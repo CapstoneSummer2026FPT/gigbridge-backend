@@ -1,4 +1,5 @@
 using Application;
+using Hangfire;
 using Infrastructure;
 using Infrastructure.Persistence;
 using Project_API.Extensions;
@@ -60,7 +61,6 @@ app.MapControllers();
 app.MapHub<Project_API.Hubs.ChatHub>("/hubs/chat");
 app.MapHub<Project_API.Hubs.NotificationHub>("/hubs/notification");
 
-using Hangfire;
 app.UseHangfireDashboard();
 
 app.Run();

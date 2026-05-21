@@ -5,10 +5,10 @@ public class AuthService : IAuthService {
     public AuthService(IJwtService jwtService) {
         _jwtService = jwtService;
     }
-    public async Task<string?> LoginAsync(string username, string password) {
+    public Task<string?> LoginAsync(string username, string password) {
         if (username == "admin@gigbridge.com" && password == "Admin123!") {
-            return _jwtService.GenerateToken(username);
+            return Task.FromResult<string?>(_jwtService.GenerateToken(username));
         }
-        return null;
+        return Task.FromResult<string?>(null);
     }
 }
