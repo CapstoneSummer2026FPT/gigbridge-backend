@@ -20,3 +20,4 @@ Thumbs.db
 *.db
 *.vsidx
 .vs/Gigbridge_ProjectCapstone/v17/.wsuo
+*.lscache
