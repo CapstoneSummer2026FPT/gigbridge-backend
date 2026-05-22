@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
 namespace Domain.Entities;
@@ -33,13 +33,7 @@ public partial class FreelancerProfile
 
     public DateTime? UpdatedAt { get; set; }
 
-    public virtual ICollection<AiinterviewSession> AiinterviewSessions { get; set; } = new List<AiinterviewSession>();
-
-    public virtual ICollection<Certification> Certifications { get; set; } = new List<Certification>();
-
     public virtual ICollection<Contract> Contracts { get; set; } = new List<Contract>();
-
-    public virtual ICollection<Education> Educations { get; set; } = new List<Education>();
 
     public virtual ICollection<FreelancerSkill> FreelancerSkills { get; set; } = new List<FreelancerSkill>();
 

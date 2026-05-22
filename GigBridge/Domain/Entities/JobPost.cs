@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
 namespace Domain.Entities;
@@ -59,10 +59,6 @@ public partial class JobPost
     public DateTime CreatedAt { get; set; }
 
     public DateTime? UpdatedAt { get; set; }
-
-    public virtual ICollection<AiconversationSession> AiconversationSessions { get; set; } = new List<AiconversationSession>();
-
-    public virtual ICollection<AiinterviewSession> AiinterviewSessions { get; set; } = new List<AiinterviewSession>();
 
     public virtual Category? Category { get; set; }
 
