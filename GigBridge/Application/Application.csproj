@@ -21,8 +21,4 @@
 	  <PackageReference Include="StackExchange.Redis" Version="2.12.14" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Folder Include="Common\Interfaces\" />
-  </ItemGroup>
-
 </Project>

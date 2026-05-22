@@ -1,4 +1,5 @@
 using Application.Common.Interfaces;
+using Application.Common.Interfaces.IRepository;
 using Application.Common.Models;
 using Infrastructure.Persistence;
 using Infrastructure.Repositories;
@@ -26,7 +27,7 @@ public static class DependencyInjection
 
         // Repositories
         services.AddScoped<IUnitOfWork, UnitOfWork>();
-        services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
+
 
         // Services
         services.AddScoped<IJwtService, Infrastructure.Services.Auth.JwtService>();
