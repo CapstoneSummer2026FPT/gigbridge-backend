@@ -30,6 +30,7 @@ public static class DependencyInjection
 
 
         // Services
+        services.AddScoped<IPasswordHasher, Infrastructure.Services.Auth.BCryptPasswordHasher>();
         services.AddScoped<IJwtService, Infrastructure.Services.Auth.JwtService>();
         services.AddScoped<IAuthService, Infrastructure.Services.Auth.AuthService>();
         services.AddScoped<IGoogleAuthService, Infrastructure.Services.Auth.GoogleAuthService>();

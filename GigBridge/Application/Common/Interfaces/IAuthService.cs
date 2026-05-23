@@ -1,4 +1,6 @@
+using Application.Features.Auth.DTOs;
+
 namespace Application.Common.Interfaces;
 public interface IAuthService {
-    Task<string?> LoginAsync(string username, string password);
+    Task<LoginResponse> LoginAsync(LoginRequest request);
 }

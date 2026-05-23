@@ -8,7 +8,7 @@ public class LoginCommandHandler : IRequestHandler<LoginCommand, LoginResponse?>
         _authService = authService;
     }
     public async Task<LoginResponse?> Handle(LoginCommand request, CancellationToken cancellationToken) {
-        var token = await _authService.LoginAsync(request.Username, request.Password);
+        var token = await _authService.LoginAsync(request.LoginRequest.Username, request.LoginRequest.Password);
         if (token == null) return null;
         return new LoginResponse { Token = token };
     }
