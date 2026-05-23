@@ -2,57 +2,54 @@ using Application.Common.Interfaces;
 using Application.Common.Interfaces.IRepository;
 using Application.Features.Auth.DTOs;
 using AutoMapper;
-using Infrastructure.Persistence;
-using Microsoft.Extensions.Configuration;
-using Microsoft.AspNetCore.Hosting;
+using Domain.Entities;
+using System;
+using System.Threading.Tasks;
+
 namespace Infrastructure.Services.Auth;
-public class AuthService : IAuthService {
+
+public class AuthService : IAuthService
+{
     private readonly IJwtService _jwtService;
     private readonly IUnitOfWork _unitOfWork;
+    private readonly IPasswordHasher _passwordHasher;
     private readonly IMapper _mapper;
-    private readonly IWebHostEnvironment _webHostEnvironment;
-    private readonly IConfiguration _configuration;
-    public AuthService(IJwtService jwtService, IUnitOfWork unitOfWork) {
+
+    public AuthService(
+        IJwtService jwtService,
+        IUnitOfWork unitOfWork,
+        IPasswordHasher passwordHasher,
+        IMapper mapper)
+    {
         _jwtService = jwtService;
         _unitOfWork = unitOfWork;
+        _passwordHasher = passwordHasher;
+        _mapper = mapper;
     }
-    public async Task<LoginResponse> LoginAsync(LoginRequest request) {
 
-        try 
+    public async Task<LoginResponse?> LoginAsync(LoginRequest request)
+    {
+        try
         {
-            var user = await _unitOfWork.UserRepository.GetAsync(c => c.FullName == request.Username);
+            // Query user by Email instead of FullName, and verify passwords using the injected IPasswordHasher
+            var user = await _unitOfWork.UserRepository.GetAsync(c => c.Email == request.Email);
 
-            if (user == null || user.Password != request.Password)
+            if (user == null || !_passwordHasher.VerifyPassword(request.Password, user.Password))
             {
-                return Task.FromResult<string?>(null);
+                return null;
             }
 
             return new LoginResponse
             {
-                User = new UserDTO
-                {
-                    FullName = user.FullName,
-                    Email = user.Email,
-                    a = user.Avatar,
-                    PhoneNumber = user.PhoneNumber,
-                    Role = user.Role,
-                    IsEmailVerified = user.IsEmailVerified,
-                    IsActive = user.IsActive,
-                    PreferredLanguage = user.PreferredLanguage,
-                    CreatedAt = user.CreatedAt,
-                    UpdatedAt = user.UpdatedAt
-                },
+                User = _mapper.Map<UserDTO>(user),
                 Token = _jwtService.GenerateToken(user)
             };
         }
-        catch(Exception ex) 
+        catch (Exception ex)
         {
-            // Log the exception (you can use a logging framework here)
+            // Log the exception
             Console.WriteLine($"An error occurred during login: {ex.Message}");
-            return null; // Return null or an appropriate response indicating failure
+            return null;
         }
-       
     }
-
-
 }

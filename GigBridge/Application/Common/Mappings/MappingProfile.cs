@@ -1,4 +1,6 @@
 using AutoMapper;
+using Domain.Entities;
+using Application.Features.Auth.DTOs;
 
 namespace Application.Common.Mappings;
 
@@ -6,6 +8,6 @@ public class MappingProfile : Profile
 {
     public MappingProfile()
     {
-        // Add mappings here
+        CreateMap<User, UserDTO>();
     }
 }

@@ -12,9 +12,9 @@ namespace Project_API.Controllers;
 public class AuthController : BaseApiController
 {
     [HttpPost("login")]
-    public async Task<IActionResult> Login([FromBody] LoginCommand command)
+    public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
-        var result = await Mediator.Send(command);
+        var result = await Mediator.Send(new LoginCommand(request));
 
         if (result == null)
         {
