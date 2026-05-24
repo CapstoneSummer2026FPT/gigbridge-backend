@@ -27,5 +27,27 @@ public class MappingProfile : Profile
 
         CreateMap<Report, ReportDto>()
             .ForMember(destination => destination.ReportId, options => options.MapFrom(source => source.ReportsId));
+
+        CreateMap<Dispute, DisputeDto>()
+            .ForMember(destination => destination.DisputeId, options => options.MapFrom(source => source.DisputesId))
+            .ForMember(destination => destination.ContractId, options => options.MapFrom(source => source.ContractsId))
+            .ForMember(destination => destination.MilestoneId, options => options.MapFrom(source => source.MilestonesId));
+        CreateMap<Dispute, DisputeDetailDto>()
+            .IncludeBase<Dispute, DisputeDto>()
+            .ForMember(destination => destination.Contract, options => options.MapFrom(source => source.Contracts))
+            .ForMember(destination => destination.Milestone, options => options.MapFrom(source => source.Milestones))
+            .ForMember(destination => destination.Evidence, options => options.MapFrom(source => source.DisputeEvidences))
+            .ForMember(destination => destination.Messages, options => options.MapFrom(source => source.DisputeMessages))
+            .ForMember(destination => destination.PaymentProofs,
+                options => options.MapFrom(source => source.Milestones == null ? null : source.Milestones.PaymentProofs));
+        CreateMap<Contract, DisputeContractDto>()
+            .ForMember(destination => destination.ContractId, options => options.MapFrom(source => source.ContractsId));
+        CreateMap<Milestone, DisputeMilestoneDto>()
+            .ForMember(destination => destination.MilestoneId, options => options.MapFrom(source => source.MilestonesId));
+        CreateMap<DisputeEvidence, DisputeEvidenceDto>();
+        CreateMap<DisputeMessage, DisputeMessageDto>()
+            .ForMember(destination => destination.DisputeMessageId, options => options.MapFrom(source => source.DisputeMessagesId));
+        CreateMap<PaymentProof, PaymentProofDto>()
+            .ForMember(destination => destination.PaymentProofId, options => options.MapFrom(source => source.PaymentProofsId));
     }
 }
