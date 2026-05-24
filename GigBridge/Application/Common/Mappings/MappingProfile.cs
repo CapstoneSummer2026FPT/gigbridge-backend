@@ -49,5 +49,8 @@ public class MappingProfile : Profile
             .ForMember(destination => destination.DisputeMessageId, options => options.MapFrom(source => source.DisputeMessagesId));
         CreateMap<PaymentProof, PaymentProofDto>()
             .ForMember(destination => destination.PaymentProofId, options => options.MapFrom(source => source.PaymentProofsId));
+
+        CreateMap<AdminAuditLog, AuditLogDto>()
+            .ForMember(destination => destination.AuditLogId, options => options.MapFrom(source => source.AdminAuditLogsId));
     }
 }
