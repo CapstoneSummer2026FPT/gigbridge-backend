@@ -43,6 +43,7 @@ public static class DependencyInjection
         services.AddScoped<IAdminDisputeService, AdminDisputeService>();
         services.AddScoped<IAdminNotificationService, AdminNotificationService>();
         services.AddScoped<IAdminAuditLogService, AdminAuditLogService>();
+        services.AddScoped<IAdminFaqService, AdminFaqService>();
 
         // Options
         services.Configure<CloudinaryOptions>(configuration.GetSection("Cloudinary"));

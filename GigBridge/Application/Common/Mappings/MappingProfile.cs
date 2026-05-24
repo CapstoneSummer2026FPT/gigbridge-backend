@@ -52,5 +52,10 @@ public class MappingProfile : Profile
 
         CreateMap<AdminAuditLog, AuditLogDto>()
             .ForMember(destination => destination.AuditLogId, options => options.MapFrom(source => source.AdminAuditLogsId));
+
+        CreateMap<Faq, FaqDto>()
+            .ForMember(destination => destination.FaqId, options => options.MapFrom(source => source.FaqsId))
+            .ForMember(destination => destination.CategoryId, options => options.MapFrom(source => source.FaqcategoriesId))
+            .ForMember(destination => destination.CategoryName, options => options.MapFrom(source => source.Faqcategories.Name));
     }
 }
