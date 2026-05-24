@@ -41,6 +41,7 @@ public static class DependencyInjection
         services.AddScoped<IAdminReviewService, AdminReviewService>();
         services.AddScoped<IAdminReportService, AdminReportService>();
         services.AddScoped<IAdminDisputeService, AdminDisputeService>();
+        services.AddScoped<IAdminNotificationService, AdminNotificationService>();
 
         // Options
         services.Configure<CloudinaryOptions>(configuration.GetSection("Cloudinary"));
