@@ -1,4 +1,4 @@
-﻿using Application.Common.Interfaces.IRepository;
+using Application.Common.Interfaces.IRepository;
 using Domain.Entities;
 using Infrastructure.Persistence;
 using System;
@@ -13,7 +13,7 @@ namespace Infrastructure.Repositories
     {
         private readonly GigbridgeDbContext _context;
 
-        public UserRepository(GigbridgeDbContext context)
+        public UserRepository(GigbridgeDbContext context) : base(context)
         {
             _context = context;
         }

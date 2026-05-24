@@ -6,10 +6,8 @@ using System.Threading.Tasks;
 
 namespace Application.Features.Auth.DTOs
 {
-    public class ResetPasswordRequest
+    public class VerifyEmailRequest
     {
-        public string Email { get; set; } = null!;
-
-        public string NewPassword { get; set; } = null!;
+        public string Token { get; set; }
     }
 }

@@ -1,8 +1,13 @@
-﻿using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.IService;
 using Application.Features.Auth.DTOs;
 using Google.Apis.Auth;
 using Microsoft.Extensions.Configuration;
+using System.Collections.Generic;
+using System.Net.Http;
 using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
+
 namespace Infrastructure.Services.Auth;
 
 public class GoogleAuthService(IConfiguration config) : IGoogleAuthService
@@ -10,16 +15,14 @@ public class GoogleAuthService(IConfiguration config) : IGoogleAuthService
     private readonly IConfiguration _config = config;
     private readonly HttpClient _httpClient = new();
 
-
-
-    public async Task<GoogleUserInfoDTO> VerifyAuthCodeAsync(string authCode)
+    public async Task<GoogleUserInfoDTO> VerifyAuthCodeAsync(string authCode, CancellationToken cancellationToken = default)
     {
         var clientId = _config["Authentication:Google:ClientId"]?.Trim();
         var clientSecret = _config["Authentication:Google:ClientSecret"]?.Trim();
 
         if (string.IsNullOrEmpty(clientId) || string.IsNullOrEmpty(clientSecret))
         {
-            throw new Exception("Google Authentication configuration (ClientId or ClientSecret) is missing or empty.");
+            throw new System.Exception("Google Authentication configuration (ClientId or ClientSecret) is missing or empty.");
         }
 
         // 1️⃣ Exchange auth code → tokens
@@ -32,18 +35,18 @@ public class GoogleAuthService(IConfiguration config) : IGoogleAuthService
                 { "client_secret", clientSecret },
                 { "redirect_uri", "postmessage" }, // 🔥 REQUIRED for SPA
                 { "grant_type", "authorization_code" }
-            })
+            }),
+            cancellationToken
         );
 
-        var error = await tokenResponse.Content.ReadAsStringAsync();
+        var error = await tokenResponse.Content.ReadAsStringAsync(cancellationToken);
 
         if (!tokenResponse.IsSuccessStatusCode)
         {
-            throw new Exception($"Google token exchange failed: {tokenResponse.StatusCode} - {error}");
+            throw new System.Exception($"Google token exchange failed: {tokenResponse.StatusCode} - {error}");
         }
 
-
-        var json = await tokenResponse.Content.ReadAsStringAsync();
+        var json = await tokenResponse.Content.ReadAsStringAsync(cancellationToken);
         var tokenData = JsonSerializer.Deserialize<GoogleTokenResponse>(json)!;
 
         // 2️⃣ Validate id_token (reuse Google library)
@@ -63,7 +66,4 @@ public class GoogleAuthService(IConfiguration config) : IGoogleAuthService
             PictureUrl = payload.Picture
         };
     }
-
-
-
 }

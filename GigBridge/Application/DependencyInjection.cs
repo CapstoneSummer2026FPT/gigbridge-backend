@@ -1,9 +1,10 @@
-using System.Reflection;
 using Application.Common.Behaviours;
-using FluentValidation;
-using Microsoft.Extensions.DependencyInjection;
-using MediatR;
+using Application.Common.Interfaces.IService;
 using Application.Common.Mappings;
+using FluentValidation;
+using MediatR;
+using Microsoft.Extensions.DependencyInjection;
+using System.Reflection;
 
 namespace Application;
 
@@ -20,6 +21,8 @@ public static class DependencyInjection
             cfg.AddBehavior(typeof(IPipelineBehavior<,>), typeof(ValidationBehaviour<,>));
             cfg.AddBehavior(typeof(IPipelineBehavior<,>), typeof(PerformanceBehaviour<,>));
         });
+
+      
 
         return services;
     }

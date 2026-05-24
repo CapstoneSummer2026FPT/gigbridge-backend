@@ -24,12 +24,10 @@ public class JwtService : IJwtService
         var jwtSettings = _configuration.GetSection("Jwt");
         var secretKey = Encoding.UTF8.GetBytes(jwtSettings["Key"]!);
 
-        // Convert the integer UserRole to string using our extension method
         string roleName = user.Role.ToUserRole().ToString();
 
         var claims = new List<Claim>
         {
-            new Claim(JwtRegisteredClaimNames.Sub, user.UserId.ToString()),
             new Claim(ClaimTypes.NameIdentifier, user.UserId.ToString()),
             new Claim(ClaimTypes.Name, user.FullName),
             new Claim(ClaimTypes.Email, user.Email),
@@ -44,7 +42,7 @@ public class JwtService : IJwtService
             issuer: jwtSettings["Issuer"],
             audience: jwtSettings["Audience"],
             claims: claims,
-            expires: DateTime.Now.AddHours(15),
+            expires: DateTime.Now.AddHours(3),
             signingCredentials: creds
         );
 
@@ -53,34 +51,35 @@ public class JwtService : IJwtService
 
     public string GenerateRefreshToken()
     {
-        var randomBytes = new byte[32];
+        var randomNumber = new byte[32];
         using var rng = RandomNumberGenerator.Create();
-        rng.GetBytes(randomBytes);
-        return Convert.ToBase64String(randomBytes);
+        rng.GetBytes(randomNumber);
+        return Convert.ToBase64String(randomNumber);
     }
 
     public string HashRefreshToken(string token)
     {
-        using var sha256 = SHA256.Create();
-        var hashedBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(token));
-        return Convert.ToBase64String(hashedBytes);
+        var bytes = Encoding.UTF8.GetBytes(token);
+        var hash = SHA256.HashData(bytes);
+        return Convert.ToBase64String(hash);
     }
 
     public ClaimsPrincipal GetPrincipalFromExpiredToken(string token)
     {
         var jwtSettings = _configuration.GetSection("Jwt");
+        var secretKey = Encoding.UTF8.GetBytes(jwtSettings["Key"]!);
 
         var tokenValidationParameters = new TokenValidationParameters
         {
             ValidateAudience = false,
             ValidateIssuer = false,
             ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings["Key"]!)),
-            ValidateLifetime = false // Critical: bypass expiry check here
+            IssuerSigningKey = new SymmetricSecurityKey(secretKey),
+            ValidateLifetime = false // Ignore token expiration
         };
 
         var tokenHandler = new JwtSecurityTokenHandler();
-        var principal = tokenHandler.ValidateToken(token, tokenValidationParameters, out SecurityToken securityToken);
+        var principal = tokenHandler.ValidateToken(token, tokenValidationParameters, out var securityToken);
 
         if (securityToken is not JwtSecurityToken jwtSecurityToken ||
             !jwtSecurityToken.Header.Alg.Equals(SecurityAlgorithms.HmacSha256, StringComparison.InvariantCultureIgnoreCase))

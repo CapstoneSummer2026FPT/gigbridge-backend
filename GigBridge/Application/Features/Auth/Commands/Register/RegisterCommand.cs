@@ -1,13 +1,6 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using Application.Features.Auth.DTOs;
+using MediatR;
 
-namespace Application.Features.Auth.Commands.Register
-{
-    public class RegisterCommand
-    {
+namespace Application.Features.Auth.Commands.Register;
 
-    }
-}
+public record RegisterCommand(RegisterRequest RegisterRequest) : IRequest<UserDTO>;

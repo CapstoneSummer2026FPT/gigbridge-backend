@@ -8,5 +8,6 @@ namespace Application.Features.Auth.DTOs
 {
     public class EmailResendConfirmationRequest
     {
+        public string Email { get; set; } = default!;
     }
 }
