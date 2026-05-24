@@ -1,5 +1,5 @@
 using Application.Common.Interfaces;
-using Application.Features.Auth.DTOs;
+using Application.Features.Auth.DTOs.AuthDTOs;
 using MediatR;
 using System.Threading;
 using System.Threading.Tasks;

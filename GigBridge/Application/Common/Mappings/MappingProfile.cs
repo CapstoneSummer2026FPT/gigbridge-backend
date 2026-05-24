@@ -1,6 +1,6 @@
 using AutoMapper;
 using Domain.Entities;
-using Application.Features.Auth.DTOs;
+using Application.Features.Auth.DTOs.AuthDTOs;
 
 namespace Application.Common.Mappings;
 

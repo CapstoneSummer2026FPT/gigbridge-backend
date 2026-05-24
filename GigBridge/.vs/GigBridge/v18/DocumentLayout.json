@@ -3,28 +3,28 @@
   "WorkspaceRootPath": "C:\\Users\\OS\\Documents\\GitHub\\Gigbridge_ProjectCapstone\\GigBridge\\",
   "Documents": [
     {
-      "AbsoluteMoniker": "D:0:0:{0FC5D6B2-6C0D-4278-9903-573ACC5EC69A}|Application\\Application.csproj|c:\\users\\os\\documents\\github\\gigbridge_projectcapstone\\gigbridge\\application\\common\\interfaces\\irepository\\iunitofwork.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{0FC5D6B2-6C0D-4278-9903-573ACC5EC69A}|Application\\Application.csproj|solutionrelative:application\\common\\interfaces\\irepository\\iunitofwork.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{0FC5D6B2-6C0D-4278-9903-573ACC5EC69A}|Application\\Application.csproj|c:\\users\\os\\documents\\github\\gigbridge_projectcapstone\\gigbridge\\application\\features\\auth\\dtos\\authdtos\\googleuserinfodto.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{0FC5D6B2-6C0D-4278-9903-573ACC5EC69A}|Application\\Application.csproj|solutionrelative:application\\features\\auth\\dtos\\authdtos\\googleuserinfodto.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{0FC5D6B2-6C0D-4278-9903-573ACC5EC69A}|Application\\Application.csproj|c:\\users\\os\\documents\\github\\gigbridge_projectcapstone\\gigbridge\\application\\common\\interfaces\\irepository\\iuserrepository.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{0FC5D6B2-6C0D-4278-9903-573ACC5EC69A}|Application\\Application.csproj|solutionrelative:application\\common\\interfaces\\irepository\\iuserrepository.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{830E3F81-3E18-44D7-A1BA-1C6EEBED457C}|Infrastructure\\Infrastructure.csproj|c:\\users\\os\\documents\\github\\gigbridge_projectcapstone\\gigbridge\\infrastructure\\services\\auth\\googleauthservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{830E3F81-3E18-44D7-A1BA-1C6EEBED457C}|Infrastructure\\Infrastructure.csproj|solutionrelative:infrastructure\\services\\auth\\googleauthservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{830E3F81-3E18-44D7-A1BA-1C6EEBED457C}|Infrastructure\\Infrastructure.csproj|c:\\users\\os\\documents\\github\\gigbridge_projectcapstone\\gigbridge\\infrastructure\\repositories\\unitofwork.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{830E3F81-3E18-44D7-A1BA-1C6EEBED457C}|Infrastructure\\Infrastructure.csproj|solutionrelative:infrastructure\\repositories\\unitofwork.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{0FC5D6B2-6C0D-4278-9903-573ACC5EC69A}|Application\\Application.csproj|c:\\users\\os\\documents\\github\\gigbridge_projectcapstone\\gigbridge\\application\\features\\auth\\dtos\\authdtos\\googletokenresponse.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{0FC5D6B2-6C0D-4278-9903-573ACC5EC69A}|Application\\Application.csproj|solutionrelative:application\\features\\auth\\dtos\\authdtos\\googletokenresponse.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{830E3F81-3E18-44D7-A1BA-1C6EEBED457C}|Infrastructure\\Infrastructure.csproj|c:\\users\\os\\documents\\github\\gigbridge_projectcapstone\\gigbridge\\infrastructure\\dependencyinjection.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{830E3F81-3E18-44D7-A1BA-1C6EEBED457C}|Infrastructure\\Infrastructure.csproj|solutionrelative:infrastructure\\dependencyinjection.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{0FC5D6B2-6C0D-4278-9903-573ACC5EC69A}|Application\\Application.csproj|c:\\users\\os\\documents\\github\\gigbridge_projectcapstone\\gigbridge\\application\\features\\auth\\dtos\\authdtos\\userdto.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{0FC5D6B2-6C0D-4278-9903-573ACC5EC69A}|Application\\Application.csproj|solutionrelative:application\\features\\auth\\dtos\\authdtos\\userdto.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{830E3F81-3E18-44D7-A1BA-1C6EEBED457C}|Infrastructure\\Infrastructure.csproj|c:\\users\\os\\documents\\github\\gigbridge_projectcapstone\\gigbridge\\infrastructure\\repositories\\repository.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{830E3F81-3E18-44D7-A1BA-1C6EEBED457C}|Infrastructure\\Infrastructure.csproj|solutionrelative:infrastructure\\repositories\\repository.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{830E3F81-3E18-44D7-A1BA-1C6EEBED457C}|Infrastructure\\Infrastructure.csproj|c:\\users\\os\\documents\\github\\gigbridge_projectcapstone\\gigbridge\\infrastructure\\infrastructure.csproj||{FA3CD31E-987B-443A-9B81-186104E8DAC1}|",
+      "RelativeMoniker": "D:0:0:{830E3F81-3E18-44D7-A1BA-1C6EEBED457C}|Infrastructure\\Infrastructure.csproj|solutionrelative:infrastructure\\infrastructure.csproj||{FA3CD31E-987B-443A-9B81-186104E8DAC1}|"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{830E3F81-3E18-44D7-A1BA-1C6EEBED457C}|Infrastructure\\Infrastructure.csproj|c:\\users\\os\\documents\\github\\gigbridge_projectcapstone\\gigbridge\\infrastructure\\repositories\\userrepository.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{830E3F81-3E18-44D7-A1BA-1C6EEBED457C}|Infrastructure\\Infrastructure.csproj|solutionrelative:infrastructure\\repositories\\userrepository.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{830E3F81-3E18-44D7-A1BA-1C6EEBED457C}|Infrastructure\\Infrastructure.csproj|c:\\users\\os\\documents\\github\\gigbridge_projectcapstone\\gigbridge\\infrastructure\\services\\auth\\jwtservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{830E3F81-3E18-44D7-A1BA-1C6EEBED457C}|Infrastructure\\Infrastructure.csproj|solutionrelative:infrastructure\\services\\auth\\jwtservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     }
   ],
   "DocumentGroupContainers": [
@@ -34,7 +34,7 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 236,
+          "SelectedChildIndex": 238,
           "Children": [
             {
               "$type": "Bookmark",
@@ -978,80 +978,80 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 1,
-              "Title": "IUserRepository.cs",
-              "DocumentMoniker": "C:\\Users\\OS\\Documents\\GitHub\\Gigbridge_ProjectCapstone\\GigBridge\\Application\\Common\\Interfaces\\IRepository\\IUserRepository.cs",
-              "RelativeDocumentMoniker": "Application\\Common\\Interfaces\\IRepository\\IUserRepository.cs",
-              "ToolTip": "C:\\Users\\OS\\Documents\\GitHub\\Gigbridge_ProjectCapstone\\GigBridge\\Application\\Common\\Interfaces\\IRepository\\IUserRepository.cs",
-              "RelativeToolTip": "Application\\Common\\Interfaces\\IRepository\\IUserRepository.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+              "DocumentIndex": 2,
+              "Title": "GoogleTokenResponse.cs",
+              "DocumentMoniker": "C:\\Users\\OS\\Documents\\GitHub\\Gigbridge_ProjectCapstone\\GigBridge\\Application\\Features\\Auth\\DTOs\\AuthDTOs\\GoogleTokenResponse.cs",
+              "RelativeDocumentMoniker": "Application\\Features\\Auth\\DTOs\\AuthDTOs\\GoogleTokenResponse.cs",
+              "ToolTip": "C:\\Users\\OS\\Documents\\GitHub\\Gigbridge_ProjectCapstone\\GigBridge\\Application\\Features\\Auth\\DTOs\\AuthDTOs\\GoogleTokenResponse.cs",
+              "RelativeToolTip": "Application\\Features\\Auth\\DTOs\\AuthDTOs\\GoogleTokenResponse.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAA4AAAAFAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-05-22T09:41:57.888Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 0,
-              "Title": "IUnitOfWork.cs",
-              "DocumentMoniker": "C:\\Users\\OS\\Documents\\GitHub\\Gigbridge_ProjectCapstone\\GigBridge\\Application\\Common\\Interfaces\\IRepository\\IUnitOfWork.cs",
-              "RelativeDocumentMoniker": "Application\\Common\\Interfaces\\IRepository\\IUnitOfWork.cs",
-              "ToolTip": "C:\\Users\\OS\\Documents\\GitHub\\Gigbridge_ProjectCapstone\\GigBridge\\Application\\Common\\Interfaces\\IRepository\\IUnitOfWork.cs",
-              "RelativeToolTip": "Application\\Common\\Interfaces\\IRepository\\IUnitOfWork.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAcAAAAIAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-05-22T09:35:01.429Z",
+              "WhenOpened": "2026-05-24T04:55:01.989Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
               "DocumentIndex": 3,
-              "Title": "DependencyInjection.cs",
-              "DocumentMoniker": "C:\\Users\\OS\\Documents\\GitHub\\Gigbridge_ProjectCapstone\\GigBridge\\Infrastructure\\DependencyInjection.cs",
-              "RelativeDocumentMoniker": "Infrastructure\\DependencyInjection.cs",
-              "ToolTip": "C:\\Users\\OS\\Documents\\GitHub\\Gigbridge_ProjectCapstone\\GigBridge\\Infrastructure\\DependencyInjection.cs",
-              "RelativeToolTip": "Infrastructure\\DependencyInjection.cs",
-              "ViewState": "AgIAABIAAAAAAAAAAAAewB0AAAAAAAAAAAAAAA==",
+              "Title": "UserDTO.cs",
+              "DocumentMoniker": "C:\\Users\\OS\\Documents\\GitHub\\Gigbridge_ProjectCapstone\\GigBridge\\Application\\Features\\Auth\\DTOs\\AuthDTOs\\UserDTO.cs",
+              "RelativeDocumentMoniker": "Application\\Features\\Auth\\DTOs\\AuthDTOs\\UserDTO.cs",
+              "ToolTip": "C:\\Users\\OS\\Documents\\GitHub\\Gigbridge_ProjectCapstone\\GigBridge\\Application\\Features\\Auth\\DTOs\\AuthDTOs\\UserDTO.cs*",
+              "RelativeToolTip": "Application\\Features\\Auth\\DTOs\\AuthDTOs\\UserDTO.cs*",
+              "ViewState": "AgIAAAgAAAAAAAAAAAAxwAAAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-05-22T09:33:17.74Z",
+              "WhenOpened": "2026-05-24T04:54:04.137Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
               "DocumentIndex": 4,
-              "Title": "Repository.cs",
-              "DocumentMoniker": "C:\\Users\\OS\\Documents\\GitHub\\Gigbridge_ProjectCapstone\\GigBridge\\Infrastructure\\Repositories\\Repository.cs",
-              "RelativeDocumentMoniker": "Infrastructure\\Repositories\\Repository.cs",
-              "ToolTip": "C:\\Users\\OS\\Documents\\GitHub\\Gigbridge_ProjectCapstone\\GigBridge\\Infrastructure\\Repositories\\Repository.cs",
-              "RelativeToolTip": "Infrastructure\\Repositories\\Repository.cs",
-              "ViewState": "AgIAAAYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-05-22T09:32:33.197Z",
+              "Title": "Infrastructure",
+              "DocumentMoniker": "C:\\Users\\OS\\Documents\\GitHub\\Gigbridge_ProjectCapstone\\GigBridge\\Infrastructure\\Infrastructure.csproj",
+              "RelativeDocumentMoniker": "Infrastructure\\Infrastructure.csproj",
+              "ToolTip": "C:\\Users\\OS\\Documents\\GitHub\\Gigbridge_ProjectCapstone\\GigBridge\\Infrastructure\\Infrastructure.csproj",
+              "RelativeToolTip": "Infrastructure\\Infrastructure.csproj",
+              "ViewState": "AgIAAAMAAAAAAAAAAAAAABIAAAAXAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000758|",
+              "WhenOpened": "2026-05-24T04:51:31.08Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
-              "DocumentIndex": 2,
-              "Title": "UnitOfWork.cs",
-              "DocumentMoniker": "C:\\Users\\OS\\Documents\\GitHub\\Gigbridge_ProjectCapstone\\GigBridge\\Infrastructure\\Repositories\\UnitOfWork.cs",
-              "RelativeDocumentMoniker": "Infrastructure\\Repositories\\UnitOfWork.cs",
-              "ToolTip": "C:\\Users\\OS\\Documents\\GitHub\\Gigbridge_ProjectCapstone\\GigBridge\\Infrastructure\\Repositories\\UnitOfWork.cs*",
-              "RelativeToolTip": "Infrastructure\\Repositories\\UnitOfWork.cs*",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAA8AAAA2AAAAAAAAAA==",
+              "DocumentIndex": 0,
+              "Title": "GoogleUserInfoDTO.cs",
+              "DocumentMoniker": "C:\\Users\\OS\\Documents\\GitHub\\Gigbridge_ProjectCapstone\\GigBridge\\Application\\Features\\Auth\\DTOs\\AuthDTOs\\GoogleUserInfoDTO.cs",
+              "RelativeDocumentMoniker": "Application\\Features\\Auth\\DTOs\\AuthDTOs\\GoogleUserInfoDTO.cs",
+              "ToolTip": "C:\\Users\\OS\\Documents\\GitHub\\Gigbridge_ProjectCapstone\\GigBridge\\Application\\Features\\Auth\\DTOs\\AuthDTOs\\GoogleUserInfoDTO.cs*",
+              "RelativeToolTip": "Application\\Features\\Auth\\DTOs\\AuthDTOs\\GoogleUserInfoDTO.cs*",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-05-22T09:32:05.536Z",
+              "WhenOpened": "2026-05-23T17:58:29.561Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "GoogleAuthService.cs",
+              "DocumentMoniker": "C:\\Users\\OS\\Documents\\GitHub\\Gigbridge_ProjectCapstone\\GigBridge\\Infrastructure\\Services\\Auth\\GoogleAuthService.cs",
+              "RelativeDocumentMoniker": "Infrastructure\\Services\\Auth\\GoogleAuthService.cs",
+              "ToolTip": "C:\\Users\\OS\\Documents\\GitHub\\Gigbridge_ProjectCapstone\\GigBridge\\Infrastructure\\Services\\Auth\\GoogleAuthService.cs*",
+              "RelativeToolTip": "Infrastructure\\Services\\Auth\\GoogleAuthService.cs*",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-23T17:57:14.858Z",
               "EditorCaption": ""
             },
             {
               "$type": "Document",
               "DocumentIndex": 5,
-              "Title": "UserRepository.cs",
-              "DocumentMoniker": "C:\\Users\\OS\\Documents\\GitHub\\Gigbridge_ProjectCapstone\\GigBridge\\Infrastructure\\Repositories\\UserRepository.cs",
-              "RelativeDocumentMoniker": "Infrastructure\\Repositories\\UserRepository.cs",
-              "ToolTip": "C:\\Users\\OS\\Documents\\GitHub\\Gigbridge_ProjectCapstone\\GigBridge\\Infrastructure\\Repositories\\UserRepository.cs",
-              "RelativeToolTip": "Infrastructure\\Repositories\\UserRepository.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAABMAAAAAAAAAAAAAAA==",
+              "Title": "JwtService.cs",
+              "DocumentMoniker": "C:\\Users\\OS\\Documents\\GitHub\\Gigbridge_ProjectCapstone\\GigBridge\\Infrastructure\\Services\\Auth\\JwtService.cs",
+              "RelativeDocumentMoniker": "Infrastructure\\Services\\Auth\\JwtService.cs",
+              "ToolTip": "C:\\Users\\OS\\Documents\\GitHub\\Gigbridge_ProjectCapstone\\GigBridge\\Infrastructure\\Services\\Auth\\JwtService.cs",
+              "RelativeToolTip": "Infrastructure\\Services\\Auth\\JwtService.cs",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAAFwAAAABAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-05-22T09:31:32.994Z",
+              "WhenOpened": "2026-05-23T17:30:19.911Z",
               "EditorCaption": ""
             }
           ]

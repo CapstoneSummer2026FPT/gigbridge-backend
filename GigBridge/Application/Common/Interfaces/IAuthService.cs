@@ -1,5 +1,5 @@
 using System.Threading.Tasks;
-using Application.Features.Auth.DTOs;
+using Application.Features.Auth.DTOs.AuthDTOs;
 
 namespace Application.Common.Interfaces;
 

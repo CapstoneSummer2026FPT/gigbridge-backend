@@ -1,6 +1,6 @@
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IRepository;
-using Application.Features.Auth.DTOs;
+using Application.Features.Auth.DTOs.AuthDTOs;
 using AutoMapper;
 using Domain.Entities;
 using System;

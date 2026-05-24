@@ -1,4 +1,4 @@
-namespace Application.Features.Auth.DTOs;
+namespace Application.Features.Auth.DTOs.AuthDTOs;
 public class LoginRequest {
     public string Email { get; set; } = string.Empty;
     public string Password { get; set; } = string.Empty;
