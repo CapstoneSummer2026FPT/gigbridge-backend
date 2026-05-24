@@ -24,5 +24,8 @@ public class MappingProfile : Profile
             .ForMember(destination => destination.ReviewId, options => options.MapFrom(source => source.ReviewsId))
             .ForMember(destination => destination.ContractId, options => options.MapFrom(source => source.ContractsId))
             .ForMember(destination => destination.ContractTitle, options => options.MapFrom(source => source.Contracts.Title));
+
+        CreateMap<Report, ReportDto>()
+            .ForMember(destination => destination.ReportId, options => options.MapFrom(source => source.ReportsId));
     }
 }
