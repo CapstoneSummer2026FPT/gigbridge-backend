@@ -19,5 +19,10 @@ public class MappingProfile : Profile
             .ForMember(destination => destination.ClientCompanyName, options => options.MapFrom(source => source.ClientProfiles.CompanyName))
             .ForMember(destination => destination.CategoryName, options => options.MapFrom(source => source.Category == null ? null : source.Category.Name))
             .ForMember(destination => destination.ProposalCount, options => options.MapFrom(source => source.Proposals.Count));
+
+        CreateMap<Review, ReviewDto>()
+            .ForMember(destination => destination.ReviewId, options => options.MapFrom(source => source.ReviewsId))
+            .ForMember(destination => destination.ContractId, options => options.MapFrom(source => source.ContractsId))
+            .ForMember(destination => destination.ContractTitle, options => options.MapFrom(source => source.Contracts.Title));
     }
 }

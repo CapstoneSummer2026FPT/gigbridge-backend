@@ -1,0 +1,32 @@
+using Application.DTOs.Admin;
+using Application.Common.Models;
+using Infrastructure.Services.Admin.Interfaces;
+using Microsoft.AspNetCore.Mvc;
+
+namespace Project_API.Controllers.Admin;
+
+[ApiController]
+[Route("api/admin/reviews")]
+public sealed class AdminReviewsController : AdminControllerBase
+{
+    private readonly IAdminReviewService _reviewService;
+
+    public AdminReviewsController(IAdminReviewService reviewService)
+    {
+        _reviewService = reviewService;
+    }
+
+    [HttpGet]
+    public async Task<IActionResult> GetAll([FromQuery] ReviewPageQueryDto query, CancellationToken cancellationToken)
+    {
+        var data = await _reviewService.GetAllAsync(query, cancellationToken);
+        return Ok(ApiResponse<object>.Ok(data, "Reviews retrieved successfully"));
+    }
+
+    [HttpPatch("{reviewId:guid}/visibility")]
+    public async Task<IActionResult> SetVisibility(Guid reviewId, [FromBody] ReviewVisibilityRequestDto request, CancellationToken cancellationToken)
+    {
+        var data = await _reviewService.SetVisibilityAsync(reviewId, request, GetActor(), cancellationToken);
+        return Ok(ApiResponse<object>.Ok(data, "Review visibility updated successfully"));
+    }
+}
