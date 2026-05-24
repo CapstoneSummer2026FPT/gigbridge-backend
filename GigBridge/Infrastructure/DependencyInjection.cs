@@ -1,5 +1,6 @@
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IRepository;
+using Application.Common.Interfaces.IService;
 using Application.Common.Models;
 using Infrastructure.Persistence;
 using Infrastructure.Repositories;

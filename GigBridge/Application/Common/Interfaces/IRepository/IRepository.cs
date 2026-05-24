@@ -22,6 +22,8 @@ namespace Application.Common.Interfaces.IRepository
 
         Task<bool> AnyAsync(Expression<Func<T, bool>> predicate);
 
+        //Task<IEnumerable<T>> FindAsync(Expression<Func<T, bool>> predicate, CancellationToken cancellationToken = default);
+
 
         //=========================================================================================================
         T Get(Expression<Func<T, bool>> filter, string? includeProperties = null);

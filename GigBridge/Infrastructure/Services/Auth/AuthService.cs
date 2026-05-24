@@ -1,6 +1,7 @@
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IRepository;
-using Application.Features.Auth.DTOs.AuthDTOs;
+using Application.Common.Interfaces.IService;
+using Application.Features.Auth.DTOs;
 using AutoMapper;
 using Domain.Entities;
 using System;
@@ -27,6 +28,16 @@ public class AuthService : IAuthService
         _mapper = mapper;
     }
 
+    public Task<(LoginResponse loginData, string refreshToken)> GoogleLoginWithRefreshAsync(string authCode)
+    {
+        throw new NotImplementedException();
+    }
+
+    public Task<bool> IsTokenExpired(string token)
+    {
+        throw new NotImplementedException();
+    }
+
     public async Task<LoginResponse?> LoginAsync(LoginRequest request)
     {
         try
@@ -51,5 +62,35 @@ public class AuthService : IAuthService
             Console.WriteLine($"An error occurred during login: {ex.Message}");
             return null;
         }
+    }
+
+    public Task<(LoginResponse loginData, string refreshToken)> LoginWithRefreshAsync(LoginRequest request)
+    {
+        throw new NotImplementedException();
+    }
+
+    public Task<(LoginResponse loginData, string refreshToken)> RefreshTokenAsync(string expriedAccessToken, string refreshToken)
+    {
+        throw new NotImplementedException();
+    }
+
+    public Task<UserDTO> RegisterAsync(RegisterRequest request)
+    {
+        throw new NotImplementedException();
+    }
+
+    public Task ResendEmailConfirmationAsync(EmailResendConfirmationRequest email)
+    {
+        throw new NotImplementedException();
+    }
+
+    public Task ResetPasswordAsync(ResetPasswordRequest request)
+    {
+        throw new NotImplementedException();
+    }
+
+    public Task SendEmailPasswordChangingRequestAsync(EmailResendConfirmationRequest email)
+    {
+        throw new NotImplementedException();
     }
 }

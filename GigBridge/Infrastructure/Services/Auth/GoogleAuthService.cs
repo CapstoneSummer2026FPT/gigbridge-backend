@@ -1,5 +1,6 @@
-﻿using Application.Common.Interfaces;
-using Application.Features.Auth.DTOs.AuthDTOs;
+﻿using Application.Common.Interfaces.IService;
+using Application.Features.Auth.DTOs;
+using Google.Apis.Auth;
 using Microsoft.Extensions.Configuration;
 using System.Text.Json;
 namespace Infrastructure.Services.Auth;

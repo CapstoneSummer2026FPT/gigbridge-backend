@@ -4,10 +4,9 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Application.Features.Auth.Commands.Login
+namespace Application.Features.Auth.Commands.Register
 {
-    public class RegisterCommand
+    public class RegisterCommandHandler
     {
-
     }
 }

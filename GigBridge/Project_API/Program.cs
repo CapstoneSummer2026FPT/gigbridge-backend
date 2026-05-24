@@ -1,4 +1,5 @@
 using Application;
+using Application.Common.Interfaces.IService;
 using Hangfire;
 using Infrastructure;
 using Infrastructure.Persistence;
@@ -21,7 +22,7 @@ builder.Services.AddJwtAuthentication(builder.Configuration);
 builder.Services.AddSwaggerWithBearerAuth();
 builder.Services.AddCorsPolicy();
 builder.Services.AddHttpContextAccessor();
-builder.Services.AddScoped<Application.Common.Interfaces.ICurrentUserService, Project_API.Services.CurrentUserService>();
+builder.Services.AddScoped<ICurrentUserService, Project_API.Services.CurrentUserService>();
 builder.Services.AddSignalR();
 builder.Services.AddHangfireServices(builder.Configuration);
 builder.Services.AddHybridCache(builder.Configuration);

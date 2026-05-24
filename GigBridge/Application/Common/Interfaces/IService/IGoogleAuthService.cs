@@ -1,6 +1,6 @@
-using Application.Features.Auth.DTOs.AuthDTOs;
+using Application.Features.Auth.DTOs;
 
-namespace Application.Common.Interfaces;
+namespace Application.Common.Interfaces.IService;
 public interface IGoogleAuthService 
 {
   Task<GoogleUserInfoDTO> VerifyAuthCodeAsync(string authCode);
