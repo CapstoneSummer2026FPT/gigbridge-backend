@@ -64,7 +64,7 @@ public class AuthService : IAuthService
             FullName = request.FullName ?? request.Email,
             Password = hash,
             Role = request.role,
-            IsEmailVerified = false,
+            IsEmailVerified = false, // true for testing
             IsActive = true,
             CreatedAt = DateTime.UtcNow,
             EmailVerificationToken = token,
@@ -185,7 +185,8 @@ public class AuthService : IAuthService
         return (new LoginResponse
         {
             User = _mapper.Map<UserDTO>(user),
-            Token = accessToken
+            Token = accessToken,
+            refreshToken = refreshToken
         }, refreshToken);
     }
 
