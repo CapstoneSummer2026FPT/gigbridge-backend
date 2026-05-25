@@ -1,8 +1,11 @@
 using Application.Common.Interfaces;
-using Application.Common.Models;
 using Infrastructure.Persistence;
 using Infrastructure.Repositories;
-using Infrastructure.Services;
+using Infrastructure.Services.Auth;
+using Infrastructure.Services.BackgroundJobs;
+using Infrastructure.Services.Email;
+using Infrastructure.Services.Media;
+using Infrastructure.Services.Notification;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -29,18 +32,15 @@ public static class DependencyInjection
         services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
 
         // Services
-        services.AddScoped<IJwtService, Infrastructure.Services.Auth.JwtService>();
-        services.AddScoped<IAuthService, Infrastructure.Services.Auth.AuthService>();
-        services.AddScoped<IGoogleAuthService, Infrastructure.Services.Auth.GoogleAuthService>();
-        services.AddScoped<IEmailService, Infrastructure.Services.Email.EmailService>();
-        services.AddScoped<IMediaService, Infrastructure.Services.Media.MediaService>();
-        services.AddScoped<INotificationService, Infrastructure.Services.Notification.NotificationService>();
-        services.AddTransient<IDateTimeService, Infrastructure.Services.Common.DateTimeService>();
-        services.AddScoped<IBackgroundJobService, Infrastructure.Services.BackgroundJobs.HangfireJobService>();
+        services.AddScoped<IJwtService, JwtService>();
+        services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IGoogleAuthService, GoogleAuthService>();
+        services.AddScoped<IEmailService, EmailService>();
+        services.AddScoped<IMediaService, MediaService>();
+        services.AddScoped<INotificationService, NotificationService>();
+        services.AddScoped<IBackgroundJobService, HangfireJobService>();
 
-        // Options
-        services.Configure<CloudinaryOptions>(configuration.GetSection("Cloudinary"));
-
+        
         // External payment service
         services.AddKeyedSingleton("OrderClient", (sp, key) =>
         {

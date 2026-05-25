@@ -3,7 +3,6 @@ using Application.Common.Behaviours;
 using FluentValidation;
 using Microsoft.Extensions.DependencyInjection;
 using MediatR;
-using Application.Common.Mappings;
 
 namespace Application;
 
@@ -11,7 +10,6 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddApplicationServices(this IServiceCollection services)
     {
-        services.AddAutoMapper(cfg => {}, typeof(MappingProfile));
         services.AddValidatorsFromAssembly(Assembly.GetExecutingAssembly());
         
         services.AddMediatR(cfg => {
