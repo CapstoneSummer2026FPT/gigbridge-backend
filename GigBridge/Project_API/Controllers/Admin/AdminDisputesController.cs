@@ -1,5 +1,7 @@
 using Application.DTOs.Admin;
 using Application.Common.Models;
+using Application.Features.Admin.Disputes.Resolve;
+using Application.Features.Admin.Disputes.StartReview;
 using Infrastructure.Services.Admin.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 
@@ -33,14 +35,14 @@ public sealed class AdminDisputesController : AdminControllerBase
     [HttpPatch("{disputeId:guid}/review")]
     public async Task<IActionResult> Review(Guid disputeId, [FromBody] DisputeReviewRequestDto request, CancellationToken cancellationToken)
     {
-        var data = await _disputeService.ReviewAsync(disputeId, request, GetActor(), cancellationToken);
+        var data = await Mediator.Send(new StartDisputeReviewCommand(disputeId, request, GetActor()), cancellationToken);
         return Ok(ApiResponse<object>.Ok(data, "Dispute moved to review successfully"));
     }
 
     [HttpPatch("{disputeId:guid}/resolution")]
     public async Task<IActionResult> Resolve(Guid disputeId, [FromBody] DisputeResolutionRequestDto request, CancellationToken cancellationToken)
     {
-        var data = await _disputeService.ResolveAsync(disputeId, request, GetActor(), cancellationToken);
+        var data = await Mediator.Send(new ResolveDisputeCommand(disputeId, request, GetActor()), cancellationToken);
         return Ok(ApiResponse<object>.Ok(data, "Dispute resolution recorded successfully"));
     }
 }

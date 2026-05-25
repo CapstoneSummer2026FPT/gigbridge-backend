@@ -1,5 +1,7 @@
 using Application.DTOs.Admin;
 using Application.Common.Models;
+using Application.Features.Admin.Reports.Resolve;
+using Application.Features.Admin.Reports.StartReview;
 using Infrastructure.Services.Admin.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 
@@ -33,14 +35,14 @@ public sealed class AdminReportsController : AdminControllerBase
     [HttpPatch("{reportId:guid}/review")]
     public async Task<IActionResult> Review(Guid reportId, [FromBody] ReportReviewRequestDto request, CancellationToken cancellationToken)
     {
-        var data = await _reportService.ReviewAsync(reportId, request, GetActor(), cancellationToken);
+        var data = await Mediator.Send(new StartReportReviewCommand(reportId, request, GetActor()), cancellationToken);
         return Ok(ApiResponse<object>.Ok(data, "Report moved to review successfully"));
     }
 
     [HttpPatch("{reportId:guid}/resolution")]
     public async Task<IActionResult> Resolve(Guid reportId, [FromBody] ReportResolutionRequestDto request, CancellationToken cancellationToken)
     {
-        var data = await _reportService.ResolveAsync(reportId, request, GetActor(), cancellationToken);
+        var data = await Mediator.Send(new ResolveReportCommand(reportId, request, GetActor()), cancellationToken);
         return Ok(ApiResponse<object>.Ok(data, "Report resolution recorded successfully"));
     }
 }

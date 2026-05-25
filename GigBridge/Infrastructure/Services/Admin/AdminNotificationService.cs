@@ -14,24 +14,14 @@ public sealed class AdminNotificationService : AdminServiceBase, IAdminNotificat
     public async Task<SystemAlertResultDto> SendSystemAlertAsync(SystemAlertRequestDto request, AdminActorDto actor, CancellationToken cancellationToken)
     {
         var userIds = request.UserIds.Distinct().ToArray();
-        if (userIds.Length == 0)
-        {
-            throw Invalid("userIds", "At least one recipient identifier is required.");
-        }
-
-        if (string.IsNullOrWhiteSpace(request.Title))
-        {
-            throw Invalid("title", "A notification title is required.");
-        }
-
         foreach (var userId in userIds)
         {
-            DbContext.Set<Notification>().Add(new Notification
+            DbContext.Set<Domain.Entities.Notification>().Add(new Domain.Entities.Notification
             {
                 NotificationsId = Guid.NewGuid(),
                 UserId = userId,
                 Type = 10,
-                Title = request.Title.Trim(),
+                Title = request.Title!.Trim(),
                 Content = request.Content,
                 ReferenceId = request.ReferenceId,
                 ReferenceType = request.ReferenceType,
@@ -41,7 +31,7 @@ public sealed class AdminNotificationService : AdminServiceBase, IAdminNotificat
         }
 
         AddAudit(actor, "SystemAlertSent", request.ReferenceId, request.ReferenceType ?? "Notification", null,
-            new { UserIds = userIds, Title = request.Title.Trim(), request.ReferenceId, request.ReferenceType });
+            new { UserIds = userIds, Title = request.Title!.Trim(), request.ReferenceId, request.ReferenceType });
         await DbContext.SaveChangesAsync(cancellationToken);
         return new SystemAlertResultDto { RecipientCount = userIds.Length };
     }

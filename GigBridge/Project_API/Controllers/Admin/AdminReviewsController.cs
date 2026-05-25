@@ -1,5 +1,6 @@
 using Application.DTOs.Admin;
 using Application.Common.Models;
+using Application.Features.Admin.Reviews.ChangeVisibility;
 using Infrastructure.Services.Admin.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 
@@ -26,7 +27,7 @@ public sealed class AdminReviewsController : AdminControllerBase
     [HttpPatch("{reviewId:guid}/visibility")]
     public async Task<IActionResult> SetVisibility(Guid reviewId, [FromBody] ReviewVisibilityRequestDto request, CancellationToken cancellationToken)
     {
-        var data = await _reviewService.SetVisibilityAsync(reviewId, request, GetActor(), cancellationToken);
+        var data = await Mediator.Send(new ChangeReviewVisibilityCommand(reviewId, request, GetActor()), cancellationToken);
         return Ok(ApiResponse<object>.Ok(data, "Review visibility updated successfully"));
     }
 }

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
 namespace Domain.Entities;
@@ -27,8 +27,6 @@ public partial class Proposal
     public DateTime? UpdatedAt { get; set; }
 
     public bool? IsAigenerated { get; set; }
-
-    public virtual ICollection<AiinterviewSession> AiinterviewSessions { get; set; } = new List<AiinterviewSession>();
 
     public virtual Contract? Contract { get; set; }
 

@@ -96,7 +96,7 @@ public sealed class AdminDisputeService : AdminServiceBase, IAdminDisputeService
         var recipients = new[] { dispute.Contracts.ClientProfiles.UserId, dispute.Contracts.FreelancerProfiles.UserId }.Distinct();
         foreach (var userId in recipients)
         {
-            DbContext.Set<Notification>().Add(new Notification
+            DbContext.Set<Domain.Entities.Notification>().Add(new Domain.Entities.Notification
             {
                 NotificationsId = Guid.NewGuid(),
                 UserId = userId,

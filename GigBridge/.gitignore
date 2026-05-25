@@ -89,4 +89,5 @@ Domain/Enums/.gitkeep
 .DS_Store
 Thumbs.db
 *.md
+!docs/mediatr-clean-code-rule.md
 *.sql

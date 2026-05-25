@@ -4,11 +4,16 @@ using Infrastructure.Persistence;
 using Infrastructure.Repositories;
 using Infrastructure.Services;
 using Infrastructure.Services.Admin;
+using Infrastructure.Services.Admin.Handlers.Dashboard;
 using Infrastructure.Services.Admin.Interfaces;
+using Infrastructure.Services.Auth;
+using Infrastructure.Services.Email;
+using Infrastructure.Services.Media;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using MediatR;
 using PayOS;
 
 namespace Infrastructure;
@@ -28,6 +33,7 @@ public static class DependencyInjection
 
         // Repositories
         services.AddScoped<IUnitOfWork, UnitOfWork>();
+        services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
 
         // Services
         services.AddScoped<JwtService>();
@@ -36,6 +42,8 @@ public static class DependencyInjection
         services.AddScoped<IEmailService, EmailService>();
         services.AddScoped<IMediaService, MediaService>();
         services.AddScoped<INotificationService, NotificationService>();
+        services.AddTransient<IDateTimeService, Services.Common.DateTimeService>();
+        services.AddScoped<IBackgroundJobService, Services.BackgroundJobs.HangfireJobService>();
         services.AddScoped<IAdminDashboardService, AdminDashboardService>();
         services.AddScoped<IAdminJobPostService, AdminJobPostService>();
         services.AddScoped<IAdminReviewService, AdminReviewService>();
@@ -44,6 +52,8 @@ public static class DependencyInjection
         services.AddScoped<IAdminNotificationService, AdminNotificationService>();
         services.AddScoped<IAdminAuditLogService, AdminAuditLogService>();
         services.AddScoped<IAdminFaqService, AdminFaqService>();
+        services.AddMediatR(options =>
+            options.RegisterServicesFromAssembly(typeof(GetAdminDashboardHandler).Assembly));
 
         // Options
         services.Configure<CloudinaryOptions>(configuration.GetSection("Cloudinary"));

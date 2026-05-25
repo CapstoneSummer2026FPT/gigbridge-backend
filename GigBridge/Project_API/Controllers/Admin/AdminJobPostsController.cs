@@ -1,5 +1,6 @@
 using Application.DTOs.Admin;
 using Application.Common.Models;
+using Application.Features.Admin.JobPosts.Cancel;
 using Infrastructure.Services.Admin.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 
@@ -33,7 +34,7 @@ public sealed class AdminJobPostsController : AdminControllerBase
     [HttpPatch("{jobPostId:guid}/status")]
     public async Task<IActionResult> SetStatus(Guid jobPostId, [FromBody] JobStatusRequestDto request, CancellationToken cancellationToken)
     {
-        var data = await _jobPostService.CancelAsync(jobPostId, request, GetActor(), cancellationToken);
+        var data = await Mediator.Send(new CancelJobPostCommand(jobPostId, request, GetActor()), cancellationToken);
         return Ok(ApiResponse<object>.Ok(data, "Job post cancelled successfully"));
     }
 }
