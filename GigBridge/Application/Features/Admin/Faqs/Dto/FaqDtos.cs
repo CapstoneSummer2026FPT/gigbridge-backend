@@ -26,9 +26,9 @@ public sealed class FaqDto
 public sealed class SaveFaqRequestDto
 {
     public Guid CategoryId { get; set; }
-    public string? Question { get; set; }
+    public string Question { get; set; }
     public string? QuestionVi { get; set; }
-    public string? Answer { get; set; }
+    public string Answer { get; set; }
     public string? AnswerVi { get; set; }
     public int? SortOrder { get; set; }
     public bool? IsActive { get; set; }

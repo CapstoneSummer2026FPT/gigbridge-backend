@@ -98,7 +98,7 @@ public sealed class AdminUserService : AdminServiceBase, IAdminUserService
         var entityEntry = DbContext.Set<User>().Add(user);
         AddAudit(actor, "UserCreated", user.UserId, "User", null, Values(user));
         await DbContext.SaveChangesAsync(cancellationToken);
-        return await GetAsync(user.UserId, cancellationToken);
+        return _mapper.Map<AdminUserDto>(user);
     }
 
     public async Task<AdminUserDto> UpdateAsync(Guid id, SaveAdminUserRequestDto request, AdminActorDto actor, CancellationToken cancellationToken)
@@ -115,7 +115,7 @@ public sealed class AdminUserService : AdminServiceBase, IAdminUserService
         user.UpdatedAt = DateTime.UtcNow;
         AddAudit(actor, "UserUpdated", id, "User", oldValues, Values(user));
         await DbContext.SaveChangesAsync(cancellationToken);
-        return await GetAsync(id, cancellationToken);
+        return _mapper.Map<AdminUserDto>(user);
     }
 
     public async Task DeleteAsync(Guid id, AdminActorDto actor, CancellationToken cancellationToken)
