@@ -1,8 +1,8 @@
 using System.Linq.Expressions;
 using System.Text.Json;
+using Application.DTOs.Admin;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.DTOs.Admin;
 using Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -104,3 +104,4 @@ public abstract class AdminServiceBase
         };
     }
 }
+

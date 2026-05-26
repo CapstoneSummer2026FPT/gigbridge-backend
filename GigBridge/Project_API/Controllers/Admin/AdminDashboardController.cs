@@ -1,5 +1,5 @@
 using Application.Common.Models;
-using Application.Features.Admin.Dashboard.GetSummary;
+using Application.Features.Admin.Dashboard.Query;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Project_API.Controllers.Admin;

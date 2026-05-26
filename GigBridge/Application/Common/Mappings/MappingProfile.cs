@@ -1,6 +1,13 @@
 using AutoMapper;
-using Application.DTOs.Admin;
 using Domain.Entities;
+using Application.Features.Admin.AuditLogs.Dto;
+using Application.Features.Admin.Disputes.Dto;
+using Application.Features.Admin.Faqs.Dto;
+using Application.Features.Admin.JobPosts.Dto;
+using Application.Features.Admin.Notifications.Dto;
+using Application.Features.Admin.Reports.Dto;
+using Application.Features.Admin.Reviews.Dto;
+using Application.Features.Admin.Users.Dto;
 
 namespace Application.Common.Mappings;
 
@@ -8,6 +15,18 @@ public class MappingProfile : Profile
 {
     public MappingProfile()
     {
+        CreateMap<User, AdminUserDto>();
+        CreateMap<User, AdminUserDetailDto>();
+        CreateMap<ClientProfile, AdminClientProfileDto>()
+            .ForMember(destination => destination.ClientProfileId, options => options.MapFrom(source => source.ClientProfilesId));
+        CreateMap<FreelancerProfile, AdminFreelancerProfileDto>()
+            .ForMember(destination => destination.FreelancerProfileId, options => options.MapFrom(source => source.FreelancerProfilesId));
+
+        CreateMap<Notification, AdminNotificationDto>()
+            .ForMember(destination => destination.NotificationId, options => options.MapFrom(source => source.NotificationsId))
+            .ForMember(destination => destination.RecipientName, options => options.MapFrom(source => source.User.FullName))
+            .ForMember(destination => destination.RecipientEmail, options => options.MapFrom(source => source.User.Email));
+
         CreateMap<JobPost, JobPostDto>()
             .ForMember(destination => destination.JobPostId, options => options.MapFrom(source => source.JobPostsId))
             .ForMember(destination => destination.ClientProfileId, options => options.MapFrom(source => source.ClientProfilesId))
@@ -59,3 +78,4 @@ public class MappingProfile : Profile
             .ForMember(destination => destination.CategoryName, options => options.MapFrom(source => source.Faqcategories.Name));
     }
 }
+

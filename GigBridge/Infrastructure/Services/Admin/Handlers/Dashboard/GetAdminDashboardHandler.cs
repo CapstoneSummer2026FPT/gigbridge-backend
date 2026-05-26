@@ -1,5 +1,5 @@
-using Application.DTOs.Admin;
-using Application.Features.Admin.Dashboard.GetSummary;
+using Application.Features.Admin.Dashboard.Dto;
+using Application.Features.Admin.Dashboard.Query;
 using Infrastructure.Services.Admin.Interfaces;
 using MediatR;
 

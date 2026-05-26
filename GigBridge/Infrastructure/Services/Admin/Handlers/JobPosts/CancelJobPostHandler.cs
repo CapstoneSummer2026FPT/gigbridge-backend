@@ -1,5 +1,5 @@
-using Application.DTOs.Admin;
-using Application.Features.Admin.JobPosts.Cancel;
+using Application.Features.Admin.JobPosts.Command;
+using Application.Features.Admin.JobPosts.Dto;
 using Infrastructure.Services.Admin.Interfaces;
 using MediatR;
 
@@ -17,3 +17,4 @@ public sealed class CancelJobPostHandler : IRequestHandler<CancelJobPostCommand,
     public Task<JobPostDetailDto> Handle(CancelJobPostCommand request, CancellationToken cancellationToken) =>
         _jobPostService.CancelAsync(request.JobPostId, request.Request, request.Actor, cancellationToken);
 }
+

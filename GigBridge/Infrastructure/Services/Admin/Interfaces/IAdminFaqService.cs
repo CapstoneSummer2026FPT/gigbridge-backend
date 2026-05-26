@@ -1,4 +1,5 @@
 using Application.DTOs.Admin;
+using Application.Features.Admin.Faqs.Dto;
 
 namespace Infrastructure.Services.Admin.Interfaces;
 
@@ -10,3 +11,4 @@ public interface IAdminFaqService
     Task<FaqDto> UpdateAsync(Guid id, SaveFaqRequestDto request, AdminActorDto actor, CancellationToken cancellationToken);
     Task DeleteAsync(Guid id, AdminActorDto actor, CancellationToken cancellationToken);
 }
+

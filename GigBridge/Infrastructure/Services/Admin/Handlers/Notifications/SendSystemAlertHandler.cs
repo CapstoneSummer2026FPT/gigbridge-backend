@@ -1,5 +1,5 @@
-using Application.DTOs.Admin;
-using Application.Features.Admin.Notifications.SendSystemAlert;
+using Application.Features.Admin.Notifications.Command;
+using Application.Features.Admin.Notifications.Dto;
 using Infrastructure.Services.Admin.Interfaces;
 using MediatR;
 
@@ -17,3 +17,4 @@ public sealed class SendSystemAlertHandler : IRequestHandler<SendSystemAlertComm
     public Task<SystemAlertResultDto> Handle(SendSystemAlertCommand request, CancellationToken cancellationToken) =>
         _notificationService.SendSystemAlertAsync(request.Request, request.Actor, cancellationToken);
 }
+

@@ -1,5 +1,5 @@
-using Application.DTOs.Admin;
-using Application.Features.Admin.Disputes.StartReview;
+using Application.Features.Admin.Disputes.Command;
+using Application.Features.Admin.Disputes.Dto;
 using Infrastructure.Services.Admin.Interfaces;
 using MediatR;
 
@@ -17,3 +17,4 @@ public sealed class StartDisputeReviewHandler : IRequestHandler<StartDisputeRevi
     public Task<DisputeDetailDto> Handle(StartDisputeReviewCommand request, CancellationToken cancellationToken) =>
         _disputeService.ReviewAsync(request.DisputeId, request.Request, request.Actor, cancellationToken);
 }
+

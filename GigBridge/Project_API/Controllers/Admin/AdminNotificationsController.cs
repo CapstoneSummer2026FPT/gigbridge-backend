@@ -1,8 +1,9 @@
-using Application.DTOs.Admin;
 using Application.Common.Models;
-using Application.Features.Admin.Notifications.SendSystemAlert;
+using Application.Features.Admin.Notifications.Command;
+using Application.Features.Admin.Notifications.Dto;
 using Infrastructure.Services.Admin.Interfaces;
 using Microsoft.AspNetCore.Mvc;
+using Application.DTOs.Admin;
 
 namespace Project_API.Controllers.Admin;
 
@@ -38,3 +39,4 @@ public sealed class AdminNotificationsController : AdminControllerBase
         return Ok(ApiResponse<object>.Ok(data, "System alert sent successfully"));
     }
 }
+

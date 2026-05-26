@@ -1,6 +1,7 @@
+using Application.DTOs.Admin;
+using Application.Features.Admin.AuditLogs.Dto;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.DTOs.Admin;
 using AutoMapper;
 using AutoMapper.QueryableExtensions;
 using Domain.Entities;
@@ -44,3 +45,4 @@ public sealed class AdminAuditLogService : AdminServiceBase, IAdminAuditLogServi
         return result ?? throw new NotFoundException(nameof(AdminAuditLog), id);
     }
 }
+

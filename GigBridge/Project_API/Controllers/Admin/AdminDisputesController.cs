@@ -1,9 +1,9 @@
-using Application.DTOs.Admin;
 using Application.Common.Models;
-using Application.Features.Admin.Disputes.Resolve;
-using Application.Features.Admin.Disputes.StartReview;
+using Application.Features.Admin.Disputes.Command;
+using Application.Features.Admin.Disputes.Dto;
 using Infrastructure.Services.Admin.Interfaces;
 using Microsoft.AspNetCore.Mvc;
+using Application.DTOs.Admin;
 
 namespace Project_API.Controllers.Admin;
 
@@ -46,3 +46,4 @@ public sealed class AdminDisputesController : AdminControllerBase
         return Ok(ApiResponse<object>.Ok(data, "Dispute resolution recorded successfully"));
     }
 }
+

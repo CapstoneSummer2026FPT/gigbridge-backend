@@ -1,5 +1,6 @@
 using Application.DTOs.Admin;
 using Application.Common.Models;
+using Application.Features.Admin.AuditLogs.Dto;
 using Infrastructure.Services.Admin.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 

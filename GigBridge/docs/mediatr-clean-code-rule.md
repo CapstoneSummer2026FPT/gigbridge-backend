@@ -101,22 +101,36 @@ Do not use pipeline behaviors for use-case-specific business logic.
 
 ## Structure
 
-Group MediatR requests by feature and use case:
+Group application types by feature. Each feature owns its `Command`, `Query`,
+and `Dto` folders as applicable:
 
 ```text
 Features/
   JobPosts/
-    Approve/
+    Command/
       ApproveJobPostCommand.cs
-      ApproveJobPostHandler.cs
-      ApproveJobPostValidator.cs
+      ApproveJobPostCommandValidator.cs
+    Query/
+      GetJobPostQuery.cs
+    Dto/
+      JobPostDtos.cs
 ```
+
+- Use the singular folder names `Command`, `Query`, and `Dto`.
+- Keep command and query namespaces aligned with their folders, for example
+  `Application.Features.JobPosts.Command`.
+- Put request and response DTOs that belong to one feature in that feature's
+  `Dto` folder, including DTOs used by direct focused services.
+- Keep only DTOs genuinely shared across multiple features in the centralized
+  `DTOs` folder, such as common paging or actor/audit context models.
+- Do not organize feature DTOs under a global `DTOs/<area>` folder.
 
 ## Admin API Application
 
 Use MediatR for these named workflows:
 
 - Get dashboard moderation summary.
+- Enable or disable a user account as moderation.
 - Cancel a violating job post.
 - Change review visibility as moderation.
 - Start report review and resolve/dismiss a report.
@@ -125,6 +139,7 @@ Use MediatR for these named workflows:
 
 Use direct focused services for these plain CRUD/read operations:
 
-- Listing or retrieving job posts, reviews, reports, and disputes.
+- Listing or retrieving job posts, reviews, notifications, reports, and disputes.
+- Listing or retrieving user accounts.
 - Listing or retrieving audit logs.
 - FAQ create, read, update, and delete administration.

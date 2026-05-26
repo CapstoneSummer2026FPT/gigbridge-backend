@@ -1,5 +1,5 @@
-using Application.DTOs.Admin;
-using Application.Features.Admin.Disputes.Resolve;
+using Application.Features.Admin.Disputes.Command;
+using Application.Features.Admin.Disputes.Dto;
 using Infrastructure.Services.Admin.Interfaces;
 using MediatR;
 
@@ -17,3 +17,4 @@ public sealed class ResolveDisputeHandler : IRequestHandler<ResolveDisputeComman
     public Task<DisputeDetailDto> Handle(ResolveDisputeCommand request, CancellationToken cancellationToken) =>
         _disputeService.ResolveAsync(request.DisputeId, request.Request, request.Actor, cancellationToken);
 }
+

@@ -1,8 +1,9 @@
-using Application.DTOs.Admin;
 using Application.Common.Models;
-using Application.Features.Admin.Reviews.ChangeVisibility;
+using Application.Features.Admin.Reviews.Command;
+using Application.Features.Admin.Reviews.Dto;
 using Infrastructure.Services.Admin.Interfaces;
 using Microsoft.AspNetCore.Mvc;
+using Application.DTOs.Admin;
 
 namespace Project_API.Controllers.Admin;
 
@@ -38,3 +39,4 @@ public sealed class AdminReviewsController : AdminControllerBase
         return Ok(ApiResponse<object>.Ok(data, "Review visibility updated successfully"));
     }
 }
+

@@ -1,5 +1,5 @@
+using Application.Features.Admin.Dashboard.Dto;
 using Application.Common.Interfaces;
-using Application.DTOs.Admin;
 using Domain.Entities;
 using Infrastructure.Services.Admin.Interfaces;
 using Microsoft.EntityFrameworkCore;
@@ -23,3 +23,4 @@ public sealed class AdminDashboardService : AdminServiceBase, IAdminDashboardSer
         };
     }
 }
+

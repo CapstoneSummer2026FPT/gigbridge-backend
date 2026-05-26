@@ -1,9 +1,9 @@
-using Application.DTOs.Admin;
 using Application.Common.Models;
-using Application.Features.Admin.Reports.Resolve;
-using Application.Features.Admin.Reports.StartReview;
+using Application.Features.Admin.Reports.Command;
+using Application.Features.Admin.Reports.Dto;
 using Infrastructure.Services.Admin.Interfaces;
 using Microsoft.AspNetCore.Mvc;
+using Application.DTOs.Admin;
 
 namespace Project_API.Controllers.Admin;
 
@@ -46,3 +46,4 @@ public sealed class AdminReportsController : AdminControllerBase
         return Ok(ApiResponse<object>.Ok(data, "Report resolution recorded successfully"));
     }
 }
+

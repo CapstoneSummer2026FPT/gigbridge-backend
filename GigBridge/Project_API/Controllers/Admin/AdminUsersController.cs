@@ -1,6 +1,7 @@
 using Application.Common.Models;
 using Application.DTOs.Admin;
-using Application.Features.Admin.Users.ChangeStatus;
+using Application.Features.Admin.Users.Command;
+using Application.Features.Admin.Users.Dto;
 using Infrastructure.Services.Admin.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 

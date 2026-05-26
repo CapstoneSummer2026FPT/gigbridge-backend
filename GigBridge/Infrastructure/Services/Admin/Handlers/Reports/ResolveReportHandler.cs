@@ -1,5 +1,5 @@
-using Application.DTOs.Admin;
-using Application.Features.Admin.Reports.Resolve;
+using Application.Features.Admin.Reports.Command;
+using Application.Features.Admin.Reports.Dto;
 using Infrastructure.Services.Admin.Interfaces;
 using MediatR;
 
@@ -17,3 +17,4 @@ public sealed class ResolveReportHandler : IRequestHandler<ResolveReportCommand,
     public Task<ReportDto> Handle(ResolveReportCommand request, CancellationToken cancellationToken) =>
         _reportService.ResolveAsync(request.ReportId, request.Request, request.Actor, cancellationToken);
 }
+

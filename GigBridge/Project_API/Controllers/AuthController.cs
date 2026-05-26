@@ -1,6 +1,6 @@
 using Application.Common.Models;
-using Application.Features.Auth.Commands.Login;
-using Application.Features.Auth.DTOs;
+using Application.Features.Auth.Command;
+using Application.Features.Auth.Dto;
 using Microsoft.AspNetCore.Mvc;
 using Project_API.Controllers.Common;
 

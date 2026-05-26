@@ -1,5 +1,5 @@
-using Application.DTOs.Admin;
-using Application.Features.Admin.Reports.StartReview;
+using Application.Features.Admin.Reports.Command;
+using Application.Features.Admin.Reports.Dto;
 using Infrastructure.Services.Admin.Interfaces;
 using MediatR;
 
@@ -17,3 +17,4 @@ public sealed class StartReportReviewHandler : IRequestHandler<StartReportReview
     public Task<ReportDto> Handle(StartReportReviewCommand request, CancellationToken cancellationToken) =>
         _reportService.ReviewAsync(request.ReportId, request.Request, request.Actor, cancellationToken);
 }
+

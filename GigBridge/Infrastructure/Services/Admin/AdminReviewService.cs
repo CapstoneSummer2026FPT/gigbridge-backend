@@ -1,6 +1,7 @@
+using Application.DTOs.Admin;
+using Application.Features.Admin.Reviews.Dto;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.DTOs.Admin;
 using AutoMapper;
 using AutoMapper.QueryableExtensions;
 using Domain.Entities;
@@ -38,6 +39,13 @@ public sealed class AdminReviewService : AdminServiceBase, IAdminReviewService
             .ProjectTo<ReviewDto>(_mapper.ConfigurationProvider), query, cancellationToken);
     }
 
+    public async Task<ReviewDto> GetAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var result = await DbContext.Set<Review>().AsNoTracking().Where(x => x.ReviewsId == id)
+            .ProjectTo<ReviewDto>(_mapper.ConfigurationProvider).SingleOrDefaultAsync(cancellationToken);
+        return result ?? throw new NotFoundException(nameof(Review), id);
+    }
+
     public async Task<ReviewDto> SetVisibilityAsync(Guid id, ReviewVisibilityRequestDto request, AdminActorDto actor, CancellationToken cancellationToken)
     {
         if (!request.IsVisible && string.IsNullOrWhiteSpace(request.Reason))
@@ -53,7 +61,7 @@ public sealed class AdminReviewService : AdminServiceBase, IAdminReviewService
         AddAudit(actor, "ReviewVisibilityChanged", id, "Review", oldValues,
             new { review.IsVisible, review.UpdatedAt, request.Reason });
         await DbContext.SaveChangesAsync(cancellationToken);
-        return await DbContext.Set<Review>().AsNoTracking().Where(x => x.ReviewsId == id)
-            .ProjectTo<ReviewDto>(_mapper.ConfigurationProvider).SingleAsync(cancellationToken);
+        return await GetAsync(id, cancellationToken);
     }
 }
+

@@ -1,7 +1,8 @@
-using Application.DTOs.Admin;
 using Application.Common.Models;
+using Application.Features.Admin.Faqs.Dto;
 using Infrastructure.Services.Admin.Interfaces;
 using Microsoft.AspNetCore.Mvc;
+using Application.DTOs.Admin;
 
 namespace Project_API.Controllers.Admin;
 
@@ -51,3 +52,4 @@ public sealed class AdminFaqsController : AdminControllerBase
         return Ok(ApiResponse<object>.Ok(new { faqId }, "FAQ deleted successfully"));
     }
 }
+
