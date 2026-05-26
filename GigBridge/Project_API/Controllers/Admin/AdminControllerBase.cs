@@ -5,16 +5,13 @@ using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
+using Project_API.Controllers.Common;
 
 namespace Project_API.Controllers.Admin;
 
 [Authorize(Roles = "Admin")]
-public abstract class AdminControllerBase : ControllerBase
+public abstract class AdminControllerBase : BaseApiController
 {
-    private IMediator? _mediator;
-
-    protected IMediator Mediator => _mediator ??= HttpContext.RequestServices.GetRequiredService<IMediator>();
-
     protected AdminActorDto GetActor()
     {
         var rawId = User.FindFirstValue(ClaimTypes.NameIdentifier)

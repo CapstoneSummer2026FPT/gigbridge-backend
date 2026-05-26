@@ -24,6 +24,13 @@ public sealed class AdminReviewsController : AdminControllerBase
         return Ok(ApiResponse<object>.Ok(data, "Reviews retrieved successfully"));
     }
 
+    [HttpGet("{reviewId:guid}")]
+    public async Task<IActionResult> Get(Guid reviewId, CancellationToken cancellationToken)
+    {
+        var data = await _reviewService.GetAsync(reviewId, cancellationToken);
+        return Ok(ApiResponse<object>.Ok(data, "Review retrieved successfully"));
+    }
+
     [HttpPatch("{reviewId:guid}/visibility")]
     public async Task<IActionResult> SetVisibility(Guid reviewId, [FromBody] ReviewVisibilityRequestDto request, CancellationToken cancellationToken)
     {
