@@ -1,6 +1,7 @@
 using Application.Common.Models;
 using Application.Features.Auth.Commands.Login;
 using Application.Features.Auth.DTOs;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Project_API.Controllers.Common;
 
@@ -10,10 +11,11 @@ namespace Project_API.Controllers;
 [Route("api/v1/[controller]")]
 public class AuthController : BaseApiController
 {
+    
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginCommand command)
     {
-        var result = await Mediator.Send(command);
+        var result = await Mediator.Send(command); 
 
         if (result == null)
         {
@@ -24,7 +26,7 @@ public class AuthController : BaseApiController
     }
 
     [HttpGet("test-auth")]
-    [Microsoft.AspNetCore.Authorization.Authorize]
+    [Authorize]
     public IActionResult TestAuth()
     {
         var data = new { message = "You are authorized!", user = User.Identity?.Name };
