@@ -4,9 +4,7 @@ using Application.Common.Interfaces.IService;
 using Application.Common.Models;
 using Infrastructure.Persistence;
 using Infrastructure.Repositories;
-using Infrastructure.Services;
-using Infrastructure.Services.Admin;
-using Infrastructure.Services.Admin.Interfaces;
+
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -42,20 +40,8 @@ public static class DependencyInjection
         services.AddScoped<INotificationService, Infrastructure.Services.Notification.NotificationService>();
         services.AddTransient<IDateTimeService, Infrastructure.Services.Common.DateTimeService>();
         services.AddScoped<IBackgroundJobService, Infrastructure.Services.BackgroundJobs.HangfireJobService>();
-        services.AddScoped<JwtService>();
-        services.AddScoped<IAuthService, AuthService>();
-        services.AddScoped<IGoogleAuthService, GoogleAuthService>();
-        services.AddScoped<IEmailService, EmailService>();
-        services.AddScoped<IMediaService, MediaService>();
-        services.AddScoped<INotificationService, NotificationService>();
-        services.AddScoped<IAdminDashboardService, AdminDashboardService>();
-        services.AddScoped<IAdminJobPostService, AdminJobPostService>();
-        services.AddScoped<IAdminReviewService, AdminReviewService>();
-        services.AddScoped<IAdminReportService, AdminReportService>();
-        services.AddScoped<IAdminDisputeService, AdminDisputeService>();
-        services.AddScoped<IAdminNotificationService, AdminNotificationService>();
-        services.AddScoped<IAdminAuditLogService, AdminAuditLogService>();
-        services.AddScoped<IAdminFaqService, AdminFaqService>();
+
+        
 
         // Options
         services.Configure<CloudinaryOptions>(configuration.GetSection("Cloudinary"));
