@@ -22,6 +22,8 @@ namespace Project_API.Controllers;
 [Route("api/v1/[controller]")]
 public class AuthController : BaseApiController
 {
+
+
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request)
     {
