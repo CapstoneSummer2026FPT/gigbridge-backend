@@ -138,8 +138,8 @@ public class AuthController : BaseApiController
         }
     }
 
-    [HttpPost("verify-email")]
-    public async Task<IActionResult> EmailVerify([FromBody] VerifyEmailRequest request)
+    [HttpGet("verify-email")]
+    public async Task<IActionResult> EmailVerify([FromQuery] VerifyEmailRequest request)
     {
         try
         {

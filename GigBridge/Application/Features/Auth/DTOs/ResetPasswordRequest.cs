@@ -8,6 +8,7 @@ namespace Application.Features.Auth.DTOs
 {
     public class ResetPasswordRequest
     {
+        public string PasswordResetToken { get; set; }
         public string Email { get; set; } = null!;
 
         public string NewPassword { get; set; } = null!;

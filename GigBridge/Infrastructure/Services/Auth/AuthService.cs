@@ -91,7 +91,7 @@ public class AuthService : IAuthService
         _unitOfWork.UserRepository.Add(user);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        var frontendUrl = _configuration["FrontendBaseUrl"] ?? "http://localhost:3000";
+        var frontendUrl = _configuration["FrontendBaseUrl"] ?? "https://localhost:7094";
         var verifyLink = $"{frontendUrl}/verify-email?token={token}";
 
         var path = Path.Combine(
@@ -315,7 +315,7 @@ public class AuthService : IAuthService
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        var frontendUrl = _configuration["FrontendBaseUrl"] ?? "http://localhost:3000";
+        var frontendUrl = _configuration["FrontendBaseUrl"] ?? "https://localhost:7094";
         var verifyLink = $"{frontendUrl}/verify-email?token={token}";
 
         var path = Path.Combine(
@@ -346,6 +346,8 @@ public class AuthService : IAuthService
             throw new Exception("Email does not exist");
         }
 
+
+
         var token = Guid.NewGuid().ToString();
 
         user.EmailVerificationToken = token;
@@ -353,7 +355,7 @@ public class AuthService : IAuthService
 
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
-        var frontendUrl = _configuration["FrontendBaseUrl"] ?? "http://localhost:3000";
+        var frontendUrl = _configuration["FrontendBaseUrl"] ?? "https://localhost:7094";
         var verifyLink = $"{frontendUrl}/reset-password?token={token}";
 
         var path = Path.Combine(
@@ -379,10 +381,23 @@ public class AuthService : IAuthService
     {
         var user = await _unitOfWork.UserRepository.GetAsync(c => c.Email.ToLower() == request.Email.ToLower());
 
+
         if (user == null)
         {
             throw new Exception("Email does not exist");
         }
+
+
+        if (request.PasswordResetToken != user.EmailVerificationToken)
+        {
+            throw new Exception("wrong email verification token");
+        }
+
+        if(user.TokenExpiry < DateTime.UtcNow)
+        {
+            throw new Exception("Token has expired");
+        }
+
 
         var hash = _passwordHasher.HashPassword(request.NewPassword);
         user.Password = hash;
