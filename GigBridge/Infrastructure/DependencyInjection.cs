@@ -1,5 +1,4 @@
 using Application.Common.Interfaces;
-using Application.Common.Models;
 using Infrastructure.Persistence;
 using Infrastructure.Repositories;
 using Infrastructure.Services;
@@ -42,9 +41,6 @@ public static class DependencyInjection
         services.AddScoped<IEmailService, EmailService>();
         services.AddScoped<IMediaService, MediaService>();
         services.AddScoped<INotificationService, Services.Notification.NotificationService>();
-        services.AddTransient<IDateTimeService, Services.Common.DateTimeService>();
-        services.AddScoped<IBackgroundJobService, Services.BackgroundJobs.HangfireJobService>();
-        services.AddTransient<IDateTimeService, Services.Common.DateTimeService>();
         services.AddScoped<IBackgroundJobService, Services.BackgroundJobs.HangfireJobService>();
         services.AddScoped<IAdminDashboardService, AdminDashboardService>();
         services.AddScoped<IAdminUserService, AdminUserService>();
@@ -58,8 +54,6 @@ public static class DependencyInjection
         services.AddMediatR(options =>
             options.RegisterServicesFromAssembly(typeof(GetAdminDashboardHandler).Assembly));
 
-        // Options
-        services.Configure<CloudinaryOptions>(configuration.GetSection("Cloudinary"));
 
         // External payment service
         services.AddKeyedSingleton("OrderClient", (sp, key) =>

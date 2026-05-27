@@ -1,6 +1,7 @@
 using Application.Common.Models;
 using Application.Features.Auth.Command;
 using Application.Features.Auth.Dto;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Project_API.Controllers.Common;
 
@@ -24,7 +25,7 @@ public class AuthController : BaseApiController
     }
 
     [HttpGet("test-auth")]
-    [Microsoft.AspNetCore.Authorization.Authorize]
+    [Authorize]
     public IActionResult TestAuth()
     {
         var data = new { message = "You are authorized!", user = User.Identity?.Name };
