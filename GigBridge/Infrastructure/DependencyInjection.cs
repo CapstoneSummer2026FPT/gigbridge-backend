@@ -4,7 +4,11 @@ using Application.Common.Interfaces.IService;
 using Application.Common.Models;
 using Infrastructure.Persistence;
 using Infrastructure.Repositories;
-
+using Infrastructure.Services.Auth;
+using Infrastructure.Services.BackgroundJobs;
+using Infrastructure.Services.Email;
+using Infrastructure.Services.Media;
+using Infrastructure.Services.Notification;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;

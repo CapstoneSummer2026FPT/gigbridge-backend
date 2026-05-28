@@ -3,80 +3,15 @@
   "WorkspaceRootPath": "C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\GigBridge\\",
   "Documents": [
     {
-      "AbsoluteMoniker": "D:0:0:{FE91BF67-F15E-4EDB-B378-1B4FBBF9B95F}|Project_API\\Project_API.csproj|c:\\users\\os\\documents\\github\\projectcapstone\\gigbridge_projectcapstone\\gigbridge\\project_api\\controllers\\authcontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{FE91BF67-F15E-4EDB-B378-1B4FBBF9B95F}|Project_API\\Project_API.csproj|solutionrelative:project_api\\controllers\\authcontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{0FC5D6B2-6C0D-4278-9903-573ACC5EC69A}|Application\\Application.csproj|c:\\users\\os\\documents\\github\\projectcapstone\\gigbridge_projectcapstone\\gigbridge\\application\\features\\auth\\commands\\login\\logincommand.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{0FC5D6B2-6C0D-4278-9903-573ACC5EC69A}|Application\\Application.csproj|solutionrelative:application\\features\\auth\\commands\\login\\logincommand.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{0FC5D6B2-6C0D-4278-9903-573ACC5EC69A}|Application\\Application.csproj|c:\\users\\os\\documents\\github\\projectcapstone\\gigbridge_projectcapstone\\gigbridge\\application\\features\\auth\\commands\\login\\logincommandhandler.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{0FC5D6B2-6C0D-4278-9903-573ACC5EC69A}|Application\\Application.csproj|solutionrelative:application\\features\\auth\\commands\\login\\logincommandhandler.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{830E3F81-3E18-44D7-A1BA-1C6EEBED457C}|Infrastructure\\Infrastructure.csproj|c:\\users\\os\\documents\\github\\projectcapstone\\gigbridge_projectcapstone\\gigbridge\\infrastructure\\services\\email\\emailservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{830E3F81-3E18-44D7-A1BA-1C6EEBED457C}|Infrastructure\\Infrastructure.csproj|solutionrelative:infrastructure\\services\\email\\emailservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{0FC5D6B2-6C0D-4278-9903-573ACC5EC69A}|Application\\Application.csproj|c:\\users\\os\\documents\\github\\projectcapstone\\gigbridge_projectcapstone\\gigbridge\\application\\features\\auth\\dtos\\registerrequest.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{0FC5D6B2-6C0D-4278-9903-573ACC5EC69A}|Application\\Application.csproj|solutionrelative:application\\features\\auth\\dtos\\registerrequest.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{0FC5D6B2-6C0D-4278-9903-573ACC5EC69A}|Application\\Application.csproj|c:\\users\\os\\documents\\github\\projectcapstone\\gigbridge_projectcapstone\\gigbridge\\application\\features\\auth\\dtos\\userdto.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{0FC5D6B2-6C0D-4278-9903-573ACC5EC69A}|Application\\Application.csproj|solutionrelative:application\\features\\auth\\dtos\\userdto.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{0FC5D6B2-6C0D-4278-9903-573ACC5EC69A}|Application\\Application.csproj|c:\\users\\os\\documents\\github\\projectcapstone\\gigbridge_projectcapstone\\gigbridge\\application\\features\\auth\\commands\\register\\registercommand.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{0FC5D6B2-6C0D-4278-9903-573ACC5EC69A}|Application\\Application.csproj|solutionrelative:application\\features\\auth\\commands\\register\\registercommand.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{0FC5D6B2-6C0D-4278-9903-573ACC5EC69A}|Application\\Application.csproj|c:\\users\\os\\documents\\github\\projectcapstone\\gigbridge_projectcapstone\\gigbridge\\application\\features\\auth\\commands\\register\\registercommandhandler.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{0FC5D6B2-6C0D-4278-9903-573ACC5EC69A}|Application\\Application.csproj|solutionrelative:application\\features\\auth\\commands\\register\\registercommandhandler.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{830E3F81-3E18-44D7-A1BA-1C6EEBED457C}|Infrastructure\\Infrastructure.csproj|c:\\users\\os\\documents\\github\\projectcapstone\\gigbridge_projectcapstone\\gigbridge\\infrastructure\\services\\auth\\authservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{830E3F81-3E18-44D7-A1BA-1C6EEBED457C}|Infrastructure\\Infrastructure.csproj|solutionrelative:infrastructure\\services\\auth\\authservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{72538C7E-DB7C-4607-A4E0-4FBEDB8469FC}|Domain\\Domain.csproj|c:\\users\\os\\documents\\github\\projectcapstone\\gigbridge_projectcapstone\\gigbridge\\domain\\entities\\adminauditlog.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{72538C7E-DB7C-4607-A4E0-4FBEDB8469FC}|Domain\\Domain.csproj|solutionrelative:domain\\entities\\adminauditlog.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{72538C7E-DB7C-4607-A4E0-4FBEDB8469FC}|Domain\\Domain.csproj|c:\\users\\os\\documents\\github\\projectcapstone\\gigbridge_projectcapstone\\gigbridge\\domain\\entities\\user.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{72538C7E-DB7C-4607-A4E0-4FBEDB8469FC}|Domain\\Domain.csproj|solutionrelative:domain\\entities\\user.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\.gitignore||{3B902123-F8A7-4915-9F01-361F908088D0}"
     },
     {
       "AbsoluteMoniker": "D:0:0:{830E3F81-3E18-44D7-A1BA-1C6EEBED457C}|Infrastructure\\Infrastructure.csproj|c:\\users\\os\\documents\\github\\projectcapstone\\gigbridge_projectcapstone\\gigbridge\\infrastructure\\services\\auth\\jwtservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
       "RelativeMoniker": "D:0:0:{830E3F81-3E18-44D7-A1BA-1C6EEBED457C}|Infrastructure\\Infrastructure.csproj|solutionrelative:infrastructure\\services\\auth\\jwtservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{0FC5D6B2-6C0D-4278-9903-573ACC5EC69A}|Application\\Application.csproj|c:\\users\\os\\documents\\github\\projectcapstone\\gigbridge_projectcapstone\\gigbridge\\application\\features\\auth\\commands\\forgotpassword\\sendemailpasswordchangingcommandhandler.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{0FC5D6B2-6C0D-4278-9903-573ACC5EC69A}|Application\\Application.csproj|solutionrelative:application\\features\\auth\\commands\\forgotpassword\\sendemailpasswordchangingcommandhandler.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{0FC5D6B2-6C0D-4278-9903-573ACC5EC69A}|Application\\Application.csproj|c:\\users\\os\\documents\\github\\projectcapstone\\gigbridge_projectcapstone\\gigbridge\\application\\features\\auth\\dtos\\resetpasswordrequest.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{0FC5D6B2-6C0D-4278-9903-573ACC5EC69A}|Application\\Application.csproj|solutionrelative:application\\features\\auth\\dtos\\resetpasswordrequest.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{0FC5D6B2-6C0D-4278-9903-573ACC5EC69A}|Application\\Application.csproj|c:\\users\\os\\documents\\github\\projectcapstone\\gigbridge_projectcapstone\\gigbridge\\application\\features\\auth\\commands\\resetpassword\\resetpasswordcommandhandler.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{0FC5D6B2-6C0D-4278-9903-573ACC5EC69A}|Application\\Application.csproj|solutionrelative:application\\features\\auth\\commands\\resetpassword\\resetpasswordcommandhandler.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
       "AbsoluteMoniker": "D:0:0:{FE91BF67-F15E-4EDB-B378-1B4FBBF9B95F}|Project_API\\Project_API.csproj|c:\\users\\os\\documents\\github\\projectcapstone\\gigbridge_projectcapstone\\gigbridge\\project_api\\properties\\launchsettings.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}",
       "RelativeMoniker": "D:0:0:{FE91BF67-F15E-4EDB-B378-1B4FBBF9B95F}|Project_API\\Project_API.csproj|solutionrelative:project_api\\properties\\launchsettings.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{0FC5D6B2-6C0D-4278-9903-573ACC5EC69A}|Application\\Application.csproj|c:\\users\\os\\documents\\github\\projectcapstone\\gigbridge_projectcapstone\\gigbridge\\application\\features\\auth\\commands\\resendemail\\resendemailconfirmationcommandhandler.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{0FC5D6B2-6C0D-4278-9903-573ACC5EC69A}|Application\\Application.csproj|solutionrelative:application\\features\\auth\\commands\\resendemail\\resendemailconfirmationcommandhandler.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{0FC5D6B2-6C0D-4278-9903-573ACC5EC69A}|Application\\Application.csproj|c:\\users\\os\\documents\\github\\projectcapstone\\gigbridge_projectcapstone\\gigbridge\\application\\features\\auth\\commands\\validatetoken\\validateresettokencommand.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{0FC5D6B2-6C0D-4278-9903-573ACC5EC69A}|Application\\Application.csproj|solutionrelative:application\\features\\auth\\commands\\validatetoken\\validateresettokencommand.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{0FC5D6B2-6C0D-4278-9903-573ACC5EC69A}|Application\\Application.csproj|c:\\users\\os\\documents\\github\\projectcapstone\\gigbridge_projectcapstone\\gigbridge\\application\\features\\auth\\commands\\validatetoken\\validateresettokencommandhandler.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{0FC5D6B2-6C0D-4278-9903-573ACC5EC69A}|Application\\Application.csproj|solutionrelative:application\\features\\auth\\commands\\validatetoken\\validateresettokencommandhandler.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     }
   ],
   "DocumentGroupContainers": [
@@ -86,140 +21,38 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 2,
+          "SelectedChildIndex": 1,
           "Children": [
             {
               "$type": "Document",
-              "DocumentIndex": 8,
-              "Title": "AuthService.cs",
-              "DocumentMoniker": "C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\GigBridge\\Infrastructure\\Services\\Auth\\AuthService.cs",
-              "RelativeDocumentMoniker": "Infrastructure\\Services\\Auth\\AuthService.cs",
-              "ToolTip": "C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\GigBridge\\Infrastructure\\Services\\Auth\\AuthService.cs",
-              "RelativeToolTip": "Infrastructure\\Services\\Auth\\AuthService.cs",
-              "ViewState": "AgIAAB8AAAAAAAAAAAAQwFgAAAAJAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-05-24T08:45:46.795Z",
-              "IsPinned": true,
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 11,
+              "DocumentIndex": 1,
               "Title": "JwtService.cs",
               "DocumentMoniker": "C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\GigBridge\\Infrastructure\\Services\\Auth\\JwtService.cs",
               "RelativeDocumentMoniker": "Infrastructure\\Services\\Auth\\JwtService.cs",
               "ToolTip": "C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\GigBridge\\Infrastructure\\Services\\Auth\\JwtService.cs",
               "RelativeToolTip": "Infrastructure\\Services\\Auth\\JwtService.cs",
-              "ViewState": "AgIAADAAAAAAAAAAAAAmwC8AAAAAAAAAAAAAAA==",
+              "ViewState": "AgIAAC8AAAAAAAAAAAAmwDAAAAAAAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2026-05-25T05:11:46.571Z",
-              "IsPinned": true
+              "IsPinned": true,
+              "EditorCaption": ""
             },
             {
               "$type": "Document",
               "DocumentIndex": 0,
-              "Title": "AuthController.cs",
-              "DocumentMoniker": "C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\GigBridge\\Project_API\\Controllers\\AuthController.cs",
-              "RelativeDocumentMoniker": "Project_API\\Controllers\\AuthController.cs",
-              "ToolTip": "C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\GigBridge\\Project_API\\Controllers\\AuthController.cs",
-              "RelativeToolTip": "Project_API\\Controllers\\AuthController.cs",
-              "ViewState": "AgIAACsAAAAAAAAAAAAQwJYAAAA2AAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-05-27T10:34:06.768Z",
-              "IsPinned": true,
+              "Title": ".gitignore",
+              "DocumentMoniker": "C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\.gitignore",
+              "RelativeDocumentMoniker": "..\\.gitignore",
+              "ToolTip": "C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\.gitignore",
+              "RelativeToolTip": "..\\.gitignore",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABkAAAAEAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2026-05-28T14:08:48.47Z",
               "EditorCaption": ""
             },
             {
-              "$type": "Document",
-              "DocumentIndex": 3,
-              "Title": "EmailService.cs",
-              "DocumentMoniker": "C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\GigBridge\\Infrastructure\\Services\\Email\\EmailService.cs",
-              "RelativeDocumentMoniker": "Infrastructure\\Services\\Email\\EmailService.cs",
-              "ToolTip": "C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\GigBridge\\Infrastructure\\Services\\Email\\EmailService.cs",
-              "RelativeToolTip": "Infrastructure\\Services\\Email\\EmailService.cs",
-              "ViewState": "AgIAAA8AAAAAAAAAAAAAAIkAAAAkAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-05-27T10:28:54.417Z",
-              "IsPinned": true,
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 2,
-              "Title": "LoginCommandHandler.cs",
-              "DocumentMoniker": "C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\GigBridge\\Application\\Features\\Auth\\Commands\\Login\\LoginCommandHandler.cs",
-              "RelativeDocumentMoniker": "Application\\Features\\Auth\\Commands\\Login\\LoginCommandHandler.cs",
-              "ToolTip": "C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\GigBridge\\Application\\Features\\Auth\\Commands\\Login\\LoginCommandHandler.cs",
-              "RelativeToolTip": "Application\\Features\\Auth\\Commands\\Login\\LoginCommandHandler.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAuwA4AAAAUAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-05-28T07:10:09.655Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 1,
-              "Title": "LoginCommand.cs",
-              "DocumentMoniker": "C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\GigBridge\\Application\\Features\\Auth\\Commands\\Login\\LoginCommand.cs",
-              "RelativeDocumentMoniker": "Application\\Features\\Auth\\Commands\\Login\\LoginCommand.cs",
-              "ToolTip": "C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\GigBridge\\Application\\Features\\Auth\\Commands\\Login\\LoginCommand.cs",
-              "RelativeToolTip": "Application\\Features\\Auth\\Commands\\Login\\LoginCommand.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAMAAABOAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-05-28T07:09:26.414Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 4,
-              "Title": "RegisterRequest.cs",
-              "DocumentMoniker": "C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\GigBridge\\Application\\Features\\Auth\\DTOs\\RegisterRequest.cs",
-              "RelativeDocumentMoniker": "Application\\Features\\Auth\\DTOs\\RegisterRequest.cs",
-              "ToolTip": "C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\GigBridge\\Application\\Features\\Auth\\DTOs\\RegisterRequest.cs",
-              "RelativeToolTip": "Application\\Features\\Auth\\DTOs\\RegisterRequest.cs",
-              "ViewState": "AgIAAA0AAAAAAAAAAAAzwB4AAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-05-28T06:52:31.161Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 5,
-              "Title": "UserDTO.cs",
-              "DocumentMoniker": "C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\GigBridge\\Application\\Features\\Auth\\DTOs\\UserDTO.cs",
-              "RelativeDocumentMoniker": "Application\\Features\\Auth\\DTOs\\UserDTO.cs",
-              "ToolTip": "C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\GigBridge\\Application\\Features\\Auth\\DTOs\\UserDTO.cs",
-              "RelativeToolTip": "Application\\Features\\Auth\\DTOs\\UserDTO.cs",
-              "ViewState": "AgIAABcAAAAAAAAAAAAswB8AAAAbAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-05-28T06:50:57.12Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 6,
-              "Title": "RegisterCommand.cs",
-              "DocumentMoniker": "C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\GigBridge\\Application\\Features\\Auth\\Commands\\Register\\RegisterCommand.cs",
-              "RelativeDocumentMoniker": "Application\\Features\\Auth\\Commands\\Register\\RegisterCommand.cs",
-              "ToolTip": "C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\GigBridge\\Application\\Features\\Auth\\Commands\\Register\\RegisterCommand.cs",
-              "RelativeToolTip": "Application\\Features\\Auth\\Commands\\Register\\RegisterCommand.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAUAAABRAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-05-28T06:49:59.503Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 7,
-              "Title": "RegisterCommandHandler.cs",
-              "DocumentMoniker": "C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\GigBridge\\Application\\Features\\Auth\\Commands\\Register\\RegisterCommandHandler.cs",
-              "RelativeDocumentMoniker": "Application\\Features\\Auth\\Commands\\Register\\RegisterCommandHandler.cs",
-              "ToolTip": "C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\GigBridge\\Application\\Features\\Auth\\Commands\\Register\\RegisterCommandHandler.cs",
-              "RelativeToolTip": "Application\\Features\\Auth\\Commands\\Register\\RegisterCommandHandler.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAgAAABFAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-05-28T06:50:18.659Z",
-              "EditorCaption": ""
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{c6f34f0d-7ae5-4f3a-be61-fe0c21ae9eb8}"
             },
             {
               "$type": "Bookmark",
@@ -1163,79 +996,7 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 10,
-              "Title": "User.cs",
-              "DocumentMoniker": "C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\GigBridge\\Domain\\Entities\\User.cs",
-              "RelativeDocumentMoniker": "Domain\\Entities\\User.cs",
-              "ToolTip": "C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\GigBridge\\Domain\\Entities\\User.cs",
-              "RelativeToolTip": "Domain\\Entities\\User.cs",
-              "ViewState": "AgIAACMAAAAAAAAAAAAmwC0AAAA8AAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-05-27T11:34:19.254Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 9,
-              "Title": "AdminAuditLog.cs",
-              "DocumentMoniker": "C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\GigBridge\\Domain\\Entities\\AdminAuditLog.cs",
-              "RelativeDocumentMoniker": "Domain\\Entities\\AdminAuditLog.cs",
-              "ToolTip": "C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\GigBridge\\Domain\\Entities\\AdminAuditLog.cs",
-              "RelativeToolTip": "Domain\\Entities\\AdminAuditLog.cs",
-              "ViewState": "AgIAAAoAAAAAAAAAAAAgwBEAAAAqAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-05-27T11:33:31.119Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 12,
-              "Title": "SendEmailPasswordChangingCommandHandler.cs",
-              "DocumentMoniker": "C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\GigBridge\\Application\\Features\\Auth\\Commands\\ForgotPassword\\SendEmailPasswordChangingCommandHandler.cs",
-              "RelativeDocumentMoniker": "Application\\Features\\Auth\\Commands\\ForgotPassword\\SendEmailPasswordChangingCommandHandler.cs",
-              "ToolTip": "C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\GigBridge\\Application\\Features\\Auth\\Commands\\ForgotPassword\\SendEmailPasswordChangingCommandHandler.cs",
-              "RelativeToolTip": "Application\\Features\\Auth\\Commands\\ForgotPassword\\SendEmailPasswordChangingCommandHandler.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-05-27T11:19:36.845Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 13,
-              "Title": "ResetPasswordRequest.cs",
-              "DocumentMoniker": "C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\GigBridge\\Application\\Features\\Auth\\DTOs\\ResetPasswordRequest.cs",
-              "RelativeDocumentMoniker": "Application\\Features\\Auth\\DTOs\\ResetPasswordRequest.cs",
-              "ToolTip": "C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\GigBridge\\Application\\Features\\Auth\\DTOs\\ResetPasswordRequest.cs",
-              "RelativeToolTip": "Application\\Features\\Auth\\DTOs\\ResetPasswordRequest.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAkAAAAFAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-05-27T11:09:57.279Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 14,
-              "Title": "ResetPasswordCommandHandler.cs",
-              "DocumentMoniker": "C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\GigBridge\\Application\\Features\\Auth\\Commands\\ResetPassword\\ResetPasswordCommandHandler.cs",
-              "RelativeDocumentMoniker": "Application\\Features\\Auth\\Commands\\ResetPassword\\ResetPasswordCommandHandler.cs",
-              "ToolTip": "C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\GigBridge\\Application\\Features\\Auth\\Commands\\ResetPassword\\ResetPasswordCommandHandler.cs",
-              "RelativeToolTip": "Application\\Features\\Auth\\Commands\\ResetPassword\\ResetPasswordCommandHandler.cs",
-              "ViewState": "AgIAAAMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-05-27T11:09:06.102Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 16,
-              "Title": "ResendEmailConfirmationCommandHandler.cs",
-              "DocumentMoniker": "C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\GigBridge\\Application\\Features\\Auth\\Commands\\ResendEmail\\ResendEmailConfirmationCommandHandler.cs",
-              "RelativeDocumentMoniker": "Application\\Features\\Auth\\Commands\\ResendEmail\\ResendEmailConfirmationCommandHandler.cs",
-              "ToolTip": "C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\GigBridge\\Application\\Features\\Auth\\Commands\\ResendEmail\\ResendEmailConfirmationCommandHandler.cs",
-              "RelativeToolTip": "Application\\Features\\Auth\\Commands\\ResendEmail\\ResendEmailConfirmationCommandHandler.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-05-27T10:51:08.449Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 15,
+              "DocumentIndex": 2,
               "Title": "launchSettings.json",
               "DocumentMoniker": "C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\GigBridge\\Project_API\\Properties\\launchSettings.json",
               "RelativeDocumentMoniker": "Project_API\\Properties\\launchSettings.json",
@@ -1244,30 +1005,6 @@
               "ViewState": "AgIAAAAAAAAAAAAAAAAAABQAAAAvAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001642|",
               "WhenOpened": "2026-05-27T10:33:33.425Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 18,
-              "Title": "ValidateResetTokenCommandHandler.cs",
-              "DocumentMoniker": "C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\GigBridge\\Application\\Features\\Auth\\Commands\\ValidateToken\\ValidateResetTokenCommandHandler.cs",
-              "RelativeDocumentMoniker": "Application\\Features\\Auth\\Commands\\ValidateToken\\ValidateResetTokenCommandHandler.cs",
-              "ToolTip": "C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\GigBridge\\Application\\Features\\Auth\\Commands\\ValidateToken\\ValidateResetTokenCommandHandler.cs",
-              "RelativeToolTip": "Application\\Features\\Auth\\Commands\\ValidateToken\\ValidateResetTokenCommandHandler.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAABgAAAABAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-05-26T16:48:29.761Z"
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 17,
-              "Title": "ValidateResetTokenCommand.cs",
-              "DocumentMoniker": "C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\GigBridge\\Application\\Features\\Auth\\Commands\\ValidateToken\\ValidateResetTokenCommand.cs",
-              "RelativeDocumentMoniker": "Application\\Features\\Auth\\Commands\\ValidateToken\\ValidateResetTokenCommand.cs",
-              "ToolTip": "C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\GigBridge\\Application\\Features\\Auth\\Commands\\ValidateToken\\ValidateResetTokenCommand.cs",
-              "RelativeToolTip": "Application\\Features\\Auth\\Commands\\ValidateToken\\ValidateResetTokenCommand.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAoAAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-05-26T16:48:15.643Z"
             }
           ]
         },
