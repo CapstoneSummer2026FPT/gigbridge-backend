@@ -1,54 +1,17 @@
 {
   "Version": 1,
-  "WorkspaceRootPath": "C:\\Users\\OS\\Documents\\Gigbridge_ProjectCapstone\\GigBridge\\",
+  "WorkspaceRootPath": "C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\GigBridge\\",
   "Documents": [
     {
-      "AbsoluteMoniker": "D:0:0:{FE91BF67-F15E-4EDB-B378-1B4FBBF9B95F}|Project_API\\Project_API.csproj|c:\\users\\os\\documents\\gigbridge_projectcapstone\\gigbridge\\project_api\\controllers\\authcontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{FE91BF67-F15E-4EDB-B378-1B4FBBF9B95F}|Project_API\\Project_API.csproj|solutionrelative:project_api\\controllers\\authcontroller.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{A2FE74E1-B743-11D0-AE1A-00A0C90FFFC3}|\u003CMiscFiles\u003E|C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\.gitignore||{3B902123-F8A7-4915-9F01-361F908088D0}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{830E3F81-3E18-44D7-A1BA-1C6EEBED457C}|Infrastructure\\Infrastructure.csproj|c:\\users\\os\\documents\\gigbridge_projectcapstone\\gigbridge\\infrastructure\\services\\serviceimplementations.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{830E3F81-3E18-44D7-A1BA-1C6EEBED457C}|Infrastructure\\Infrastructure.csproj|solutionrelative:infrastructure\\services\\serviceimplementations.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{830E3F81-3E18-44D7-A1BA-1C6EEBED457C}|Infrastructure\\Infrastructure.csproj|c:\\users\\os\\documents\\github\\projectcapstone\\gigbridge_projectcapstone\\gigbridge\\infrastructure\\services\\auth\\jwtservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
+      "RelativeMoniker": "D:0:0:{830E3F81-3E18-44D7-A1BA-1C6EEBED457C}|Infrastructure\\Infrastructure.csproj|solutionrelative:infrastructure\\services\\auth\\jwtservice.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
     },
     {
-      "AbsoluteMoniker": "D:0:0:{830E3F81-3E18-44D7-A1BA-1C6EEBED457C}|Infrastructure\\Infrastructure.csproj|c:\\users\\os\\documents\\gigbridge_projectcapstone\\gigbridge\\infrastructure\\persistence\\gigbridgedbcontext.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{830E3F81-3E18-44D7-A1BA-1C6EEBED457C}|Infrastructure\\Infrastructure.csproj|solutionrelative:infrastructure\\persistence\\gigbridgedbcontext.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{0FC5D6B2-6C0D-4278-9903-573ACC5EC69A}|Application\\Application.csproj|c:\\users\\os\\documents\\gigbridge_projectcapstone\\gigbridge\\application\\common\\interfaces\\iapplicationdbcontext.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{0FC5D6B2-6C0D-4278-9903-573ACC5EC69A}|Application\\Application.csproj|solutionrelative:application\\common\\interfaces\\iapplicationdbcontext.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{0FC5D6B2-6C0D-4278-9903-573ACC5EC69A}|Application\\Application.csproj|c:\\users\\os\\documents\\gigbridge_projectcapstone\\gigbridge\\application\\common\\interfaces\\iunitofwork.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{0FC5D6B2-6C0D-4278-9903-573ACC5EC69A}|Application\\Application.csproj|solutionrelative:application\\common\\interfaces\\iunitofwork.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{0FC5D6B2-6C0D-4278-9903-573ACC5EC69A}|Application\\Application.csproj|c:\\users\\os\\documents\\gigbridge_projectcapstone\\gigbridge\\application\\common\\interfaces\\iserviceinterfaces.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{0FC5D6B2-6C0D-4278-9903-573ACC5EC69A}|Application\\Application.csproj|solutionrelative:application\\common\\interfaces\\iserviceinterfaces.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{830E3F81-3E18-44D7-A1BA-1C6EEBED457C}|Infrastructure\\Infrastructure.csproj|c:\\users\\os\\documents\\gigbridge_projectcapstone\\gigbridge\\infrastructure\\repositories\\unitofwork.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{830E3F81-3E18-44D7-A1BA-1C6EEBED457C}|Infrastructure\\Infrastructure.csproj|solutionrelative:infrastructure\\repositories\\unitofwork.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{830E3F81-3E18-44D7-A1BA-1C6EEBED457C}|Infrastructure\\Infrastructure.csproj|c:\\users\\os\\documents\\gigbridge_projectcapstone\\gigbridge\\infrastructure\\persistence\\dbseeder.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{830E3F81-3E18-44D7-A1BA-1C6EEBED457C}|Infrastructure\\Infrastructure.csproj|solutionrelative:infrastructure\\persistence\\dbseeder.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{0FC5D6B2-6C0D-4278-9903-573ACC5EC69A}|Application\\Application.csproj|c:\\users\\os\\documents\\gigbridge_projectcapstone\\gigbridge\\application\\common\\models\\cloudinaryoptions.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{0FC5D6B2-6C0D-4278-9903-573ACC5EC69A}|Application\\Application.csproj|solutionrelative:application\\common\\models\\cloudinaryoptions.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{0FC5D6B2-6C0D-4278-9903-573ACC5EC69A}|Application\\Application.csproj|c:\\users\\os\\documents\\gigbridge_projectcapstone\\gigbridge\\application\\common\\mappings\\mappingprofile.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{0FC5D6B2-6C0D-4278-9903-573ACC5EC69A}|Application\\Application.csproj|solutionrelative:application\\common\\mappings\\mappingprofile.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{FE91BF67-F15E-4EDB-B378-1B4FBBF9B95F}|Project_API\\Project_API.csproj|c:\\users\\os\\documents\\gigbridge_projectcapstone\\gigbridge\\project_api\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{FE91BF67-F15E-4EDB-B378-1B4FBBF9B95F}|Project_API\\Project_API.csproj|solutionrelative:project_api\\program.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
-    },
-    {
-      "AbsoluteMoniker": "D:0:0:{830E3F81-3E18-44D7-A1BA-1C6EEBED457C}|Infrastructure\\Infrastructure.csproj|c:\\users\\os\\documents\\gigbridge_projectcapstone\\gigbridge\\infrastructure\\dependencyinjection.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}",
-      "RelativeMoniker": "D:0:0:{830E3F81-3E18-44D7-A1BA-1C6EEBED457C}|Infrastructure\\Infrastructure.csproj|solutionrelative:infrastructure\\dependencyinjection.cs||{A6C744A8-0E4A-4FC6-886A-064283054674}"
+      "AbsoluteMoniker": "D:0:0:{FE91BF67-F15E-4EDB-B378-1B4FBBF9B95F}|Project_API\\Project_API.csproj|c:\\users\\os\\documents\\github\\projectcapstone\\gigbridge_projectcapstone\\gigbridge\\project_api\\properties\\launchsettings.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}",
+      "RelativeMoniker": "D:0:0:{FE91BF67-F15E-4EDB-B378-1B4FBBF9B95F}|Project_API\\Project_API.csproj|solutionrelative:project_api\\properties\\launchsettings.json||{90A6B3A7-C1A3-4009-A288-E2FF89E96FA0}"
     }
   ],
   "DocumentGroupContainers": [
@@ -58,8 +21,39 @@
       "DocumentGroups": [
         {
           "DockedWidth": 200,
-          "SelectedChildIndex": 236,
+          "SelectedChildIndex": 1,
           "Children": [
+            {
+              "$type": "Document",
+              "DocumentIndex": 1,
+              "Title": "JwtService.cs",
+              "DocumentMoniker": "C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\GigBridge\\Infrastructure\\Services\\Auth\\JwtService.cs",
+              "RelativeDocumentMoniker": "Infrastructure\\Services\\Auth\\JwtService.cs",
+              "ToolTip": "C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\GigBridge\\Infrastructure\\Services\\Auth\\JwtService.cs",
+              "RelativeToolTip": "Infrastructure\\Services\\Auth\\JwtService.cs",
+              "ViewState": "AgIAAC8AAAAAAAAAAAAmwDAAAAAAAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
+              "WhenOpened": "2026-05-25T05:11:46.571Z",
+              "IsPinned": true,
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Document",
+              "DocumentIndex": 0,
+              "Title": ".gitignore",
+              "DocumentMoniker": "C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\.gitignore",
+              "RelativeDocumentMoniker": "..\\.gitignore",
+              "ToolTip": "C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\.gitignore",
+              "RelativeToolTip": "..\\.gitignore",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABkAAAAEAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001001|",
+              "WhenOpened": "2026-05-28T14:08:48.47Z",
+              "EditorCaption": ""
+            },
+            {
+              "$type": "Bookmark",
+              "Name": "ST:0:0:{c6f34f0d-7ae5-4f3a-be61-fe0c21ae9eb8}"
+            },
             {
               "$type": "Bookmark",
               "Name": "ST:1:0:{e8b06f52-6d01-11d2-aa7d-00c04f990343}"
@@ -1002,159 +996,15 @@
             },
             {
               "$type": "Document",
-              "DocumentIndex": 1,
-              "Title": "ServiceImplementations.cs",
-              "DocumentMoniker": "C:\\Users\\OS\\Documents\\Gigbridge_ProjectCapstone\\GigBridge\\Infrastructure\\Services\\ServiceImplementations.cs",
-              "RelativeDocumentMoniker": "Infrastructure\\Services\\ServiceImplementations.cs",
-              "ToolTip": "C:\\Users\\OS\\Documents\\Gigbridge_ProjectCapstone\\GigBridge\\Infrastructure\\Services\\ServiceImplementations.cs",
-              "RelativeToolTip": "Infrastructure\\Services\\ServiceImplementations.cs",
-              "ViewState": "AgIAAEUAAAAAAAAAAAAIwBUAAABHAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-04-21T10:40:50.013Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 0,
-              "Title": "AuthController.cs",
-              "DocumentMoniker": "C:\\Users\\OS\\Documents\\Gigbridge_ProjectCapstone\\GigBridge\\Project_API\\Controllers\\AuthController.cs",
-              "RelativeDocumentMoniker": "Project_API\\Controllers\\AuthController.cs",
-              "ToolTip": "C:\\Users\\OS\\Documents\\Gigbridge_ProjectCapstone\\GigBridge\\Project_API\\Controllers\\AuthController.cs*",
-              "RelativeToolTip": "Project_API\\Controllers\\AuthController.cs*",
-              "ViewState": "AgIAABwAAAAAAAAAAAAYwCcAAAAVAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-04-21T10:39:43.704Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
               "DocumentIndex": 2,
-              "Title": "GigbridgeDbContext.cs",
-              "DocumentMoniker": "C:\\Users\\OS\\Documents\\Gigbridge_ProjectCapstone\\GigBridge\\Infrastructure\\Persistence\\GigbridgeDbContext.cs",
-              "RelativeDocumentMoniker": "Infrastructure\\Persistence\\GigbridgeDbContext.cs",
-              "ToolTip": "C:\\Users\\OS\\Documents\\Gigbridge_ProjectCapstone\\GigBridge\\Infrastructure\\Persistence\\GigbridgeDbContext.cs",
-              "RelativeToolTip": "Infrastructure\\Persistence\\GigbridgeDbContext.cs",
-              "ViewState": "AgIAAHIFAAAAAAAAAAAmwHIFAAAaAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-04-21T10:35:14.09Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 3,
-              "Title": "IApplicationDbContext.cs",
-              "DocumentMoniker": "C:\\Users\\OS\\Documents\\Gigbridge_ProjectCapstone\\GigBridge\\Application\\Common\\Interfaces\\IApplicationDbContext.cs",
-              "RelativeDocumentMoniker": "Application\\Common\\Interfaces\\IApplicationDbContext.cs",
-              "ToolTip": "C:\\Users\\OS\\Documents\\Gigbridge_ProjectCapstone\\GigBridge\\Application\\Common\\Interfaces\\IApplicationDbContext.cs",
-              "RelativeToolTip": "Application\\Common\\Interfaces\\IApplicationDbContext.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-04-21T10:34:52.059Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 6,
-              "Title": "UnitOfWork.cs",
-              "DocumentMoniker": "C:\\Users\\OS\\Documents\\Gigbridge_ProjectCapstone\\GigBridge\\Infrastructure\\Repositories\\UnitOfWork.cs",
-              "RelativeDocumentMoniker": "Infrastructure\\Repositories\\UnitOfWork.cs",
-              "ToolTip": "C:\\Users\\OS\\Documents\\Gigbridge_ProjectCapstone\\GigBridge\\Infrastructure\\Repositories\\UnitOfWork.cs",
-              "RelativeToolTip": "Infrastructure\\Repositories\\UnitOfWork.cs",
-              "ViewState": "AgIAAAUAAAAAAAAAAAAxwAAAAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-04-21T10:34:38.195Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 7,
-              "Title": "DbSeeder.cs",
-              "DocumentMoniker": "C:\\Users\\OS\\Documents\\Gigbridge_ProjectCapstone\\GigBridge\\Infrastructure\\Persistence\\DbSeeder.cs",
-              "RelativeDocumentMoniker": "Infrastructure\\Persistence\\DbSeeder.cs",
-              "ToolTip": "C:\\Users\\OS\\Documents\\Gigbridge_ProjectCapstone\\GigBridge\\Infrastructure\\Persistence\\DbSeeder.cs",
-              "RelativeToolTip": "Infrastructure\\Persistence\\DbSeeder.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-04-21T10:34:36.582Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 8,
-              "Title": "CloudinaryOptions.cs",
-              "DocumentMoniker": "C:\\Users\\OS\\Documents\\Gigbridge_ProjectCapstone\\GigBridge\\Application\\Common\\Models\\CloudinaryOptions.cs",
-              "RelativeDocumentMoniker": "Application\\Common\\Models\\CloudinaryOptions.cs",
-              "ToolTip": "C:\\Users\\OS\\Documents\\Gigbridge_ProjectCapstone\\GigBridge\\Application\\Common\\Models\\CloudinaryOptions.cs",
-              "RelativeToolTip": "Application\\Common\\Models\\CloudinaryOptions.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-04-21T10:34:30.807Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 5,
-              "Title": "IServiceInterfaces.cs",
-              "DocumentMoniker": "C:\\Users\\OS\\Documents\\Gigbridge_ProjectCapstone\\GigBridge\\Application\\Common\\Interfaces\\IServiceInterfaces.cs",
-              "RelativeDocumentMoniker": "Application\\Common\\Interfaces\\IServiceInterfaces.cs",
-              "ToolTip": "C:\\Users\\OS\\Documents\\Gigbridge_ProjectCapstone\\GigBridge\\Application\\Common\\Interfaces\\IServiceInterfaces.cs",
-              "RelativeToolTip": "Application\\Common\\Interfaces\\IServiceInterfaces.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-04-21T10:34:22.27Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 4,
-              "Title": "IUnitOfWork.cs",
-              "DocumentMoniker": "C:\\Users\\OS\\Documents\\Gigbridge_ProjectCapstone\\GigBridge\\Application\\Common\\Interfaces\\IUnitOfWork.cs",
-              "RelativeDocumentMoniker": "Application\\Common\\Interfaces\\IUnitOfWork.cs",
-              "ToolTip": "C:\\Users\\OS\\Documents\\Gigbridge_ProjectCapstone\\GigBridge\\Application\\Common\\Interfaces\\IUnitOfWork.cs",
-              "RelativeToolTip": "Application\\Common\\Interfaces\\IUnitOfWork.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-04-21T10:34:21.308Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 9,
-              "Title": "MappingProfile.cs",
-              "DocumentMoniker": "C:\\Users\\OS\\Documents\\Gigbridge_ProjectCapstone\\GigBridge\\Application\\Common\\Mappings\\MappingProfile.cs",
-              "RelativeDocumentMoniker": "Application\\Common\\Mappings\\MappingProfile.cs",
-              "ToolTip": "C:\\Users\\OS\\Documents\\Gigbridge_ProjectCapstone\\GigBridge\\Application\\Common\\Mappings\\MappingProfile.cs",
-              "RelativeToolTip": "Application\\Common\\Mappings\\MappingProfile.cs",
-              "ViewState": "AgIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-04-21T10:34:28.644Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 11,
-              "Title": "DependencyInjection.cs",
-              "DocumentMoniker": "C:\\Users\\OS\\Documents\\Gigbridge_ProjectCapstone\\GigBridge\\Infrastructure\\DependencyInjection.cs",
-              "RelativeDocumentMoniker": "Infrastructure\\DependencyInjection.cs",
-              "ToolTip": "C:\\Users\\OS\\Documents\\Gigbridge_ProjectCapstone\\GigBridge\\Infrastructure\\DependencyInjection.cs",
-              "RelativeToolTip": "Infrastructure\\DependencyInjection.cs",
-              "ViewState": "AgIAAAYAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-04-21T10:24:43.308Z",
-              "EditorCaption": ""
-            },
-            {
-              "$type": "Document",
-              "DocumentIndex": 10,
-              "Title": "Program.cs",
-              "DocumentMoniker": "C:\\Users\\OS\\Documents\\Gigbridge_ProjectCapstone\\GigBridge\\Project_API\\Program.cs",
-              "RelativeDocumentMoniker": "Project_API\\Program.cs",
-              "ToolTip": "C:\\Users\\OS\\Documents\\Gigbridge_ProjectCapstone\\GigBridge\\Project_API\\Program.cs",
-              "RelativeToolTip": "Project_API\\Program.cs",
-              "ViewState": "AgIAAKIAAAAAAAAAAAAAAIwAAAAAAAAAAAAAAA==",
-              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-04-21T10:24:25.253Z",
-              "EditorCaption": ""
+              "Title": "launchSettings.json",
+              "DocumentMoniker": "C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\GigBridge\\Project_API\\Properties\\launchSettings.json",
+              "RelativeDocumentMoniker": "Project_API\\Properties\\launchSettings.json",
+              "ToolTip": "C:\\Users\\OS\\Documents\\GitHub\\ProjectCapstone\\Gigbridge_ProjectCapstone\\GigBridge\\Project_API\\Properties\\launchSettings.json",
+              "RelativeToolTip": "Project_API\\Properties\\launchSettings.json",
+              "ViewState": "AgIAAAAAAAAAAAAAAAAAABQAAAAvAAAAAAAAAA==",
+              "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.001642|",
+              "WhenOpened": "2026-05-27T10:33:33.425Z"
             }
           ]
         },

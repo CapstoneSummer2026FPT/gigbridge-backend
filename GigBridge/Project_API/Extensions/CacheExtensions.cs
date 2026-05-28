@@ -1,7 +1,7 @@
-using Application.Common.Interfaces;
 using Infrastructure.Services.Caching;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
+using Application.Common.Interfaces.IService;
 namespace Project_API.Extensions;
 public static class CacheExtensions {
     public static IServiceCollection AddHybridCache(this IServiceCollection services, IConfiguration configuration) {

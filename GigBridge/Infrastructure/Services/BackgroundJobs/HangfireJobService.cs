@@ -1,5 +1,5 @@
 using System.Linq.Expressions;
-using Application.Common.Interfaces;
+using Application.Common.Interfaces.IService;
 using Hangfire;
 namespace Infrastructure.Services.BackgroundJobs;
 public class HangfireJobService : IBackgroundJobService {

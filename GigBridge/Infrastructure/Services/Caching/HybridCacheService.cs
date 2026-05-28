@@ -1,5 +1,5 @@
 using System.Text.Json;
-using Application.Common.Interfaces;
+using Application.Common.Interfaces.IService;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.Caching.Memory;
 namespace Infrastructure.Services.Caching;
