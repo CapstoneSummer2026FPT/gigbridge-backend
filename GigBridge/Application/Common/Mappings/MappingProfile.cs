@@ -1,7 +1,7 @@
 using AutoMapper;
 
 using Domain.Entities;
-using Application.Features.Auth.DTOs;
+using Application.Features.Auth.Shared.DTOs;
 using Application.DTOs.Admin;
 
 

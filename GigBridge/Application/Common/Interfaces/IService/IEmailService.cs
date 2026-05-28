@@ -1,6 +1,7 @@
 using System.Threading;
 using System.Threading.Tasks;
-using Application.Features.Auth.DTOs;
+using Application.Features.Auth.Shared.DTOs;
+using Application.Features.Auth.VerifyEmail.DTOs;
 
 namespace Application.Common.Interfaces.IService;
 
