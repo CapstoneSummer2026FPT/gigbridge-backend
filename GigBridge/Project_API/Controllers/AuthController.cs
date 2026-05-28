@@ -1,14 +1,23 @@
 using Application.Common.Models;
-using Application.Features.Auth.Commands.ForgotPassword;
-using Application.Features.Auth.Commands.GoogleLogin;
-using Application.Features.Auth.Commands.Login;
-using Application.Features.Auth.Commands.RefreshToken;
-using Application.Features.Auth.Commands.Register;
-using Application.Features.Auth.Commands.ResendEmail;
-using Application.Features.Auth.Commands.ResetPassword;
-using Application.Features.Auth.Commands.ValidateToken;
-using Application.Features.Auth.Commands.VerifyEmail;
-using Application.Features.Auth.DTOs;
+using Application.Features.Auth.Shared.DTOs;
+using Application.Features.Auth.ForgotPassword.Commands;
+using Application.Features.Auth.ForgotPassword.DTOs;
+using Application.Features.Auth.GoogleLogin.Commands;
+using Application.Features.Auth.GoogleLogin.DTOs;
+using Application.Features.Auth.Login.Commands;
+using Application.Features.Auth.Login.DTOs;
+using Application.Features.Auth.RefreshToken.Commands;
+using Application.Features.Auth.RefreshToken.DTOs;
+using Application.Features.Auth.Register.Commands;
+using Application.Features.Auth.Register.DTOs;
+using Application.Features.Auth.ResendEmail.Commands;
+using Application.Features.Auth.ResendEmail.DTOs;
+using Application.Features.Auth.ResetPassword.Commands;
+using Application.Features.Auth.ResetPassword.DTOs;
+using Application.Features.Auth.ValidateToken.Commands;
+using Application.Features.Auth.ValidateToken.DTOs;
+using Application.Features.Auth.VerifyEmail.Commands;
+using Application.Features.Auth.VerifyEmail.DTOs;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -19,7 +28,7 @@ using System.Threading.Tasks;
 namespace Project_API.Controllers;
 
 [ApiController]
-[Route("api/v1/[controller]")]
+[Route("api/[controller]")]
 public class AuthController : BaseApiController
 {
 
@@ -179,7 +188,7 @@ public class AuthController : BaseApiController
     }
 
     [HttpPost("forgot-password")]
-    public async Task<IActionResult> SendPasswordEmailChanging([FromBody] EmailResendConfirmationRequest request)
+    public async Task<IActionResult> SendPasswordEmailChanging([FromBody] ForgotPasswordRequest request)
     {
         try
         {

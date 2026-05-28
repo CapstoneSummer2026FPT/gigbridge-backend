@@ -1,6 +1,7 @@
 using Application.Common.Interfaces.IRepository;
 using Application.Common.Interfaces.IService;
-using Application.Features.Auth.DTOs;
+using Application.Features.Auth.Shared.DTOs;
+using Application.Features.Auth.VerifyEmail.DTOs;
 using Microsoft.Extensions.Configuration;
 using System;
 using System.Collections.Generic;

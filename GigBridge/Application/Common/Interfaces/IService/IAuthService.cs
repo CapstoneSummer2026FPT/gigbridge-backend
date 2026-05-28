@@ -1,6 +1,11 @@
 using System.Threading;
 using System.Threading.Tasks;
-using Application.Features.Auth.DTOs;
+using Application.Features.Auth.Shared.DTOs;
+using Application.Features.Auth.Login.DTOs;
+using Application.Features.Auth.Register.DTOs;
+using Application.Features.Auth.ResendEmail.DTOs;
+using Application.Features.Auth.ForgotPassword.DTOs;
+using Application.Features.Auth.ResetPassword.DTOs;
 
 namespace Application.Common.Interfaces.IService;
 
@@ -18,7 +23,7 @@ public interface IAuthService
 
     Task ResendEmailConfirmationAsync(EmailResendConfirmationRequest email, CancellationToken cancellationToken = default);
 
-    Task SendEmailPasswordChangingRequestAsync(EmailResendConfirmationRequest email, CancellationToken cancellationToken = default);
+    Task SendEmailPasswordChangingRequestAsync(ForgotPasswordRequest email, CancellationToken cancellationToken = default);
 
     Task ResetPasswordAsync(ResetPasswordRequest request, CancellationToken cancellationToken = default);
 

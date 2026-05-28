@@ -1,7 +1,12 @@
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IRepository;
 using Application.Common.Interfaces.IService;
-using Application.Features.Auth.DTOs;
+using Application.Features.Auth.Shared.DTOs;
+using Application.Features.Auth.Login.DTOs;
+using Application.Features.Auth.Register.DTOs;
+using Application.Features.Auth.ResendEmail.DTOs;
+using Application.Features.Auth.ForgotPassword.DTOs;
+using Application.Features.Auth.ResetPassword.DTOs;
 using AutoMapper;
 using Domain.Entities;
 using Domain.Enums;
@@ -337,7 +342,7 @@ public class AuthService : IAuthService
         }, cancellationToken);
     }
 
-    public async Task SendEmailPasswordChangingRequestAsync(EmailResendConfirmationRequest email, CancellationToken cancellationToken = default)
+    public async Task SendEmailPasswordChangingRequestAsync(ForgotPasswordRequest email, CancellationToken cancellationToken = default)
     {
         var user = await _unitOfWork.UserRepository.GetAsync(c => c.Email.ToLower() == email.Email.ToLower());
 
