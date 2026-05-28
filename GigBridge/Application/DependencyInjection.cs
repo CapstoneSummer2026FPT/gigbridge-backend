@@ -20,9 +20,7 @@ public static class DependencyInjection
             cfg.AddBehavior(typeof(IPipelineBehavior<,>), typeof(ValidationBehaviour<,>));
             cfg.AddBehavior(typeof(IPipelineBehavior<,>), typeof(PerformanceBehaviour<,>));
         });
-
-      
-
+        services.AddAutoMapper(cfg => {}, typeof(MappingProfile));
         return services;
     }
 }

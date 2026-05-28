@@ -46,10 +46,6 @@ public static class DependencyInjection
         services.AddScoped<IBackgroundJobService, Infrastructure.Services.BackgroundJobs.HangfireJobService>();
 
         
-
-        // Options
-        services.Configure<CloudinaryOptions>(configuration.GetSection("Cloudinary"));
-
         // External payment service
         services.AddKeyedSingleton("OrderClient", (sp, key) =>
         {
