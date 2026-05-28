@@ -1,4 +1,4 @@
-using Application.Common.Interfaces;
+using Application.Common.Interfaces.IService;
 using MediatR.Pipeline;
 using Microsoft.Extensions.Logging;
 namespace Application.Common.Behaviours;
