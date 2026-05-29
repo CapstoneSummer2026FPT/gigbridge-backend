@@ -1,8 +1,14 @@
 using Application.Common.Interfaces;
+using Application.Common.Interfaces.IRepository;
+using Application.Common.Interfaces.IService;
 using Application.Common.Models;
 using Infrastructure.Persistence;
 using Infrastructure.Repositories;
-using Infrastructure.Services;
+using Infrastructure.Services.Auth;
+using Infrastructure.Services.BackgroundJobs;
+using Infrastructure.Services.Email;
+using Infrastructure.Services.Media;
+using Infrastructure.Services.Notification;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -26,9 +32,10 @@ public static class DependencyInjection
 
         // Repositories
         services.AddScoped<IUnitOfWork, UnitOfWork>();
-        services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
+
 
         // Services
+        services.AddScoped<IPasswordHasher, Infrastructure.Services.Auth.BCryptPasswordHasher>();
         services.AddScoped<IJwtService, Infrastructure.Services.Auth.JwtService>();
         services.AddScoped<IAuthService, Infrastructure.Services.Auth.AuthService>();
         services.AddScoped<IGoogleAuthService, Infrastructure.Services.Auth.GoogleAuthService>();
@@ -38,9 +45,7 @@ public static class DependencyInjection
         services.AddTransient<IDateTimeService, Infrastructure.Services.Common.DateTimeService>();
         services.AddScoped<IBackgroundJobService, Infrastructure.Services.BackgroundJobs.HangfireJobService>();
 
-        // Options
-        services.Configure<CloudinaryOptions>(configuration.GetSection("Cloudinary"));
-
+        
         // External payment service
         services.AddKeyedSingleton("OrderClient", (sp, key) =>
         {

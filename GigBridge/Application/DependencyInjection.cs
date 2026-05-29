@@ -1,9 +1,10 @@
-using System.Reflection;
 using Application.Common.Behaviours;
-using FluentValidation;
-using Microsoft.Extensions.DependencyInjection;
-using MediatR;
+using Application.Common.Interfaces.IService;
 using Application.Common.Mappings;
+using FluentValidation;
+using MediatR;
+using Microsoft.Extensions.DependencyInjection;
+using System.Reflection;
 
 namespace Application;
 
@@ -11,7 +12,6 @@ public static class DependencyInjection
 {
     public static IServiceCollection AddApplicationServices(this IServiceCollection services)
     {
-        services.AddAutoMapper(cfg => {}, typeof(MappingProfile));
         services.AddValidatorsFromAssembly(Assembly.GetExecutingAssembly());
         
         services.AddMediatR(cfg => {
@@ -20,7 +20,7 @@ public static class DependencyInjection
             cfg.AddBehavior(typeof(IPipelineBehavior<,>), typeof(ValidationBehaviour<,>));
             cfg.AddBehavior(typeof(IPipelineBehavior<,>), typeof(PerformanceBehaviour<,>));
         });
-
+        services.AddAutoMapper(cfg => {}, typeof(MappingProfile));
         return services;
     }
 }

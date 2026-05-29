@@ -28,9 +28,20 @@ public partial class User
 
     public string? PreferredLanguage { get; set; }
 
+    public string? Provider { get; set; }
+
+    public string? ProviderId { get; set; }
+
     public DateTime CreatedAt { get; set; }
 
     public DateTime? UpdatedAt { get; set; }
+
+    public string? EmailVerificationToken { get; set; }
+
+    public DateTime? TokenExpiry { get; set; }
+    public string? RefreshTokenHash { get; set; }
+    public DateTime? RefreshTokenExpiry { get; set; }
+
 
     public virtual ICollection<AdminAuditLog> AdminAuditLogs { get; set; } = new List<AdminAuditLog>();
 
