@@ -27,6 +27,12 @@ builder.Services.AddSignalR();
 builder.Services.AddHangfireServices(builder.Configuration);
 builder.Services.AddHybridCache(builder.Configuration);
 
+if (!builder.Environment.IsEnvironment("Testing"))
+{
+    builder.Services.AddHangfireServices(builder.Configuration);
+}
+builder.Services.AddHybridCache(builder.Configuration);
+
 var app = builder.Build();
 
 // Enable Swagger in all environments for testing
@@ -49,8 +55,11 @@ using (var scope = app.Services.CreateScope())
 app.UseMiddleware<Project_API.Middleware.ExceptionHandlingMiddleware>();
 app.UseMiddleware<Project_API.Middleware.RequestLoggingMiddleware>();
 
-app.UseHttpsRedirection();
-app.UseStaticFiles();
+if (!app.Environment.IsEnvironment("Testing"))
+{
+    app.UseHttpsRedirection();
+    app.UseStaticFiles();
+}
 
 app.UseCors("AllowAll"); // CORS must be BEFORE MapControllers
 
@@ -62,6 +71,11 @@ app.MapControllers();
 app.MapHub<Project_API.Hubs.ChatHub>("/hubs/chat");
 app.MapHub<Project_API.Hubs.NotificationHub>("/hubs/notification");
 
-app.UseHangfireDashboard();
+if (!app.Environment.IsEnvironment("Testing"))
+{
+    app.UseHangfireDashboard();
+}
 
 app.Run();
+
+public partial class Program;
