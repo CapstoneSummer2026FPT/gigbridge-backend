@@ -17,6 +17,7 @@ using System.IO;
 using System.Security.Claims;
 using System.Threading;
 using System.Threading.Tasks;
+using Application.Common.Constants;
 
 namespace Infrastructure.Services.Auth;
 
@@ -53,7 +54,7 @@ public class AuthService : IAuthService
 
     public async Task<UserDTO> RegisterAsync(RegisterRequest request, CancellationToken cancellationToken = default)
     {
-        var existing = await _unitOfWork.UserRepository.GetAsync(c => c.Email.ToLower() == request.Email.ToLower());
+        var existing = await _unitOfWork.UserRepository.GetAsync(c => c.Email.ToLower() == request.Email.ToLower(), cancellationToken: cancellationToken);
         if (existing != null)
         {
             throw new Exception("Email already exists");
@@ -126,8 +127,11 @@ public class AuthService : IAuthService
         {
             var user = await _unitOfWork.UserRepository.GetAsync(
                 c => c.Email == request.Email,
-                includeProperties: "ClientProfile,FreelancerProfile"
+                includeProperties: SD.Join_ClientProfile + "," + SD.Join_FreelancerProfile,
+                cancellationToken: cancellationToken
             );
+
+        //includeProperties: "ClientProfile,FreelancerProfile"
 
             if (user == null || !_passwordHasher.VerifyPassword(request.Password, user.Password))
             {
@@ -161,7 +165,8 @@ public class AuthService : IAuthService
     {
         var user = await _unitOfWork.UserRepository.GetAsync(
             c => c.Email == request.Email,
-            includeProperties: "ClientProfile,FreelancerProfile"
+            includeProperties: SD.Join_ClientProfile + "," + SD.Join_FreelancerProfile,
+            cancellationToken: cancellationToken
         );
 
         if (user == null || !_passwordHasher.VerifyPassword(request.Password, user.Password))
@@ -200,7 +205,8 @@ public class AuthService : IAuthService
         var googleUser = await _googleAuthService.VerifyAuthCodeAsync(authCode, cancellationToken);
         var user = await _unitOfWork.UserRepository.GetAsync(
             u => u.Email.ToLower() == googleUser.Email.ToLower(),
-            includeProperties: "ClientProfile,FreelancerProfile"
+            includeProperties: "ClientProfile,FreelancerProfile",
+            cancellationToken: cancellationToken
         );
 
         if (user == null)
@@ -260,7 +266,8 @@ public class AuthService : IAuthService
 
         var user = await _unitOfWork.UserRepository.GetAsync(
             u => u.UserId == Guid.Parse(userId),
-            includeProperties: "ClientProfile,FreelancerProfile"
+            includeProperties: SD.Join_ClientProfile + "," + SD.Join_FreelancerProfile,
+            cancellationToken: cancellationToken
         );
 
         if (user == null)
@@ -301,7 +308,7 @@ public class AuthService : IAuthService
 
     public async Task ResendEmailConfirmationAsync(EmailResendConfirmationRequest email, CancellationToken cancellationToken = default)
     {
-        var user = await _unitOfWork.UserRepository.GetAsync(c => c.Email.ToLower() == email.Email.ToLower());
+        var user = await _unitOfWork.UserRepository.GetAsync(c => c.Email.ToLower() == email.Email.ToLower(), cancellationToken: cancellationToken);
 
         if (user == null)
         {
@@ -344,7 +351,7 @@ public class AuthService : IAuthService
 
     public async Task SendEmailPasswordChangingRequestAsync(ForgotPasswordRequest email, CancellationToken cancellationToken = default)
     {
-        var user = await _unitOfWork.UserRepository.GetAsync(c => c.Email.ToLower() == email.Email.ToLower());
+        var user = await _unitOfWork.UserRepository.GetAsync(c => c.Email.ToLower() == email.Email.ToLower(), cancellationToken: cancellationToken);
 
         if (user == null)
         {
@@ -384,7 +391,7 @@ public class AuthService : IAuthService
 
     public async Task ResetPasswordAsync(ResetPasswordRequest request, CancellationToken cancellationToken = default)
     {
-        var user = await _unitOfWork.UserRepository.GetAsync(c => c.Email.ToLower() == request.Email.ToLower());
+        var user = await _unitOfWork.UserRepository.GetAsync(c => c.Email.ToLower() == request.Email.ToLower(), cancellationToken: cancellationToken);
 
 
         if (user == null)
@@ -414,7 +421,7 @@ public class AuthService : IAuthService
 
     public async Task<bool> IsTokenExpired(string token, CancellationToken cancellationToken = default)
     {
-        var user = await _unitOfWork.UserRepository.GetAsync(c => c.EmailVerificationToken == token);
+        var user = await _unitOfWork.UserRepository.GetAsync(c => c.EmailVerificationToken == token, cancellationToken: cancellationToken);
 
         if (user != null)
         {

@@ -133,7 +133,7 @@ namespace Infrastructure.Services.Email
         public async Task VerifyEmailAsync(VerifyEmailRequest emailRequestDTO, CancellationToken cancellationToken = default)
         {
             var user = await _unitOfWork.UserRepository
-                .GetAsync(u => u.EmailVerificationToken == emailRequestDTO.Token);
+                .GetAsync(u => u.EmailVerificationToken == emailRequestDTO.Token, cancellationToken: cancellationToken);
 
             if (user == null)
                 throw new Exception("Invalid token");
