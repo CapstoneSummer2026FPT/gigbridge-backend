@@ -16,7 +16,6 @@ using Project_API.Controllers.Common;
 
 namespace Project_API.ontrollers;
 
-[Area("Admin")]
 [Route("api/v1/admin/users")]
 [Authorize(Roles = "2")]
 public class AdminUserController : BaseApiController
