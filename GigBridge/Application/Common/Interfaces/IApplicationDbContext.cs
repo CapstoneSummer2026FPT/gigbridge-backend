@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 
 namespace Application.Common.Interfaces;

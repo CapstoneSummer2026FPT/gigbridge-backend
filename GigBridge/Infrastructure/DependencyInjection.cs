@@ -1,9 +1,7 @@
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IRepository;
 using Application.Common.Interfaces.IService;
 using Application.Common.Models;
 using Infrastructure.Persistence;
-using Infrastructure.Repositories;
 using Infrastructure.Services.Auth;
 using Infrastructure.Services.BackgroundJobs;
 using Infrastructure.Services.Email;
@@ -30,14 +28,12 @@ public static class DependencyInjection
         services.AddScoped<IApplicationDbContext>(provider =>
             provider.GetRequiredService<GigbridgeDbContext>());
 
-        // Repositories
-        services.AddScoped<IUnitOfWork, UnitOfWork>();
-
 
         // Services
         services.AddScoped<IPasswordHasher, Infrastructure.Services.Auth.BCryptPasswordHasher>();
         services.AddScoped<IJwtService, Infrastructure.Services.Auth.JwtService>();
         services.AddScoped<IAuthService, Infrastructure.Services.Auth.AuthService>();
+        services.AddScoped<IUserService, Infrastructure.Services.Admin.UserService>();
         services.AddScoped<IGoogleAuthService, Infrastructure.Services.Auth.GoogleAuthService>();
         services.AddScoped<IEmailService, Infrastructure.Services.Email.EmailService>();
         services.AddScoped<IMediaService, Infrastructure.Services.Media.MediaService>();
