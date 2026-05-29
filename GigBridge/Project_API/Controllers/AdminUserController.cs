@@ -14,7 +14,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Project_API.Controllers.Common;
 
-namespace Project_API.ontrollers;
+namespace Project_API.Controllers;
 
 [Route("api/v1/admin/users")]
 [Authorize(Roles = "2")]
