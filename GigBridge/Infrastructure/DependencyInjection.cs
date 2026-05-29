@@ -38,6 +38,7 @@ public static class DependencyInjection
         services.AddScoped<IPasswordHasher, Infrastructure.Services.Auth.BCryptPasswordHasher>();
         services.AddScoped<IJwtService, Infrastructure.Services.Auth.JwtService>();
         services.AddScoped<IAuthService, Infrastructure.Services.Auth.AuthService>();
+        services.AddScoped<IUserService, Infrastructure.Services.Admin.UserService>();
         services.AddScoped<IGoogleAuthService, Infrastructure.Services.Auth.GoogleAuthService>();
         services.AddScoped<IEmailService, Infrastructure.Services.Email.EmailService>();
         services.AddScoped<IMediaService, Infrastructure.Services.Media.MediaService>();
