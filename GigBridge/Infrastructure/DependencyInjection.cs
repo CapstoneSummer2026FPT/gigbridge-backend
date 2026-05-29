@@ -1,9 +1,7 @@
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IRepository;
 using Application.Common.Interfaces.IService;
 using Application.Common.Models;
 using Infrastructure.Persistence;
-using Infrastructure.Repositories;
 using Infrastructure.Services.Auth;
 using Infrastructure.Services.BackgroundJobs;
 using Infrastructure.Services.Email;
@@ -29,9 +27,6 @@ public static class DependencyInjection
 
         services.AddScoped<IApplicationDbContext>(provider =>
             provider.GetRequiredService<GigbridgeDbContext>());
-
-        // Repositories
-        services.AddScoped<IUnitOfWork, UnitOfWork>();
 
 
         // Services

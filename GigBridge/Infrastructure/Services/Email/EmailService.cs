@@ -1,7 +1,9 @@
-using Application.Common.Interfaces.IRepository;
+using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Features.Auth.Shared.DTOs;
 using Application.Features.Auth.VerifyEmail.DTOs;
+using Domain.Entities;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using System;
 using System.Collections.Generic;
@@ -17,13 +19,13 @@ namespace Infrastructure.Services.Email
 {
     public class EmailService : IEmailService
     {
-        private readonly IUnitOfWork _unitOfWork;
+        private readonly IApplicationDbContext _context;
         private readonly IConfiguration _configuration;
         private readonly HttpClient _httpClient;
 
-        public EmailService(IUnitOfWork unitOfWork, IConfiguration configuration)
+        public EmailService(IApplicationDbContext context, IConfiguration configuration)
         {
-            _unitOfWork = unitOfWork;
+            _context = context;
             _configuration = configuration;
             _httpClient = new HttpClient();
         }
@@ -132,8 +134,8 @@ namespace Infrastructure.Services.Email
 
         public async Task VerifyEmailAsync(VerifyEmailRequest emailRequestDTO, CancellationToken cancellationToken = default)
         {
-            var user = await _unitOfWork.UserRepository
-                .GetAsync(u => u.EmailVerificationToken == emailRequestDTO.Token, cancellationToken: cancellationToken);
+            var user = await _context.Set<User>()
+                .FirstOrDefaultAsync(u => u.EmailVerificationToken == emailRequestDTO.Token, cancellationToken: cancellationToken);
 
             if (user == null)
                 throw new Exception("Invalid token");
@@ -146,7 +148,7 @@ namespace Infrastructure.Services.Email
             user.EmailVerificationToken = null;
             user.TokenExpiry = null;
 
-            await _unitOfWork.SaveChangesAsync(cancellationToken);
+            await _context.SaveChangesAsync(cancellationToken);
         }
     }
 }
