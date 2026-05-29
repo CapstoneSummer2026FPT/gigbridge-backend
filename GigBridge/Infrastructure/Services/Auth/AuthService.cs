@@ -397,7 +397,7 @@ public class AuthService : IAuthService
             throw new Exception("wrong email verification token");
         }
 
-        if(user.TokenExpiry < DateTime.UtcNow)
+        if (user.TokenExpiry < DateTime.UtcNow)
         {
             throw new Exception("Token has expired");
         }

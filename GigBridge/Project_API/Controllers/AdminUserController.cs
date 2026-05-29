@@ -10,6 +10,7 @@ using Application.Features.Admin.Users.Shared.DTOs;
 using Application.Features.Admin.Users.ToggleUserActivity.Commands;
 using Application.Features.Admin.Users.UpdateUser.Commands;
 using Application.Features.Admin.Users.UpdateUser.DTOs;
+using Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Project_API.Controllers.Common;
@@ -17,7 +18,7 @@ using Project_API.Controllers.Common;
 namespace Project_API.Controllers;
 
 [Route("api/v1/admin/users")]
-[Authorize(Roles = "2")]
+[Authorize(Roles = nameof(UserRole.Admin))]
 public class AdminUserController : BaseApiController
 {
     [HttpGet]
