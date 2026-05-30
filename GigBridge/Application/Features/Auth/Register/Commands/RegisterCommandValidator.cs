@@ -30,8 +30,7 @@ namespace Application.Features.Auth.Register.Commands
                 .WithMessage("Passwords do not match.");
 
             RuleFor(v => v.RegisterRequest.role)
-                .GreaterThan(0)
-                .WithMessage("Role is required.");
+               .NotEmpty().WithMessage("Role is required.");
         }
     }
 }
