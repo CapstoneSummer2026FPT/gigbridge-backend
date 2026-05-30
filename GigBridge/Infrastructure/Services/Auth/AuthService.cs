@@ -78,7 +78,7 @@ public class AuthService : IAuthService
             Email = request.Email,
             FullName = request.FullName ?? request.Email,
             Password = hash,
-            Role = request.role,
+            Role = (int)request.role!.Value,
             IsEmailVerified = true,
             IsActive = true,
             CreatedAt = DateTime.UtcNow,
@@ -86,7 +86,7 @@ public class AuthService : IAuthService
             TokenExpiry = null
         };
 
-        if (user.Role == 0) // Client
+        if (user.Role == (int)UserRole.Client) // Client
         {
             user.ClientProfile = new ClientProfile
             {
@@ -94,7 +94,7 @@ public class AuthService : IAuthService
                 CreatedAt = DateTime.UtcNow
             };
         }
-        else if (user.Role == 1) // Freelancer
+        else if (user.Role == (int)UserRole.Freelancer) // Freelancer
         {
             user.FreelancerProfile = new FreelancerProfile
             {
