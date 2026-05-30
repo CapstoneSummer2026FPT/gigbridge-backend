@@ -1,4 +1,4 @@
-namespace Application.Features.Profile.DTOs
+namespace Application.Features.Profile.UpdateFreelancerProfile.DTOs
 {
     public class UpdateFreelancerProfileDto
     {

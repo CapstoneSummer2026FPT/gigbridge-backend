@@ -3,7 +3,8 @@ using AutoMapper;
 using Domain.Entities;
 using Application.Features.Auth.Shared.DTOs;
 using Application.Features.Admin.Users.Shared.DTOs;
-using Application.Features.Profile.DTOs;
+using Application.Features.Profile.UpdateClientProfile.DTOs;
+using Application.Features.Profile.UpdateFreelancerProfile.DTOs;
 
 
 

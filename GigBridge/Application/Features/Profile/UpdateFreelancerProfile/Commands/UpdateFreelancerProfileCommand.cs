@@ -1,7 +1,7 @@
-using Application.Features.Profile.DTOs;
+using Application.Features.Profile.UpdateFreelancerProfile.DTOs;
 using MediatR;
 
-namespace Application.Features.Profile.Commands
+namespace Application.Features.Profile.UpdateFreelancerProfile.Commands
 {
     public class UpdateFreelancerProfileCommand : IRequest<FreelancerProfileResponseDto>
     {

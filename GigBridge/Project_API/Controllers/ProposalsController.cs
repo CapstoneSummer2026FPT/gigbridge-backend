@@ -23,8 +23,7 @@ public class ProposalsController : BaseApiController
     [Authorize(Roles = "Freelancer")]
     public async Task<IActionResult> SubmitProposal([FromBody] SubmitProposalCommand command)
     {
-        var freelancerId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
-                        ?? User.FindFirst("sub")?.Value;
+        var freelancerId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
         if (string.IsNullOrEmpty(freelancerId))
             return Unauthorized(ApiResponse<object>.Error(401, "Invalid token"));
@@ -40,8 +39,7 @@ public class ProposalsController : BaseApiController
     [Authorize(Roles = "Freelancer")]
     public async Task<IActionResult> GetMyProposals([FromQuery] int pageIndex = 1, int pageSize = 10)
     {
-        var freelancerId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
-                        ?? User.FindFirst("sub")?.Value;
+        var freelancerId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
         var query = new GetMyProposalsQuery
         {
@@ -60,8 +58,7 @@ public class ProposalsController : BaseApiController
     [Authorize(Roles = "Client")]
     public async Task<IActionResult> GetProposalsByJobPost(Guid jobPostId, [FromQuery] int pageIndex = 1, int pageSize = 10)
     {
-        var clientId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
-                    ?? User.FindFirst("sub")?.Value;
+        var clientId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
         if (string.IsNullOrEmpty(clientId))
             return Unauthorized(ApiResponse<object>.Error(401, "Invalid token"));

@@ -1,13 +1,12 @@
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
-using Application.Features.Profile.Commands;
-using Application.Features.Profile.DTOs;
+using Application.Features.Profile.UpdateFreelancerProfile.DTOs;
 using AutoMapper;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
-namespace Application.Features.Profile.Handlers
+namespace Application.Features.Profile.UpdateFreelancerProfile.Commands
 {
     public class UpdateFreelancerProfileCommandHandler : IRequestHandler<UpdateFreelancerProfileCommand, FreelancerProfileResponseDto>
     {

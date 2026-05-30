@@ -1,6 +1,9 @@
+using System.Security.Claims;
 using Application.Common.Models;
-using Application.Features.Profile.Commands;
-using Application.Features.Profile.DTOs;
+using Application.Features.Profile.UpdateClientProfile.Commands;
+using Application.Features.Profile.UpdateClientProfile.DTOs;
+using Application.Features.Profile.UpdateFreelancerProfile.Commands;
+using Application.Features.Profile.UpdateFreelancerProfile.DTOs;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Project_API.Controllers.Common;
@@ -67,7 +70,7 @@ public class ProfileController : BaseApiController
     {
         try
         {
-            var userIdClaim = User.FindFirst("sub")?.Value;
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
             
             if (string.IsNullOrEmpty(userIdClaim) || !Guid.TryParse(userIdClaim, out var userId))
             {

@@ -1,13 +1,12 @@
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
-using Application.Features.Profile.Commands;
-using Application.Features.Profile.DTOs;
+using Application.Features.Profile.UpdateClientProfile.DTOs;
 using AutoMapper;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
-namespace Application.Features.Profile.Handlers
+namespace Application.Features.Profile.UpdateClientProfile.Commands
 {
     public class UpdateClientProfileCommandHandler : IRequestHandler<UpdateClientProfileCommand, ClientProfileResponseDto>
     {

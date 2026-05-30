@@ -1,7 +1,7 @@
-using Application.Features.Profile.DTOs;
+using Application.Features.Profile.UpdateClientProfile.DTOs;
 using MediatR;
 
-namespace Application.Features.Profile.Commands
+namespace Application.Features.Profile.UpdateClientProfile.Commands
 {
     public class UpdateClientProfileCommand : IRequest<ClientProfileResponseDto>
     {
