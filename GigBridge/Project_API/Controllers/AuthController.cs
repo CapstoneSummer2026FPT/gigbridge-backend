@@ -15,10 +15,12 @@ using Application.Features.Auth.ResendEmail.Commands;
 using Application.Features.Auth.ResendEmail.DTOs;
 using Application.Features.Auth.ResetPassword.Commands;
 using Application.Features.Auth.ResetPassword.DTOs;
+using Application.Features.Auth.Shared.DTOs;
 using Application.Features.Auth.ValidateToken.Commands;
 using Application.Features.Auth.ValidateToken.DTOs;
 using Application.Features.Auth.VerifyEmail.Commands;
 using Application.Features.Auth.VerifyEmail.DTOs;
+using Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -60,6 +62,7 @@ public class authController : BaseApiController
     }
 
     [HttpPost("login")]
+  
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
         try

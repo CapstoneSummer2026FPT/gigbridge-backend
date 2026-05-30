@@ -7,6 +7,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="Common\Interfaces\IRepository\**" />
+    <EmbeddedResource Remove="Common\Interfaces\IRepository\**" />
+    <None Remove="Common\Interfaces\IRepository\**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Domain\Domain.csproj" />
   </ItemGroup>
 
