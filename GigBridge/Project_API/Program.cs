@@ -1,5 +1,7 @@
 using Application;
 using Application.Common.Interfaces.IService;
+using Application.Features.JobPosts.Services;
+using Application.Features.Proposals.Services;
 using Hangfire;
 using Infrastructure;
 using Infrastructure.Persistence;
@@ -16,7 +18,8 @@ builder.Services.AddControllers(options =>
 // Layer registrations (Clean Architecture)
 builder.Services.AddApplicationServices();
 builder.Services.AddInfrastructureServices(builder.Configuration);
-
+builder.Services.AddScoped<IProposalsService, Infrastructure.Services.Proposals.ProposalsService>();
+builder.Services.AddScoped<IJobPostsService, Infrastructure.Services.JobPosts.JobPostsService>();
 // API-layer concerns
 builder.Services.AddJwtAuthentication(builder.Configuration);
 builder.Services.AddSwaggerWithBearerAuth();
@@ -24,7 +27,13 @@ builder.Services.AddCorsPolicy();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, Project_API.Services.CurrentUserService>();
 builder.Services.AddSignalR();
-builder.Services.AddHangfireServices(builder.Configuration);
+//builder.Services.AddHangfireServices(builder.Configuration);
+builder.Services.AddHybridCache(builder.Configuration);
+
+if (builder.Environment.IsEnvironment("Testing"))
+{
+    //builder.Services.AddHangfireServices(builder.Configuration);
+}
 builder.Services.AddHybridCache(builder.Configuration);
 
 var app = builder.Build();
@@ -50,12 +59,11 @@ app.UseMiddleware<Project_API.Middleware.ExceptionHandlingMiddleware>();
 app.UseMiddleware<Project_API.Middleware.RequestLoggingMiddleware>();
 
 app.UseCors("AllowAll"); // CORS must be BEFORE UseHttpsRedirection and MapControllers
-
-if (!app.Environment.IsDevelopment())
+if (!app.Environment.IsEnvironment("Testing"))
 {
     app.UseHttpsRedirection();
+    app.UseStaticFiles();
 }
-app.UseStaticFiles();
 
 app.UseAuthentication();
 app.UseAuthorization();
@@ -65,6 +73,11 @@ app.MapControllers();
 app.MapHub<Project_API.Hubs.ChatHub>("/hubs/chat");
 app.MapHub<Project_API.Hubs.NotificationHub>("/hubs/notification");
 
-app.UseHangfireDashboard();
+if (!app.Environment.IsEnvironment("Testing"))
+{
+    //app.UseHangfireDashboard();
+}
 
 app.Run();
+
+public partial class Program;

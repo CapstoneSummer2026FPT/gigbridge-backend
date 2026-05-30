@@ -24,3 +24,5 @@ Thumbs.db
 
 # Visual Studio
 .vs/
+*.user
+*.suo
