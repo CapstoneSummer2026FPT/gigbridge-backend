@@ -30,6 +30,7 @@ public class AuthService : IAuthService
     private readonly IWebHostEnvironment _webHostEnvironment;
     private readonly IConfiguration _configuration;
     private readonly IGoogleAuthService _googleAuthService;
+    private readonly ICacheService _cacheService;
 
     public AuthService(
         IJwtService jwtService,
