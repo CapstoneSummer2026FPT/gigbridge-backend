@@ -44,7 +44,7 @@ using (var scope = app.Services.CreateScope())
     try
     {
         var db = scope.ServiceProvider.GetRequiredService<GigbridgeDbContext>();
-        DbSeeder.Seed(db);
+        await DbSeeder.SeedLocalOnlyAsync<GigbridgeDbContext>(app.Services);
     }
     catch (Exception ex)
     {

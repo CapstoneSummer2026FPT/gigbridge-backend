@@ -1,28 +1,32 @@
-﻿using System.Globalization;
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
 using System.Reflection;
 using System.Text.Json;
-using Infrastructure.Persistence;
+using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 
-namespace Infrastructure.Persistence;
-
 public static class DbSeeder
 {
     private static readonly MethodInfo DbContextSetMethod = typeof(DbContext)
-            .GetMethods()
-            .Single(method =>
-                method.Name == nameof(DbContext.Set)
-                && method.IsGenericMethodDefinition
-                && method.GetParameters().Length == 0);
+        .GetMethods()
+        .Single(method =>
+            method.Name == nameof(DbContext.Set)
+            && method.IsGenericMethodDefinition
+            && method.GetParameters().Length == 0);
 
     private static readonly MethodInfo AnyAsyncMethod = typeof(EntityFrameworkQueryableExtensions)
         .GetMethods()
-        .Single(method => {
+        .Single(method =>
+        {
             if (method.Name != nameof(EntityFrameworkQueryableExtensions.AnyAsync)
-                || !method.IsGenericMethodDefinition) {
+                || !method.IsGenericMethodDefinition)
+            {
                 return false;
             }
 
@@ -37,12 +41,14 @@ public static class DbSeeder
     public static async Task SeedLocalOnlyAsync<TContext>(
         IServiceProvider services,
         CancellationToken cancellationToken = default)
-        where TContext : DbContext {
+        where TContext : DbContext
+    {
         using var scope = services.CreateScope();
 
         var environment = scope.ServiceProvider.GetService<IHostEnvironment>();
 
-        if (environment is not null && !IsLocalLikeEnvironment(environment.EnvironmentName)) {
+        if (environment is not null && !IsLocalLikeEnvironment(environment.EnvironmentName))
+        {
             return;
         }
 
@@ -53,10 +59,12 @@ public static class DbSeeder
 
     public static async Task SeedAsync(
         DbContext context,
-        CancellationToken cancellationToken = default) {
+        CancellationToken cancellationToken = default)
+    {
         var connectionString = context.Database.GetConnectionString() ?? string.Empty;
 
-        if (LooksLikeSupabase(connectionString)) {
+        if (LooksLikeSupabase(connectionString))
+        {
             throw new InvalidOperationException(
                 "DbSeeder refused to run because the current connection string looks like Supabase. Use a local database connection string only.");
         }
@@ -64,10 +72,12 @@ public static class DbSeeder
         var now = DateTime.UtcNow;
         var tables = BuildSeedData(now);
 
-        foreach (var table in tables) {
+        foreach (var table in tables)
+        {
             var entityType = FindEntityType(context, table.TableName);
 
-            if (await HasAnyRowsAsync(context, entityType.ClrType, cancellationToken)) {
+            if (await HasAnyRowsAsync(context, entityType.ClrType, cancellationToken))
+            {
                 continue;
             }
 
@@ -75,14 +85,16 @@ public static class DbSeeder
                 entityType.GetTableName()!,
                 entityType.GetSchema());
 
-            foreach (var row in table.Rows) {
+            foreach (var row in table.Rows)
+            {
                 var entity = Activator.CreateInstance(entityType.ClrType)
                              ?? throw new InvalidOperationException(
                                  $"Cannot create entity instance for table '{table.TableName}'.");
 
                 var entry = context.Entry(entity);
 
-                for (var columnIndex = 0; columnIndex < table.Columns.Length; columnIndex++) {
+                for (var columnIndex = 0; columnIndex < table.Columns.Length; columnIndex++)
+                {
                     var columnName = table.Columns[columnIndex];
                     var property = FindProperty(entityType, storeObject, columnName);
                     var value = ConvertValue(row[columnIndex], property.ClrType);
@@ -97,19 +109,22 @@ public static class DbSeeder
         }
     }
 
-    private static bool IsLocalLikeEnvironment(string environmentName) {
+    private static bool IsLocalLikeEnvironment(string environmentName)
+    {
         return string.Equals(environmentName, Environments.Development, StringComparison.OrdinalIgnoreCase)
                || string.Equals(environmentName, "Local", StringComparison.OrdinalIgnoreCase)
                || string.Equals(environmentName, "Testing", StringComparison.OrdinalIgnoreCase)
                || string.Equals(environmentName, "Test", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool LooksLikeSupabase(string connectionString) {
+    private static bool LooksLikeSupabase(string connectionString)
+    {
         return connectionString.Contains("supabase", StringComparison.OrdinalIgnoreCase)
                || connectionString.Contains("pooler.supabase", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static IEntityType FindEntityType(DbContext context, string tableName) {
+    private static IEntityType FindEntityType(DbContext context, string tableName)
+    {
         var entityType = context.Model
             .GetEntityTypes()
             .FirstOrDefault(type =>
@@ -123,7 +138,8 @@ public static class DbSeeder
     private static IProperty FindProperty(
         IEntityType entityType,
         StoreObjectIdentifier storeObject,
-        string columnName) {
+        string columnName)
+    {
         var property = entityType
             .GetProperties()
             .FirstOrDefault(property =>
@@ -138,7 +154,8 @@ public static class DbSeeder
     private static async Task<bool> HasAnyRowsAsync(
         DbContext context,
         Type clrType,
-        CancellationToken cancellationToken) {
+        CancellationToken cancellationToken)
+    {
         var set = (IQueryable)(DbContextSetMethod.MakeGenericMethod(clrType).Invoke(context, null)
                   ?? throw new InvalidOperationException($"Cannot create DbSet for '{clrType.Name}'."));
 
@@ -149,70 +166,86 @@ public static class DbSeeder
         return await task;
     }
 
-    private static object? ConvertValue(object? value, Type targetType) {
-        if (value is null) {
+    private static object? ConvertValue(object? value, Type targetType)
+    {
+        if (value is null)
+        {
             return null;
         }
 
         var nonNullableType = Nullable.GetUnderlyingType(targetType) ?? targetType;
 
-        if (nonNullableType.IsInstanceOfType(value)) {
+        if (nonNullableType.IsInstanceOfType(value))
+        {
             return value;
         }
 
-        if (nonNullableType.IsEnum) {
+        if (nonNullableType.IsEnum)
+        {
             return value is string text
                 ? Enum.Parse(nonNullableType, text, ignoreCase: true)
                 : Enum.ToObject(nonNullableType, value);
         }
 
-        if (nonNullableType == typeof(Guid)) {
+        if (nonNullableType == typeof(Guid))
+        {
             return value is Guid guid ? guid : Guid.Parse(Convert.ToString(value, CultureInfo.InvariantCulture)!);
         }
 
-        if (nonNullableType == typeof(DateTime)) {
-            if (value is DateTime dateTime) {
+        if (nonNullableType == typeof(DateTime))
+        {
+            if (value is DateTime dateTime)
+            {
                 return DateTime.SpecifyKind(dateTime, DateTimeKind.Utc);
             }
 
-            if (value is DateTimeOffset dateTimeOffset) {
+            if (value is DateTimeOffset dateTimeOffset)
+            {
                 return dateTimeOffset.UtcDateTime;
             }
         }
 
-        if (nonNullableType == typeof(DateTimeOffset)) {
-            if (value is DateTime dateTime) {
+        if (nonNullableType == typeof(DateTimeOffset))
+        {
+            if (value is DateTime dateTime)
+            {
                 return new DateTimeOffset(DateTime.SpecifyKind(dateTime, DateTimeKind.Utc));
             }
 
-            if (value is DateTimeOffset dateTimeOffset) {
+            if (value is DateTimeOffset dateTimeOffset)
+            {
                 return dateTimeOffset;
             }
         }
 
-        if (nonNullableType == typeof(JsonDocument) && value is string jsonDocumentText) {
+        if (nonNullableType == typeof(JsonDocument) && value is string jsonDocumentText)
+        {
             return JsonDocument.Parse(jsonDocumentText);
         }
 
-        if (nonNullableType == typeof(JsonElement) && value is string jsonElementText) {
+        if (nonNullableType == typeof(JsonElement) && value is string jsonElementText)
+        {
             using var jsonDocument = JsonDocument.Parse(jsonElementText);
             return jsonDocument.RootElement.Clone();
         }
 
         if (nonNullableType != typeof(string)
             && value is string jsonText
-            && (jsonText.StartsWith("[", StringComparison.Ordinal) || jsonText.StartsWith("{", StringComparison.Ordinal))) {
+            && (jsonText.StartsWith("[", StringComparison.Ordinal) || jsonText.StartsWith("{", StringComparison.Ordinal)))
+        {
             return JsonSerializer.Deserialize(jsonText, nonNullableType);
         }
 
-        if (nonNullableType == typeof(string)) {
+        if (nonNullableType == typeof(string))
+        {
             return Convert.ToString(value, CultureInfo.InvariantCulture);
         }
 
         return Convert.ChangeType(value, nonNullableType, CultureInfo.InvariantCulture);
     }
 
-    private static IReadOnlyList<SeedTableData> BuildSeedData(DateTime now) {
+    private static IReadOnlyList<SeedTableData> BuildSeedData(DateTime now)
+    {
         return new List<SeedTableData>
         {
             new SeedTableData(
@@ -678,8 +711,10 @@ public static class DbSeeder
         };
     }
 
-    private sealed class SeedTableData {
-        public SeedTableData(string tableName, string[] columns, object?[][] rows) {
+    private sealed class SeedTableData
+    {
+        public SeedTableData(string tableName, string[] columns, object?[][] rows)
+        {
             TableName = tableName;
             Columns = columns;
             Rows = rows;
