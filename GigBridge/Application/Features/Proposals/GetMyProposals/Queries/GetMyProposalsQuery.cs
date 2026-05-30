@@ -7,7 +7,7 @@ namespace Application.Features.Proposals.GetMyProposals.Queries;
 
 public class GetMyProposalsQuery : IRequest<IEnumerable<ProposalDto>>
 {
-    public Guid FreelancerProfilesId { get; set; }
+    public Guid UserId { get; set; }
     public int PageIndex { get; set; } = 1;
     public int PageSize { get; set; } = 10;
 }
