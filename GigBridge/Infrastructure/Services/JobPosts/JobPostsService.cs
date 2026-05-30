@@ -84,13 +84,69 @@ public class JobPostsService : IJobPostsService
         return jobPost.JobPostsId;
     }
 
-    public async Task<IEnumerable<JobPostSummaryDto>> GetAvailableJobPostsAsync(GetAvailableJobPostsQuery request, CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<JobPostSummaryDto>> GetAvailableJobPostsAsync(
+    GetAvailableJobPostsQuery request,
+    CancellationToken cancellationToken = default)
     {
-        var jobPosts = await _context.Set<JobPost>()
+        var query = _context.Set<JobPost>()
+            .AsNoTracking()
             .Include(j => j.JobPostSkills)
                 .ThenInclude(js => js.Skills)
             .Where(j => j.Status == 1 && (j.Visibility == 0 || j.Visibility == null))
-            .OrderByDescending(j => j.CreatedAt)
+            .AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var keyword = request.Search.Trim().ToLower();
+
+            query = query.Where(j =>
+                j.Title.ToLower().Contains(keyword) ||
+                j.JobPostSkills.Any(js =>
+                    js.Skills != null &&
+                    js.Skills.Name.ToLower().Contains(keyword)));
+        }
+        if (request.BudgetType.HasValue)
+        {
+            query = query.Where(j =>
+                j.BudgetType == request.BudgetType.Value);
+        }
+        if (request.SkillIds != null && request.SkillIds.Any())
+        {
+            query = query.Where(j =>
+                j.JobPostSkills.Any(js =>
+                    request.SkillIds.Contains(js.SkillsId)));
+        }
+
+        if (request.BudgetMin.HasValue)
+        {
+            query = query.Where(j =>
+                !j.BudgetMax.HasValue ||
+                j.BudgetMax >= request.BudgetMin.Value);
+        }
+
+        if (request.BudgetMax.HasValue)
+        {
+            query = query.Where(j =>
+                !j.BudgetMin.HasValue ||
+                j.BudgetMin <= request.BudgetMax.Value);
+        }
+
+        query = request.SortBy?.ToLower() switch
+        {
+            "budgetmin" => request.SortDesc
+                ? query.OrderByDescending(j => j.BudgetMin)
+                : query.OrderBy(j => j.BudgetMin),
+
+            "budgetmax" => request.SortDesc
+                ? query.OrderByDescending(j => j.BudgetMax)
+                : query.OrderBy(j => j.BudgetMax),
+
+            "newest" => query.OrderByDescending(j => j.CreatedAt),
+
+            _ => query.OrderByDescending(j => j.CreatedAt)
+        };
+
+        var jobPosts = await query
             .Skip((request.PageIndex - 1) * request.PageSize)
             .Take(request.PageSize)
             .ToListAsync(cancellationToken);
@@ -100,10 +156,9 @@ public class JobPostsService : IJobPostsService
             Title: j.Title,
             DescriptionPreview: string.IsNullOrEmpty(j.Description)
                 ? ""
-                : (j.Description.Length > 200
+                : j.Description.Length > 200
                     ? j.Description.Substring(0, 200) + "..."
-                    : j.Description),
-
+                    : j.Description,
             BudgetType: j.BudgetType,
             BudgetMin: j.BudgetMin,
             BudgetMax: j.BudgetMax,
@@ -114,7 +169,7 @@ public class JobPostsService : IJobPostsService
                 .Where(js => js.Skills != null)
                 .Select(js => js.Skills.Name)
                 .ToList() ?? new List<string>()
-        ));
+        )).ToList();
     }
 
     public async Task<JobPostDetailDto> GetJobPostDetailAsync(GetJobPostDetailQuery request, CancellationToken cancellationToken = default)
