@@ -68,8 +68,7 @@ public class ProposalsController : BaseApiController
     [Authorize(Roles = "Client")]
     public async Task<IActionResult> GetProposalsByJobPost(Guid jobPostId, [FromQuery] int pageIndex = 1, int pageSize = 10)
     {
-        var clientId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
-                    ?? User.FindFirst("sub")?.Value;
+        var clientId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
         if (string.IsNullOrEmpty(clientId))
             return Unauthorized(ApiResponse<object>.Error(401, "Invalid token"));
