@@ -1,6 +1,7 @@
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Microsoft.EntityFrameworkCore;
+using Application.Common.Exceptions;
 using Application.Features.Auth.Shared.DTOs;
 using Application.Features.Auth.Login.DTOs;
 using Application.Features.Auth.Register.DTOs;
@@ -55,7 +56,7 @@ public class AuthService : IAuthService
         var existing = await _context.Set<User>().FirstOrDefaultAsync(c => c.Email.ToLower() == request.Email.ToLower(), cancellationToken: cancellationToken);
         if (existing != null)
         {
-            throw new Exception("Email already exists");
+            throw new BadRequestException("Email already exists");
         }
 
         var hash = _passwordHasher.HashPassword(request.Password);
@@ -304,12 +305,12 @@ public class AuthService : IAuthService
 
         if (user == null)
         {
-            throw new Exception("Email does not exist");
+            throw new BadRequestException("Email does not exist");
         }
 
         if (user.IsEmailVerified)
         {
-            throw new Exception("Account has already been verified");
+            throw new BadRequestException("Account has already been verified");
         }
 
         var token = Guid.NewGuid().ToString();
@@ -347,7 +348,7 @@ public class AuthService : IAuthService
 
         if (user == null)
         {
-            throw new Exception("Email does not exist");
+            throw new BadRequestException("Email does not exist");
         }
 
 
@@ -388,18 +389,18 @@ public class AuthService : IAuthService
 
         if (user == null)
         {
-            throw new Exception("Email does not exist");
+            throw new BadRequestException("Email does not exist");
         }
 
 
         if (request.PasswordResetToken != user.EmailVerificationToken)
         {
-            throw new Exception("wrong email verification token");
+            throw new BadRequestException("wrong email verification token");
         }
 
         if(user.TokenExpiry < DateTime.UtcNow)
         {
-            throw new Exception("Token has expired");
+            throw new BadRequestException("Token has expired");
         }
 
 
