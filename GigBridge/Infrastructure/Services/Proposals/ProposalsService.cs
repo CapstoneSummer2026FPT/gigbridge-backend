@@ -1,8 +1,16 @@
-﻿using Application.Common.Interfaces.IRepository;
+﻿using Application.Common.Interfaces;
+using Application.Features.Proposals.DTOs;
+using Application.Features.Proposals.GetAllProposals.Queries;
+using Application.Features.Proposals.GetMyProposals.Queries;
+using Application.Features.Proposals.GetProposalsByJobPost.Queries;
 using Application.Features.Proposals.Services;
 using Application.Features.Proposals.SubmitProposal.Commands;
 using Domain.Entities;
+using Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -10,39 +18,35 @@ namespace Infrastructure.Services.Proposals;
 
 public class ProposalsService : IProposalsService
 {
-    private readonly IProposalRepository _proposalRepository;
-    private readonly IJobPostRepository _jobPostRepository;
+    private readonly IApplicationDbContext _context;
 
-    public ProposalsService(
-        IProposalRepository proposalRepository,
-        IJobPostRepository jobPostRepository)
+    public ProposalsService(IApplicationDbContext context)
     {
-        _proposalRepository = proposalRepository;
-        _jobPostRepository = jobPostRepository;
+        _context = context;
     }
 
+    #region Submit Proposal
     public async Task<Guid> SubmitProposalAsync(SubmitProposalCommand command, CancellationToken cancellationToken = default)
     {
         var request = command.Request;
 
-        // Kiểm tra JobPost tồn tại
-        var jobPost = await _jobPostRepository.GetAsync(j => j.JobPostsId == request.JobPostsId);
+        var jobPost = await _context.Set<JobPost>()
+            .FirstOrDefaultAsync(j => j.JobPostsId == request.JobPostsId, cancellationToken);
+
         if (jobPost == null)
             throw new Exception("Job Post không tồn tại.");
 
-        // Kiểm tra JobPost còn mở không
         if (jobPost.Status != 1)
             throw new Exception("Job Post này hiện không nhận thêm Proposal.");
 
-        // Kiểm tra Freelancer đã submit chưa
-        bool hasSubmitted = await _proposalRepository.HasUserSubmittedProposalAsync(
-            request.JobPostsId,
-            command.FreelancerProfilesId);
+        bool hasSubmitted = await _context.Set<Proposal>()
+            .AnyAsync(p => p.JobPostsId == request.JobPostsId
+                        && p.FreelancerProfilesId == command.FreelancerProfilesId,
+                   cancellationToken);
 
         if (hasSubmitted)
             throw new Exception("Bạn đã gửi Proposal cho công việc này rồi.");
 
-        // Tạo Proposal
         var proposal = new Proposal
         {
             ProposalsId = Guid.NewGuid(),
@@ -51,13 +55,105 @@ public class ProposalsService : IProposalsService
             CoverLetter = request.CoverLetter,
             ProposedRate = request.ProposedRate,
             ProposedDuration = request.ProposedDuration,
-            Status = 0, // 0 = Pending
+            Status = 0,
             SubmittedAt = DateTime.UtcNow
         };
 
-        _proposalRepository.Add(proposal);
-        // await _unitOfWork.SaveChangesAsync(cancellationToken);
+        _context.Set<Proposal>().Add(proposal);
+        await _context.SaveChangesAsync(cancellationToken);
 
         return proposal.ProposalsId;
     }
+    #endregion
+
+    #region Get My Proposals (Freelancer)
+    public async Task<IEnumerable<ProposalDto>> GetMyProposalsAsync(GetMyProposalsQuery request, CancellationToken cancellationToken = default)
+    {
+        var proposals = await _context.Set<Proposal>()
+            .Include(p => p.JobPosts)                    // Navigation đúng theo Entity
+            .Where(p => p.FreelancerProfilesId == request.FreelancerProfilesId)
+            .OrderByDescending(p => p.SubmittedAt)
+            .Skip((request.PageIndex - 1) * request.PageSize)
+            .Take(request.PageSize)
+            .ToListAsync(cancellationToken);
+
+        return proposals.Select(p => new ProposalDto
+        {
+            ProposalsId = p.ProposalsId,
+            JobPostsId = p.JobPostsId,
+            JobTitle = p.JobPosts?.Title ?? "",
+            FreelancerProfilesId = p.FreelancerProfilesId,
+            CoverLetter = p.CoverLetter ?? "",
+            ProposedRate = p.ProposedRate ?? 0m,
+            ProposedDuration = p.ProposedDuration ?? "",
+            Status = p.Status,
+            SubmittedAt = p.SubmittedAt ?? DateTime.UtcNow,
+            // ReviewedAt không tồn tại trong Entity → bỏ hoặc thay bằng UpdatedAt
+            // ReviewedAt = p.UpdatedAt
+        }).ToList();
+    }
+    #endregion
+
+    #region Get Proposals By JobPost (Client)
+    public async Task<IEnumerable<ProposalDto>> GetProposalsByJobPostAsync(GetProposalsByJobPostQuery request, CancellationToken cancellationToken = default)
+    {
+        var jobPost = await _context.Set<JobPost>()
+            .FirstOrDefaultAsync(j => j.JobPostsId == request.JobPostsId
+                                   && j.ClientProfilesId == request.ClientProfilesId,
+                                cancellationToken);
+
+        if (jobPost == null)
+            throw new Exception("Bạn không có quyền xem proposal của job này.");
+
+        var proposals = await _context.Set<Proposal>()
+            .Include(p => p.JobPosts)
+            .Include(p => p.FreelancerProfiles.User)   // Giả sử FreelancerProfiles có User
+            .Where(p => p.JobPostsId == request.JobPostsId)
+            .OrderByDescending(p => p.SubmittedAt)
+            .Skip((request.PageIndex - 1) * request.PageSize)
+            .Take(request.PageSize)
+            .ToListAsync(cancellationToken);
+
+        return proposals.Select(p => new ProposalDto
+        {
+            ProposalsId = p.ProposalsId,
+            JobPostsId = p.JobPostsId,
+            JobTitle = jobPost.Title,
+            FreelancerProfilesId = p.FreelancerProfilesId,
+            FreelancerName = p.FreelancerProfiles?.User?.FullName ?? "",
+            CoverLetter = p.CoverLetter ?? "",
+            ProposedRate = p.ProposedRate ?? 0m,
+            ProposedDuration = p.ProposedDuration ?? "",
+            Status = p.Status,
+            SubmittedAt = p.SubmittedAt ?? DateTime.UtcNow,
+        }).ToList();
+    }
+    #endregion
+
+    #region Get All Proposals (Admin)
+    public async Task<IEnumerable<ProposalDto>> GetAllProposalsAsync(GetAllProposalsQuery request, CancellationToken cancellationToken = default)
+    {
+        var proposals = await _context.Set<Proposal>()
+            .Include(p => p.JobPosts)
+            .Include(p => p.FreelancerProfiles.User)
+            .OrderByDescending(p => p.SubmittedAt)
+            .Skip((request.PageIndex - 1) * request.PageSize)
+            .Take(request.PageSize)
+            .ToListAsync(cancellationToken);
+
+        return proposals.Select(p => new ProposalDto
+        {
+            ProposalsId = p.ProposalsId,
+            JobPostsId = p.JobPostsId,
+            JobTitle = p.JobPosts?.Title ?? "",
+            FreelancerProfilesId = p.FreelancerProfilesId,
+            FreelancerName = p.FreelancerProfiles?.User?.FullName ?? "",
+            CoverLetter = p.CoverLetter ?? "",
+            ProposedRate = p.ProposedRate ?? 0m,
+            ProposedDuration = p.ProposedDuration ?? "",
+            Status = p.Status,
+            SubmittedAt = p.SubmittedAt ?? DateTime.UtcNow,
+        }).ToList();
+    }
+    #endregion
 }

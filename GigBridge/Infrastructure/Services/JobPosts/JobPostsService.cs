@@ -1,4 +1,4 @@
-﻿using Application.Common.Interfaces.IRepository;
+﻿using Application.Common.Interfaces;
 using Application.Features.JobPosts.Common.DTOs;
 using Application.Features.JobPosts.CreateJobPost.Commands;
 using Application.Features.JobPosts.GetAvailableJobPosts.DTOs;
@@ -9,6 +9,8 @@ using Application.Features.JobPosts.GetMyAppliedJobPosts.Queries;
 using Application.Features.JobPosts.GetMyJobPosts.Queries;
 using Application.Features.JobPosts.Services;
 using Domain.Entities;
+using Infrastructure.Persistence;   // GigbridgeDbContext hoặc IApplicationDbContext
+using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -19,24 +21,32 @@ namespace Infrastructure.Services.JobPosts;
 
 public class JobPostsService : IJobPostsService
 {
-    private readonly IJobPostRepository _jobPostRepository;
-    private readonly IUnitOfWork _unitOfWork;
+    private readonly IApplicationDbContext _context;
 
-    public JobPostsService(IJobPostRepository jobPostRepository, IUnitOfWork unitOfWork)
+    public JobPostsService(IApplicationDbContext context)
     {
-        _jobPostRepository = jobPostRepository;
-        _unitOfWork = unitOfWork;
+        _context = context;
     }
 
-    // === Create ===
-    public async Task<Guid> CreateJobPostAsync(CreateJobPostCommand command, CancellationToken cancellationToken = default)
+    public async Task<Guid> CreateJobPostAsync(
+    CreateJobPostCommand command,
+    CancellationToken cancellationToken = default)
     {
         var request = command.Request;
+
+        var clientProfile = await _context.Set<ClientProfile>()
+            .FirstOrDefaultAsync(
+                x => x.UserId == command.UserId,
+                cancellationToken);
+
+        if (clientProfile == null)
+            throw new Exception("Client profile không tồn tại.");
 
         var jobPost = new JobPost
         {
             JobPostsId = Guid.NewGuid(),
-            ClientProfilesId = command.ClientProfilesId,
+            ClientProfilesId = clientProfile.ClientProfilesId,
+
             Title = request.Title,
             Description = request.Description,
             CategoryId = request.CategoryId,
@@ -68,42 +78,51 @@ public class JobPostsService : IJobPostsService
             }
         }
 
-        _jobPostRepository.Add(jobPost);
-        await _unitOfWork.SaveChangesAsync(cancellationToken);
+        _context.Set<JobPost>().Add(jobPost);
+        await _context.SaveChangesAsync(cancellationToken);
 
         return jobPost.JobPostsId;
     }
 
-    // === Get Available Job Posts ===
     public async Task<IEnumerable<JobPostSummaryDto>> GetAvailableJobPostsAsync(GetAvailableJobPostsQuery request, CancellationToken cancellationToken = default)
     {
-        var jobPosts = await _jobPostRepository.GetAllPagedAsync(
-            pageIndex: request.PageIndex,
-            pageSize: request.PageSize,
-            filter: j => j.Status == 1 && (j.Visibility == 0 || j.Visibility == null),
-            includeProperties: "JobPostSkills.Skill",
-            orderBy: j => j.CreatedAt,
-            descending: true
-        );
+        var jobPosts = await _context.Set<JobPost>()
+            .Include(j => j.JobPostSkills)
+                .ThenInclude(js => js.Skills)
+            .Where(j => j.Status == 1 && (j.Visibility == 0 || j.Visibility == null))
+            .OrderByDescending(j => j.CreatedAt)
+            .Skip((request.PageIndex - 1) * request.PageSize)
+            .Take(request.PageSize)
+            .ToListAsync(cancellationToken);
 
         return jobPosts.Select(j => new JobPostSummaryDto(
             JobPostsId: j.JobPostsId,
             Title: j.Title,
-            DescriptionPreview: j.Description.Length > 200 ? j.Description.Substring(0, 200) + "..." : j.Description,
+            DescriptionPreview: string.IsNullOrEmpty(j.Description)
+                ? ""
+                : (j.Description.Length > 200
+                    ? j.Description.Substring(0, 200) + "..."
+                    : j.Description),
+
             BudgetType: j.BudgetType,
             BudgetMin: j.BudgetMin,
             BudgetMax: j.BudgetMax,
             ExperienceLevelRequired: j.ExperienceLevelRequired,
             LocationType: j.LocationType,
             CreatedAt: j.CreatedAt,
-            SkillNames: j.JobPostSkills.Select(js => js.Skills.Name).ToList()
+            SkillNames: j.JobPostSkills?
+                .Where(js => js.Skills != null)
+                .Select(js => js.Skills.Name)
+                .ToList() ?? new List<string>()
         ));
     }
 
-    // === Get Job Post Detail ===
     public async Task<JobPostDetailDto> GetJobPostDetailAsync(GetJobPostDetailQuery request, CancellationToken cancellationToken = default)
     {
-        var jobPost = await _jobPostRepository.GetJobPostWithDetailsAsync(request.JobPostsId);
+        var jobPost = await _context.Set<JobPost>()
+            .Include(x => x.JobPostSkills).ThenInclude(js => js.Skills)
+            .Include(x => x.JobPostAttachments)
+            .FirstOrDefaultAsync(x => x.JobPostsId == request.JobPostsId, cancellationToken);
 
         if (jobPost == null)
             throw new Exception("Job Post không tồn tại");
@@ -128,52 +147,54 @@ public class JobPostsService : IJobPostsService
             Attachments: jobPost.JobPostAttachments.Select(a => new AttachmentDto(a.JobPostAttachmentsId, a.FileUrl, a.FileName)).ToList()
         );
     }
-    // === Client xem JobPosts của mình ===
+
     public async Task<IEnumerable<JobPostSummaryDto>> GetMyJobPostsAsync(GetMyJobPostsQuery request, CancellationToken cancellationToken = default)
     {
-        var jobPosts = await _jobPostRepository.GetAllPagedAsync(
-            pageIndex: request.PageIndex,
-            pageSize: request.PageSize,
-            filter: j => j.ClientProfilesId == request.ClientProfilesId,
-            includeProperties: "JobPostSkills.Skill",
-            orderBy: j => j.CreatedAt,
-            descending: true
-        );
+        var jobPosts = await _context.Set<JobPost>()
+            .Include(j => j.JobPostSkills).ThenInclude(js => js.Skills)
+            .Where(j => j.ClientProfilesId == request.ClientProfilesId)
+            .OrderByDescending(j => j.CreatedAt)
+            .Skip((request.PageIndex - 1) * request.PageSize)
+            .Take(request.PageSize)
+            .ToListAsync(cancellationToken);
 
-        return jobPosts.Select(j => new JobPostSummaryDto(
-            JobPostsId: j.JobPostsId,
-            Title: j.Title,
-            DescriptionPreview: j.Description.Length > 200 ? j.Description.Substring(0, 200) + "..." : j.Description,
-            BudgetType: j.BudgetType,
-            BudgetMin: j.BudgetMin,
-            BudgetMax: j.BudgetMax,
-            ExperienceLevelRequired: j.ExperienceLevelRequired,
-            LocationType: j.LocationType,
-            CreatedAt: j.CreatedAt,
-            SkillNames: j.JobPostSkills.Select(js => js.Skills.Name).ToList()
-        ));
+        return MapToSummaryDto(jobPosts);
     }
 
-    // === Freelancer xem các JobPost đã apply ===
     public async Task<IEnumerable<JobPostSummaryDto>> GetMyAppliedJobPostsAsync(GetMyAppliedJobPostsQuery request, CancellationToken cancellationToken = default)
     {
-        var jobPosts = await _jobPostRepository.GetAppliedJobPostsByFreelancerAsync(
-            freelancerId: request.FreelancerProfilesId,
-            pageIndex: request.PageIndex,
-            pageSize: request.PageSize
-        );
+        var jobPosts = await _context.Set<JobPost>()
+            .Include(j => j.JobPostSkills).ThenInclude(js => js.Skills)
+            .Where(j => j.Proposals.Any(p => p.FreelancerProfilesId == request.FreelancerProfilesId))
+            .OrderByDescending(j => j.CreatedAt)
+            .Skip((request.PageIndex - 1) * request.PageSize)
+            .Take(request.PageSize)
+            .ToListAsync(cancellationToken);
 
+        return MapToSummaryDto(jobPosts);
+    }
+
+    private static List<JobPostSummaryDto> MapToSummaryDto(IEnumerable<JobPost> jobPosts)
+    {
         return jobPosts.Select(j => new JobPostSummaryDto(
             JobPostsId: j.JobPostsId,
             Title: j.Title,
-            DescriptionPreview: j.Description.Length > 200 ? j.Description.Substring(0, 200) + "..." : j.Description,
+            DescriptionPreview: string.IsNullOrEmpty(j.Description)
+                ? ""
+                : (j.Description.Length > 200
+                    ? j.Description.Substring(0, 200) + "..."
+                    : j.Description),
+
             BudgetType: j.BudgetType,
             BudgetMin: j.BudgetMin,
             BudgetMax: j.BudgetMax,
             ExperienceLevelRequired: j.ExperienceLevelRequired,
             LocationType: j.LocationType,
             CreatedAt: j.CreatedAt,
-            SkillNames: j.JobPostSkills.Select(js => js.Skills.Name).ToList()
-        ));
+            SkillNames: j.JobPostSkills?
+                .Where(js => js.Skills != null)
+                .Select(js => js.Skills.Name)
+                .ToList() ?? new List<string>()
+        )).ToList();
     }
 }

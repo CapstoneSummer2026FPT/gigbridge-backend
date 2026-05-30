@@ -1,8 +1,9 @@
 ﻿using Application.Common.Models;
-using Application.DTOs.Admin;
 using Application.Features.JobPosts.CreateJobPost.Commands;
+using Application.Features.JobPosts.CreateJobPost.DTOs;
 using Application.Features.JobPosts.GetAvailableJobPosts.DTOs;
 using Application.Features.JobPosts.GetAvailableJobPosts.Queries;
+using Application.Features.JobPosts.GetJobPostDetail.DTOs;
 using Application.Features.JobPosts.GetJobPostDetail.Queries;
 using Application.Features.JobPosts.GetMyAppliedJobPosts.Queries;
 using Application.Features.JobPosts.GetMyJobPosts.Queries;
@@ -42,18 +43,23 @@ public class JobPostsController : BaseApiController
 
     [HttpPost]
     [Authorize(Roles = "Client")]
-    public async Task<IActionResult> CreateJobPost([FromBody] CreateJobPostCommand command)
+    [HttpPost]
+    [Authorize(Roles = "Client")]
+    public async Task<IActionResult> CreateJobPost([FromBody] CreateJobPostRequest request)
     {
-        var clientId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
-                    ?? User.FindFirst("sub")?.Value;
+        var userIdValue = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+            ?? User.FindFirst("sub")?.Value;
 
-        if (string.IsNullOrEmpty(clientId))
+        if (string.IsNullOrEmpty(userIdValue))
             return Unauthorized(ApiResponse<object>.Error(401, "Invalid token"));
 
-        // Sửa lỗi CS8852 - init-only property
-        command = command with { ClientProfilesId = Guid.Parse(clientId) };
+        var command = new CreateJobPostCommand(
+            Request: request,
+            UserId: Guid.Parse(userIdValue)
+        );
 
         var result = await Mediator.Send(command);
+
         return Ok(ApiResponse<Guid>.Ok(result, "Job post created successfully"));
     }
 

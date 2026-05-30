@@ -15,12 +15,8 @@ namespace Application.Features.JobPosts.Services;
 public interface IJobPostsService
 {
     Task<Guid> CreateJobPostAsync(CreateJobPostCommand command, CancellationToken cancellationToken = default);
-
     Task<IEnumerable<JobPostSummaryDto>> GetAvailableJobPostsAsync(GetAvailableJobPostsQuery request, CancellationToken cancellationToken = default);
-
     Task<JobPostDetailDto> GetJobPostDetailAsync(GetJobPostDetailQuery request, CancellationToken cancellationToken = default);
-
     Task<IEnumerable<JobPostSummaryDto>> GetMyJobPostsAsync(GetMyJobPostsQuery request, CancellationToken cancellationToken = default);
-
     Task<IEnumerable<JobPostSummaryDto>> GetMyAppliedJobPostsAsync(GetMyAppliedJobPostsQuery request, CancellationToken cancellationToken = default);
 }

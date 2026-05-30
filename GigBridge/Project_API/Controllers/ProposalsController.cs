@@ -1,6 +1,9 @@
-﻿using Application.Features.Proposals.GetMyProposals.Queries;           // Nếu bạn chưa có thì tạo sau
+﻿using Application.Common.Models;
+using Application.Features.Proposals.DTOs;
+using Application.Features.Proposals.GetAllProposals.Queries;
+using Application.Features.Proposals.GetMyProposals.Queries;
+using Application.Features.Proposals.GetProposalsByJobPost.Queries;
 using Application.Features.Proposals.SubmitProposal.Commands;
-using Application.Common.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Project_API.Controllers.Common;
@@ -48,7 +51,7 @@ public class ProposalsController : BaseApiController
         };
 
         var result = await Mediator.Send(query);
-        return Ok(ApiResponse(result, "Success")); // Bạn có thể điều chỉnh DTO phù hợp
+        return Ok(ApiResponse<IEnumerable<ProposalDto>>.Ok(result, "Success"));
     }
 
     // ==================== CLIENT ENDPOINTS ====================
@@ -60,6 +63,9 @@ public class ProposalsController : BaseApiController
         var clientId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
                     ?? User.FindFirst("sub")?.Value;
 
+        if (string.IsNullOrEmpty(clientId))
+            return Unauthorized(ApiResponse<object>.Error(401, "Invalid token"));
+
         var query = new GetProposalsByJobPostQuery
         {
             JobPostsId = jobPostId,
@@ -69,7 +75,7 @@ public class ProposalsController : BaseApiController
         };
 
         var result = await Mediator.Send(query);
-        return Ok(ApiResponse(result, "Success"));
+        return Ok(ApiResponse<IEnumerable<ProposalDto>>.Ok(result, "Success"));
     }
 
     // ==================== ADMIN ENDPOINTS ====================
@@ -85,6 +91,6 @@ public class ProposalsController : BaseApiController
         };
 
         var result = await Mediator.Send(query);
-        return Ok(ApiResponse(result, "Success"));
+        return Ok(ApiResponse<IEnumerable<ProposalDto>>.Ok(result, "Success"));
     }
 }
