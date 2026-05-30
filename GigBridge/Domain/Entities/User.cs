@@ -26,6 +26,8 @@ public partial class User
 
     public bool IsActive { get; set; }
 
+    public bool IsSetup { get; set; }
+
     public string? PreferredLanguage { get; set; }
 
     public string? Provider { get; set; }

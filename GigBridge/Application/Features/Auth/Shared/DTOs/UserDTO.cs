@@ -16,6 +16,7 @@ namespace Application.Features.Auth.Shared.DTOs
         public int Role { get; set; }
         public bool IsEmailVerified { get; set; }
         public bool IsActive { get; set; }
+        public bool IsSetup { get; set; }
         public string? PreferredLanguage { get; set; }
         public string? Provider { get; set; }
         public DateTime CreatedAt { get; set; }
