@@ -18,6 +18,10 @@ using Application.Features.Auth.ValidateToken.Commands;
 using Application.Features.Auth.ValidateToken.DTOs;
 using Application.Features.Auth.VerifyEmail.Commands;
 using Application.Features.Auth.VerifyEmail.DTOs;
+using Application.Features.Auth.SendOtp.Commands;
+using Application.Features.Auth.SendOtp.DTOs;
+using Application.Features.Auth.VerifyOtp.Commands;
+using Application.Features.Auth.VerifyOtp.DTOs;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -47,6 +51,30 @@ public class AuthController : BaseApiController
         }
 
         return Ok(ApiResponse<UserDTO>.Ok(user, "User registered successfully"));
+    }
+
+    [HttpPost("send-otp")]
+    public async Task<IActionResult> SendOtp([FromBody] SendOtpRequest request)
+    {
+        if (request == null || string.IsNullOrWhiteSpace(request.Email))
+        {
+            return BadRequest(ApiResponse<object>.Error(400, "Email is required"));
+        }
+
+        await Mediator.Send(new SendOtpCommand(request));
+        return Ok(ApiResponse<object>.Ok(null, "Verification code sent successfully"));
+    }
+
+    [HttpPost("verify-otp")]
+    public async Task<IActionResult> VerifyOtp([FromBody] VerifyOtpRequest request)
+    {
+        if (request == null || string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Otp))
+        {
+            return BadRequest(ApiResponse<object>.Error(400, "Email and verification code are required"));
+        }
+
+        await Mediator.Send(new VerifyOtpCommand(request));
+        return Ok(ApiResponse<object>.Ok(null, "Email verified successfully"));
     }
 
     [HttpPost("login")]

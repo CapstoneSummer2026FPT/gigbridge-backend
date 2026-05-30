@@ -6,6 +6,8 @@ using Application.Features.Auth.Register.DTOs;
 using Application.Features.Auth.ResendEmail.DTOs;
 using Application.Features.Auth.ForgotPassword.DTOs;
 using Application.Features.Auth.ResetPassword.DTOs;
+using Application.Features.Auth.SendOtp.DTOs;
+using Application.Features.Auth.VerifyOtp.DTOs;
 
 namespace Application.Common.Interfaces.IService;
 
@@ -28,4 +30,8 @@ public interface IAuthService
     Task ResetPasswordAsync(ResetPasswordRequest request, CancellationToken cancellationToken = default);
 
     Task<bool> IsTokenExpired(string token, CancellationToken cancellationToken = default);
+
+    Task SendOtpAsync(SendOtpRequest request, CancellationToken cancellationToken = default);
+
+    Task VerifyOtpAsync(VerifyOtpRequest request, CancellationToken cancellationToken = default);
 }
