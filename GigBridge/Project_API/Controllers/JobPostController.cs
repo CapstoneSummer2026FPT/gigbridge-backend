@@ -27,22 +27,20 @@ public class JobPostsController : BaseApiController
     public async Task<IActionResult> GetPublicJobPosts([FromQuery] GetAvailableJobPostsQuery query)
     {
         var result = await Mediator.Send(query);
-        return Ok(ApiResponse<IEnumerable<JobPostSummaryDto>>.Ok(result));
+        return Ok(result);
     }
 
     [HttpGet("{id}")]
     [AllowAnonymous]
     public async Task<IActionResult> GetJobPostDetail(Guid id)
     {
-        var query = new GetJobPostDetailQuery(id);        // ← Sửa lỗi CS7036
+        var query = new GetJobPostDetailQuery(id);        
         var result = await Mediator.Send(query);
-        return Ok(ApiResponse<JobPostDetailDto>.Ok(result));
+        return Ok(result);
     }
 
     // ==================== AUTHENTICATED ENDPOINTS ====================
 
-    [HttpPost]
-    [Authorize(Roles = "Client")]
     [HttpPost]
     [Authorize(Roles = "Client")]
     public async Task<IActionResult> CreateJobPost([FromBody] CreateJobPostRequest request)
@@ -82,7 +80,7 @@ public class JobPostsController : BaseApiController
 
         var query = new GetMyJobPostsQuery
         {
-            ClientProfilesId = Guid.Parse(clientId!),
+            UserId = Guid.Parse(clientId!),
             PageIndex = pageIndex,
             PageSize = pageSize
         };
@@ -101,7 +99,7 @@ public class JobPostsController : BaseApiController
 
         var query = new GetMyAppliedJobPostsQuery
         {
-            FreelancerProfilesId = Guid.Parse(freelancerId!),
+            UserId = Guid.Parse(freelancerId!),
             PageIndex = pageIndex,
             PageSize = pageSize
         };

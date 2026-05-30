@@ -9,7 +9,7 @@ using Application.Features.JobPosts.GetMyAppliedJobPosts.Queries;
 using Application.Features.JobPosts.GetMyJobPosts.Queries;
 using Application.Features.JobPosts.Services;
 using Domain.Entities;
-using Infrastructure.Persistence;   // GigbridgeDbContext hoặc IApplicationDbContext
+using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
@@ -150,9 +150,15 @@ public class JobPostsService : IJobPostsService
 
     public async Task<IEnumerable<JobPostSummaryDto>> GetMyJobPostsAsync(GetMyJobPostsQuery request, CancellationToken cancellationToken = default)
     {
+        var clientProfileId = await _context.Set<ClientProfile>()
+    .Where(cp => cp.UserId == request.UserId)
+    .Select(cp => cp.ClientProfilesId)
+    .FirstOrDefaultAsync(cancellationToken);
+
         var jobPosts = await _context.Set<JobPost>()
-            .Include(j => j.JobPostSkills).ThenInclude(js => js.Skills)
-            .Where(j => j.ClientProfilesId == request.ClientProfilesId)
+            .Include(j => j.JobPostSkills)
+                .ThenInclude(js => js.Skills)
+            .Where(j => j.ClientProfilesId == clientProfileId)
             .OrderByDescending(j => j.CreatedAt)
             .Skip((request.PageIndex - 1) * request.PageSize)
             .Take(request.PageSize)
@@ -161,11 +167,21 @@ public class JobPostsService : IJobPostsService
         return MapToSummaryDto(jobPosts);
     }
 
-    public async Task<IEnumerable<JobPostSummaryDto>> GetMyAppliedJobPostsAsync(GetMyAppliedJobPostsQuery request, CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<JobPostSummaryDto>> GetMyAppliedJobPostsAsync(
+    GetMyAppliedJobPostsQuery request,
+    CancellationToken cancellationToken = default)
     {
+        var freelancerProfile = await _context.Set<FreelancerProfile>()
+            .FirstOrDefaultAsync(x => x.UserId == request.UserId, cancellationToken);
+
+        if (freelancerProfile == null)
+            throw new Exception("Freelancer profile không tồn tại.");
+
         var jobPosts = await _context.Set<JobPost>()
-            .Include(j => j.JobPostSkills).ThenInclude(js => js.Skills)
-            .Where(j => j.Proposals.Any(p => p.FreelancerProfilesId == request.FreelancerProfilesId))
+            .Include(j => j.JobPostSkills)
+                .ThenInclude(js => js.Skills)
+            .Where(j => j.Proposals.Any(
+                p => p.FreelancerProfilesId == freelancerProfile.FreelancerProfilesId))
             .OrderByDescending(j => j.CreatedAt)
             .Skip((request.PageIndex - 1) * request.PageSize)
             .Take(request.PageSize)

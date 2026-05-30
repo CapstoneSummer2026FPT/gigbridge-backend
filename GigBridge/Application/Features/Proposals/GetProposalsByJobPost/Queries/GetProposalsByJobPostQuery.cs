@@ -8,7 +8,7 @@ namespace Application.Features.Proposals.GetProposalsByJobPost.Queries;
 public class GetProposalsByJobPostQuery : IRequest<IEnumerable<ProposalDto>>
 {
     public Guid JobPostsId { get; set; }
-    public Guid ClientProfilesId { get; set; }
+    public Guid UserId { get; set; }
     public int PageIndex { get; set; } = 1;
     public int PageSize { get; set; } = 10;
 }

@@ -26,9 +26,17 @@ public class ProposalsService : IProposalsService
     }
 
     #region Submit Proposal
-    public async Task<Guid> SubmitProposalAsync(SubmitProposalCommand command, CancellationToken cancellationToken = default)
+    public async Task<Guid> SubmitProposalAsync(
+    SubmitProposalCommand command,
+    CancellationToken cancellationToken = default)
     {
         var request = command.Request;
+
+        var freelancerProfile = await _context.Set<FreelancerProfile>()
+            .FirstOrDefaultAsync(x => x.UserId == command.UserId, cancellationToken);
+
+        if (freelancerProfile == null)
+            throw new Exception("Freelancer profile không tồn tại.");
 
         var jobPost = await _context.Set<JobPost>()
             .FirstOrDefaultAsync(j => j.JobPostsId == request.JobPostsId, cancellationToken);
@@ -41,8 +49,8 @@ public class ProposalsService : IProposalsService
 
         bool hasSubmitted = await _context.Set<Proposal>()
             .AnyAsync(p => p.JobPostsId == request.JobPostsId
-                        && p.FreelancerProfilesId == command.FreelancerProfilesId,
-                   cancellationToken);
+                        && p.FreelancerProfilesId == freelancerProfile.FreelancerProfilesId,
+                cancellationToken);
 
         if (hasSubmitted)
             throw new Exception("Bạn đã gửi Proposal cho công việc này rồi.");
@@ -51,7 +59,7 @@ public class ProposalsService : IProposalsService
         {
             ProposalsId = Guid.NewGuid(),
             JobPostsId = request.JobPostsId,
-            FreelancerProfilesId = command.FreelancerProfilesId,
+            FreelancerProfilesId = freelancerProfile.FreelancerProfilesId,
             CoverLetter = request.CoverLetter,
             ProposedRate = request.ProposedRate,
             ProposedDuration = request.ProposedDuration,
@@ -67,11 +75,19 @@ public class ProposalsService : IProposalsService
     #endregion
 
     #region Get My Proposals (Freelancer)
-    public async Task<IEnumerable<ProposalDto>> GetMyProposalsAsync(GetMyProposalsQuery request, CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<ProposalDto>> GetMyProposalsAsync(
+    GetMyProposalsQuery request,
+    CancellationToken cancellationToken = default)
     {
+        var freelancerProfile = await _context.Set<FreelancerProfile>()
+            .FirstOrDefaultAsync(x => x.UserId == request.UserId, cancellationToken);
+
+        if (freelancerProfile == null)
+            throw new Exception("Freelancer profile không tồn tại.");
+
         var proposals = await _context.Set<Proposal>()
-            .Include(p => p.JobPosts)                    // Navigation đúng theo Entity
-            .Where(p => p.FreelancerProfilesId == request.FreelancerProfilesId)
+            .Include(p => p.JobPosts)
+            .Where(p => p.FreelancerProfilesId == freelancerProfile.FreelancerProfilesId)
             .OrderByDescending(p => p.SubmittedAt)
             .Skip((request.PageIndex - 1) * request.PageSize)
             .Take(request.PageSize)
@@ -87,27 +103,35 @@ public class ProposalsService : IProposalsService
             ProposedRate = p.ProposedRate ?? 0m,
             ProposedDuration = p.ProposedDuration ?? "",
             Status = p.Status,
-            SubmittedAt = p.SubmittedAt ?? DateTime.UtcNow,
-            // ReviewedAt không tồn tại trong Entity → bỏ hoặc thay bằng UpdatedAt
-            // ReviewedAt = p.UpdatedAt
+            SubmittedAt = p.SubmittedAt ?? DateTime.UtcNow
         }).ToList();
     }
     #endregion
 
     #region Get Proposals By JobPost (Client)
-    public async Task<IEnumerable<ProposalDto>> GetProposalsByJobPostAsync(GetProposalsByJobPostQuery request, CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<ProposalDto>> GetProposalsByJobPostAsync(
+    GetProposalsByJobPostQuery request,
+    CancellationToken cancellationToken = default)
     {
+        var clientProfile = await _context.Set<ClientProfile>()
+            .FirstOrDefaultAsync(x => x.UserId == request.UserId, cancellationToken);
+
+        if (clientProfile == null)
+            throw new Exception("Client profile không tồn tại.");
+
         var jobPost = await _context.Set<JobPost>()
-            .FirstOrDefaultAsync(j => j.JobPostsId == request.JobPostsId
-                                   && j.ClientProfilesId == request.ClientProfilesId,
-                                cancellationToken);
+            .FirstOrDefaultAsync(j => j.JobPostsId == request.JobPostsId, cancellationToken);
 
         if (jobPost == null)
+            throw new Exception("Job post không tồn tại.");
+
+        if (jobPost.ClientProfilesId != clientProfile.ClientProfilesId)
             throw new Exception("Bạn không có quyền xem proposal của job này.");
 
         var proposals = await _context.Set<Proposal>()
             .Include(p => p.JobPosts)
-            .Include(p => p.FreelancerProfiles.User)   // Giả sử FreelancerProfiles có User
+            .Include(p => p.FreelancerProfiles)
+                .ThenInclude(fp => fp.User)
             .Where(p => p.JobPostsId == request.JobPostsId)
             .OrderByDescending(p => p.SubmittedAt)
             .Skip((request.PageIndex - 1) * request.PageSize)
@@ -125,7 +149,7 @@ public class ProposalsService : IProposalsService
             ProposedRate = p.ProposedRate ?? 0m,
             ProposedDuration = p.ProposedDuration ?? "",
             Status = p.Status,
-            SubmittedAt = p.SubmittedAt ?? DateTime.UtcNow,
+            SubmittedAt = p.SubmittedAt ?? DateTime.UtcNow
         }).ToList();
     }
     #endregion
