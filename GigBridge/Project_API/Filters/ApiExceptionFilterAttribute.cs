@@ -1,4 +1,5 @@
 using Application.Common.Exceptions;
+using Application.Common.Models;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 
@@ -15,6 +16,8 @@ public class ApiExceptionFilterAttribute : ExceptionFilterAttribute
             { typeof(ValidationException), HandleValidationException },
             { typeof(NotFoundException), HandleNotFoundException },
             { typeof(ForbiddenAccessException), HandleForbiddenAccessException },
+            { typeof(UnauthorizedAccessException), HandleUnauthorizedAccessException },
+            { typeof(InvalidOperationException), HandleInvalidOperationException },
         };
     }
 
@@ -78,6 +81,29 @@ public class ApiExceptionFilterAttribute : ExceptionFilterAttribute
         {
             StatusCode = StatusCodes.Status403Forbidden
         };
+
+        context.ExceptionHandled = true;
+    }
+
+    private static void HandleUnauthorizedAccessException(ExceptionContext context)
+    {
+        var exception = context.Exception;
+
+        context.Result = new ObjectResult(
+            ApiResponse<object>.Error(StatusCodes.Status401Unauthorized, exception.Message))
+        {
+            StatusCode = StatusCodes.Status401Unauthorized
+        };
+
+        context.ExceptionHandled = true;
+    }
+
+    private static void HandleInvalidOperationException(ExceptionContext context)
+    {
+        var exception = context.Exception;
+
+        context.Result = new BadRequestObjectResult(
+            ApiResponse<object>.BadRequest(exception.Message));
 
         context.ExceptionHandled = true;
     }

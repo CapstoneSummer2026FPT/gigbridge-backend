@@ -33,230 +33,118 @@ namespace Project_API.Controllers;
 public class AuthController : BaseApiController
 {
 
-
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request)
     {
-        try
-        {
-            if (request == null)
-            {
-                return BadRequest(ApiResponse<object>.Error(400, "Registration data is required"));
-            }
+        if (request == null)
+            return BadRequest(ApiResponse<object>.BadRequest("Registration data is required"));
 
-            var user = await Mediator.Send(new RegisterCommand(request));
+        var user = await Mediator.Send(new RegisterCommand(request));
 
-            if (user == null)
-            {
-                return BadRequest(ApiResponse<object>.Error(400, "Registration failed"));
-            }
+        if (user == null)
+            return BadRequest(ApiResponse<object>.BadRequest("Registration failed"));
 
-            return Ok(ApiResponse<UserDTO>.Ok(user, "User registered successfully"));
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, ApiResponse<object>.Error(500, ex.Message));
-        }
+        return Ok(ApiResponse<UserDTO>.Ok(user, "User registered successfully"));
     }
 
     [HttpPost("login")]
-  
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
-        try
-        {
-            if (request == null)
-            {
-                return BadRequest(ApiResponse<object>.Error(400, "Login data is required"));
-            }
+        if (request == null)
+            return BadRequest(ApiResponse<object>.BadRequest("Login data is required"));
 
-            var (loginData, refreshToken) = await Mediator.Send(new LoginWithRefreshCommand(request));
+        var (loginData, refreshToken) = await Mediator.Send(new LoginWithRefreshCommand(request));
 
-            if (loginData == null)
-            {
-                return BadRequest(ApiResponse<object>.Error(400, "Login failed"));
-            }
+        if (loginData == null)
+            return BadRequest(ApiResponse<object>.BadRequest("Login failed"));
 
-            SetRefreshTokenCookie(refreshToken);
-
-            return Ok(ApiResponse<LoginResponse>.Ok(loginData, "Login successful"));
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return Unauthorized(ApiResponse<object>.Error(401, ex.Message));
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, ApiResponse<object>.Error(500, ex.Message));
-        }
+        SetRefreshTokenCookie(refreshToken);
+        return Ok(ApiResponse<LoginResponse>.Ok(loginData, "Login successful"));
     }
 
     [HttpPost("google")]
     public async Task<IActionResult> GoogleLogin([FromBody] string authCode)
     {
-        try
-        {
-            if (string.IsNullOrWhiteSpace(authCode))
-            {
-                return BadRequest(ApiResponse<object>.Error(400, "Authorization code is required"));
-            }
+        if (string.IsNullOrWhiteSpace(authCode))
+            return BadRequest(ApiResponse<object>.BadRequest("Authorization code is required"));
 
-            var (loginData, refreshToken) = await Mediator.Send(new GoogleLoginCommand(authCode));
+        var (loginData, refreshToken) = await Mediator.Send(new GoogleLoginCommand(authCode));
 
-            if (loginData == null)
-            {
-                return BadRequest(ApiResponse<object>.Error(400, "Google login failed"));
-            }
+        if (loginData == null)
+            return BadRequest(ApiResponse<object>.BadRequest("Google login failed"));
 
-            SetRefreshTokenCookie(refreshToken);
-
-            return Ok(ApiResponse<LoginResponse>.Ok(loginData, "Login successful"));
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return Unauthorized(ApiResponse<object>.Error(401, ex.Message));
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, ApiResponse<object>.Error(500, ex.Message));
-        }
+        SetRefreshTokenCookie(refreshToken);
+        return Ok(ApiResponse<LoginResponse>.Ok(loginData, "Login successful"));
     }
 
     [HttpPost("refresh")]
     public async Task<IActionResult> Refresh([FromBody] TokenRequest request)
     {
-        try
-        {
-            var refreshToken = Request.Cookies["refreshToken"];
-            if (string.IsNullOrEmpty(refreshToken))
-            {
-                return Unauthorized(ApiResponse<object>.Error(401, "Refresh token is missing. Please log in again."));
-            }
+        var refreshToken = Request.Cookies["refreshToken"];
+        if (string.IsNullOrEmpty(refreshToken))
+            return Unauthorized(ApiResponse<object>.Error(401, "Refresh token is missing. Please log in again."));
 
-            var (loginData, newRefreshToken) = await Mediator.Send(new RefreshTokenCommand(request.AccessToken, refreshToken));
+        var (loginData, newRefreshToken) = await Mediator.Send(new RefreshTokenCommand(request.AccessToken, refreshToken));
 
-            SetRefreshTokenCookie(newRefreshToken);
-
-            return Ok(ApiResponse<LoginResponse>.Ok(loginData, "Token refreshed successfully"));
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            return Unauthorized(ApiResponse<object>.Error(401, ex.Message));
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, ApiResponse<object>.Error(500, ex.Message));
-        }
+        SetRefreshTokenCookie(newRefreshToken);
+        return Ok(ApiResponse<LoginResponse>.Ok(loginData, "Token refreshed successfully"));
     }
 
     [HttpGet("verify-email")]
     public async Task<IActionResult> EmailVerify([FromQuery] VerifyEmailRequest request)
     {
-        try
-        {
-            if (string.IsNullOrWhiteSpace(request.Token))
-            {
-                return BadRequest(ApiResponse<object>.Error(400, "Token is required"));
-            }
+        if (string.IsNullOrWhiteSpace(request.Token))
+            return BadRequest(ApiResponse<object>.BadRequest("Token is required"));
 
-            await Mediator.Send(new VerifyEmailCommand(request));
-
-            return Ok(ApiResponse<object>.Ok(null, "Email verified successfully"));
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, ApiResponse<object>.Error(500, ex.Message));
-        }
+        await Mediator.Send(new VerifyEmailCommand(request));
+        return Ok(ApiResponse<object>.NoContent("Email verified successfully"));
     }
 
     [HttpPost("resend-email")]
     public async Task<IActionResult> ResendEmailConfirmation([FromBody] EmailResendConfirmationRequest request)
     {
-        try
-        {
-            if (string.IsNullOrWhiteSpace(request.Email))
-            {
-                return BadRequest(ApiResponse<object>.Error(400, "Email is required"));
-            }
+        if (string.IsNullOrWhiteSpace(request.Email))
+            return BadRequest(ApiResponse<object>.BadRequest("Email is required"));
 
-            await Mediator.Send(new ResendEmailConfirmationCommand(request));
-
-            return Ok(ApiResponse<object>.Ok(null, "Email sent successfully"));
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, ApiResponse<object>.Error(500, ex.Message));
-        }
+        await Mediator.Send(new ResendEmailConfirmationCommand(request));
+        return Ok(ApiResponse<object>.NoContent("Email sent successfully"));
     }
 
     [HttpPost("forgot-password")]
     public async Task<IActionResult> SendPasswordEmailChanging([FromBody] ForgotPasswordRequest request)
     {
-        try
-        {
-            if (string.IsNullOrWhiteSpace(request.Email))
-            {
-                return BadRequest(ApiResponse<object>.Error(400, "Email is required"));
-            }
+        if (string.IsNullOrWhiteSpace(request.Email))
+            return BadRequest(ApiResponse<object>.BadRequest("Email is required"));
 
-            await Mediator.Send(new SendEmailPasswordChangingCommand(request));
-
-            return Ok(ApiResponse<object>.Ok(null, "Email sent successfully"));
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, ApiResponse<object>.Error(500, ex.Message));
-        }
+        await Mediator.Send(new SendEmailPasswordChangingCommand(request));
+        return Ok(ApiResponse<object>.NoContent("Email sent successfully"));
     }
 
     [HttpPost("password-reset")]
     public async Task<IActionResult> PasswordChangingRequest([FromBody] ResetPasswordRequest request)
     {
-        try
-        {
-            if (string.IsNullOrWhiteSpace(request.Email))
-            {
-                return BadRequest(ApiResponse<object>.Error(400, "Email is required"));
-            }
+        if (string.IsNullOrWhiteSpace(request.Email))
+            return BadRequest(ApiResponse<object>.BadRequest("Email is required"));
 
-            if (string.IsNullOrWhiteSpace(request.NewPassword))
-            {
-                return BadRequest(ApiResponse<object>.Error(400, "NewPassword is required"));
-            }
+        if (string.IsNullOrWhiteSpace(request.NewPassword))
+            return BadRequest(ApiResponse<object>.BadRequest("NewPassword is required"));
 
-            await Mediator.Send(new ResetPasswordCommand(request));
-
-            return Ok(ApiResponse<object>.Ok(null, "Password reset successfully"));
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, ApiResponse<object>.Error(500, ex.Message));
-        }
+        await Mediator.Send(new ResetPasswordCommand(request));
+        return Ok(ApiResponse<object>.NoContent("Password reset successfully"));
     }
 
     [HttpPost("validate-reset-token")]
     public async Task<IActionResult> ValidateResetToken([FromBody] ValidateResetTokenRequest request)
     {
-        try
-        {
-            if (string.IsNullOrWhiteSpace(request.Token))
-            {
-                return BadRequest(ApiResponse<object>.Error(400, "TOKEN_INVALID"));
-            }
+        if (string.IsNullOrWhiteSpace(request.Token))
+            return BadRequest(ApiResponse<object>.BadRequest("TOKEN_INVALID"));
 
-            var isExpired = await Mediator.Send(new ValidateResetTokenCommand(request));
+        var isExpired = await Mediator.Send(new ValidateResetTokenCommand(request));
 
-            if (isExpired)
-            {
-                return BadRequest(ApiResponse<object>.Error(400, "TOKEN_EXPIRED"));
-            }
+        if (isExpired)
+            return BadRequest(ApiResponse<object>.BadRequest("TOKEN_EXPIRED"));
 
-            return Ok(ApiResponse<object>.Ok(null, "valid"));
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(500, ApiResponse<object>.Error(500, ex.Message));
-        }
+        return Ok(ApiResponse<object>.NoContent("valid"));
     }
 
     [HttpGet("test-auth")]
@@ -279,3 +167,4 @@ public class AuthController : BaseApiController
         Response.Cookies.Append("refreshToken", refreshToken, cookieOptions);
     }
 }
+
