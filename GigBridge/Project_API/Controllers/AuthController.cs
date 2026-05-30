@@ -1,5 +1,6 @@
 using Application.Common.Models;
 using Application.Features.Auth.Shared.DTOs;
+using Application.Features.Auth.Commands;
 using Application.Features.Auth.ForgotPassword.Commands;
 using Application.Features.Auth.ForgotPassword.DTOs;
 using Application.Features.Auth.GoogleLogin.Commands;
@@ -28,8 +29,8 @@ using System.Threading.Tasks;
 namespace Project_API.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
-public class AuthController : BaseApiController
+[Route("api/v1/[controller]")]
+public class authController : BaseApiController
 {
 
 

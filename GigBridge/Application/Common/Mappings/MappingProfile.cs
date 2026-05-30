@@ -3,6 +3,7 @@ using AutoMapper;
 using Domain.Entities;
 using Application.Features.Auth.Shared.DTOs;
 using Application.Features.Admin.Users.Shared.DTOs;
+using Application.Features.Profile.DTOs;
 
 
 
@@ -15,6 +16,10 @@ public class MappingProfile : Profile
 
         CreateMap<User, UserDTO>();
         CreateMap<User, AdminUserDto>();
+        
+        // Profile mappings
+        CreateMap<ClientProfile, ClientProfileResponseDto>();
+        CreateMap<FreelancerProfile, FreelancerProfileResponseDto>();
 
     }
 }

@@ -27,7 +27,7 @@ builder.Services.AddSignalR();
 builder.Services.AddHangfireServices(builder.Configuration);
 builder.Services.AddHybridCache(builder.Configuration);
 
-if (!builder.Environment.IsEnvironment("Testing"))
+if (builder.Environment.IsEnvironment("Testing"))
 {
     builder.Services.AddHangfireServices(builder.Configuration);
 }
