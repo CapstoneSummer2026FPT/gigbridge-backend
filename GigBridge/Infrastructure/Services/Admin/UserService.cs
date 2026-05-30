@@ -1,5 +1,6 @@
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Application.Common.Caching;
 using Application.Features.Admin.Users.CreateNewUser.DTOs;
 using Application.Features.Admin.Users.GetAllUser.DTOs;
 using Application.Features.Admin.Users.Shared.DTOs;
@@ -15,16 +16,32 @@ public class UserService : IUserService
     private readonly IApplicationDbContext _dbContext;
     private readonly IMapper _mapper;
     private readonly IPasswordHasher _passwordHasher;
+    private readonly ICacheService _cache;
 
-    public UserService(IApplicationDbContext dbContext, IMapper mapper, IPasswordHasher passwordHasher)
+    public UserService(
+        IApplicationDbContext dbContext,
+        IMapper mapper,
+        IPasswordHasher passwordHasher,
+        ICacheService cache)
     {
         _dbContext = dbContext;
         _mapper = mapper;
         _passwordHasher = passwordHasher;
+        _cache = cache;
     }
 
     public async Task<GetAllUsersResponse> GetAllAsync(int page, int pageSize, string? search, int? status, CancellationToken cancellationToken)
     {
+        var version = await _cache.GetAsync<string>(CacheKeys.AdminUsersVersion, cancellationToken)
+                      ?? "0";
+        var cacheKey = CacheKeys.AdminUsers(version, page, pageSize, search, status);
+
+        var cached = await _cache.GetAsync<GetAllUsersResponse>(cacheKey, cancellationToken);
+        if (cached != null)
+        {
+            return cached;
+        }
+
         var query = _dbContext.Set<User>().AsQueryable();
 
         if (search is not null)
@@ -41,13 +58,17 @@ public class UserService : IUserService
             .Take(pageSize)
             .ToListAsync(cancellationToken);
 
-        return new GetAllUsersResponse
+        var response = new GetAllUsersResponse
         {
             Items = _mapper.Map<IReadOnlyList<AdminUserDto>>(users),
             Page = page,
             PageSize = pageSize,
             TotalItems = total
         };
+
+        await _cache.SetAsync(cacheKey, response, CacheDurations.ShortList, cancellationToken);
+
+        return response;
     }
 
     public async Task<AdminUserDto?> GetClientByEmailAsync(string email, CancellationToken cancellationToken)
@@ -85,6 +106,7 @@ public class UserService : IUserService
 
         _dbContext.Set<User>().Add(user);
         await _dbContext.SaveChangesAsync(cancellationToken);
+        await InvalidateAdminUsersCacheAsync(cancellationToken);
 
         return _mapper.Map<AdminUserDto>(user);
     }
@@ -115,6 +137,7 @@ public class UserService : IUserService
         user.UpdatedAt = DateTime.UtcNow;
 
         await _dbContext.SaveChangesAsync(cancellationToken);
+        await InvalidateAdminUsersCacheAsync(cancellationToken);
 
         return _mapper.Map<AdminUserDto>(user);
     }
@@ -129,6 +152,7 @@ public class UserService : IUserService
 
         user.IsActive = !user.IsActive;
         await _dbContext.SaveChangesAsync(cancellationToken);
+        await InvalidateAdminUsersCacheAsync(cancellationToken);
 
         return true;
     }
@@ -143,7 +167,14 @@ public class UserService : IUserService
 
         _dbContext.Set<User>().Remove(user);
         await _dbContext.SaveChangesAsync(cancellationToken);
+        await InvalidateAdminUsersCacheAsync(cancellationToken);
 
         return true;
+    }
+
+    private Task InvalidateAdminUsersCacheAsync(CancellationToken cancellationToken)
+    {
+        var newVersion = Guid.NewGuid().ToString("N");
+        return _cache.SetAsync(CacheKeys.AdminUsersVersion, newVersion, CacheDurations.Version, cancellationToken);
     }
 }

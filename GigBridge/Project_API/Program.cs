@@ -30,12 +30,6 @@ builder.Services.AddSignalR();
 //builder.Services.AddHangfireServices(builder.Configuration);
 builder.Services.AddHybridCache(builder.Configuration);
 
-if (builder.Environment.IsEnvironment("Testing"))
-{
-    //builder.Services.AddHangfireServices(builder.Configuration);
-}
-builder.Services.AddHybridCache(builder.Configuration);
-
 var app = builder.Build();
 
 // Enable Swagger in all environments for testing
