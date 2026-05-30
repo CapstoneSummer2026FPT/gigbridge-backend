@@ -96,7 +96,7 @@ public class AuthService : IAuthService
         await _context.SaveChangesAsync(cancellationToken);
 
         var frontendUrl = _configuration["FrontendBaseUrl"] ?? "https://localhost:7094";
-        var verifyLink = $"{frontendUrl}/verify-email?token={token}";
+        var verifyLink = $"{frontendUrl}/api/Auth/verify-email?token={token}";
 
         var path = Path.Combine(
             _webHostEnvironment.ContentRootPath,
@@ -320,7 +320,7 @@ public class AuthService : IAuthService
         await _context.SaveChangesAsync(cancellationToken);
 
         var frontendUrl = _configuration["FrontendBaseUrl"] ?? "https://localhost:7094";
-        var verifyLink = $"{frontendUrl}/verify-email?token={token}";
+        var verifyLink = $"{frontendUrl}/api/Auth/verify-email?token={token}";
 
         var path = Path.Combine(
             _webHostEnvironment.ContentRootPath,
@@ -360,7 +360,7 @@ public class AuthService : IAuthService
         await _context.SaveChangesAsync(cancellationToken);
 
         var frontendUrl = _configuration["FrontendBaseUrl"] ?? "https://localhost:7094";
-        var verifyLink = $"{frontendUrl}/reset-password?token={token}";
+        var verifyLink = $"{frontendUrl}/api/Auth/reset-password?token={token}";
 
         var path = Path.Combine(
             _webHostEnvironment.ContentRootPath,
