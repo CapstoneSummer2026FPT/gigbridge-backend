@@ -1,3 +1,5 @@
+using Application.Features.JobPosts.GetAvailableJobPosts.DTOs;
+using Application.Features.JobPosts.GetJobPostDetail.DTOs;
 using System;
 
 namespace Application.Common.Models;
@@ -44,4 +46,14 @@ public class ApiResponse<TData>
 
     public static ApiResponse<TData> Error(int statusCode, string message, object? errors = null) =>
         Create(false, statusCode, message, errors: errors);
+
+    public static object? Ok(JobPostDetailDto result)
+    {
+        throw new NotImplementedException();
+    }
+
+    public static object? Ok(IEnumerable<JobPostSummaryDto> result)
+    {
+        throw new NotImplementedException();
+    }
 }

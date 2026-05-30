@@ -1,5 +1,7 @@
 using Application;
 using Application.Common.Interfaces.IService;
+using Application.Features.JobPosts.Services;
+using Application.Features.Proposals.Services;
 using Hangfire;
 using Infrastructure;
 using Infrastructure.Persistence;
@@ -16,7 +18,8 @@ builder.Services.AddControllers(options =>
 // Layer registrations (Clean Architecture)
 builder.Services.AddApplicationServices();
 builder.Services.AddInfrastructureServices(builder.Configuration);
-
+builder.Services.AddScoped<IProposalsService, Infrastructure.Services.Proposals.ProposalsService>();
+builder.Services.AddScoped<IJobPostsService, Infrastructure.Services.JobPosts.JobPostsService>();
 // API-layer concerns
 builder.Services.AddJwtAuthentication(builder.Configuration);
 builder.Services.AddSwaggerWithBearerAuth();
@@ -24,12 +27,12 @@ builder.Services.AddCorsPolicy();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, Project_API.Services.CurrentUserService>();
 builder.Services.AddSignalR();
-builder.Services.AddHangfireServices(builder.Configuration);
+//builder.Services.AddHangfireServices(builder.Configuration);
 builder.Services.AddHybridCache(builder.Configuration);
 
-if (!builder.Environment.IsEnvironment("Testing"))
+if (builder.Environment.IsEnvironment("Testing"))
 {
-    builder.Services.AddHangfireServices(builder.Configuration);
+    //builder.Services.AddHangfireServices(builder.Configuration);
 }
 builder.Services.AddHybridCache(builder.Configuration);
 
@@ -73,7 +76,7 @@ app.MapHub<Project_API.Hubs.NotificationHub>("/hubs/notification");
 
 if (!app.Environment.IsEnvironment("Testing"))
 {
-    app.UseHangfireDashboard();
+    //app.UseHangfireDashboard();
 }
 
 app.Run();
