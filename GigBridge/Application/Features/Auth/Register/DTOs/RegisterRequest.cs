@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Domain.Enums;
 
 namespace Application.Features.Auth.Register.DTOs
 {
@@ -14,6 +15,6 @@ namespace Application.Features.Auth.Register.DTOs
 
         public string ConfirmPassword { get; set; } = null!;
 
-        public int role { get; set; }
+        public UserRole? role { get; set; }
     }
 }

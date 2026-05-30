@@ -1,4 +1,4 @@
-﻿using FluentValidation;
+using FluentValidation;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -30,8 +30,8 @@ namespace Application.Features.Auth.Register.Commands
                 .WithMessage("Passwords do not match.");
 
             RuleFor(v => v.RegisterRequest.role)
-                .GreaterThan(0)
-                .WithMessage("Role is required.");
+               .NotNull().WithMessage("Role is required.")
+               .IsInEnum().WithMessage("Invalid role.");
         }
     }
 }

@@ -58,13 +58,12 @@ using (var scope = app.Services.CreateScope())
 app.UseMiddleware<Project_API.Middleware.ExceptionHandlingMiddleware>();
 app.UseMiddleware<Project_API.Middleware.RequestLoggingMiddleware>();
 
+app.UseCors("AllowAll"); // CORS must be BEFORE UseHttpsRedirection and MapControllers
 if (!app.Environment.IsEnvironment("Testing"))
 {
     app.UseHttpsRedirection();
     app.UseStaticFiles();
 }
-
-app.UseCors("AllowAll"); // CORS must be BEFORE MapControllers
 
 app.UseAuthentication();
 app.UseAuthorization();
