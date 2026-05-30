@@ -58,13 +58,14 @@ public class AuthService : IAuthService
 
     public async Task<UserDTO> RegisterAsync(RegisterRequest request, CancellationToken cancellationToken = default)
     {
-        var existing = await _context.Set<User>().FirstOrDefaultAsync(c => c.Email.ToLower() == request.Email.ToLower(), cancellationToken: cancellationToken);
+        var email = request.Email.Trim().ToLower();
+        var existing = await _context.Set<User>().FirstOrDefaultAsync(c => c.Email.ToLower() == email, cancellationToken: cancellationToken);
         if (existing != null)
         {
             throw new BadRequestException("Email already exists");
         }
 
-        var isVerified = await _cacheService.GetAsync<bool>($"verified_email:{request.Email.ToLower()}", cancellationToken);
+        var isVerified = await _cacheService.GetAsync<bool>($"verified_email:{email}", cancellationToken);
         if (!isVerified)
         {
             throw new BadRequestException("Email has not been verified or verification has expired.");
@@ -75,8 +76,8 @@ public class AuthService : IAuthService
         var user = new User
         {
             UserId = Guid.NewGuid(),
-            Email = request.Email,
-            FullName = request.FullName ?? request.Email,
+            Email = request.Email.Trim(),
+            FullName = request.FullName ?? request.Email.Trim(),
             Password = hash,
             Role = (int)request.role!.Value,
             IsEmailVerified = true,
@@ -107,7 +108,7 @@ public class AuthService : IAuthService
         await _context.SaveChangesAsync(cancellationToken);
 
         // Delete the verification flag from Redis cache
-        await _cacheService.RemoveAsync($"verified_email:{request.Email.ToLower()}", cancellationToken);
+        await _cacheService.RemoveAsync($"verified_email:{email}", cancellationToken);
 
         return _mapper.Map<UserDTO>(user);
     }
@@ -418,11 +419,11 @@ public class AuthService : IAuthService
 
     public async Task SendOtpAsync(SendOtpRequest request, CancellationToken cancellationToken = default)
     {
-
-        var cachedOtp = await _cacheService.GetAsync<string>($"otp:{request.Email.ToLower()}", cancellationToken);
+        var email = request.Email.Trim().ToLower();
+        var cachedOtp = await _cacheService.GetAsync<string>($"otp:{email}", cancellationToken);
         if (!string.IsNullOrEmpty(cachedOtp))
         {
-            await _cacheService.RemoveAsync($"otp:{request.Email.ToLower()}", cancellationToken);
+            await _cacheService.RemoveAsync($"otp:{email}", cancellationToken);
         }
 
         // Generate a 6-digit OTP
@@ -430,7 +431,7 @@ public class AuthService : IAuthService
         var otp = random.Next(100000, 999999).ToString();
 
         // Store OTP in cache for 5 minutes
-        await _cacheService.SetAsync($"otp:{request.Email.ToLower()}", otp, TimeSpan.FromMinutes(5), cancellationToken);
+        await _cacheService.SetAsync($"otp:{email}", otp, TimeSpan.FromMinutes(5), cancellationToken);
 
         // Load OTP email template
         var path = Path.Combine(
@@ -446,7 +447,7 @@ public class AuthService : IAuthService
         await _emailService.SendEmailAsync(new EmailRequest
         {
             Body = body,
-            To = request.Email,
+            To = email,
             Subject = "GigBridge: Your Verification Code",
             IsHtml = true,
             Attachments = null
@@ -455,16 +456,17 @@ public class AuthService : IAuthService
 
     public async Task VerifyOtpAsync(VerifyOtpRequest request, CancellationToken cancellationToken = default)
     {
-        var cachedOtp = await _cacheService.GetAsync<string>($"otp:{request.Email.ToLower()}", cancellationToken);
+        var email = request.Email.Trim().ToLower();
+        var cachedOtp = await _cacheService.GetAsync<string>($"otp:{email}", cancellationToken);
         if (string.IsNullOrEmpty(cachedOtp) || cachedOtp != request.Otp)
         {
             throw new BadRequestException("Invalid or expired OTP verification code.");
         }
 
         // Remove OTP from cache as it's been used
-        await _cacheService.RemoveAsync($"otp:{request.Email.ToLower()}", cancellationToken);
+        await _cacheService.RemoveAsync($"otp:{email}", cancellationToken);
 
         // Set verification flag in cache for 10 minutes
-        await _cacheService.SetAsync($"verified_email:{request.Email.ToLower()}", true, TimeSpan.FromMinutes(10), cancellationToken);
+        await _cacheService.SetAsync($"verified_email:{email}", true, TimeSpan.FromMinutes(10), cancellationToken);
     }
 }
