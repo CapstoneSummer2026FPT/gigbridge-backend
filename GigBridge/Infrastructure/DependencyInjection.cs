@@ -27,15 +27,15 @@ public static class DependencyInjection
 
         services.AddScoped<IApplicationDbContext>(provider =>
             provider.GetRequiredService<GigbridgeDbContext>());
+        services.AddScoped<ITransactionManager, EfCoreTransactionManager>();
 
 
         // Services
         services.AddScoped<IPasswordHasher, Infrastructure.Services.Auth.BCryptPasswordHasher>();
         services.AddScoped<IJwtService, Infrastructure.Services.Auth.JwtService>();
-        services.AddScoped<IAuthService, Infrastructure.Services.Auth.AuthService>();
-        services.AddScoped<IUserService, Infrastructure.Services.Admin.UserService>();
-        services.AddScoped<IGoogleAuthService, Infrastructure.Services.Auth.GoogleAuthService>();
+        services.AddHttpClient<IGoogleAuthService, Infrastructure.Services.Auth.GoogleAuthService>();
         services.AddScoped<IEmailService, Infrastructure.Services.Email.EmailService>();
+        services.AddScoped<IAuthEmailSender, Infrastructure.Services.Email.AuthEmailSender>();
         services.AddScoped<IMediaService, Infrastructure.Services.Media.MediaService>();
         services.AddScoped<INotificationService, Infrastructure.Services.Notification.NotificationService>();
         services.AddTransient<IDateTimeService, Infrastructure.Services.Common.DateTimeService>();

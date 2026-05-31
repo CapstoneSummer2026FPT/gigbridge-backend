@@ -13,12 +13,12 @@ namespace Application.Common.Behaviours;
 public class TransactionBehaviour<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse>
     where TRequest : notnull
 {
-    private readonly IApplicationDbContext _dbContext;
+    private readonly ITransactionManager _transactionManager;
     private readonly ILogger<TRequest> _logger;
 
-    public TransactionBehaviour(IApplicationDbContext dbContext, ILogger<TRequest> logger)
+    public TransactionBehaviour(ITransactionManager transactionManager, ILogger<TRequest> logger)
     {
-        _dbContext = dbContext;
+        _transactionManager = transactionManager;
         _logger = logger;
     }
 
@@ -32,11 +32,7 @@ public class TransactionBehaviour<TRequest, TResponse> : IPipelineBehavior<TRequ
             return await next();
         }
 
-        // EF Core DbContext tracks changes and SaveChangesAsync is called by the handler/service.
-        // We wrap the entire handler execution in a transaction so that multiple SaveChanges calls
-        // within a single command are atomic.
-        await using var transaction = await (_dbContext as Microsoft.EntityFrameworkCore.DbContext)!
-            .Database.BeginTransactionAsync(cancellationToken);
+        await using var transaction = await _transactionManager.BeginTransactionAsync(cancellationToken);
 
         try
         {

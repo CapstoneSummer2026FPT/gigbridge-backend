@@ -1,22 +1,28 @@
+using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Domain.Entities;
 using MediatR;
-using System.Threading;
-using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore;
 
-namespace Application.Features.Auth.ValidateToken.Commands
+namespace Application.Features.Auth.ValidateToken.Commands;
+
+public class ValidateResetTokenCommandHandler : IRequestHandler<ValidateResetTokenCommand, bool>
 {
-    public class ValidateResetTokenCommandHandler : IRequestHandler<ValidateResetTokenCommand, bool>
+    private readonly IApplicationDbContext _context;
+    private readonly IDateTimeService _dateTimeService;
+
+    public ValidateResetTokenCommandHandler(IApplicationDbContext context, IDateTimeService dateTimeService)
     {
-        private readonly IAuthService _authService;
+        _context = context;
+        _dateTimeService = dateTimeService;
+    }
 
-        public ValidateResetTokenCommandHandler(IAuthService authService)
-        {
-            _authService = authService;
-        }
+    public async Task<bool> Handle(ValidateResetTokenCommand request, CancellationToken cancellationToken)
+    {
+        var user = await _context.Set<User>()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(u => u.EmailVerificationToken == request.Request.Token, cancellationToken);
 
-        public async Task<bool> Handle(ValidateResetTokenCommand request, CancellationToken cancellationToken)
-        {
-            return await _authService.IsTokenExpired(request.Request.Token, cancellationToken);
-        }
+        return user is null || user.TokenExpiry < _dateTimeService.UtcNow;
     }
 }

@@ -2,30 +2,31 @@ using Application.Common.Interfaces.IService;
 using Application.Features.Auth.GoogleLogin.DTOs;
 using Google.Apis.Auth;
 using Microsoft.Extensions.Configuration;
-using System.Collections.Generic;
-using System.Net.Http;
 using System.Text.Json;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Infrastructure.Services.Auth;
 
-public class GoogleAuthService(IConfiguration config) : IGoogleAuthService
+public class GoogleAuthService : IGoogleAuthService
 {
-    private readonly IConfiguration _config = config;
-    private readonly HttpClient _httpClient = new();
+    private readonly IConfiguration _configuration;
+    private readonly HttpClient _httpClient;
+
+    public GoogleAuthService(IConfiguration configuration, HttpClient httpClient)
+    {
+        _configuration = configuration;
+        _httpClient = httpClient;
+    }
 
     public async Task<GoogleUserInfoDTO> VerifyAuthCodeAsync(string authCode, CancellationToken cancellationToken = default)
     {
-        var clientId = _config["Authentication:Google:ClientId"]?.Trim();
-        var clientSecret = _config["Authentication:Google:ClientSecret"]?.Trim();
+        var clientId = _configuration["Authentication:Google:ClientId"]?.Trim();
+        var clientSecret = _configuration["Authentication:Google:ClientSecret"]?.Trim();
 
         if (string.IsNullOrEmpty(clientId) || string.IsNullOrEmpty(clientSecret))
         {
-            throw new System.Exception("Google Authentication configuration (ClientId or ClientSecret) is missing or empty.");
+            throw new InvalidOperationException("Google Authentication configuration (ClientId or ClientSecret) is missing or empty.");
         }
 
-        // 1️⃣ Exchange auth code → tokens
         var tokenResponse = await _httpClient.PostAsync(
             "https://oauth2.googleapis.com/token",
             new FormUrlEncodedContent(new Dictionary<string, string>
@@ -33,30 +34,27 @@ public class GoogleAuthService(IConfiguration config) : IGoogleAuthService
                 { "code", authCode },
                 { "client_id", clientId },
                 { "client_secret", clientSecret },
-                { "redirect_uri", "postmessage" }, // 🔥 REQUIRED for SPA
+                { "redirect_uri", "postmessage" },
                 { "grant_type", "authorization_code" }
             }),
-            cancellationToken
-        );
+            cancellationToken);
 
-        var error = await tokenResponse.Content.ReadAsStringAsync(cancellationToken);
+        var responseBody = await tokenResponse.Content.ReadAsStringAsync(cancellationToken);
 
         if (!tokenResponse.IsSuccessStatusCode)
         {
-            throw new System.Exception($"Google token exchange failed: {tokenResponse.StatusCode} - {error}");
+            throw new InvalidOperationException($"Google token exchange failed: {tokenResponse.StatusCode} - {responseBody}");
         }
 
-        var json = await tokenResponse.Content.ReadAsStringAsync(cancellationToken);
-        var tokenData = JsonSerializer.Deserialize<GoogleTokenResponse>(json)!;
+        var tokenData = JsonSerializer.Deserialize<GoogleTokenResponse>(responseBody)
+            ?? throw new InvalidOperationException("Google token response is invalid.");
 
-        // 2️⃣ Validate id_token (reuse Google library)
         var payload = await GoogleJsonWebSignature.ValidateAsync(
             tokenData.id_token,
             new GoogleJsonWebSignature.ValidationSettings
             {
-                Audience = new[] { clientId! }
-            }
-        );
+                Audience = new[] { clientId }
+            });
 
         return new GoogleUserInfoDTO
         {

@@ -23,6 +23,7 @@ public class JwtService : IJwtService
     {
         var jwtSettings = _configuration.GetSection("Jwt");
         var secretKey = Encoding.UTF8.GetBytes(jwtSettings["Key"]!);
+        var accessTokenMinutes = GetAccessTokenMinutes(jwtSettings["AccessTokenMinutes"]);
 
         string roleName = user.Role.ToUserRole().ToString();
 
@@ -42,11 +43,16 @@ public class JwtService : IJwtService
             issuer: jwtSettings["Issuer"],
             audience: jwtSettings["Audience"],
             claims: claims,
-            expires: DateTime.Now.AddMinutes(2),
+            expires: DateTime.UtcNow.AddMinutes(accessTokenMinutes),
             signingCredentials: creds
         );
 
         return new JwtSecurityTokenHandler().WriteToken(token);
+    }
+
+    private static int GetAccessTokenMinutes(string? configuredValue)
+    {
+        return int.TryParse(configuredValue, out var minutes) && minutes > 0 ? minutes : 15;
     }
 
     public string GenerateRefreshToken()

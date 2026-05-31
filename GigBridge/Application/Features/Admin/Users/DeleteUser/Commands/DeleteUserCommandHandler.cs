@@ -1,19 +1,32 @@
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces;
+using Domain.Entities;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.Admin.Users.DeleteUser.Commands;
 
 public class DeleteUserCommandHandler : IRequestHandler<DeleteUserCommand, bool>
 {
-    private readonly IUserService _userService;
+    private readonly IApplicationDbContext _context;
 
-    public DeleteUserCommandHandler(IUserService userService)
+    public DeleteUserCommandHandler(IApplicationDbContext context)
     {
-        _userService = userService;
+        _context = context;
     }
 
     public async Task<bool> Handle(DeleteUserCommand request, CancellationToken cancellationToken)
     {
-        return await _userService.DeleteAsync(request.Email, cancellationToken);
+        var email = request.Email.Trim();
+        var user = await _context.Set<User>()
+            .FirstOrDefaultAsync(u => u.Email == email, cancellationToken);
+
+        if (user is null)
+        {
+            return false;
+        }
+
+        _context.Set<User>().Remove(user);
+        await _context.SaveChangesAsync(cancellationToken);
+        return true;
     }
 }

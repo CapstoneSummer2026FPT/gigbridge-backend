@@ -1,5 +1,7 @@
+using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Domain.Enums;
 using MediatR;
 using Microsoft.Extensions.Logging;
 
@@ -33,6 +35,13 @@ public class AuthorizationBehaviour<TRequest, TResponse> : IPipelineBehavior<TRe
                 _logger.LogWarning("GigBridge Authorization: Unauthenticated request {Name}", requestName);
                 throw new UnauthorizedAccessException("Authentication is required to perform this action.");
             }
+        }
+
+        if (request is IRequireAdmin && _currentUserService.Role != nameof(UserRole.Admin))
+        {
+            var requestName = typeof(TRequest).Name;
+            _logger.LogWarning("GigBridge Authorization: Forbidden admin request {Name}", requestName);
+            throw new ForbiddenAccessException();
         }
 
         return await next();

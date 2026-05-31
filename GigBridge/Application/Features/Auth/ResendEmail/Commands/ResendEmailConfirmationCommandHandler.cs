@@ -1,22 +1,48 @@
+using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Domain.Entities;
 using MediatR;
-using System.Threading;
-using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore;
 
-namespace Application.Features.Auth.ResendEmail.Commands
+namespace Application.Features.Auth.ResendEmail.Commands;
+
+public class ResendEmailConfirmationCommandHandler : IRequestHandler<ResendEmailConfirmationCommand>
 {
-    public class ResendEmailConfirmationCommandHandler : IRequestHandler<ResendEmailConfirmationCommand>
+    private readonly IApplicationDbContext _context;
+    private readonly IDateTimeService _dateTimeService;
+    private readonly IAuthEmailSender _authEmailSender;
+
+    public ResendEmailConfirmationCommandHandler(
+        IApplicationDbContext context,
+        IDateTimeService dateTimeService,
+        IAuthEmailSender authEmailSender)
     {
-        private readonly IAuthService _authService;
+        _context = context;
+        _dateTimeService = dateTimeService;
+        _authEmailSender = authEmailSender;
+    }
 
-        public ResendEmailConfirmationCommandHandler(IAuthService authService)
+    public async Task Handle(ResendEmailConfirmationCommand request, CancellationToken cancellationToken)
+    {
+        var email = request.Request.Email.Trim();
+        var user = await _context.Set<User>()
+            .FirstOrDefaultAsync(u => u.Email.ToLower() == email.ToLower(), cancellationToken);
+
+        if (user is null)
         {
-            _authService = authService;
+            throw new InvalidOperationException("Email does not exist");
         }
 
-        public async Task Handle(ResendEmailConfirmationCommand request, CancellationToken cancellationToken)
+        if (user.IsEmailVerified)
         {
-            await _authService.ResendEmailConfirmationAsync(request.Request, cancellationToken);
+            throw new InvalidOperationException("Account has already been verified");
         }
+
+        var token = Guid.NewGuid().ToString();
+        user.EmailVerificationToken = token;
+        user.TokenExpiry = _dateTimeService.UtcNow.AddHours(24);
+
+        await _context.SaveChangesAsync(cancellationToken);
+        await _authEmailSender.SendVerificationEmailAsync(user.Email, token, cancellationToken);
     }
 }

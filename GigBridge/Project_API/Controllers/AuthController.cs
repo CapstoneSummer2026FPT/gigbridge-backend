@@ -32,6 +32,7 @@ namespace Project_API.Controllers;
 [Route("api/[controller]")]
 public class AuthController : BaseApiController
 {
+    private const int RefreshTokenCookieDays = 7;
 
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request)
@@ -162,7 +163,7 @@ public class AuthController : BaseApiController
             HttpOnly = true,
             Secure = true,
             SameSite = SameSiteMode.None,
-            Expires = DateTime.UtcNow.AddMinutes(3)
+            Expires = DateTime.UtcNow.AddDays(RefreshTokenCookieDays)
         };
         Response.Cookies.Append("refreshToken", refreshToken, cookieOptions);
     }

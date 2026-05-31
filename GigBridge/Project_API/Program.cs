@@ -24,13 +24,12 @@ builder.Services.AddCorsPolicy();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, Project_API.Services.CurrentUserService>();
 builder.Services.AddSignalR();
-builder.Services.AddHangfireServices(builder.Configuration);
-builder.Services.AddHybridCache(builder.Configuration);
 
 if (!builder.Environment.IsEnvironment("Testing"))
 {
     builder.Services.AddHangfireServices(builder.Configuration);
 }
+
 builder.Services.AddHybridCache(builder.Configuration);
 
 var app = builder.Build();

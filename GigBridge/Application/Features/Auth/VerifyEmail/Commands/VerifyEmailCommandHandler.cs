@@ -1,22 +1,41 @@
+using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Domain.Entities;
 using MediatR;
-using System.Threading;
-using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore;
 
-namespace Application.Features.Auth.VerifyEmail.Commands
+namespace Application.Features.Auth.VerifyEmail.Commands;
+
+public class VerifyEmailCommandHandler : IRequestHandler<VerifyEmailCommand>
 {
-    public class VerifyEmailCommandHandler : IRequestHandler<VerifyEmailCommand>
+    private readonly IApplicationDbContext _context;
+    private readonly IDateTimeService _dateTimeService;
+
+    public VerifyEmailCommandHandler(IApplicationDbContext context, IDateTimeService dateTimeService)
     {
-        private readonly IEmailService _emailService;
+        _context = context;
+        _dateTimeService = dateTimeService;
+    }
 
-        public VerifyEmailCommandHandler(IEmailService emailService)
+    public async Task Handle(VerifyEmailCommand request, CancellationToken cancellationToken)
+    {
+        var user = await _context.Set<User>()
+            .FirstOrDefaultAsync(u => u.EmailVerificationToken == request.VerifyEmailRequest.Token, cancellationToken);
+
+        if (user is null)
         {
-            _emailService = emailService;
+            throw new InvalidOperationException("Invalid token");
         }
 
-        public async Task Handle(VerifyEmailCommand request, CancellationToken cancellationToken)
+        if (user.TokenExpiry < _dateTimeService.UtcNow)
         {
-            await _emailService.VerifyEmailAsync(request.VerifyEmailRequest, cancellationToken);
+            throw new InvalidOperationException("Token has expired");
         }
+
+        user.IsEmailVerified = true;
+        user.EmailVerificationToken = null;
+        user.TokenExpiry = null;
+
+        await _context.SaveChangesAsync(cancellationToken);
     }
 }
