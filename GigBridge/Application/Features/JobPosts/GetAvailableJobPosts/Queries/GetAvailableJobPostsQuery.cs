@@ -9,6 +9,7 @@ public record GetAvailableJobPostsQuery(
     int PageSize = 10,
     string? Search = null,
     List<Guid>? SkillIds = null,
+    int? BudgetType = null,
     decimal? BudgetMin = null,
     decimal? BudgetMax = null,
     string? SortBy = null,

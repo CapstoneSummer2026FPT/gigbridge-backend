@@ -11,7 +11,7 @@ using Project_API.Controllers.Common;
 namespace Project_API.Controllers;
 
 [ApiController]
-[Route("api/v1/[controller]")]
+[Route("api/[controller]")]
 [Authorize]
 public class ProfileController : BaseApiController
 {
