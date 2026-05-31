@@ -7,8 +7,11 @@
 *.key
 *.pfx
 **/secrets.json
-**/appsettings.*.json
 
+# Ignore environment-specific appsettings
+appsettings.Development.json
+appsettings.Local.json
+appsettings.*.json
 # OS
 .DS_Store
 Thumbs.db
