@@ -1,9 +1,11 @@
 using Application.Common.Domain;
+using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Features.Auth.Shared.DTOs;
 using AutoMapper;
 using Domain.Entities;
+using Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -14,20 +16,20 @@ public class RegisterCommandHandler : IRequestHandler<RegisterCommand, UserDTO>
     private readonly IApplicationDbContext _context;
     private readonly IPasswordHasher _passwordHasher;
     private readonly IDateTimeService _dateTimeService;
-    private readonly IAuthEmailSender _authEmailSender;
+    private readonly ICacheService _cacheService;
     private readonly IMapper _mapper;
 
     public RegisterCommandHandler(
         IApplicationDbContext context,
         IPasswordHasher passwordHasher,
         IDateTimeService dateTimeService,
-        IAuthEmailSender authEmailSender,
+        ICacheService cacheService,
         IMapper mapper)
     {
         _context = context;
         _passwordHasher = passwordHasher;
         _dateTimeService = dateTimeService;
-        _authEmailSender = authEmailSender;
+        _cacheService = cacheService;
         _mapper = mapper;
     }
 
@@ -41,19 +43,26 @@ public class RegisterCommandHandler : IRequestHandler<RegisterCommand, UserDTO>
 
         if (emailExists)
         {
-            throw new InvalidOperationException("Email already exists");
+            throw new BadRequestException("Email already exists");
         }
 
-        var user = CreateUser(registerRequest.role, email, registerRequest.FullName, registerRequest.Password);
+        var verificationKey = $"verified_email:{email.ToLowerInvariant()}";
+        var isVerified = await _cacheService.GetAsync<bool>(verificationKey, cancellationToken);
+        if (!isVerified)
+        {
+            throw new BadRequestException("Email has not been verified or verification has expired.");
+        }
+
+        var user = CreateUser(registerRequest.role!.Value, email, registerRequest.FullName, registerRequest.Password);
 
         _context.Set<User>().Add(user);
         await _context.SaveChangesAsync(cancellationToken);
-        await _authEmailSender.SendVerificationEmailAsync(user.Email, user.EmailVerificationToken!, cancellationToken);
+        await _cacheService.RemoveAsync(verificationKey, cancellationToken);
 
         return _mapper.Map<UserDTO>(user);
     }
 
-    private User CreateUser(int role, string email, string? fullName, string password)
+    private User CreateUser(UserRole role, string email, string? fullName, string password)
     {
         var now = _dateTimeService.UtcNow;
         var user = new User
@@ -62,12 +71,12 @@ public class RegisterCommandHandler : IRequestHandler<RegisterCommand, UserDTO>
             Email = email,
             FullName = string.IsNullOrWhiteSpace(fullName) ? email : fullName.Trim(),
             Password = _passwordHasher.HashPassword(password),
-            Role = role,
-            IsEmailVerified = false,
+            Role = (int)role,
+            IsEmailVerified = true,
             IsActive = true,
             CreatedAt = now,
-            EmailVerificationToken = Guid.NewGuid().ToString(),
-            TokenExpiry = now.AddHours(24)
+            EmailVerificationToken = null,
+            TokenExpiry = null
         };
 
         UserProfileFactory.AttachProfileForRole(user, now);

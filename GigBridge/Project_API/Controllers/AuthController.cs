@@ -49,7 +49,6 @@ public class AuthController : BaseApiController
             return BadRequest(ApiResponse<object>.BadRequest("Registration failed"));
 
         return Ok(ApiResponse<UserDTO>.Ok(user, "User registered successfully"));
-        return Ok(ApiResponse<UserDTO>.Ok(user, "User registered successfully"));
     }
 
     [HttpPost("send-otp")]
@@ -61,7 +60,7 @@ public class AuthController : BaseApiController
         }
 
         await Mediator.Send(new SendOtpCommand(request));
-        return Ok(ApiResponse<object>.Ok(null, "Verification code sent successfully"));
+        return Ok(ApiResponse<object?>.Ok(null, "Verification code sent successfully"));
     }
 
     [HttpPost("verify-otp")]
@@ -73,7 +72,7 @@ public class AuthController : BaseApiController
         }
 
         await Mediator.Send(new VerifyOtpCommand(request));
-        return Ok(ApiResponse<object>.Ok(null, "Email verified successfully"));
+        return Ok(ApiResponse<object?>.Ok(null, "Email verified successfully"));
     }
 
     [HttpPost("login")]
@@ -197,10 +196,4 @@ public class AuthController : BaseApiController
         };
         Response.Cookies.Append("refreshToken", refreshToken, cookieOptions);
     }
-}
-
-public class GoogleLoginRequest
-{
-    public string AuthCode { get; set; }
-    public int? Role { get; set; }
 }

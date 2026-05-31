@@ -14,6 +14,7 @@ public class ApiExceptionFilterAttribute : ExceptionFilterAttribute
         _exceptionHandlers = new Dictionary<Type, Action<ExceptionContext>>
         {
             { typeof(ValidationException), HandleValidationException },
+            { typeof(BadRequestException), HandleBadRequestException },
             { typeof(NotFoundException), HandleNotFoundException },
             { typeof(ForbiddenAccessException), HandleForbiddenAccessException },
             { typeof(UnauthorizedAccessException), HandleUnauthorizedAccessException },
@@ -50,6 +51,16 @@ public class ApiExceptionFilterAttribute : ExceptionFilterAttribute
         };
 
         context.Result = new BadRequestObjectResult(details);
+        context.ExceptionHandled = true;
+    }
+
+    private static void HandleBadRequestException(ExceptionContext context)
+    {
+        var exception = context.Exception;
+
+        context.Result = new BadRequestObjectResult(
+            ApiResponse<object>.BadRequest(exception.Message));
+
         context.ExceptionHandled = true;
     }
 

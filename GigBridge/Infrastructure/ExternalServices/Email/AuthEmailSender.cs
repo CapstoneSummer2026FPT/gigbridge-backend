@@ -9,6 +9,7 @@ public class AuthEmailSender : IAuthEmailSender
 {
     private const string VerifyEmailTemplate = "VerifyEmail.html";
     private const string ResetPasswordTemplate = "ResetPassword.html";
+    private const string OtpEmailTemplate = "OtpEmail.html";
 
     private readonly IEmailService _emailService;
     private readonly IWebHostEnvironment _webHostEnvironment;
@@ -48,6 +49,19 @@ public class AuthEmailSender : IAuthEmailSender
             Body = body,
             To = email,
             Subject = "GigBridge: Please Confirm Your New Password",
+            IsHtml = true
+        }, cancellationToken);
+    }
+
+    public async Task SendOtpEmailAsync(string email, string otp, CancellationToken cancellationToken = default)
+    {
+        var body = await RenderTemplateAsync(OtpEmailTemplate, "{{OTP_CODE}}", otp, cancellationToken);
+
+        await _emailService.SendEmailAsync(new EmailRequest
+        {
+            Body = body,
+            To = email,
+            Subject = "GigBridge: Your Verification Code",
             IsHtml = true
         }, cancellationToken);
     }

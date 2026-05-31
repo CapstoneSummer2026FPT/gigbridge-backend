@@ -1,5 +1,3 @@
-using Application.Features.JobPosts.GetAvailableJobPosts.DTOs;
-using Application.Features.JobPosts.GetJobPostDetail.DTOs;
 using System;
 
 namespace Application.Common.Models;

@@ -40,7 +40,7 @@ public class LoginWithRefreshCommandHandler : IRequestHandler<LoginWithRefreshCo
             .Include(u => u.FreelancerProfile)
             .FirstOrDefaultAsync(u => u.Email == request.LoginRequest.Email, cancellationToken);
 
-        if (user is null || !_passwordHasher.VerifyPassword(request.LoginRequest.Password, user.Password))
+        if (user is null || string.IsNullOrEmpty(user.Password) || !_passwordHasher.VerifyPassword(request.LoginRequest.Password, user.Password))
         {
             throw new UnauthorizedAccessException("Invalid email or password");
         }

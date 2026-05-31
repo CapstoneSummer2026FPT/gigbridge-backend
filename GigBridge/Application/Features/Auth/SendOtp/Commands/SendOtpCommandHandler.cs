@@ -1,23 +1,30 @@
 using Application.Common.Interfaces.IService;
 using MediatR;
-using System.Threading;
-using System.Threading.Tasks;
+using System.Security.Cryptography;
 
-namespace Application.Features.Auth.SendOtp.Commands
+namespace Application.Features.Auth.SendOtp.Commands;
+
+public class SendOtpCommandHandler : IRequestHandler<SendOtpCommand, Unit>
 {
-    public class SendOtpCommandHandler : IRequestHandler<SendOtpCommand, Unit>
+    private readonly ICacheService _cacheService;
+    private readonly IAuthEmailSender _authEmailSender;
+
+    public SendOtpCommandHandler(ICacheService cacheService, IAuthEmailSender authEmailSender)
     {
-        private readonly IAuthService _authService;
+        _cacheService = cacheService;
+        _authEmailSender = authEmailSender;
+    }
 
-        public SendOtpCommandHandler(IAuthService authService)
-        {
-            _authService = authService;
-        }
+    public async Task<Unit> Handle(SendOtpCommand request, CancellationToken cancellationToken)
+    {
+        var email = request.SendOtpRequest.Email.Trim().ToLowerInvariant();
+        var cacheKey = $"otp:{email}";
+        var otp = RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
 
-        public async Task<Unit> Handle(SendOtpCommand request, CancellationToken cancellationToken)
-        {
-            await _authService.SendOtpAsync(request.SendOtpRequest, cancellationToken);
-            return Unit.Value;
-        }
+        await _cacheService.RemoveAsync(cacheKey, cancellationToken);
+        await _cacheService.SetAsync(cacheKey, otp, TimeSpan.FromMinutes(5), cancellationToken);
+        await _authEmailSender.SendOtpEmailAsync(email, otp, cancellationToken);
+
+        return Unit.Value;
     }
 }
