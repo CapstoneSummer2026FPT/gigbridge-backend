@@ -19,7 +19,7 @@ public interface IAuthService
 
     Task<(LoginResponse loginData, string refreshToken)> LoginWithRefreshAsync(LoginRequest request, CancellationToken cancellationToken = default);
 
-    Task<(LoginResponse loginData, string refreshToken)> GoogleLoginWithRefreshAsync(string authCode, CancellationToken cancellationToken = default);
+    Task<(LoginResponse loginData, string refreshToken)> GoogleLoginWithRefreshAsync(string authCode, int? role, CancellationToken cancellationToken = default);
 
     Task<(LoginResponse loginData, string refreshToken)> RefreshTokenAsync(string expriedAccessToken, string refreshToken, CancellationToken cancellationToken = default);
 

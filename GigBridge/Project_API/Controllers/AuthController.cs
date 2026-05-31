@@ -98,14 +98,14 @@ public class AuthController : BaseApiController
     }
 
     [HttpPost("google")]
-    public async Task<IActionResult> GoogleLogin([FromBody] string authCode)
+    public async Task<IActionResult> GoogleLogin([FromBody] GoogleLoginRequest request)
     {
-        if (string.IsNullOrWhiteSpace(authCode))
+        if (request == null || string.IsNullOrWhiteSpace(request.AuthCode))
         {
             return BadRequest(ApiResponse<object>.Error(400, "Authorization code is required"));
         }
 
-        var (loginData, refreshToken) = await Mediator.Send(new GoogleLoginCommand(authCode));
+        var (loginData, refreshToken) = await Mediator.Send(new GoogleLoginCommand(request.AuthCode, request.Role));
 
         if (loginData == null)
         {
@@ -227,4 +227,10 @@ public class AuthController : BaseApiController
         };
         Response.Cookies.Append("refreshToken", refreshToken, cookieOptions);
     }
+}
+
+public class GoogleLoginRequest
+{
+    public string AuthCode { get; set; }
+    public int? Role { get; set; }
 }
