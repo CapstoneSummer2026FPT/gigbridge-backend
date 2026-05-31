@@ -4,4 +4,7 @@ using System;
 
 namespace Application.Features.Proposals.SubmitProposal.Commands;
 
-public record SubmitProposalCommand(SubmitProposalRequest Request, Guid FreelancerProfilesId) : IRequest<Guid>;
+public record SubmitProposalCommand(
+    SubmitProposalRequest Request,
+    Guid UserId
+) : IRequest<Guid>;

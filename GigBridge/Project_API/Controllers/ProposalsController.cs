@@ -4,6 +4,7 @@ using Application.Features.Proposals.GetAllProposals.Queries;
 using Application.Features.Proposals.GetMyProposals.Queries;
 using Application.Features.Proposals.GetProposalsByJobPost.Queries;
 using Application.Features.Proposals.SubmitProposal.Commands;
+using Application.Features.Proposals.SubmitProposal.DTOs;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Project_API.Controllers.Common;
@@ -21,17 +22,21 @@ public class ProposalsController : BaseApiController
 
     [HttpPost]
     [Authorize(Roles = "Freelancer")]
-    public async Task<IActionResult> SubmitProposal([FromBody] SubmitProposalCommand command)
+    public async Task<IActionResult> SubmitProposal([FromBody] SubmitProposalRequest request)
     {
-        var freelancerId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var userIdValue = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+            ?? User.FindFirst("sub")?.Value;
 
-        if (string.IsNullOrEmpty(freelancerId))
+        if (string.IsNullOrEmpty(userIdValue))
             return Unauthorized(ApiResponse<object>.Error(401, "Invalid token"));
 
-        // Gán Freelancer ID từ JWT token
-        command = command with { FreelancerProfilesId = Guid.Parse(freelancerId) };
+        var command = new SubmitProposalCommand(
+            Request: request,
+            UserId: Guid.Parse(userIdValue)
+        );
 
         var result = await Mediator.Send(command);
+
         return Ok(ApiResponse<Guid>.Ok(result, "Proposal submitted successfully"));
     }
 
@@ -39,16 +44,21 @@ public class ProposalsController : BaseApiController
     [Authorize(Roles = "Freelancer")]
     public async Task<IActionResult> GetMyProposals([FromQuery] int pageIndex = 1, int pageSize = 10)
     {
-        var freelancerId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        var userIdValue = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+            ?? User.FindFirst("sub")?.Value;
+
+        if (string.IsNullOrEmpty(userIdValue))
+            return Unauthorized(ApiResponse<object>.Error(401, "Invalid token"));
 
         var query = new GetMyProposalsQuery
         {
-            FreelancerProfilesId = Guid.Parse(freelancerId!),
+            UserId = Guid.Parse(userIdValue),
             PageIndex = pageIndex,
             PageSize = pageSize
         };
 
         var result = await Mediator.Send(query);
+
         return Ok(ApiResponse<IEnumerable<ProposalDto>>.Ok(result, "Success"));
     }
 
@@ -66,7 +76,7 @@ public class ProposalsController : BaseApiController
         var query = new GetProposalsByJobPostQuery
         {
             JobPostsId = jobPostId,
-            ClientProfilesId = Guid.Parse(clientId!),
+            UserId = Guid.Parse(clientId!),
             PageIndex = pageIndex,
             PageSize = pageSize
         };

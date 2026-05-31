@@ -1,12 +1,15 @@
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Microsoft.EntityFrameworkCore;
+using Application.Common.Exceptions;
 using Application.Features.Auth.Shared.DTOs;
 using Application.Features.Auth.Login.DTOs;
 using Application.Features.Auth.Register.DTOs;
 using Application.Features.Auth.ResendEmail.DTOs;
 using Application.Features.Auth.ForgotPassword.DTOs;
 using Application.Features.Auth.ResetPassword.DTOs;
+using Application.Features.Auth.SendOtp.DTOs;
+using Application.Features.Auth.VerifyOtp.DTOs;
 using AutoMapper;
 using Domain.Entities;
 using Domain.Enums;
@@ -29,6 +32,7 @@ public class AuthService : IAuthService
     private readonly IWebHostEnvironment _webHostEnvironment;
     private readonly IConfiguration _configuration;
     private readonly IGoogleAuthService _googleAuthService;
+    private readonly ICacheService _cacheService;
 
     public AuthService(
         IJwtService jwtService,
@@ -38,7 +42,8 @@ public class AuthService : IAuthService
         IEmailService emailService,
         IWebHostEnvironment webHostEnvironment,
         IConfiguration configuration,
-        IGoogleAuthService googleAuthService)
+        IGoogleAuthService googleAuthService,
+        ICacheService cacheService)
     {
         _jwtService = jwtService;
         _context = context;
@@ -48,34 +53,41 @@ public class AuthService : IAuthService
         _webHostEnvironment = webHostEnvironment;
         _configuration = configuration;
         _googleAuthService = googleAuthService;
+        _cacheService = cacheService;
     }
 
     public async Task<UserDTO> RegisterAsync(RegisterRequest request, CancellationToken cancellationToken = default)
     {
-        var existing = await _context.Set<User>().FirstOrDefaultAsync(c => c.Email.ToLower() == request.Email.ToLower(), cancellationToken: cancellationToken);
+        var email = request.Email.Trim().ToLower();
+        var existing = await _context.Set<User>().FirstOrDefaultAsync(c => c.Email.ToLower() == email, cancellationToken: cancellationToken);
         if (existing != null)
         {
-            throw new Exception("Email already exists");
+            throw new BadRequestException("Email already exists");
+        }
+
+        var isVerified = await _cacheService.GetAsync<bool>($"verified_email:{email}", cancellationToken);
+        if (!isVerified)
+        {
+            throw new BadRequestException("Email has not been verified or verification has expired.");
         }
 
         var hash = _passwordHasher.HashPassword(request.Password);
-        var token = Guid.NewGuid().ToString();
 
         var user = new User
         {
             UserId = Guid.NewGuid(),
-            Email = request.Email,
-            FullName = request.FullName ?? request.Email,
+            Email = request.Email.Trim(),
+            FullName = request.FullName ?? request.Email.Trim(),
             Password = hash,
-            Role = request.role,
-            IsEmailVerified = false, // true for testing
+            Role = (int)request.role!.Value,
+            IsEmailVerified = true,
             IsActive = true,
             CreatedAt = DateTime.UtcNow,
-            EmailVerificationToken = token,
-            TokenExpiry = DateTime.UtcNow.AddHours(24)
+            EmailVerificationToken = null,
+            TokenExpiry = null
         };
 
-        if (user.Role == 0) // Client
+        if (user.Role == (int)UserRole.Client) // Client
         {
             user.ClientProfile = new ClientProfile
             {
@@ -83,7 +95,7 @@ public class AuthService : IAuthService
                 CreatedAt = DateTime.UtcNow
             };
         }
-        else if (user.Role == 1) // Freelancer
+        else if (user.Role == (int)UserRole.Freelancer) // Freelancer
         {
             user.FreelancerProfile = new FreelancerProfile
             {
@@ -95,26 +107,8 @@ public class AuthService : IAuthService
         _context.Set<User>().Add(user);
         await _context.SaveChangesAsync(cancellationToken);
 
-        var frontendUrl = _configuration["FrontendBaseUrl"] ?? "https://localhost:7094";
-        var verifyLink = $"{frontendUrl}/api/Auth/verify-email?token={token}";
-
-        var path = Path.Combine(
-            _webHostEnvironment.ContentRootPath,
-            "Templates",
-            "VerifyEmail.html"
-        );
-
-        var body = await File.ReadAllTextAsync(path, cancellationToken);
-        body = body.Replace("{{VERIFICATION_URL}}", verifyLink);
-
-        await _emailService.SendEmailAsync(new EmailRequest
-        {
-            Body = body,
-            To = user.Email,
-            Subject = "Welcome to GigBridge! Please Confirm Your Email",
-            IsHtml = true,
-            Attachments = null
-        }, cancellationToken);
+        // Delete the verification flag from Redis cache
+        await _cacheService.RemoveAsync($"verified_email:{email}", cancellationToken);
 
         return _mapper.Map<UserDTO>(user);
     }
@@ -304,12 +298,12 @@ public class AuthService : IAuthService
 
         if (user == null)
         {
-            throw new Exception("Email does not exist");
+            throw new BadRequestException("Email does not exist");
         }
 
         if (user.IsEmailVerified)
         {
-            throw new Exception("Account has already been verified");
+            throw new BadRequestException("Account has already been verified");
         }
 
         var token = Guid.NewGuid().ToString();
@@ -347,7 +341,7 @@ public class AuthService : IAuthService
 
         if (user == null)
         {
-            throw new Exception("Email does not exist");
+            throw new BadRequestException("Email does not exist");
         }
 
 
@@ -388,18 +382,18 @@ public class AuthService : IAuthService
 
         if (user == null)
         {
-            throw new Exception("Email does not exist");
+            throw new BadRequestException("Email does not exist");
         }
 
 
         if (request.PasswordResetToken != user.EmailVerificationToken)
         {
-            throw new Exception("wrong email verification token");
+            throw new BadRequestException("wrong email verification token");
         }
 
         if (user.TokenExpiry < DateTime.UtcNow)
         {
-            throw new Exception("Token has expired");
+            throw new BadRequestException("Token has expired");
         }
 
 
@@ -421,5 +415,58 @@ public class AuthService : IAuthService
         }
 
         return true;
+    }
+
+    public async Task SendOtpAsync(SendOtpRequest request, CancellationToken cancellationToken = default)
+    {
+        var email = request.Email.Trim().ToLower();
+        var cachedOtp = await _cacheService.GetAsync<string>($"otp:{email}", cancellationToken);
+        if (!string.IsNullOrEmpty(cachedOtp))
+        {
+            await _cacheService.RemoveAsync($"otp:{email}", cancellationToken);
+        }
+
+        // Generate a 6-digit OTP
+        var random = new Random();
+        var otp = random.Next(100000, 999999).ToString();
+
+        // Store OTP in cache for 5 minutes
+        await _cacheService.SetAsync($"otp:{email}", otp, TimeSpan.FromMinutes(5), cancellationToken);
+
+        // Load OTP email template
+        var path = Path.Combine(
+            _webHostEnvironment.ContentRootPath,
+            "Templates",
+            "OtpEmail.html"
+        );
+
+        var body = await File.ReadAllTextAsync(path, cancellationToken);
+        body = body.Replace("{{OTP_CODE}}", otp);
+
+        // Send email
+        await _emailService.SendEmailAsync(new EmailRequest
+        {
+            Body = body,
+            To = email,
+            Subject = "GigBridge: Your Verification Code",
+            IsHtml = true,
+            Attachments = null
+        }, cancellationToken);
+    }
+
+    public async Task VerifyOtpAsync(VerifyOtpRequest request, CancellationToken cancellationToken = default)
+    {
+        var email = request.Email.Trim().ToLower();
+        var cachedOtp = await _cacheService.GetAsync<string>($"otp:{email}", cancellationToken);
+        if (string.IsNullOrEmpty(cachedOtp) || cachedOtp != request.Otp)
+        {
+            throw new BadRequestException("Invalid or expired OTP verification code.");
+        }
+
+        // Remove OTP from cache as it's been used
+        await _cacheService.RemoveAsync($"otp:{email}", cancellationToken);
+
+        // Set verification flag in cache for 10 minutes
+        await _cacheService.SetAsync($"verified_email:{email}", true, TimeSpan.FromMinutes(10), cancellationToken);
     }
 }
