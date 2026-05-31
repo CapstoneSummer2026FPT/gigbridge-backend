@@ -2,12 +2,17 @@
 ## Backend (.NET) patterns are in GigBridge/.gitignore
 ## Frontend patterns are in frontend-web/.gitignore (if present)
 
-# Sensitive / credentials (repo-wide)
+# Sensitive / credentials
 *.pem
 *.key
 *.pfx
 **/secrets.json
-**/appsettings.*.json
+
+# ASP.NET configuration
+appsettings.Development.json
+appsettings.Local.json
+appsettings.*.json
+!appsettings.json
 
 # OS
 .DS_Store
