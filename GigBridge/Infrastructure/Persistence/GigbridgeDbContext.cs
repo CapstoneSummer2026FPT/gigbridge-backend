@@ -480,7 +480,7 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.HasIndex(e => e.IsActive, "IX_FAQs_IsActive");
 
             entity.Property(e => e.FaqsId)
-                .HasDefaultValueSql("gen_random_uuid()")
+                .UseIdentityByDefaultColumn()
                 .HasColumnName("FAQsId");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.FaqcategoriesId).HasColumnName("FAQCategoriesId");
@@ -502,7 +502,7 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.HasIndex(e => e.Slug, "IX_FAQCategories_Slug").IsUnique();
 
             entity.Property(e => e.FaqcategoriesId)
-                .HasDefaultValueSql("gen_random_uuid()")
+                .UseIdentityByDefaultColumn()
                 .HasColumnName("FAQCategoriesId");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.IsActive).HasDefaultValue(true);

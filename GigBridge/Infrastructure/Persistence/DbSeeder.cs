@@ -94,6 +94,7 @@ public static class DbSeeder
             }
 
             await context.SaveChangesAsync(cancellationToken);
+            await ResetIntegerIdentitySequenceAsync(context, entityType, storeObject, cancellationToken);
         }
     }
 
@@ -147,6 +148,64 @@ public static class DbSeeder
             new object?[] { set, cancellationToken }) ?? throw new InvalidOperationException("Cannot invoke AnyAsync."));
 
         return await task;
+    }
+
+    private static async Task ResetIntegerIdentitySequenceAsync(
+        DbContext context,
+        IEntityType entityType,
+        StoreObjectIdentifier storeObject,
+        CancellationToken cancellationToken) {
+        if (!string.Equals(context.Database.ProviderName, "Npgsql.EntityFrameworkCore.PostgreSQL", StringComparison.Ordinal)) {
+            return;
+        }
+
+        var primaryKey = entityType.FindPrimaryKey();
+
+        if (primaryKey?.Properties.Count != 1) {
+            return;
+        }
+
+        var property = primaryKey.Properties[0];
+
+        if (property.ClrType != typeof(int) || property.ValueGenerated != ValueGenerated.OnAdd) {
+            return;
+        }
+
+        var tableName = entityType.GetTableName();
+        var columnName = property.GetColumnName(storeObject);
+
+        if (string.IsNullOrWhiteSpace(tableName) || string.IsNullOrWhiteSpace(columnName)) {
+            return;
+        }
+
+        var schema = entityType.GetSchema();
+        var qualifiedTableName = schema is null
+            ? QuoteIdentifier(tableName)
+            : $"{QuoteIdentifier(schema)}.{QuoteIdentifier(tableName)}";
+        var sequenceTableName = schema is null
+            ? QuoteIdentifier(tableName)
+            : $"{QuoteIdentifier(schema)}.{QuoteIdentifier(tableName)}";
+        var quotedColumnName = QuoteIdentifier(columnName);
+        var sequenceTableLiteral = EscapeSqlLiteral(sequenceTableName);
+        var columnLiteral = EscapeSqlLiteral(columnName);
+
+        var sql = $"""
+            SELECT setval(
+                pg_get_serial_sequence('{sequenceTableLiteral}', '{columnLiteral}'),
+                GREATEST(COALESCE((SELECT MAX({quotedColumnName}) FROM {qualifiedTableName}), 0), 1),
+                true
+            );
+            """;
+
+        await context.Database.ExecuteSqlRawAsync(sql, cancellationToken);
+    }
+
+    private static string QuoteIdentifier(string identifier) {
+        return "\"" + identifier.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"";
+    }
+
+    private static string EscapeSqlLiteral(string value) {
+        return value.Replace("'", "''", StringComparison.Ordinal);
     }
 
     private static object? ConvertValue(object? value, Type targetType) {
@@ -232,9 +291,9 @@ public static class DbSeeder
                 new[] { "FAQCategoriesId", "Name", "NameVi", "Slug", "SortOrder", "IsActive", "CreatedAt" },
                 new object?[][]
                 {
-                new object?[] { "f0eebc99-9c0b-4ef8-bb6d-6bb9bd380001", "General Questions", "Câu hỏi chung", "general", 1, true, now },
-                new object?[] { "f0eebc99-9c0b-4ef8-bb6d-6bb9bd380002", "For Clients", "Dành cho khách hàng", "clients", 2, true, now },
-                new object?[] { "f0eebc99-9c0b-4ef8-bb6d-6bb9bd380003", "For Freelancers", "Dành cho freelancer", "freelancers", 3, true, now }
+                new object?[] { 1, "General Questions", "Câu hỏi chung", "general", 1, true, now },
+                new object?[] { 2, "For Clients", "Dành cho khách hàng", "clients", 2, true, now },
+                new object?[] { 3, "For Freelancers", "Dành cho freelancer", "freelancers", 3, true, now }
                 }),
 
             new SeedTableData(
@@ -242,9 +301,9 @@ public static class DbSeeder
                 new[] { "FAQsId", "FAQCategoriesId", "Question", "QuestionVi", "Answer", "AnswerVi", "SortOrder", "IsActive", "CreatedAt" },
                 new object?[][]
                 {
-                new object?[] { "f1eebc99-9c0b-4ef8-bb6d-6bb9bd380111", "f0eebc99-9c0b-4ef8-bb6d-6bb9bd380001", "What is GigBridge?", "GigBridge là gì?", "GigBridge is a freelance platform connecting enterprises with talented freelancers in Vietnam.", "GigBridge là nền tảng kết nối các doanh nghiệp và cá nhân tuyển dụng với những lập trình viên và nhà thiết kế tài năng tại Việt Nam.", 1, true, now },
-                new object?[] { "f1eebc99-9c0b-4ef8-bb6d-6bb9bd380112", "f0eebc99-9c0b-4ef8-bb6d-6bb9bd380002", "How do I post a job?", "Làm thế nào để đăng tin tuyển dụng?", "Log in to your account, navigate to \"My Jobs\", and click \"Create New Job Post\". Fill in details and publish.", "Đăng nhập tài khoản Khách hàng, vào mục \"Công việc của tôi\" và chọn \"Đăng tin mới\". Điền thông tin mô tả, ngân sách và đăng tải.", 1, true, now },
-                new object?[] { "f1eebc99-9c0b-4ef8-bb6d-6bb9bd380113", "f0eebc99-9c0b-4ef8-bb6d-6bb9bd380003", "When do I get paid?", "Khi nào tôi nhận được tiền?", "Payments are held securely in milestones. Once the client approves your work, money is released to your balance.", "Tiền thanh toán được giữ an toàn trong hệ thống Milestone. Khi khách hàng phê duyệt sản phẩm bạn bàn giao, tiền sẽ được mở khóa vào ví của bạn.", 1, true, now }
+                new object?[] { 1, 1, "What is GigBridge?", "GigBridge là gì?", "GigBridge is a freelance platform connecting enterprises with talented freelancers in Vietnam.", "GigBridge là nền tảng kết nối các doanh nghiệp và cá nhân tuyển dụng với những lập trình viên và nhà thiết kế tài năng tại Việt Nam.", 1, true, now },
+                new object?[] { 2, 2, "How do I post a job?", "Làm thế nào để đăng tin tuyển dụng?", "Log in to your account, navigate to \"My Jobs\", and click \"Create New Job Post\". Fill in details and publish.", "Đăng nhập tài khoản Khách hàng, vào mục \"Công việc của tôi\" và chọn \"Đăng tin mới\". Điền thông tin mô tả, ngân sách và đăng tải.", 1, true, now },
+                new object?[] { 3, 3, "When do I get paid?", "Khi nào tôi nhận được tiền?", "Payments are held securely in milestones. Once the client approves your work, money is released to your balance.", "Tiền thanh toán được giữ an toàn trong hệ thống Milestone. Khi khách hàng phê duyệt sản phẩm bạn bàn giao, tiền sẽ được mở khóa vào ví của bạn.", 1, true, now }
                 }),
 
             new SeedTableData(
