@@ -16,7 +16,7 @@ namespace Application.Features.Auth.GoogleLogin.Commands
 
         public async Task<(LoginResponse LoginData, string RefreshToken)> Handle(GoogleLoginCommand request, CancellationToken cancellationToken)
         {
-            return await _authService.GoogleLoginWithRefreshAsync(request.AuthCode, cancellationToken);
+            return await _authService.GoogleLoginWithRefreshAsync(request.AuthCode, request.Role, cancellationToken);
         }
     }
 }

@@ -188,7 +188,7 @@ public class AuthService : IAuthService
         }, refreshToken);
     }
 
-    public async Task<(LoginResponse loginData, string refreshToken)> GoogleLoginWithRefreshAsync(string authCode, CancellationToken cancellationToken = default)
+    public async Task<(LoginResponse loginData, string refreshToken)> GoogleLoginWithRefreshAsync(string authCode, int? role, CancellationToken cancellationToken = default)
     {
         var googleUser = await _googleAuthService.VerifyAuthCodeAsync(authCode, cancellationToken);
         var user = await _context.Set<User>()
@@ -198,12 +198,14 @@ public class AuthService : IAuthService
 
         if (user == null)
         {
+            int finalRole = role ?? 1; // Default to Freelancer if not specified
+
             user = new User
             {
                 UserId = Guid.NewGuid(),
                 Email = googleUser.Email,
                 FullName = googleUser.Name,
-                Role = 1, // Default to Freelancer
+                Role = finalRole,
                 Provider = "Google",
                 ProviderId = googleUser.GoogleId,
                 IsEmailVerified = true,
@@ -212,11 +214,22 @@ public class AuthService : IAuthService
                 Avatar = googleUser.PictureUrl
             };
 
-            user.FreelancerProfile = new FreelancerProfile
+            if (finalRole == 0) // Client
             {
-                FreelancerProfilesId = Guid.NewGuid(),
-                CreatedAt = DateTime.UtcNow
-            };
+                user.ClientProfile = new ClientProfile
+                {
+                    ClientProfilesId = Guid.NewGuid(),
+                    CreatedAt = DateTime.UtcNow
+                };
+            }
+            else // Freelancer (1) or other default
+            {
+                user.FreelancerProfile = new FreelancerProfile
+                {
+                    FreelancerProfilesId = Guid.NewGuid(),
+                    CreatedAt = DateTime.UtcNow
+                };
+            }
 
             _context.Set<User>().Add(user);
             await _context.SaveChangesAsync(cancellationToken);
