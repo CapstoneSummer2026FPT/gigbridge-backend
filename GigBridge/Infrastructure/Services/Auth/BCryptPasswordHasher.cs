@@ -12,6 +12,12 @@ public class BCryptPasswordHasher : IPasswordHasher
 
     public bool VerifyPassword(string password, string hashedPassword)
     {
+        // If hashedPassword is null (e.g., OAuth user without password), return false
+        if (string.IsNullOrEmpty(hashedPassword))
+        {
+            return false;
+        }
+        
         return BC.Verify(password, hashedPassword);
     }
 }
