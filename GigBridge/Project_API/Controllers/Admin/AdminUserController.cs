@@ -15,9 +15,9 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Project_API.Controllers.Common;
 
-namespace Project_API.Controllers;
+namespace Project_API.Controllers.Admin;
 
-[Route("api/v1/admin/users")]
+[Route("api/admin/users")]
 [Authorize(Roles = nameof(UserRole.Admin))]
 public class AdminUserController : BaseApiController
 {

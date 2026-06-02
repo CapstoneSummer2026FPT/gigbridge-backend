@@ -3,7 +3,7 @@ using Application.Common.Interfaces.IService;
 using Application.Common.Models;
 using Infrastructure.Persistence;
 using Infrastructure.Services.Auth;
-using Infrastructure.Services.BackgroundJobs;
+using Infrastructure.Services.Common;
 using Infrastructure.Services.Email;
 using Infrastructure.Services.Media;
 using Infrastructure.Services.Notification;
@@ -27,19 +27,17 @@ public static class DependencyInjection
 
         services.AddScoped<IApplicationDbContext>(provider =>
             provider.GetRequiredService<GigbridgeDbContext>());
-        services.AddScoped<ITransactionManager, EfCoreTransactionManager>();
 
 
         // Services
-        services.AddScoped<IPasswordHasher, Infrastructure.Services.Auth.BCryptPasswordHasher>();
-        services.AddScoped<IJwtService, Infrastructure.Services.Auth.JwtService>();
-        services.AddHttpClient<IGoogleAuthService, Infrastructure.Services.Auth.GoogleAuthService>();
-        services.AddScoped<IEmailService, Infrastructure.Services.Email.EmailService>();
-        services.AddScoped<IAuthEmailSender, Infrastructure.Services.Email.AuthEmailSender>();
-        services.AddScoped<IMediaService, Infrastructure.Services.Media.MediaService>();
-        services.AddScoped<INotificationService, Infrastructure.Services.Notification.NotificationService>();
-        services.AddTransient<IDateTimeService, Infrastructure.Services.Common.DateTimeService>();
-        services.AddScoped<IBackgroundJobService, Infrastructure.Services.BackgroundJobs.HangfireJobService>();
+        services.AddScoped<IPasswordHasher, BCryptPasswordHasher>();
+        services.AddScoped<IJwtService, JwtService>();
+        services.AddHttpClient<IGoogleAuthService, GoogleAuthService>();
+        services.AddScoped<IEmailService, EmailService>();
+        services.AddScoped<IAuthEmailSender, AuthEmailSender>();
+        services.AddScoped<IMediaService, MediaService>();
+        services.AddScoped<INotificationService, NotificationService>();
+        services.AddTransient<IDateTimeService, DateTimeService>();
 
         
         // External payment service

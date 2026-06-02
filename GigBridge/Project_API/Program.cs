@@ -1,17 +1,11 @@
 using Application;
 using Application.Common.Interfaces.IService;
-using Hangfire;
 using Infrastructure;
 using Infrastructure.Persistence;
 using Project_API.Extensions;
-using Project_API.Filters;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers(options =>
-{
-    options.Filters.Add<ApiExceptionFilterAttribute>();
-});
 
 // Layer registrations (Clean Architecture)
 builder.Services.AddApplicationServices();
@@ -27,7 +21,6 @@ builder.Services.AddSignalR();
 
 if (!builder.Environment.IsEnvironment("Testing"))
 {
-    builder.Services.AddHangfireServices(builder.Configuration);
 }
 
 builder.Services.AddHybridCache(builder.Configuration);
@@ -71,7 +64,6 @@ app.MapHub<Project_API.Hubs.NotificationHub>("/hubs/notification");
 
 if (!app.Environment.IsEnvironment("Testing"))
 {
-    app.UseHangfireDashboard();
 }
 
 app.Run();
