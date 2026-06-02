@@ -98,7 +98,7 @@ public class AuthController : BaseApiController
             return BadRequest(ApiResponse<object>.Error(400, "Authorization code is required"));
         }
 
-        var (loginData, refreshToken) = await Mediator.Send(new GoogleLoginCommand(request.AuthCode, request.Role));
+        var (loginData, refreshToken) = await Mediator.Send(new GoogleLoginCommand(request.AuthCode, request.Role, request.IsFromSignIn));
 
         if (loginData == null)
             return BadRequest(ApiResponse<object>.BadRequest("Google login failed"));

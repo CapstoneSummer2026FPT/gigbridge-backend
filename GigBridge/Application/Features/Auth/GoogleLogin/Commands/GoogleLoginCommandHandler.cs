@@ -41,6 +41,11 @@ public class GoogleLoginCommandHandler : IRequestHandler<GoogleLoginCommand, (Lo
 
         if (user is null)
         {
+            if (request.IsFromSignIn == true)
+            {
+                throw new BadRequestException("Your account does not have a role set up yet. Please select a role on the sign-up page before signing in.");
+            }
+
             user = CreateUser(googleUser, ResolveRole(request.Role));
             _context.Set<User>().Add(user);
         }

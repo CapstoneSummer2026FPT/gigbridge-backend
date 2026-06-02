@@ -6,6 +6,7 @@ using Project_API.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Services.AddControllers();
 
 // Layer registrations (Clean Architecture)
 builder.Services.AddApplicationServices();
