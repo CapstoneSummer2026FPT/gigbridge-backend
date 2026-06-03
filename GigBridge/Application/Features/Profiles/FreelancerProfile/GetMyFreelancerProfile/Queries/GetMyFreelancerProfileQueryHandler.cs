@@ -7,10 +7,10 @@ using Application.Features.Profiles.FreelancerProfile.GetFreelancerProfile.DTOs;
 using Application.Features.Profiles.FreelancerProfile.GetFreelancerProfile.Queries;
 using MediatR;
 
-namespace Application.Features.Profiles.FreelancerProfile.GetMyFreelancerProfile.Handlers;
+namespace Application.Features.Profiles.FreelancerProfile.GetMyFreelancerProfile.Queries;
 
 public class GetMyFreelancerProfileQueryHandler 
-    : IRequestHandler<Queries.GetMyFreelancerProfileQuery, FreelancerProfileDetailDto>
+    : IRequestHandler<GetMyFreelancerProfileQuery, FreelancerProfileDetailDto>
 {
     private readonly ICurrentUserService _currentUserService;
     private readonly IMediator _mediator;
@@ -22,7 +22,7 @@ public class GetMyFreelancerProfileQueryHandler
     }
 
     public async Task<FreelancerProfileDetailDto> Handle(
-        Queries.GetMyFreelancerProfileQuery request, 
+        GetMyFreelancerProfileQuery request, 
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(_currentUserService.UserId) || !Guid.TryParse(_currentUserService.UserId, out var currentUserId))

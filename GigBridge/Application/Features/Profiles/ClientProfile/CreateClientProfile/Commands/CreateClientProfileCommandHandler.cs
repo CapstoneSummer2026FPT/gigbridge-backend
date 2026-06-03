@@ -12,10 +12,10 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using ClientProfileEntity = Domain.Entities.ClientProfile;
 
-namespace Application.Features.Profiles.ClientProfile.CreateClientProfile.Handlers;
+namespace Application.Features.Profiles.ClientProfile.CreateClientProfile.Commands;
 
 public class CreateClientProfileCommandHandler 
-    : IRequestHandler<Commands.CreateClientProfileCommand, ClientProfileResponseDto>
+    : IRequestHandler<CreateClientProfileCommand, ClientProfileResponseDto>
 {
     private readonly IApplicationDbContext _context;
     private readonly ICurrentUserService _currentUserService;
@@ -32,7 +32,7 @@ public class CreateClientProfileCommandHandler
     }
 
     public async Task<ClientProfileResponseDto> Handle(
-        Commands.CreateClientProfileCommand request, 
+        CreateClientProfileCommand request, 
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(_currentUserService.UserId) || !Guid.TryParse(_currentUserService.UserId, out var currentUserId))

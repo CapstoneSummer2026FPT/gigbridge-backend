@@ -8,9 +8,9 @@ using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
-namespace Application.Features.Profiles.MarkSetupComplete.Handlers;
+namespace Application.Features.Profiles.MarkSetupComplete.Commands;
 
-public class MarkSetupCompleteCommandHandler : IRequestHandler<Commands.MarkSetupCompleteCommand, bool>
+public class MarkSetupCompleteCommandHandler : IRequestHandler<MarkSetupCompleteCommand, bool>
 {
     private readonly IApplicationDbContext _context;
     private readonly ICurrentUserService _currentUserService;
@@ -21,7 +21,7 @@ public class MarkSetupCompleteCommandHandler : IRequestHandler<Commands.MarkSetu
         _currentUserService = currentUserService;
     }
 
-    public async Task<bool> Handle(Commands.MarkSetupCompleteCommand request, CancellationToken cancellationToken)
+    public async Task<bool> Handle(MarkSetupCompleteCommand request, CancellationToken cancellationToken)
     {
         if (string.IsNullOrEmpty(_currentUserService.UserId) || !Guid.TryParse(_currentUserService.UserId, out var currentUserId))
         {

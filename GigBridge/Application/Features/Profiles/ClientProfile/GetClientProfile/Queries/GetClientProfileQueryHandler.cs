@@ -9,10 +9,10 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using ClientProfileEntity = Domain.Entities.ClientProfile;
 
-namespace Application.Features.Profiles.ClientProfile.GetClientProfile.Handlers;
+namespace Application.Features.Profiles.ClientProfile.GetClientProfile.Queries;
 
 public class GetClientProfileQueryHandler 
-    : IRequestHandler<Queries.GetClientProfileQuery, ClientProfileDetailDto>
+    : IRequestHandler<GetClientProfileQuery, ClientProfileDetailDto>
 {
     private readonly IApplicationDbContext _context;
 
@@ -22,7 +22,7 @@ public class GetClientProfileQueryHandler
     }
 
     public async Task<ClientProfileDetailDto> Handle(
-        Queries.GetClientProfileQuery request, 
+        GetClientProfileQuery request, 
         CancellationToken cancellationToken)
     {
         var clientProfile = await _context.Set<ClientProfileEntity>()

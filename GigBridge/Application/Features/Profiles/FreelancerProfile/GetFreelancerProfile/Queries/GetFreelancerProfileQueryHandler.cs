@@ -10,10 +10,10 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using FreelancerProfileEntity = Domain.Entities.FreelancerProfile;
 
-namespace Application.Features.Profiles.FreelancerProfile.GetFreelancerProfile.Handlers;
+namespace Application.Features.Profiles.FreelancerProfile.GetFreelancerProfile.Queries;
 
 public class GetFreelancerProfileQueryHandler 
-    : IRequestHandler<Queries.GetFreelancerProfileQuery, FreelancerProfileDetailDto>
+    : IRequestHandler<GetFreelancerProfileQuery, FreelancerProfileDetailDto>
 {
     private readonly IApplicationDbContext _context;
 
@@ -23,7 +23,7 @@ public class GetFreelancerProfileQueryHandler
     }
 
     public async Task<FreelancerProfileDetailDto> Handle(
-        Queries.GetFreelancerProfileQuery request, 
+        GetFreelancerProfileQuery request, 
         CancellationToken cancellationToken)
     {
         var freelancerProfile = await _context.Set<FreelancerProfileEntity>()

@@ -6,14 +6,13 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Features.Profiles.FreelancerProfile.CreateFreelancerProfile.DTOs;
-using Application.Features.Profiles.FreelancerProfile.CreateFreelancerProfile.Commands;
 using AutoMapper;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using FreelancerProfileEntity = Domain.Entities.FreelancerProfile;
 
-namespace Application.Features.Profiles.FreelancerProfile.CreateFreelancerProfile.Handlers;
+namespace Application.Features.Profiles.FreelancerProfile.CreateFreelancerProfile.Commands;
 
 public class CreateFreelancerProfileCommandHandler 
     : IRequestHandler<CreateFreelancerProfileCommand, FreelancerProfileResponseDto>
