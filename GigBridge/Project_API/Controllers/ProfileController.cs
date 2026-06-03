@@ -117,4 +117,29 @@ public class ProfileController : BaseApiController
         };
         return Ok(ApiResponse<IEnumerable<string>>.Ok(industries, "Success"));
     }
+
+    [HttpGet("experience-levels")]
+    public IActionResult GetExperienceLevels()
+    {
+        var experienceLevels = new[]
+        {
+            new { Id = 0, Name = "Entry Level (0-2 years)" },
+            new { Id = 1, Name = "Intermediate (3-5 years)" },
+            new { Id = 2, Name = "Expert (5+ years)" }
+        };
+        return Ok(ApiResponse<object>.Ok(experienceLevels, "Success"));
+    }
+
+    [HttpGet("availability-statuses")]
+    public IActionResult GetAvailabilityStatuses()
+    {
+        var availabilityStatuses = new[]
+        {
+            new { Id = 0, Name = "Available - More than 30 hrs/week" },
+            new { Id = 1, Name = "Busy - Less than 30 hrs/week" },
+            new { Id = 2, Name = "Not Available" }
+        };
+        return Ok(ApiResponse<object>.Ok(availabilityStatuses, "Success"));
+    }
 }
+
