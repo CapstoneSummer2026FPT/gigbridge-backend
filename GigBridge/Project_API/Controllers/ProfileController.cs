@@ -112,4 +112,28 @@ public class ProfileController : BaseApiController
 
         return Ok(ApiResponse<object?>.Ok(null, "Setup marked as complete"));
     }
+
+    [HttpGet("company-sizes")]
+    public IActionResult GetCompanySizes()
+    {
+        var companySizes = new[]
+        {
+            new { Id = 0, Name = "Solo (1-9 employees)" },
+            new { Id = 1, Name = "Small (10-49 employees)" },
+            new { Id = 2, Name = "Medium (50-249 employees)" },
+            new { Id = 3, Name = "Large (250+ employees)" }
+        };
+        return Ok(ApiResponse<object>.Ok(companySizes, "Success"));
+    }
+
+    [HttpGet("industries")]
+    public IActionResult GetIndustries()
+    {
+        var industries = new[]
+        {
+            "Technology", "Finance", "Healthcare", "E-commerce", "Education",
+            "Marketing", "Real Estate", "Entertainment", "Manufacturing", "Other"
+        };
+        return Ok(ApiResponse<IEnumerable<string>>.Ok(industries, "Success"));
+    }
 }
