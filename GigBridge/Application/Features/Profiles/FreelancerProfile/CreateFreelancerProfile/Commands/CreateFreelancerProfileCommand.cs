@@ -1,5 +1,5 @@
 using Application.Common.Interfaces;
-using Application.Features.Profiles.FreelancerProfile.DTOs;
+using Application.Features.Profiles.FreelancerProfile.CreateFreelancerProfile.DTOs;
 using MediatR;
 
 namespace Application.Features.Profiles.FreelancerProfile.CreateFreelancerProfile.Commands;

@@ -1,4 +1,4 @@
-namespace Application.Features.Profiles.FreelancerProfile.DTOs;
+namespace Application.Features.Profiles.FreelancerProfile.CreateFreelancerProfile.DTOs;
 
 public class CreateFreelancerProfileDto
 {

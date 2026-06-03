@@ -1,4 +1,4 @@
-namespace Application.Features.Profiles.ClientProfile.DTOs;
+namespace Application.Features.Profiles.ClientProfile.CreateClientProfile.DTOs;
 
 public class CreateClientProfileDto
 {

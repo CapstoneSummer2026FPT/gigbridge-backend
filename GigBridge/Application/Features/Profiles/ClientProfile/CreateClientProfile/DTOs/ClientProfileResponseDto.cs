@@ -1,8 +1,8 @@
 using System;
 
-namespace Application.Features.Profiles.ClientProfile.DTOs;
+namespace Application.Features.Profiles.ClientProfile.CreateClientProfile.DTOs;
 
-public class ClientProfileDetailDto
+public class ClientProfileResponseDto
 {
     public Guid ClientProfilesId { get; set; }
     public Guid UserId { get; set; }
@@ -14,8 +14,4 @@ public class ClientProfileDetailDto
     public string? Location { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
-
-    public string? UserFullName { get; set; }
-    public string? UserEmail { get; set; }
-    public string? UserAvatar { get; set; }
 }

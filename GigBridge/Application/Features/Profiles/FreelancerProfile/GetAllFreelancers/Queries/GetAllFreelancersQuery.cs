@@ -1,5 +1,5 @@
 using System.Collections.Generic;
-using Application.Features.Profiles.FreelancerProfile.DTOs;
+using Application.Features.Profiles.FreelancerProfile.GetFreelancerProfile.DTOs;
 using MediatR;
 
 namespace Application.Features.Profiles.FreelancerProfile.GetAllFreelancers.Queries;

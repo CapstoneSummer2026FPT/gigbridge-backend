@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace Application.Features.Profiles.FreelancerProfile.DTOs;
+namespace Application.Features.Profiles.FreelancerProfile.GetFreelancerProfile.DTOs;
 
 public class FreelancerProfileDetailDto
 {

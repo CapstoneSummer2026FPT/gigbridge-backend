@@ -3,8 +3,8 @@ using AutoMapper;
 using Domain.Entities;
 using Application.Features.Auth.Shared.DTOs;
 using Application.Features.Admin.Users.Shared.DTOs;
-using Application.Features.Profiles.FreelancerProfile.DTOs;
-using Application.Features.Profiles.ClientProfile.DTOs;
+using Application.Features.Profiles.FreelancerProfile.CreateFreelancerProfile.DTOs;
+using Application.Features.Profiles.ClientProfile.CreateClientProfile.DTOs;
 
 namespace Application.Common.Mappings;
 

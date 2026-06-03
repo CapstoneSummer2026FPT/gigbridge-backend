@@ -4,7 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Application.Common.Interfaces;
-using Application.Features.Profiles.FreelancerProfile.DTOs;
+using Application.Features.Profiles.FreelancerProfile.GetFreelancerProfile.DTOs;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
