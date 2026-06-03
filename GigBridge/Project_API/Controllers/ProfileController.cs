@@ -13,9 +13,7 @@ using Application.Features.Profiles.ClientProfile.CreateClientProfile.DTOs;
 using Application.Features.Profiles.ClientProfile.GetClientProfile.DTOs;
 using Application.Features.Profiles.ClientProfile.CreateClientProfile.Commands;
 using Application.Features.Profiles.ClientProfile.GetClientProfile.Queries;
-using Domain.Entities;
-using Application.Common.Interfaces;
-using Microsoft.EntityFrameworkCore;
+using Application.Features.Profiles.MarkSetupComplete.Commands;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Project_API.Controllers.Common;
@@ -25,12 +23,6 @@ namespace Project_API.Controllers;
 [Authorize]
 public class ProfileController : BaseApiController
 {
-    private readonly IApplicationDbContext _context;
-
-    public ProfileController(IApplicationDbContext context)
-    {
-        _context = context;
-    }
 
     [HttpPut("freelancer")]
     public async Task<IActionResult> CreateFreelancerProfile([FromBody] CreateFreelancerProfileDto dto)
@@ -96,19 +88,8 @@ public class ProfileController : BaseApiController
     [HttpPut("setup-complete")]
     public async Task<IActionResult> MarkSetupComplete()
     {
-        if (!TryGetCurrentUserId(out var userId))
-        {
-            return InvalidTokenResponse();
-        }
-
-        var user = await _context.Set<User>().FirstOrDefaultAsync(u => u.UserId == userId);
-        if (user == null)
-        {
-            throw new NotFoundException(nameof(User), userId);
-        }
-
-        user.IsSetup = true;
-        await _context.SaveChangesAsync(default);
+        var command = new MarkSetupCompleteCommand();
+        await Mediator.Send(command);
 
         return Ok(ApiResponse<object?>.Ok(null, "Setup marked as complete"));
     }
