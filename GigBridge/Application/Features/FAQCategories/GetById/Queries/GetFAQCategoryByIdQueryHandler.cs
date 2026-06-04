@@ -22,7 +22,7 @@ public sealed class GetFAQCategoryByIdQueryHandler : IRequestHandler<GetFAQCateg
             .FirstOrDefaultAsync(c => c.FaqcategoriesId == request.Id, cancellationToken);
 
         if (category is null)
-            return null;
+            throw new KeyNotFoundException($"FAQ category with ID {request.Id} not found.");
 
         return new FAQCategoryDto
         {

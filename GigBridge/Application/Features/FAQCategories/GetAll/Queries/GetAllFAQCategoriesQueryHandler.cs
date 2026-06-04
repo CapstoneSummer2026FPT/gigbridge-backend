@@ -23,6 +23,8 @@ public sealed class GetAllFAQCategoriesQueryHandler : IRequestHandler<GetAllFAQC
             .ThenBy(c => c.Name)
             .ToListAsync(cancellationToken);
 
+        if (categories is null || !categories.Any())
+            throw new KeyNotFoundException("No FAQ categories found.");
         return categories.Select(c => new FAQCategoryDto
         {
             Id = c.FaqcategoriesId,
