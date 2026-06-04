@@ -1,3 +1,4 @@
+using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Features.FAQCategories.Shared.DTOs;
 using Domain.Entities;
@@ -24,7 +25,7 @@ public sealed class GetAllFAQCategoriesQueryHandler : IRequestHandler<GetAllFAQC
             .ToListAsync(cancellationToken);
 
         if (categories is null || !categories.Any())
-            throw new KeyNotFoundException("No FAQ categories found.");
+            throw new NotFoundException("No FAQ categories found.");
         return categories.Select(c => new FAQCategoryDto
         {
             Id = c.FaqcategoriesId,

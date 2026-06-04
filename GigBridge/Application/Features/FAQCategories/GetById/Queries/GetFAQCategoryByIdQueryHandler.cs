@@ -1,4 +1,5 @@
 using Application.Common.Interfaces;
+using Application.Common.Exceptions;
 using Application.Features.FAQCategories.Shared.DTOs;
 using Domain.Entities;
 using MediatR;
@@ -22,7 +23,7 @@ public sealed class GetFAQCategoryByIdQueryHandler : IRequestHandler<GetFAQCateg
             .FirstOrDefaultAsync(c => c.FaqcategoriesId == request.Id, cancellationToken);
 
         if (category is null)
-            throw new KeyNotFoundException($"FAQ category with ID {request.Id} not found.");
+            throw new NotFoundException($"FAQ category with ID {request.Id} not found.");
 
         return new FAQCategoryDto
         {
