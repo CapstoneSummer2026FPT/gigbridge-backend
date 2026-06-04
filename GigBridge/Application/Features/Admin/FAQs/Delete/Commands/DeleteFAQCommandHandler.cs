@@ -1,3 +1,4 @@
+using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Domain.Entities;
 using MediatR;
@@ -20,7 +21,7 @@ public sealed class DeleteFAQCommandHandler : IRequestHandler<DeleteFAQCommand, 
             .FirstOrDefaultAsync(f => f.FaqsId == request.Id, cancellationToken);
 
         if (faq is null)
-            return false;
+            throw new NotFoundException($"FAQ with ID {request.Id} not found.");
 
         _context.Set<Faq>().Remove(faq);
         await _context.SaveChangesAsync(cancellationToken);

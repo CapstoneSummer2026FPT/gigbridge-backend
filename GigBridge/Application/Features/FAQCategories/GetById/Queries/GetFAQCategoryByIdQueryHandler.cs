@@ -1,3 +1,4 @@
+using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Features.FAQCategories.Shared.DTOs;
 using Domain.Entities;
@@ -22,7 +23,7 @@ public sealed class GetFAQCategoryByIdQueryHandler : IRequestHandler<GetFAQCateg
             .FirstOrDefaultAsync(c => c.FaqcategoriesId == request.Id, cancellationToken);
 
         if (category is null)
-            return null;
+            throw new NotFoundException($"FAQ category with ID {request.Id} not found.");
 
         return new FAQCategoryDto
         {

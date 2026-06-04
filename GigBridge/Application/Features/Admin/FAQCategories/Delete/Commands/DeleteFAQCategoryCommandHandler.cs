@@ -1,3 +1,4 @@
+using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Domain.Entities;
 using MediatR;
@@ -21,10 +22,10 @@ public sealed class DeleteFAQCategoryCommandHandler : IRequestHandler<DeleteFAQC
             .FirstOrDefaultAsync(c => c.FaqcategoriesId == request.Id, cancellationToken);
 
         if (category is null)
-            return false;
+            throw new NotFoundException($"FAQ category with ID {request.Id} not found.");
 
         if (category.Faqs.Count > 0)
-            throw new Common.Exceptions.ConflictException(
+            throw new ConflictException(
                 $"Cannot delete category '{category.Name}' because it has {category.Faqs.Count} associated FAQ(s). Remove or reassign them first.");
 
         _context.Set<Faqcategory>().Remove(category);

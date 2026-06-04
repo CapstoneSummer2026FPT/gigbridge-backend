@@ -1,3 +1,4 @@
+using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Features.FAQs.Shared.DTOs;
 using Domain.Entities;
@@ -22,7 +23,7 @@ public sealed class GetFAQByIdQueryHandler : IRequestHandler<GetFAQByIdQuery, FA
             .FirstOrDefaultAsync(f => f.FaqsId == request.Id, cancellationToken);
 
         if (faq is null)
-            return null;
+            throw new NotFoundException($"FAQ with ID {request.Id} not found.");
 
         return new FAQDto
         {

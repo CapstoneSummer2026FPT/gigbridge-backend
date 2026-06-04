@@ -1,3 +1,4 @@
+using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Domain.Entities;
 using MediatR;
@@ -20,7 +21,7 @@ public sealed class ToggleFAQCategoryActivityCommandHandler : IRequestHandler<To
             .FirstOrDefaultAsync(c => c.FaqcategoriesId == request.Id, cancellationToken);
 
         if (category is null)
-            return false;
+            throw new NotFoundException($"FAQ category with ID {request.Id} not found.");
 
         category.IsActive = !(category.IsActive ?? true);
         await _context.SaveChangesAsync(cancellationToken);

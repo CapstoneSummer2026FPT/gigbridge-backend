@@ -1,3 +1,4 @@
+using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Features.FAQCategories.Shared.DTOs;
 using Domain.Entities;
@@ -24,7 +25,7 @@ public sealed class CreateFAQCategoryCommandHandler : IRequestHandler<CreateFAQC
             .FirstOrDefaultAsync(c => c.Slug == slug, cancellationToken);
 
         if (existing is not null)
-            throw new Common.Exceptions.ConflictException($"A category with slug '{slug}' already exists.");
+            throw new ConflictException($"A category with slug '{slug}' already exists.");
 
         var category = new Faqcategory
         {
