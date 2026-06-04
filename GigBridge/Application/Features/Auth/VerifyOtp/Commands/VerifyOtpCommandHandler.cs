@@ -25,7 +25,7 @@ public class VerifyOtpCommandHandler : IRequestHandler<VerifyOtpCommand, Unit>
         }
 
         await _cacheService.RemoveAsync(otpKey, cancellationToken);
-        await _cacheService.SetAsync($"verified_email:{email}", request.VerifyOtpRequest.Otp, TimeSpan.FromMinutes(1), cancellationToken);
+        await _cacheService.SetAsync($"verified_email:{email}", request.VerifyOtpRequest.Otp, TimeSpan.FromMinutes(5), cancellationToken);
 
         return Unit.Value;
     }

@@ -38,7 +38,7 @@ public class SendEmailPasswordChangingCommandHandler : IRequestHandler<SendEmail
         var otp = RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
 
         await _cacheService.RemoveAsync(cacheKey, cancellationToken);
-        await _cacheService.SetAsync(cacheKey, otp, TimeSpan.FromMinutes(5), cancellationToken);
-        await _authEmailSender.SendOtpEmailAsync(user.Email, otp, cancellationToken);
+        await _cacheService.SetAsync(cacheKey, otp, TimeSpan.FromMinutes(1), cancellationToken);
+        await _authEmailSender.SendForgotPasswordOtpEmailAsync(user.Email, otp, cancellationToken);
     }
 }
