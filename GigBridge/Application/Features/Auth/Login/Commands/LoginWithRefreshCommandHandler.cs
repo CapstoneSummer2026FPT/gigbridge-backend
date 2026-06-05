@@ -13,7 +13,7 @@ using System.Threading.Tasks;
 
 namespace Application.Features.Auth.Login.Commands
 {
-    public class LoginWithRefreshCommandHandler : IRequestHandler<LoginWithRefreshCommand, (LoginResponse LoginData, string RefreshToken)>
+    public class LoginWithRefreshCommandHandler : IRequestHandler<LoginWithRefreshCommand, (LoginResponse LoginData, string RefreshToken, DateTime RefreshTokenExpiry)>
     {
         private readonly IApplicationDbContext _context;
         private readonly IPasswordHasher _passwordHasher;
@@ -35,7 +35,7 @@ namespace Application.Features.Auth.Login.Commands
             _mapper = mapper;
         }
 
-        public async Task<(LoginResponse LoginData, string RefreshToken)> Handle(LoginWithRefreshCommand request, CancellationToken cancellationToken)
+        public async Task<(LoginResponse LoginData, string RefreshToken, DateTime RefreshTokenExpiry)> Handle(LoginWithRefreshCommand request, CancellationToken cancellationToken)
         {
             var user = await _context.Set<User>()
                 .Include(u => u.ClientProfile)
@@ -57,7 +57,7 @@ namespace Application.Features.Auth.Login.Commands
                 User = _mapper.Map<UserDTO>(user),
                 Token = _jwtService.GenerateToken(user),
                 refreshToken = refreshToken
-            }, refreshToken);
+            }, refreshToken, user.RefreshTokenExpiry ?? DateTime.UtcNow);
         }
 
         private string RotateRefreshToken(User user)

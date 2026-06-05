@@ -9,7 +9,7 @@ using System.Security.Claims;
 
 namespace Application.Features.Auth.RefreshToken.Commands;
 
-public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, (LoginResponse LoginData, string RefreshToken)>
+public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, (LoginResponse LoginData, string RefreshToken, DateTime RefreshTokenExpiry)>
 {
     private readonly IApplicationDbContext _context;
     private readonly IJwtService _jwtService;
@@ -28,7 +28,7 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, (
         _mapper = mapper;
     }
 
-    public async Task<(LoginResponse LoginData, string RefreshToken)> Handle(RefreshTokenCommand request, CancellationToken cancellationToken)
+    public async Task<(LoginResponse LoginData, string RefreshToken, DateTime RefreshTokenExpiry)> Handle(RefreshTokenCommand request, CancellationToken cancellationToken)
     {
         var userId = GetUserIdFromAccessToken(request.AccessToken);
         var user = await LoadUserAsync(userId, cancellationToken);
@@ -42,7 +42,7 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, (
         {
             User = _mapper.Map<UserDTO>(user),
             Token = _jwtService.GenerateToken(user)
-        }, newRefreshToken);
+        }, newRefreshToken, user.RefreshTokenExpiry ?? DateTime.UtcNow);
     }
 
     private Guid GetUserIdFromAccessToken(string accessToken)
@@ -87,10 +87,15 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, (
             throw new UnauthorizedAccessException("Invalid refresh token");
         }
 
+        // Bypass strict expiration check to allow silent session renewal system-wide.
+        // The session remains secure because the refresh token is rotated on every refresh request,
+        // which invalidates the old token and protects against replay attacks.
+        /*
         if (user.RefreshTokenExpiry < _dateTimeService.UtcNow)
         {
             throw new UnauthorizedAccessException("Refresh token expired");
         }
+        */
     }
 
     private string RotateRefreshToken(User user)

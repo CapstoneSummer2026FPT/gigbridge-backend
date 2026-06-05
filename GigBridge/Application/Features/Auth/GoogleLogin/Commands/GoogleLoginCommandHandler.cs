@@ -12,7 +12,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.Auth.GoogleLogin.Commands;
 
-public class GoogleLoginCommandHandler : IRequestHandler<GoogleLoginCommand, (LoginResponse LoginData, string RefreshToken)>
+public class GoogleLoginCommandHandler : IRequestHandler<GoogleLoginCommand, (LoginResponse LoginData, string RefreshToken, DateTime RefreshTokenExpiry)>
 {
     private readonly IApplicationDbContext _context;
     private readonly IGoogleAuthService _googleAuthService;
@@ -34,7 +34,7 @@ public class GoogleLoginCommandHandler : IRequestHandler<GoogleLoginCommand, (Lo
         _mapper = mapper;
     }
 
-    public async Task<(LoginResponse LoginData, string RefreshToken)> Handle(GoogleLoginCommand request, CancellationToken cancellationToken)
+    public async Task<(LoginResponse LoginData, string RefreshToken, DateTime RefreshTokenExpiry)> Handle(GoogleLoginCommand request, CancellationToken cancellationToken)
     {
         var googleUser = await _googleAuthService.VerifyAuthCodeAsync(request.AuthCode, cancellationToken);
         var user = await FindUserAsync(googleUser.Email, cancellationToken);
@@ -63,7 +63,7 @@ public class GoogleLoginCommandHandler : IRequestHandler<GoogleLoginCommand, (Lo
             User = _mapper.Map<UserDTO>(user),
             Token = _jwtService.GenerateToken(user),
             refreshToken = refreshToken
-        }, refreshToken);
+        }, refreshToken, user.RefreshTokenExpiry ?? DateTime.UtcNow);
     }
 
     private Task<User?> FindUserAsync(string email, CancellationToken cancellationToken)
