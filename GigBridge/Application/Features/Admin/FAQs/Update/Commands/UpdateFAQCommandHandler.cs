@@ -58,7 +58,10 @@ public sealed class UpdateFAQCommandHandler : IRequestHandler<UpdateFAQCommand, 
         await _context.SaveChangesAsync(cancellationToken);
 
         var category = await _context.Set<Faqcategory>()
-            .FirstAsync(c => c.FaqcategoriesId == faq.FaqcategoriesId, cancellationToken);
+            .FirstOrDefaultAsync(c => c.FaqcategoriesId == faq.FaqcategoriesId, cancellationToken);
+
+        if (category is null)
+            throw new NotFoundException($"FAQ category with ID {faq.FaqcategoriesId} not found.");
 
         return new FAQDto
         {
