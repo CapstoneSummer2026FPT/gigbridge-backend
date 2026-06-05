@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Application.Common.Models;
-using Application.Features.Profiles.MarkSetupComplete.Commands;
+using Application.Features.Profiles.Common.MarkSetupComplete.Commands;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Project_API.Controllers.Common;

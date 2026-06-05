@@ -1,9 +1,10 @@
-﻿using Application.Common.Interfaces;
+using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Features.Auth.Shared.DTOs;
 using AutoMapper;
 using Domain.Entities;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -63,7 +64,7 @@ namespace Application.Features.Auth.Login.Commands
         {
             var refreshToken = _jwtService.GenerateRefreshToken();
             user.RefreshTokenHash = _jwtService.HashRefreshToken(refreshToken);
-            user.RefreshTokenExpiry = _dateTimeService.UtcNow.AddDays(7);
+            user.RefreshTokenExpiry = _dateTimeService.UtcNow.AddMinutes(_jwtService.GetRefreshTokenExpiryMinutes());
             return refreshToken;
         }
 

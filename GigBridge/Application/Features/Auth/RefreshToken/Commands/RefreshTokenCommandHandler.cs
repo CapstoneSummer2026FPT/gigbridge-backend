@@ -97,7 +97,7 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, (
     {
         var refreshToken = _jwtService.GenerateRefreshToken();
         user.RefreshTokenHash = _jwtService.HashRefreshToken(refreshToken);
-        user.RefreshTokenExpiry = _dateTimeService.UtcNow.AddDays(7);
+        user.RefreshTokenExpiry = _dateTimeService.UtcNow.AddMinutes(_jwtService.GetRefreshTokenExpiryMinutes());
         return refreshToken;
     }
 }

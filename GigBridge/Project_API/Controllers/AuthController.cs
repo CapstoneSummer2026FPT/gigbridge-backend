@@ -25,6 +25,7 @@ using Application.Features.Auth.VerifyOtp.DTOs;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 using Project_API.Controllers.Common;
 using System;
 using System.Threading.Tasks;
@@ -35,7 +36,12 @@ namespace Project_API.Controllers;
 [Route("api/[controller]")]
 public class AuthController : BaseApiController
 {
-    private const int RefreshTokenCookieDays = 7;
+    private readonly IConfiguration _configuration;
+
+    public AuthController(IConfiguration configuration)
+    {
+        _configuration = configuration;
+    }
 
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request)
@@ -187,12 +193,15 @@ public class AuthController : BaseApiController
 
     private void SetRefreshTokenCookie(string refreshToken)
     {
+        var jwtSettings = _configuration.GetSection("Jwt");
+        var refreshTokenMinutes = int.TryParse(jwtSettings["RefreshTokenMinutes"], out var minutes) && minutes > 0 ? minutes : 10080;
+
         var cookieOptions = new CookieOptions
         {
             HttpOnly = true,
             Secure = true,
             SameSite = SameSiteMode.None,
-            Expires = DateTime.UtcNow.AddDays(RefreshTokenCookieDays)
+            Expires = DateTime.UtcNow.AddMinutes(refreshTokenMinutes)
         };
         Response.Cookies.Append("refreshToken", refreshToken, cookieOptions);
     }

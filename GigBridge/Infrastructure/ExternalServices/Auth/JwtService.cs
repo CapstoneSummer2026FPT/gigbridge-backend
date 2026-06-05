@@ -95,4 +95,10 @@ public class JwtService : IJwtService
 
         return principal;
     }
+
+    public int GetRefreshTokenExpiryMinutes()
+    {
+        var jwtSettings = _configuration.GetSection("Jwt");
+        return int.TryParse(jwtSettings["RefreshTokenMinutes"], out var minutes) && minutes > 0 ? minutes : 10080; // Default to 7 days in minutes
+    }
 }
