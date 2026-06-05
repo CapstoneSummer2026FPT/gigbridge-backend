@@ -5,7 +5,7 @@ using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
-namespace Application.Features.Proposals.Admin.GetAllProposals.Queries;
+namespace Application.Features.Admin.Proposals.GetAllProposals.Queries;
 
 public class GetAllProposalsQueryHandler : IRequestHandler<GetAllProposalsQuery, IEnumerable<ProposalDto>>
 {

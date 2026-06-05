@@ -5,7 +5,7 @@ using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
-namespace Application.Features.Proposals.Common.GetMyProposalByJobPost.Queries;
+namespace Application.Features.Proposals.Freelancer.GetMyProposalByJobPost.Queries;
 
 public class GetMyProposalByJobPostQueryHandler
     : IRequestHandler<GetMyProposalByJobPostQuery, ProposalDetailDto>

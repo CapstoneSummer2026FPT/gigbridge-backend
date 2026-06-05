@@ -2,7 +2,7 @@ using Application.Features.Proposals.Common.DTOs;
 using MediatR;
 using System.Collections.Generic;
 
-namespace Application.Features.Proposals.Admin.GetAllProposals.Queries;
+namespace Application.Features.Admin.Proposals.GetAllProposals.Queries;
 
 public class GetAllProposalsQuery : IRequest<IEnumerable<ProposalDto>>
 {

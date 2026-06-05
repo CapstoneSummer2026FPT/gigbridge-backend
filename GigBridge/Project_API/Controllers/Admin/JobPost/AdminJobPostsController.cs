@@ -1,5 +1,5 @@
 using Application.Common.Models;
-using Application.Features.JobPosts.Admin.GetAllJobPosts.Queries;
+using Application.Features.Admin.JobPosts.GetAllJobPosts.Queries;
 using Application.Features.JobPosts.Public.GetAvailableJobPosts.DTOs;
 using Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
