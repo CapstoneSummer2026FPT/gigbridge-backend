@@ -22,6 +22,8 @@ using Application.Features.Auth.SendOtp.Commands;
 using Application.Features.Auth.SendOtp.DTOs;
 using Application.Features.Auth.VerifyOtp.Commands;
 using Application.Features.Auth.VerifyOtp.DTOs;
+using Application.Features.Auth.ChangePassword.Commands;
+using Application.Features.Auth.ChangePassword.DTOs;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -137,6 +139,20 @@ public class AuthController : BaseApiController
 
         await Mediator.Send(new ResendEmailConfirmationCommand(request));
         return Ok(ApiResponse<object>.NoContent("Email sent successfully"));
+    }
+
+    [HttpPost("change-password")]
+    [Authorize]
+    public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordProfileRequest request)
+    {
+        if (request == null)
+            return BadRequest(ApiResponse<object>.BadRequest("Request body cannot be null"));
+
+        if (string.IsNullOrWhiteSpace(request.CurrentPassword) || string.IsNullOrWhiteSpace(request.NewPassword))
+            return BadRequest(ApiResponse<object>.BadRequest("Current password and new password are required"));
+
+        await Mediator.Send(new ChangePasswordCommand(request));
+        return Ok(ApiResponse<object>.NoContent("Password changed successfully"));
     }
 
     [HttpPost("forgot-password")]
