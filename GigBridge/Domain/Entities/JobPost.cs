@@ -43,7 +43,7 @@ public partial class JobPost
     public string? Location { get; set; }
 
     /// <summary>
-    /// Enum JobPostStatus: 0=Draft, 1=Open, 2=InProgress, 3=Closed, 4=Cancelled
+    /// Enum JobPostStatus: 0=Draft (Client), 1=Open (All), 2=Closed(Client), 3=Cancelled(Client,Admin)
     /// </summary>
     public int Status { get; set; }
 
