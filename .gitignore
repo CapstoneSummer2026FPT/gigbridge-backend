@@ -33,3 +33,4 @@ Thumbs.db
 *.suo
 GigBridge/Project_API/Properties/launchSettings.json
 *.csproj
+/docs

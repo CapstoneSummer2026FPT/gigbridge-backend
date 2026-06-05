@@ -1,7 +1,7 @@
 using Application.Features.JobPosts.Public.GetAvailableJobPosts.DTOs;
 using MediatR;
 
-namespace Application.Features.JobPosts.Admin.GetAllJobPosts.Queries;
+namespace Application.Features.Admin.Jobpost.GetAllJobPosts.Queries;
 
 public record GetAllJobPostsQuery(
     int PageIndex = 1,
