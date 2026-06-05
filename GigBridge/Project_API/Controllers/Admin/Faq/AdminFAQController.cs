@@ -2,6 +2,8 @@ using Application.Common.Models;
 using Application.Features.Admin.FAQs.Create.Commands;
 using Application.Features.Admin.FAQs.Create.DTOs;
 using Application.Features.Admin.FAQs.Delete.Commands;
+using Application.Features.Admin.FAQs.GetAll.Queries;
+using Application.Features.Admin.FAQs.ToggleActivity.Commands;
 using Application.Features.Admin.FAQs.Update.Commands;
 using Application.Features.Admin.FAQs.Update.DTOs;
 using Application.Features.FAQs.Shared.DTOs;
@@ -16,6 +18,13 @@ namespace Project_API.Controllers.Admin.FAQ;
 [Authorize(Roles = nameof(UserRole.Admin))]
 public sealed class AdminFAQController : BaseApiController
 {
+    [HttpGet]
+    public async Task<IActionResult> GetAllFAQs([FromQuery] int? categoryId = null)
+    {
+        var result = await Mediator.Send(new GetAllAdminFAQsQuery(categoryId));
+        return Ok(ApiResponse<IReadOnlyList<FAQDto>>.Ok(result, "FAQs retrieved successfully"));
+    }
+
     [HttpPost]
     public async Task<IActionResult> CreateFAQ([FromBody] CreateFAQRequest request)
     {
@@ -38,6 +47,17 @@ public sealed class AdminFAQController : BaseApiController
             return NotFound(ApiResponse<object>.NotFound("FAQ not found"));
 
         return Ok(ApiResponse<FAQDto>.Ok(result, "FAQ updated successfully"));
+    }
+
+    [HttpPatch("{id:int}/toggle-activity")]
+    public async Task<IActionResult> ToggleFAQActivity(int id)
+    {
+        var result = await Mediator.Send(new ToggleFAQActivityCommand(id));
+
+        if (!result)
+            return NotFound(ApiResponse<object>.NotFound("FAQ not found"));
+
+        return Ok(ApiResponse<object>.NoContent("FAQ activity toggled successfully"));
     }
 
     [HttpDelete("{id:int}")]

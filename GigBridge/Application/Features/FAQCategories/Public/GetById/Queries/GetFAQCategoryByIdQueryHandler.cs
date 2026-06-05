@@ -20,6 +20,7 @@ public sealed class GetFAQCategoryByIdQueryHandler : IRequestHandler<GetFAQCateg
     {
         var category = await _context.Set<Faqcategory>()
             .Include(c => c.Faqs)
+            .Where(c => c.IsActive == true)
             .FirstOrDefaultAsync(c => c.FaqcategoriesId == request.Id, cancellationToken);
 
         if (category is null)
@@ -34,7 +35,7 @@ public sealed class GetFAQCategoryByIdQueryHandler : IRequestHandler<GetFAQCateg
             SortOrder = category.SortOrder,
             IsActive = category.IsActive,
             CreatedAt = category.CreatedAt,
-            FaqCount = category.Faqs.Count
+            FaqCount = category.Faqs.Count(f => f.IsActive == true)
         };
     }
 }

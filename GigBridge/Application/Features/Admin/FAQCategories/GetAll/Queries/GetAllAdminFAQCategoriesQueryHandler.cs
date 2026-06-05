@@ -4,18 +4,18 @@ using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
-namespace Application.Features.FAQCategories.GetAll.Queries;
+namespace Application.Features.Admin.FAQCategories.GetAll.Queries;
 
-public sealed class GetAllFAQCategoriesQueryHandler : IRequestHandler<GetAllFAQCategoriesQuery, IReadOnlyList<FAQCategoryDto>>
+public sealed class GetAllAdminFAQCategoriesQueryHandler : IRequestHandler<GetAllAdminFAQCategoriesQuery, IReadOnlyList<FAQCategoryDto>>
 {
     private readonly IApplicationDbContext _context;
 
-    public GetAllFAQCategoriesQueryHandler(IApplicationDbContext context)
+    public GetAllAdminFAQCategoriesQueryHandler(IApplicationDbContext context)
     {
         _context = context;
     }
 
-    public async Task<IReadOnlyList<FAQCategoryDto>> Handle(GetAllFAQCategoriesQuery request, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<FAQCategoryDto>> Handle(GetAllAdminFAQCategoriesQuery request, CancellationToken cancellationToken)
     {
         var categories = await _context.Set<Faqcategory>()
             .Include(c => c.Faqs)

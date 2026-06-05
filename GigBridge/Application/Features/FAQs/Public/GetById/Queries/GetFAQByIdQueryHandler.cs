@@ -20,6 +20,7 @@ public sealed class GetFAQByIdQueryHandler : IRequestHandler<GetFAQByIdQuery, FA
     {
         var faq = await _context.Set<Faq>()
             .Include(f => f.Faqcategories)
+            .Where(f => f.IsActive == true && f.Faqcategories.IsActive == true)
             .FirstOrDefaultAsync(f => f.FaqsId == request.Id, cancellationToken);
 
         if (faq is null)
