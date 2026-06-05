@@ -8,7 +8,7 @@ using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
-namespace Application.Features.Profiles.MarkSetupComplete.Commands;
+namespace Application.Features.Profiles.Common.MarkSetupComplete.Commands;
 
 public class MarkSetupCompleteCommandHandler : IRequestHandler<MarkSetupCompleteCommand, bool>
 {
