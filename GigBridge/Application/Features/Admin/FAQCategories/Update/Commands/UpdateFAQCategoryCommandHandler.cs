@@ -25,7 +25,7 @@ public sealed class UpdateFAQCategoryCommandHandler : IRequestHandler<UpdateFAQC
             .FirstOrDefaultAsync(c => c.FaqcategoriesId == request.Id, cancellationToken);
 
         if (category is null)
-            return null;
+            throw new NotFoundException($"FAQ category with ID {request.Id} not found.");
 
         if (categoryRequest.Name is not null)
             category.Name = categoryRequest.Name.Trim();

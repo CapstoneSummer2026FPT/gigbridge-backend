@@ -2,6 +2,7 @@ using Application.Common.Models;
 using Application.Features.Admin.FAQCategories.Create.Commands;
 using Application.Features.Admin.FAQCategories.Create.DTOs;
 using Application.Features.Admin.FAQCategories.Delete.Commands;
+using Application.Features.Admin.FAQCategories.GetAll.Queries;
 using Application.Features.Admin.FAQCategories.ToggleActivity.Commands;
 using Application.Features.Admin.FAQCategories.Update.Commands;
 using Application.Features.Admin.FAQCategories.Update.DTOs;
@@ -17,6 +18,13 @@ namespace Project_API.Controllers.Admin.FAQ;
 [Authorize(Roles = nameof(UserRole.Admin))]
 public sealed class AdminFAQCategoryController : BaseApiController
 {
+    [HttpGet]
+    public async Task<IActionResult> GetAllCategories()
+    {
+        var result = await Mediator.Send(new GetAllAdminFAQCategoriesQuery());
+        return Ok(ApiResponse<IReadOnlyList<FAQCategoryDto>>.Ok(result, "Categories retrieved successfully"));
+    }
+
     [HttpPost]
     public async Task<IActionResult> CreateCategory([FromBody] CreateFAQCategoryRequest request)
     {

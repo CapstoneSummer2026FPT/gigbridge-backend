@@ -4,18 +4,18 @@ using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
-namespace Application.Features.FAQs.GetAll.Queries;
+namespace Application.Features.Admin.FAQs.GetAll.Queries;
 
-public sealed class GetAllFAQsQueryHandler : IRequestHandler<GetAllFAQsQuery, IReadOnlyList<FAQDto>>
+public sealed class GetAllAdminFAQsQueryHandler : IRequestHandler<GetAllAdminFAQsQuery, IReadOnlyList<FAQDto>>
 {
     private readonly IApplicationDbContext _context;
 
-    public GetAllFAQsQueryHandler(IApplicationDbContext context)
+    public GetAllAdminFAQsQueryHandler(IApplicationDbContext context)
     {
         _context = context;
     }
 
-    public async Task<IReadOnlyList<FAQDto>> Handle(GetAllFAQsQuery request, CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<FAQDto>> Handle(GetAllAdminFAQsQuery request, CancellationToken cancellationToken)
     {
         var query = _context.Set<Faq>()
             .Include(f => f.Faqcategories)
@@ -25,7 +25,7 @@ public sealed class GetAllFAQsQueryHandler : IRequestHandler<GetAllFAQsQuery, IR
             query = query.Where(f => f.FaqcategoriesId == request.FaqCategoryId.Value);
 
         var faqs = await query
-            .OrderBy(f => f.Faqcategories!.SortOrder)
+            .OrderBy(f => f.Faqcategories.SortOrder)
             .ThenBy(f => f.SortOrder)
             .ThenBy(f => f.FaqsId)
             .ToListAsync(cancellationToken);

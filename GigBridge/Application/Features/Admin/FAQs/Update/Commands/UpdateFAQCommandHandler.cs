@@ -24,8 +24,7 @@ public sealed class UpdateFAQCommandHandler : IRequestHandler<UpdateFAQCommand, 
             .FirstOrDefaultAsync(f => f.FaqsId == request.Id, cancellationToken);
 
         if (faq is null)
-            return null;
-
+            throw new NotFoundException($"FAQ with ID {request.Id} not found.");
         if (faqRequest.FaqCategoryId.HasValue)
         {
             var categoryExists = await _context.Set<Faqcategory>()
@@ -59,7 +58,10 @@ public sealed class UpdateFAQCommandHandler : IRequestHandler<UpdateFAQCommand, 
         await _context.SaveChangesAsync(cancellationToken);
 
         var category = await _context.Set<Faqcategory>()
-            .FirstAsync(c => c.FaqcategoriesId == faq.FaqcategoriesId, cancellationToken);
+            .FirstOrDefaultAsync(c => c.FaqcategoriesId == faq.FaqcategoriesId, cancellationToken);
+
+        if (category is null)
+            throw new NotFoundException($"FAQ category with ID {faq.FaqcategoriesId} not found.");
 
         return new FAQDto
         {
