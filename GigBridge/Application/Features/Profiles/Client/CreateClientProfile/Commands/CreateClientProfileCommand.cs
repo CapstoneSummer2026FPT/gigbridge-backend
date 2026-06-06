@@ -5,4 +5,4 @@ using MediatR;
 namespace Application.Features.Profiles.ClientProfile.CreateClientProfile.Commands;
 
 public record CreateClientProfileCommand(CreateClientProfileDto Dto) 
-    : IRequest<ClientProfileResponseDto>, IRequireAuthentication;
+    : IRequest<ClientProfileResponseDto>;

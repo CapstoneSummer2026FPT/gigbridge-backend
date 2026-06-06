@@ -3,4 +3,4 @@ using MediatR;
 
 namespace Application.Features.Admin.Users.DeleteUser.Commands;
 
-public record DeleteUserCommand(string Email) : IRequest<bool>, IRequireAdmin;
+public record DeleteUserCommand(string Email) : IRequest<bool>;

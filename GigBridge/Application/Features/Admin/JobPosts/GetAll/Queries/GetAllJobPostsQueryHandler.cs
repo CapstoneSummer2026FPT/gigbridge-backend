@@ -5,6 +5,7 @@ using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
+
 namespace Application.Features.Admin.JobPosts.GetAllJobPosts.Queries;
 
 public class GetAllJobPostsQueryHandler : IRequestHandler<GetAllJobPostsQuery, IEnumerable<JobPostSummaryDto>>

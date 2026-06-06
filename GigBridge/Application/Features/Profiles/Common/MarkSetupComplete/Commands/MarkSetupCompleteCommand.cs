@@ -3,4 +3,4 @@ using MediatR;
 
 namespace Application.Features.Profiles.Common.MarkSetupComplete.Commands;
 
-public record MarkSetupCompleteCommand : IRequest<bool>, IRequireAuthentication;
+public record MarkSetupCompleteCommand : IRequest<bool>;

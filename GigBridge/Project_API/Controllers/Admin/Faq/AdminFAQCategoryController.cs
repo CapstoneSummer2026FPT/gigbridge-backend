@@ -15,7 +15,6 @@ using Project_API.Controllers.Common;
 namespace Project_API.Controllers.Admin.FAQ;
 
 [Route("api/admin/faq/categories")]
-[Authorize(Roles = nameof(UserRole.Admin))]
 public sealed class AdminFAQCategoryController : BaseApiController
 {
     [HttpGet]

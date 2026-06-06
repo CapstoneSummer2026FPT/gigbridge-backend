@@ -5,4 +5,4 @@ using MediatR;
 namespace Application.Features.Profiles.FreelancerProfile.CreateFreelancerProfile.Commands;
 
 public record CreateFreelancerProfileCommand(CreateFreelancerProfileDto Dto) 
-    : IRequest<FreelancerProfileResponseDto>, IRequireAuthentication;
+    : IRequest<FreelancerProfileResponseDto>;
