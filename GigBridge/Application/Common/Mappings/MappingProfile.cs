@@ -7,6 +7,8 @@ using Application.Features.FAQCategories.Shared.DTOs;
 using Application.Features.FAQs.Shared.DTOs;
 
 
+using Application.Features.Profiles.FreelancerProfile.CreateFreelancerProfile.DTOs;
+using Application.Features.Profiles.ClientProfile.CreateClientProfile.DTOs;
 
 namespace Application.Common.Mappings;
 
@@ -14,7 +16,6 @@ public class MappingProfile : Profile
 {
     public MappingProfile()
     {
-
         CreateMap<User, UserDTO>();
         CreateMap<User, AdminUserDto>();
 
@@ -28,5 +29,7 @@ public class MappingProfile : Profile
             .ForMember(dest => dest.FaqCategoryId, opt => opt.MapFrom(src => src.FaqcategoriesId))
             .ForMember(dest => dest.FaqCategoryName, opt => opt.MapFrom(src => src.Faqcategories != null ? src.Faqcategories.Name : null));
 
+        CreateMap<FreelancerProfile, FreelancerProfileResponseDto>();
+        CreateMap<ClientProfile, ClientProfileResponseDto>();
     }
 }

@@ -9,4 +9,5 @@ public interface IJwtService
     string GenerateRefreshToken();
     string HashRefreshToken(string token);
     ClaimsPrincipal GetPrincipalFromExpiredToken(string token);
+    int GetRefreshTokenExpiryMinutes();
 }

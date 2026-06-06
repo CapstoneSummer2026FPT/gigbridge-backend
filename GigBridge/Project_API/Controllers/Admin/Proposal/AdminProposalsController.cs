@@ -1,5 +1,5 @@
 using Application.Common.Models;
-using Application.Features.Proposals.Admin.GetAllProposals.Queries;
+using Application.Features.Admin.Proposals.GetAllProposals.Queries;
 using Application.Features.Proposals.Common.DTOs;
 using Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
