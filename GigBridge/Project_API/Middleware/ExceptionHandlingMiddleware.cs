@@ -61,6 +61,10 @@ public class ExceptionHandlingMiddleware {
             response = ApiResponse<object>.Error((int)statusCode, message);
         }
 
-        return context.Response.WriteAsync(JsonSerializer.Serialize(response));
+        var options = new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+        };
+        return context.Response.WriteAsync(JsonSerializer.Serialize(response, options));
     }
 }

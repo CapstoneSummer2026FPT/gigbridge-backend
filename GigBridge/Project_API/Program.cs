@@ -8,6 +8,7 @@ using Project_API.Services;
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddControllers();
 
+builder.Services.AddControllers();
 
 // Layer registrations (Clean Architecture)
 builder.Services.AddApplicationServices();

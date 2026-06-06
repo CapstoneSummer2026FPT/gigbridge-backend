@@ -22,9 +22,12 @@ using Application.Features.Auth.SendOtp.Commands;
 using Application.Features.Auth.SendOtp.DTOs;
 using Application.Features.Auth.VerifyOtp.Commands;
 using Application.Features.Auth.VerifyOtp.DTOs;
+using Application.Features.Auth.ChangePassword.Commands;
+using Application.Features.Auth.ChangePassword.DTOs;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
 using Project_API.Controllers.Common;
 using System;
 using System.Threading.Tasks;
@@ -35,8 +38,6 @@ namespace Project_API.Controllers;
 [Route("api/[controller]")]
 public class AuthController : BaseApiController
 {
-    private const int RefreshTokenCookieDays = 7;
-
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request)
     {
@@ -81,12 +82,12 @@ public class AuthController : BaseApiController
         if (request == null)
             return BadRequest(ApiResponse<object>.BadRequest("Login data is required"));
 
-        var (loginData, refreshToken) = await Mediator.Send(new LoginWithRefreshCommand(request));
+        var (loginData, refreshToken, refreshTokenExpiry) = await Mediator.Send(new LoginWithRefreshCommand(request));
 
         if (loginData == null)
             return BadRequest(ApiResponse<object>.BadRequest("Login failed"));
 
-        SetRefreshTokenCookie(refreshToken);
+        SetRefreshTokenCookie(refreshToken, refreshTokenExpiry);
         return Ok(ApiResponse<LoginResponse>.Ok(loginData, "Login successful"));
     }
 
@@ -98,12 +99,12 @@ public class AuthController : BaseApiController
             return BadRequest(ApiResponse<object>.Error(400, "Authorization code is required"));
         }
 
-        var (loginData, refreshToken) = await Mediator.Send(new GoogleLoginCommand(request.AuthCode, request.Role));
+        var (loginData, refreshToken, refreshTokenExpiry) = await Mediator.Send(new GoogleLoginCommand(request.AuthCode, request.Role, request.IsFromSignIn));
 
         if (loginData == null)
             return BadRequest(ApiResponse<object>.BadRequest("Google login failed"));
 
-        SetRefreshTokenCookie(refreshToken);
+        SetRefreshTokenCookie(refreshToken, refreshTokenExpiry);
         return Ok(ApiResponse<LoginResponse>.Ok(loginData, "Login successful"));
     }
 
@@ -114,9 +115,9 @@ public class AuthController : BaseApiController
         if (string.IsNullOrEmpty(refreshToken))
             return Unauthorized(ApiResponse<object>.Error(401, "Refresh token is missing. Please log in again."));
 
-        var (loginData, newRefreshToken) = await Mediator.Send(new RefreshTokenCommand(request.AccessToken, refreshToken));
+        var (loginData, newRefreshToken, newRefreshTokenExpiry) = await Mediator.Send(new RefreshTokenCommand(request.AccessToken, refreshToken));
 
-        SetRefreshTokenCookie(newRefreshToken);
+        SetRefreshTokenCookie(newRefreshToken, newRefreshTokenExpiry);
         return Ok(ApiResponse<LoginResponse>.Ok(loginData, "Token refreshed successfully"));
     }
 
@@ -138,6 +139,20 @@ public class AuthController : BaseApiController
 
         await Mediator.Send(new ResendEmailConfirmationCommand(request));
         return Ok(ApiResponse<object>.NoContent("Email sent successfully"));
+    }
+
+    [HttpPost("change-password")]
+    [Authorize]
+    public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordProfileRequest request)
+    {
+        if (request == null)
+            return BadRequest(ApiResponse<object>.BadRequest("Request body cannot be null"));
+
+        if (string.IsNullOrWhiteSpace(request.CurrentPassword) || string.IsNullOrWhiteSpace(request.NewPassword))
+            return BadRequest(ApiResponse<object>.BadRequest("Current password and new password are required"));
+
+        await Mediator.Send(new ChangePasswordCommand(request));
+        return Ok(ApiResponse<object>.NoContent("Password changed successfully"));
     }
 
     [HttpPost("forgot-password")]
@@ -185,14 +200,14 @@ public class AuthController : BaseApiController
         return Ok(ApiResponse<object>.Ok(data, "Authorization verified"));
     }
 
-    private void SetRefreshTokenCookie(string refreshToken)
+    private void SetRefreshTokenCookie(string refreshToken, DateTime expires)
     {
         var cookieOptions = new CookieOptions
         {
             HttpOnly = true,
             Secure = true,
             SameSite = SameSiteMode.None,
-            Expires = DateTime.UtcNow.AddDays(RefreshTokenCookieDays)
+            Expires = expires
         };
         Response.Cookies.Append("refreshToken", refreshToken, cookieOptions);
     }

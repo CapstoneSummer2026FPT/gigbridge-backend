@@ -47,8 +47,8 @@ public class RegisterCommandHandler : IRequestHandler<RegisterCommand, UserDTO>
         }
 
         var verificationKey = $"verified_email:{email.ToLowerInvariant()}";
-        var isVerified = await _cacheService.GetAsync<bool>(verificationKey, cancellationToken);
-        if (!isVerified)
+        var cachedOtp = await _cacheService.GetAsync<string>(verificationKey, cancellationToken);
+        if (string.IsNullOrEmpty(cachedOtp))
         {
             throw new BadRequestException("Email has not been verified or verification has expired.");
         }
