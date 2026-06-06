@@ -5,8 +5,6 @@ using Application.Features.Auth.Shared.DTOs;
 using Application.Features.Admin.Users.Shared.DTOs;
 using Application.Features.FAQCategories.Shared.DTOs;
 using Application.Features.FAQs.Shared.DTOs;
-
-
 using Application.Features.Profiles.FreelancerProfile.CreateFreelancerProfile.DTOs;
 using Application.Features.Profiles.ClientProfile.CreateClientProfile.DTOs;
 

@@ -3,10 +3,8 @@ using Application.Common.Interfaces.IService;
 using Infrastructure;
 using Infrastructure.Persistence;
 using Project_API.Extensions;
-using Project_API.Services;
 
 var builder = WebApplication.CreateBuilder(args);
-builder.Services.AddControllers();
 
 builder.Services.AddControllers();
 
@@ -19,7 +17,7 @@ builder.Services.AddJwtAuthentication(builder.Configuration);
 builder.Services.AddSwaggerWithBearerAuth();
 builder.Services.AddCorsPolicy();
 builder.Services.AddHttpContextAccessor();
-builder.Services.AddScoped<ICurrentUserService,CurrentUserService>();
+builder.Services.AddScoped<ICurrentUserService, Project_API.Services.CurrentUserService>();
 builder.Services.AddSignalR();
 
 if (!builder.Environment.IsEnvironment("Testing"))
