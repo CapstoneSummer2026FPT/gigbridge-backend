@@ -27,6 +27,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Folder Include="Features\Profiles\Freelancer\commands\" />
+    <Folder Include="Features\Profiles\Freelancer\DTOs\" />
     <Folder Include="Features\Proposals\Admin\" />
   </ItemGroup>
 
