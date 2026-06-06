@@ -4,6 +4,7 @@ using MediatR;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 namespace Project_API.Controllers.Common;
+
 [ApiController]
 [Route("api/[controller]")]
 public abstract class BaseApiController : ControllerBase {
