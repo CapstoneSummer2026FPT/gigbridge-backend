@@ -4,4 +4,4 @@ using MediatR;
 
 namespace Application.Features.Admin.Users.CreateNewUser.Commands;
 
-public record CreateNewUserCommand(CreateNewUser.DTOs.CreateUserRequest Request) : IRequest<AdminUserDto>, IRequireAdmin;
+public record CreateNewUserCommand(CreateNewUser.DTOs.CreateUserRequest Request) : IRequest<AdminUserDto>;

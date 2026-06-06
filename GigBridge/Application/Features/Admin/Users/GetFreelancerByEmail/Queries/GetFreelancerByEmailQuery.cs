@@ -4,4 +4,4 @@ using MediatR;
 
 namespace Application.Features.Admin.Users.GetFreelancerByEmail.Queries;
 
-public record GetFreelancerByEmailQuery(string Email) : IRequest<AdminUserDto?>, IRequireAdmin;
+public record GetFreelancerByEmailQuery(string Email) : IRequest<AdminUserDto?>;

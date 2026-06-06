@@ -4,4 +4,4 @@ using MediatR;
 
 namespace Application.Features.Admin.Users.UpdateUser.Commands;
 
-public record UpdateUserCommand(string Email, UpdateUser.DTOs.UpdateUserRequest Request) : IRequest<AdminUserDto?>, IRequireAdmin;
+public record UpdateUserCommand(string Email, UpdateUser.DTOs.UpdateUserRequest Request) : IRequest<AdminUserDto?>;

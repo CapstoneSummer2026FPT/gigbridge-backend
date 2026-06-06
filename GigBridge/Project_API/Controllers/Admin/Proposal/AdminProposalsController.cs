@@ -11,13 +11,10 @@ namespace Project_API.Controllers.Admin;
 [ApiController]
 [Route("api/Proposals")]
 [Authorize(Roles = nameof(UserRole.Admin))]
-public class AdminProposalsController : BaseApiController
-{
+public class AdminProposalsController : BaseApiController {
     [HttpGet("admin/all")]
-    public async Task<IActionResult> GetAllProposals([FromQuery] int pageIndex = 1, int pageSize = 10)
-    {
-        var query = new GetAllProposalsQuery
-        {
+    public async Task<IActionResult> GetAllProposals([FromQuery] int pageIndex = 1, int pageSize = 10) {
+        var query = new GetAllProposalsQuery {
             PageIndex = pageIndex,
             PageSize = pageSize
         };

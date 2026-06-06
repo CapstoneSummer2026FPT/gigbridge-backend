@@ -4,4 +4,4 @@ using MediatR;
 
 namespace Application.Features.Auth.ChangePassword.Commands;
 
-public record ChangePasswordCommand(ChangePasswordProfileRequest Request) : IRequest, IRequireAuthentication;
+public record ChangePasswordCommand(ChangePasswordProfileRequest Request) : IRequest;

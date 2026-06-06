@@ -5,11 +5,8 @@ using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
-<<<<<<<< HEAD:GigBridge/Application/Features/Admin/Jobposts/GetAllJobPosts/Queries/GetAllJobPostsQueryHandler.cs
-namespace Application.Features.Admin.Jobpost.GetAllJobPosts.Queries;
-========
+
 namespace Application.Features.Admin.JobPosts.GetAllJobPosts.Queries;
->>>>>>>> 2399a82a7a1aab05aec2a83005037a29808e8e3f:GigBridge/Application/Features/Admin/JobPosts/GetAll/Queries/GetAllJobPostsQueryHandler.cs
 
 public class GetAllJobPostsQueryHandler : IRequestHandler<GetAllJobPostsQuery, IEnumerable<JobPostSummaryDto>>
 {
