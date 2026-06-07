@@ -11,6 +11,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Application", "Application\
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Infrastructure", "Infrastructure\Infrastructure.csproj", "{830E3F81-3E18-44D7-A1BA-1C6EEBED457C}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Test_Gigbridge-Backend", "Test_Gigbridge-Backend\Test_Gigbridge-Backend.csproj", "{11507DAE-3225-4C8C-83BB-90AA353A46BC}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -33,6 +35,10 @@ Global
 		{830E3F81-3E18-44D7-A1BA-1C6EEBED457C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{830E3F81-3E18-44D7-A1BA-1C6EEBED457C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{830E3F81-3E18-44D7-A1BA-1C6EEBED457C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{11507DAE-3225-4C8C-83BB-90AA353A46BC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{11507DAE-3225-4C8C-83BB-90AA353A46BC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{11507DAE-3225-4C8C-83BB-90AA353A46BC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{11507DAE-3225-4C8C-83BB-90AA353A46BC}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

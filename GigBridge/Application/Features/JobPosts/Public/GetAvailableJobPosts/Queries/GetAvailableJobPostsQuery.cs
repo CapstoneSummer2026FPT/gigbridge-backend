@@ -1,0 +1,17 @@
+using Application.Features.JobPosts.Public.GetAvailableJobPosts.DTOs;
+using MediatR;
+using System.Collections.Generic;
+
+namespace Application.Features.JobPosts.Public.GetAvailableJobPosts.Queries;
+
+public record GetAvailableJobPostsQuery(
+    int PageIndex = 1,
+    int PageSize = 10,
+    string? Search = null,
+    int? BudgetType = null,
+    List<Guid>? SkillIds = null,
+    decimal? BudgetMin = null,
+    decimal? BudgetMax = null,
+    string? SortBy = null,
+    bool SortDesc = true
+) : IRequest<IEnumerable<JobPostSummaryDto>>;

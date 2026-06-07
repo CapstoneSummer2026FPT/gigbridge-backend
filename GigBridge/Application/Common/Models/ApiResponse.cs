@@ -44,4 +44,5 @@ public class ApiResponse<TData>
 
     public static ApiResponse<TData> Error(int statusCode, string message, object? errors = null) =>
         Create(false, statusCode, message, errors: errors);
+
 }

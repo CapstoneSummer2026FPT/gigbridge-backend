@@ -9,32 +9,32 @@ public static class ServiceCollectionExtensions
 {
     public static IServiceCollection AddJwtAuthentication(this IServiceCollection services, IConfiguration configuration)
     {
-        var jwtSettings = configuration.GetSection("Jwt");
-        var secretKey = Encoding.UTF8.GetBytes(jwtSettings["Key"]!);
+       var jwtSettings = configuration.GetSection("Jwt");
+       var secretKey = Encoding.UTF8.GetBytes(jwtSettings["Key"]!);
 
-        services.AddAuthentication(options =>
-        {
-            options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-            options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-        })
-        .AddJwtBearer(options =>
-        {
-            options.TokenValidationParameters = new TokenValidationParameters
-            {
-                ValidateIssuer = true,
-                ValidateAudience = true,
-                ValidateLifetime = true,
-                ValidateIssuerSigningKey = true,
+       services.AddAuthentication(options =>
+       {
+           options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+           options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+       })
+       .AddJwtBearer(options =>
+       {
+           options.TokenValidationParameters = new TokenValidationParameters
+           {
+               ValidateIssuer = true,
+               ValidateAudience = true,
+               ValidateLifetime = true,
+               ValidateIssuerSigningKey = true,
 
-                ValidIssuer = jwtSettings["Issuer"],
-                ValidAudience = jwtSettings["Audience"],
-                IssuerSigningKey = new SymmetricSecurityKey(secretKey),
+               ValidIssuer = jwtSettings["Issuer"],
+               ValidAudience = jwtSettings["Audience"],
+               IssuerSigningKey = new SymmetricSecurityKey(secretKey),
 
-                ClockSkew = TimeSpan.Zero
-            };
-        });
+               ClockSkew = TimeSpan.Zero
+           };
+       });
 
-        return services;
+       return services;
     }
 
     public static IServiceCollection AddSwaggerWithBearerAuth(this IServiceCollection services)

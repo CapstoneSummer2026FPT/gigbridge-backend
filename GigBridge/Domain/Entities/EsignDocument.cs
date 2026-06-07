@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
 namespace Domain.Entities;
@@ -37,8 +37,6 @@ public partial class EsignDocument
     public virtual Contract? Contracts { get; set; }
 
     public virtual EsignTemplate EsignTemplates { get; set; } = null!;
-
-    public virtual ICollection<EsignAuditTrail> EsignAuditTrails { get; set; } = new List<EsignAuditTrail>();
 
     public virtual ICollection<EsignSignature> EsignSignatures { get; set; } = new List<EsignSignature>();
 

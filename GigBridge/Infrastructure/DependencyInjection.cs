@@ -1,8 +1,12 @@
 using Application.Common.Interfaces;
+using Application.Common.Interfaces.IService;
 using Application.Common.Models;
 using Infrastructure.Persistence;
-using Infrastructure.Repositories;
-using Infrastructure.Services;
+using Infrastructure.Services.Auth;
+using Infrastructure.Services.Common;
+using Infrastructure.Services.Email;
+using Infrastructure.Services.Media;
+using Infrastructure.Services.Notification;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -24,20 +28,18 @@ public static class DependencyInjection
         services.AddScoped<IApplicationDbContext>(provider =>
             provider.GetRequiredService<GigbridgeDbContext>());
 
-        // Repositories
-        services.AddScoped<IUnitOfWork, UnitOfWork>();
 
         // Services
-        services.AddScoped<JwtService>();
-        services.AddScoped<IAuthService, AuthService>();
-        services.AddScoped<IGoogleAuthService, GoogleAuthService>();
+        services.AddScoped<IPasswordHasher, BCryptPasswordHasher>();
+        services.AddScoped<IJwtService, JwtService>();
+        services.AddHttpClient<IGoogleAuthService, GoogleAuthService>();
         services.AddScoped<IEmailService, EmailService>();
+        services.AddScoped<IAuthEmailSender, AuthEmailSender>();
         services.AddScoped<IMediaService, MediaService>();
         services.AddScoped<INotificationService, NotificationService>();
+        services.AddTransient<IDateTimeService, DateTimeService>();
 
-        // Options
-        services.Configure<CloudinaryOptions>(configuration.GetSection("Cloudinary"));
-
+        
         // External payment service
         services.AddKeyedSingleton("OrderClient", (sp, key) =>
         {

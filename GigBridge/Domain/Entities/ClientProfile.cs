@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
 namespace Domain.Entities;
@@ -27,8 +27,6 @@ public partial class ClientProfile
     public DateTime CreatedAt { get; set; }
 
     public DateTime? UpdatedAt { get; set; }
-
-    public virtual ICollection<AiinterviewSession> AiinterviewSessions { get; set; } = new List<AiinterviewSession>();
 
     public virtual ICollection<Contract> Contracts { get; set; } = new List<Contract>();
 

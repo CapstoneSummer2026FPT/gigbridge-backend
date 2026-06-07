@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
 namespace Domain.Entities;
@@ -8,6 +8,10 @@ public partial class User
     public Guid UserId { get; set; }
 
     public string FullName { get; set; } = null!;
+
+    public string Email { get; set; } = null!;
+
+    public string? Password { get; set; }
 
     public string? Avatar { get; set; }
 
@@ -22,15 +26,26 @@ public partial class User
 
     public bool IsActive { get; set; }
 
+    public bool IsSetup { get; set; }
+
     public string? PreferredLanguage { get; set; }
+
+    public string? Provider { get; set; }
+
+    public string? ProviderId { get; set; }
 
     public DateTime CreatedAt { get; set; }
 
     public DateTime? UpdatedAt { get; set; }
 
-    public virtual ICollection<AdminAuditLog> AdminAuditLogs { get; set; } = new List<AdminAuditLog>();
+    public string? EmailVerificationToken { get; set; }
 
-    public virtual ICollection<AiconversationSession> AiconversationSessions { get; set; } = new List<AiconversationSession>();
+    public DateTime? TokenExpiry { get; set; }
+    public string? RefreshTokenHash { get; set; }
+    public DateTime? RefreshTokenExpiry { get; set; }
+
+
+    public virtual ICollection<AdminAuditLog> AdminAuditLogs { get; set; } = new List<AdminAuditLog>();
 
     public virtual ClientProfile? ClientProfile { get; set; }
 
@@ -45,8 +60,6 @@ public partial class User
     public virtual ICollection<Dispute> DisputeResolvedByAdmins { get; set; } = new List<Dispute>();
 
     public virtual ICollection<Dispute> DisputeInitiators { get; set; } = new List<Dispute>();
-
-    public virtual ICollection<EsignAuditTrail> EsignAuditTrails { get; set; } = new List<EsignAuditTrail>();
 
     public virtual ICollection<EsignSignature> EsignSignatures { get; set; } = new List<EsignSignature>();
 

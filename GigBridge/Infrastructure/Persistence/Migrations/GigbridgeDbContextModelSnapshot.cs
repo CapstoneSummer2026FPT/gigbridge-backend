@@ -78,233 +78,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.ToTable("AdminAuditLogs");
                 });
 
-            modelBuilder.Entity("Domain.Entities.AiconversationSession", b =>
-                {
-                    b.Property<Guid>("AiconversationSessionsId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("AIConversationSessionsId")
-                        .HasDefaultValueSql("gen_random_uuid()");
-
-                    b.Property<Guid?>("ContractsId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("ContractsId");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasDefaultValueSql("now()");
-
-                    b.Property<bool?>("IsActive")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true);
-
-                    b.Property<Guid?>("JobPostsId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("JobPostsId");
-
-                    b.Property<string>("ModelUsed")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<string>("Title")
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
-
-                    b.Property<int?>("TotalTokensUsed")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0);
-
-                    b.Property<int>("Type")
-                        .HasColumnType("integer")
-                        .HasComment("Enum AISessionType: 0=WorkAssistant, 1=ProfileOptimizer, 2=JobPostGenerator, 3=ProposalGenerator");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("UserId");
-
-                    b.HasKey("AiconversationSessionsId")
-                        .HasName("AIConversationSessions_pkey");
-
-                    b.HasIndex("JobPostsId");
-
-                    b.HasIndex(new[] { "ContractsId" }, "IX_AIConversationSessions_ContractsId");
-
-                    b.HasIndex(new[] { "Type" }, "IX_AIConversationSessions_Type");
-
-                    b.HasIndex(new[] { "UserId" }, "IX_AIConversationSessions_UserId");
-
-                    b.HasIndex(new[] { "UserId", "Type" }, "IX_AIConversationSessions_UserId_Type");
-
-                    b.ToTable("AIConversationSessions", (string)null);
-                });
-
-            modelBuilder.Entity("Domain.Entities.AiinterviewQuestion", b =>
-                {
-                    b.Property<Guid>("AiinterviewQuestionsId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("AIInterviewQuestionsId")
-                        .HasDefaultValueSql("gen_random_uuid()");
-
-                    b.Property<string>("Aianalysis")
-                        .HasColumnType("text")
-                        .HasColumnName("AIAnalysis");
-
-                    b.Property<Guid>("AiinterviewSessionsId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("AIInterviewSessionsId");
-
-                    b.Property<string>("Answer")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("AnsweredAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasDefaultValueSql("now()");
-
-                    b.Property<string>("Question")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<decimal?>("Score")
-                        .HasPrecision(5, 2)
-                        .HasColumnType("numeric(5,2)");
-
-                    b.Property<int?>("SortOrder")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0);
-
-                    b.HasKey("AiinterviewQuestionsId")
-                        .HasName("AIInterviewQuestions_pkey");
-
-                    b.HasIndex(new[] { "AiinterviewSessionsId", "SortOrder" }, "IX_AIInterviewQuestions_SessionId_SortOrder");
-
-                    b.ToTable("AIInterviewQuestions", (string)null);
-                });
-
-            modelBuilder.Entity("Domain.Entities.AiinterviewSession", b =>
-                {
-                    b.Property<Guid>("AiinterviewSessionsId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("AIInterviewSessionsId")
-                        .HasDefaultValueSql("gen_random_uuid()");
-
-                    b.Property<string>("Aifeedback")
-                        .HasColumnType("text")
-                        .HasColumnName("AIFeedback");
-
-                    b.Property<Guid>("ClientProfilesId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("ClientProfilesId");
-
-                    b.Property<DateTime?>("CompletedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasDefaultValueSql("now()");
-
-                    b.Property<Guid>("FreelancerProfilesId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("FreelancerProfilesId");
-
-                    b.Property<Guid>("JobPostsId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("JobPostsId");
-
-                    b.Property<decimal?>("OverallScore")
-                        .HasPrecision(5, 2)
-                        .HasColumnType("numeric(5,2)");
-
-                    b.Property<Guid?>("ProposalsId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("ProposalsId");
-
-                    b.Property<DateTime?>("StartedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer")
-                        .HasComment("Enum InterviewStatus: 0=Pending, 1=InProgress, 2=Completed, 3=Cancelled");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("AiinterviewSessionsId")
-                        .HasName("AIInterviewSessions_pkey");
-
-                    b.HasIndex("ClientProfilesId");
-
-                    b.HasIndex("ProposalsId");
-
-                    b.HasIndex(new[] { "JobPostsId", "FreelancerProfilesId" }, "AIInterviewSessions_jp_JobPostsId_flPro_FreelancerProfilesI_key")
-                        .IsUnique();
-
-                    b.HasIndex(new[] { "FreelancerProfilesId" }, "IX_AIInterviewSessions_FreelancerProfilesId");
-
-                    b.HasIndex(new[] { "JobPostsId" }, "IX_AIInterviewSessions_JobPostsId");
-
-                    b.HasIndex(new[] { "Status" }, "IX_AIInterviewSessions_Status");
-
-                    b.ToTable("AIInterviewSessions", (string)null);
-                });
-
-            modelBuilder.Entity("Domain.Entities.Aimessage", b =>
-                {
-                    b.Property<Guid>("AimessagesId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("AIMessagesId")
-                        .HasDefaultValueSql("gen_random_uuid()");
-
-                    b.Property<Guid>("AiconversationSessionsId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("AIConversationSessionsId");
-
-                    b.Property<string>("Content")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasDefaultValueSql("now()");
-
-                    b.Property<string>("Role")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<int?>("SortOrder")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0);
-
-                    b.Property<int?>("TokensUsed")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0);
-
-                    b.HasKey("AimessagesId")
-                        .HasName("AIMessages_pkey");
-
-                    b.HasIndex(new[] { "AiconversationSessionsId", "SortOrder" }, "IX_AIMessages_SessionId_SortOrder");
-
-                    b.ToTable("AIMessages", (string)null);
-                });
-
             modelBuilder.Entity("Domain.Entities.Category", b =>
                 {
                     b.Property<Guid>("CategoriesId")
@@ -359,44 +132,6 @@ namespace Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("Categories");
-                });
-
-            modelBuilder.Entity("Domain.Entities.Certification", b =>
-                {
-                    b.Property<Guid>("CertificationsId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("CertificationsId")
-                        .HasDefaultValueSql("gen_random_uuid()");
-
-                    b.Property<string>("CredentialUrl")
-                        .HasColumnType("text");
-
-                    b.Property<DateOnly?>("ExpirationDate")
-                        .HasColumnType("date");
-
-                    b.Property<Guid>("FreelancerId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("FreelancerId");
-
-                    b.Property<DateOnly?>("IssueDate")
-                        .HasColumnType("date");
-
-                    b.Property<string>("IssuingOrganization")
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
-
-                    b.HasKey("CertificationsId")
-                        .HasName("Certifications_pkey");
-
-                    b.HasIndex(new[] { "FreelancerId" }, "IX_Certifications_FreelancerId");
-
-                    b.ToTable("Certifications");
                 });
 
             modelBuilder.Entity("Domain.Entities.ClientProfile", b =>
@@ -741,99 +476,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.ToTable("DisputeMessages");
                 });
 
-            modelBuilder.Entity("Domain.Entities.Education", b =>
-                {
-                    b.Property<Guid>("EducationsId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("EducationsId")
-                        .HasDefaultValueSql("gen_random_uuid()");
-
-                    b.Property<string>("Degree")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("Description")
-                        .HasColumnType("text");
-
-                    b.Property<DateOnly?>("EndDate")
-                        .HasColumnType("date");
-
-                    b.Property<string>("FieldOfStudy")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<Guid>("FreelancerId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("FreelancerId");
-
-                    b.Property<string>("Institution")
-                        .IsRequired()
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
-
-                    b.Property<DateOnly?>("StartDate")
-                        .HasColumnType("date");
-
-                    b.HasKey("EducationsId")
-                        .HasName("Educations_pkey");
-
-                    b.HasIndex(new[] { "FreelancerId" }, "IX_Educations_FreelancerId");
-
-                    b.ToTable("Educations");
-                });
-
-            modelBuilder.Entity("Domain.Entities.EsignAuditTrail", b =>
-                {
-                    b.Property<Guid>("EsignAuditTrailsId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("ESignAuditTrailsId")
-                        .HasDefaultValueSql("gen_random_uuid()");
-
-                    b.Property<int>("Action")
-                        .HasColumnType("integer")
-                        .HasComment("Enum ESignAuditAction: 0=DocumentCreated, 1=DocumentViewed, 2=SignatureAdded, 3=SignatureDeclined, 4=DocumentFinalized, 5=DocumentExported, 6=DocumentVoided");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasDefaultValueSql("now()");
-
-                    b.Property<string>("Description")
-                        .HasColumnType("text");
-
-                    b.Property<Guid>("EsignDocumentsId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("ESignDocumentsId");
-
-                    b.Property<string>("IpAddress")
-                        .HasMaxLength(45)
-                        .HasColumnType("character varying(45)");
-
-                    b.Property<string>("Metadata")
-                        .HasColumnType("jsonb");
-
-                    b.Property<string>("UserAgent")
-                        .HasColumnType("text");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("UserId");
-
-                    b.HasKey("EsignAuditTrailsId")
-                        .HasName("ESignAuditTrails_pkey");
-
-                    b.HasIndex(new[] { "Action" }, "IX_ESignAuditTrails_Action");
-
-                    b.HasIndex(new[] { "EsignDocumentsId", "CreatedAt" }, "IX_ESignAuditTrails_DocId_CreatedAt")
-                        .IsDescending(false, true);
-
-                    b.HasIndex(new[] { "UserId" }, "IX_ESignAuditTrails_UserId");
-
-                    b.ToTable("ESignAuditTrails", (string)null);
-                });
-
             modelBuilder.Entity("Domain.Entities.EsignDocument", b =>
                 {
                     b.Property<Guid>("EsignDocumentsId")
@@ -1047,11 +689,12 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.Faq", b =>
                 {
-                    b.Property<Guid>("FaqsId")
+                    b.Property<int>("FaqsId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("FAQsId")
-                        .HasDefaultValueSql("gen_random_uuid()");
+                        .HasColumnType("integer")
+                        .HasColumnName("FAQsId");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("FaqsId"));
 
                     b.Property<string>("Answer")
                         .IsRequired()
@@ -1065,8 +708,8 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasDefaultValueSql("now()");
 
-                    b.Property<Guid>("FaqcategoriesId")
-                        .HasColumnType("uuid")
+                    b.Property<int>("FaqcategoriesId")
+                        .HasColumnType("integer")
                         .HasColumnName("FAQCategoriesId");
 
                     b.Property<bool?>("IsActive")
@@ -1101,11 +744,12 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.Faqcategory", b =>
                 {
-                    b.Property<Guid>("FaqcategoriesId")
+                    b.Property<int>("FaqcategoriesId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("FAQCategoriesId")
-                        .HasDefaultValueSql("gen_random_uuid()");
+                        .HasColumnType("integer")
+                        .HasColumnName("FAQCategoriesId");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("FaqcategoriesId"));
 
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
@@ -1802,36 +1446,20 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnName("PortfolioItemsId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
-                    b.Property<Guid?>("CategoryId")
+                    b.Property<Guid?>("CategoryCategoriesId")
                         .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasDefaultValueSql("now()");
-
-                    b.Property<string>("Description")
-                        .HasColumnType("text");
 
                     b.Property<Guid>("FreelancerId")
                         .HasColumnType("uuid")
                         .HasColumnName("FreelancerId");
 
-                    b.Property<string>("ImageUrls")
-                        .HasColumnType("text");
-
                     b.Property<string>("ProjectUrl")
                         .HasColumnType("text");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
 
                     b.HasKey("PortfolioItemsId")
                         .HasName("PortfolioItems_pkey");
 
-                    b.HasIndex(new[] { "CategoryId" }, "IX_PortfolioItems_CategoryId");
+                    b.HasIndex("CategoryCategoriesId");
 
                     b.HasIndex(new[] { "FreelancerId" }, "IX_PortfolioItems_FreelancerId");
 
@@ -2368,6 +1996,14 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasDefaultValueSql("now()");
 
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("EmailVerificationToken")
+                        .HasColumnType("text");
+
                     b.Property<string>("FullName")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -2383,6 +2019,13 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(false);
 
+                    b.Property<bool>("IsSetup")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Password")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
                     b.Property<string>("PhoneNumber")
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
@@ -2393,15 +2036,33 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(5)")
                         .HasDefaultValueSql("'vi'::character varying");
 
+                    b.Property<string>("Provider")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ProviderId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("RefreshTokenExpiry")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RefreshTokenHash")
+                        .HasColumnType("text");
+
                     b.Property<int>("Role")
                         .HasColumnType("integer")
                         .HasComment("Enum UserRole: 0=Client, 1=Freelancer, 2=Admin");
+
+                    b.Property<DateTime?>("TokenExpiry")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("UserId")
                         .HasName("Users_pkey");
+
+                    b.HasIndex(new[] { "Email" }, "IX_Users_Email")
+                        .IsUnique();
 
                     b.HasIndex(new[] { "IsActive" }, "IX_Users_IsActive");
 
@@ -2465,87 +2126,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("Admin");
                 });
 
-            modelBuilder.Entity("Domain.Entities.AiconversationSession", b =>
-                {
-                    b.HasOne("Domain.Entities.Contract", "Contracts")
-                        .WithMany("AiconversationSessions")
-                        .HasForeignKey("ContractsId")
-                        .HasConstraintName("AIConversationSessions_cont_ContractsId_fkey");
-
-                    b.HasOne("Domain.Entities.JobPost", "JobPosts")
-                        .WithMany("AiconversationSessions")
-                        .HasForeignKey("JobPostsId")
-                        .HasConstraintName("AIConversationSessions_jp_JobPostsId_fkey");
-
-                    b.HasOne("Domain.Entities.User", "User")
-                        .WithMany("AiconversationSessions")
-                        .HasForeignKey("UserId")
-                        .IsRequired()
-                        .HasConstraintName("AIConversationSessions_usr_UserId_fkey");
-
-                    b.Navigation("Contracts");
-
-                    b.Navigation("JobPosts");
-
-                    b.Navigation("User");
-                });
-
-            modelBuilder.Entity("Domain.Entities.AiinterviewQuestion", b =>
-                {
-                    b.HasOne("Domain.Entities.AiinterviewSession", "AiinterviewSessions")
-                        .WithMany("AiinterviewQuestions")
-                        .HasForeignKey("AiinterviewSessionsId")
-                        .IsRequired()
-                        .HasConstraintName("AIInterviewQuestions_aiIntv_AIInterviewSessionsId_fkey");
-
-                    b.Navigation("AiinterviewSessions");
-                });
-
-            modelBuilder.Entity("Domain.Entities.AiinterviewSession", b =>
-                {
-                    b.HasOne("Domain.Entities.ClientProfile", "ClientProfiles")
-                        .WithMany("AiinterviewSessions")
-                        .HasForeignKey("ClientProfilesId")
-                        .IsRequired()
-                        .HasConstraintName("AIInterviewSessions_clPro_ClientProfilesId_fkey");
-
-                    b.HasOne("Domain.Entities.FreelancerProfile", "FreelancerProfiles")
-                        .WithMany("AiinterviewSessions")
-                        .HasForeignKey("FreelancerProfilesId")
-                        .IsRequired()
-                        .HasConstraintName("AIInterviewSessions_flPro_FreelancerProfilesId_fkey");
-
-                    b.HasOne("Domain.Entities.JobPost", "JobPosts")
-                        .WithMany("AiinterviewSessions")
-                        .HasForeignKey("JobPostsId")
-                        .IsRequired()
-                        .HasConstraintName("AIInterviewSessions_jp_JobPostsId_fkey");
-
-                    b.HasOne("Domain.Entities.Proposal", "Proposals")
-                        .WithMany("AiinterviewSessions")
-                        .HasForeignKey("ProposalsId")
-                        .HasConstraintName("AIInterviewSessions_propo_ProposalsId_fkey");
-
-                    b.Navigation("ClientProfiles");
-
-                    b.Navigation("FreelancerProfiles");
-
-                    b.Navigation("JobPosts");
-
-                    b.Navigation("Proposals");
-                });
-
-            modelBuilder.Entity("Domain.Entities.Aimessage", b =>
-                {
-                    b.HasOne("Domain.Entities.AiconversationSession", "AiconversationSessions")
-                        .WithMany("Aimessages")
-                        .HasForeignKey("AiconversationSessionsId")
-                        .IsRequired()
-                        .HasConstraintName("AIMessages_aiSess_AIConversationSessionsId_fkey");
-
-                    b.Navigation("AiconversationSessions");
-                });
-
             modelBuilder.Entity("Domain.Entities.Category", b =>
                 {
                     b.HasOne("Domain.Entities.Category", "ParentCategory")
@@ -2554,17 +2134,6 @@ namespace Infrastructure.Persistence.Migrations
                         .HasConstraintName("Categories_ParentCategoryId_fkey");
 
                     b.Navigation("ParentCategory");
-                });
-
-            modelBuilder.Entity("Domain.Entities.Certification", b =>
-                {
-                    b.HasOne("Domain.Entities.FreelancerProfile", "Freelancer")
-                        .WithMany("Certifications")
-                        .HasForeignKey("FreelancerId")
-                        .IsRequired()
-                        .HasConstraintName("Certifications_fl_FreelancerId_fkey");
-
-                    b.Navigation("Freelancer");
                 });
 
             modelBuilder.Entity("Domain.Entities.ClientProfile", b =>
@@ -2707,36 +2276,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("Disputes");
 
                     b.Navigation("Sender");
-                });
-
-            modelBuilder.Entity("Domain.Entities.Education", b =>
-                {
-                    b.HasOne("Domain.Entities.FreelancerProfile", "Freelancer")
-                        .WithMany("Educations")
-                        .HasForeignKey("FreelancerId")
-                        .IsRequired()
-                        .HasConstraintName("Educations_fl_FreelancerId_fkey");
-
-                    b.Navigation("Freelancer");
-                });
-
-            modelBuilder.Entity("Domain.Entities.EsignAuditTrail", b =>
-                {
-                    b.HasOne("Domain.Entities.EsignDocument", "EsignDocuments")
-                        .WithMany("EsignAuditTrails")
-                        .HasForeignKey("EsignDocumentsId")
-                        .IsRequired()
-                        .HasConstraintName("ESignAuditTrails_eDoc_ESignDocumentsId_fkey");
-
-                    b.HasOne("Domain.Entities.User", "User")
-                        .WithMany("EsignAuditTrails")
-                        .HasForeignKey("UserId")
-                        .IsRequired()
-                        .HasConstraintName("ESignAuditTrails_usr_UserId_fkey");
-
-                    b.Navigation("EsignDocuments");
-
-                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Domain.Entities.EsignDocument", b =>
@@ -2985,18 +2524,15 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.PortfolioItem", b =>
                 {
-                    b.HasOne("Domain.Entities.Category", "Category")
+                    b.HasOne("Domain.Entities.Category", null)
                         .WithMany("PortfolioItems")
-                        .HasForeignKey("CategoryId")
-                        .HasConstraintName("PortfolioItems_CategoryId_fkey");
+                        .HasForeignKey("CategoryCategoriesId");
 
                     b.HasOne("Domain.Entities.FreelancerProfile", "Freelancer")
                         .WithMany("PortfolioItems")
                         .HasForeignKey("FreelancerId")
                         .IsRequired()
                         .HasConstraintName("PortfolioItems_fl_FreelancerId_fkey");
-
-                    b.Navigation("Category");
 
                     b.Navigation("Freelancer");
                 });
@@ -3166,16 +2702,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("Freelancer");
                 });
 
-            modelBuilder.Entity("Domain.Entities.AiconversationSession", b =>
-                {
-                    b.Navigation("Aimessages");
-                });
-
-            modelBuilder.Entity("Domain.Entities.AiinterviewSession", b =>
-                {
-                    b.Navigation("AiinterviewQuestions");
-                });
-
             modelBuilder.Entity("Domain.Entities.Category", b =>
                 {
                     b.Navigation("InverseParentCategory");
@@ -3189,8 +2715,6 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.ClientProfile", b =>
                 {
-                    b.Navigation("AiinterviewSessions");
-
                     b.Navigation("Contracts");
 
                     b.Navigation("JobPosts");
@@ -3198,8 +2722,6 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.Contract", b =>
                 {
-                    b.Navigation("AiconversationSessions");
-
                     b.Navigation("Conversations");
 
                     b.Navigation("Disputes");
@@ -3225,8 +2747,6 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.EsignDocument", b =>
                 {
-                    b.Navigation("EsignAuditTrails");
-
                     b.Navigation("EsignSignatures");
                 });
 
@@ -3242,13 +2762,7 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.FreelancerProfile", b =>
                 {
-                    b.Navigation("AiinterviewSessions");
-
-                    b.Navigation("Certifications");
-
                     b.Navigation("Contracts");
-
-                    b.Navigation("Educations");
 
                     b.Navigation("FreelancerSkills");
 
@@ -3263,10 +2777,6 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.JobPost", b =>
                 {
-                    b.Navigation("AiconversationSessions");
-
-                    b.Navigation("AiinterviewSessions");
-
                     b.Navigation("Contracts");
 
                     b.Navigation("EsignDocuments");
@@ -3296,8 +2806,6 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.Proposal", b =>
                 {
-                    b.Navigation("AiinterviewSessions");
-
                     b.Navigation("Contract");
 
                     b.Navigation("ProposalAttachments");
@@ -3319,8 +2827,6 @@ namespace Infrastructure.Persistence.Migrations
                 {
                     b.Navigation("AdminAuditLogs");
 
-                    b.Navigation("AiconversationSessions");
-
                     b.Navigation("ClientProfile");
 
                     b.Navigation("ConversationUser1s");
@@ -3334,8 +2840,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("DisputeMessages");
 
                     b.Navigation("DisputeResolvedByAdmins");
-
-                    b.Navigation("EsignAuditTrails");
 
                     b.Navigation("EsignSignatures");
 

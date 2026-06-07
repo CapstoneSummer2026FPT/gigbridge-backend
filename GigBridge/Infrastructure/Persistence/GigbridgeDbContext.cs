@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using Application.Common.Interfaces;
 using Domain.Entities;
@@ -15,17 +15,7 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
 
     public virtual DbSet<AdminAuditLog> AdminAuditLogs { get; set; }
 
-    public virtual DbSet<AiconversationSession> AiconversationSessions { get; set; }
-
-    public virtual DbSet<AiinterviewQuestion> AiinterviewQuestions { get; set; }
-
-    public virtual DbSet<AiinterviewSession> AiinterviewSessions { get; set; }
-
-    public virtual DbSet<Aimessage> Aimessages { get; set; }
-
     public virtual DbSet<Category> Categories { get; set; }
-
-    public virtual DbSet<Certification> Certifications { get; set; }
 
     public virtual DbSet<ClientProfile> ClientProfiles { get; set; }
 
@@ -38,10 +28,6 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
     public virtual DbSet<DisputeEvidence> DisputeEvidences { get; set; }
 
     public virtual DbSet<DisputeMessage> DisputeMessages { get; set; }
-
-    public virtual DbSet<Education> Educations { get; set; }
-
-    public virtual DbSet<EsignAuditTrail> EsignAuditTrails { get; set; }
 
     public virtual DbSet<EsignDocument> EsignDocuments { get; set; }
 
@@ -134,138 +120,6 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
                 .HasConstraintName("AdminAuditLogs_usr_AdminId_fkey");
         });
 
-        modelBuilder.Entity<AiconversationSession>(entity =>
-        {
-            entity.HasKey(e => e.AiconversationSessionsId).HasName("AIConversationSessions_pkey");
-
-            entity.ToTable("AIConversationSessions");
-
-            entity.HasIndex(e => e.ContractsId, "IX_AIConversationSessions_ContractsId");
-
-            entity.HasIndex(e => e.Type, "IX_AIConversationSessions_Type");
-
-            entity.HasIndex(e => e.UserId, "IX_AIConversationSessions_UserId");
-
-            entity.HasIndex(e => new { e.UserId, e.Type }, "IX_AIConversationSessions_UserId_Type");
-
-            entity.Property(e => e.AiconversationSessionsId)
-                .HasDefaultValueSql("gen_random_uuid()")
-                .HasColumnName("AIConversationSessionsId");
-            entity.Property(e => e.ContractsId).HasColumnName("ContractsId");
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
-            entity.Property(e => e.IsActive).HasDefaultValue(true);
-            entity.Property(e => e.JobPostsId).HasColumnName("JobPostsId");
-            entity.Property(e => e.ModelUsed).HasMaxLength(100);
-            entity.Property(e => e.Title).HasMaxLength(300);
-            entity.Property(e => e.TotalTokensUsed).HasDefaultValue(0);
-            entity.Property(e => e.Type).HasComment("Enum AISessionType: 0=WorkAssistant, 1=ProfileOptimizer, 2=JobPostGenerator, 3=ProposalGenerator");
-            entity.Property(e => e.UserId).HasColumnName("UserId");
-
-            entity.HasOne(d => d.Contracts).WithMany(p => p.AiconversationSessions)
-                .HasForeignKey(d => d.ContractsId)
-                .HasConstraintName("AIConversationSessions_cont_ContractsId_fkey");
-
-            entity.HasOne(d => d.JobPosts).WithMany(p => p.AiconversationSessions)
-                .HasForeignKey(d => d.JobPostsId)
-                .HasConstraintName("AIConversationSessions_jp_JobPostsId_fkey");
-
-            entity.HasOne(d => d.User).WithMany(p => p.AiconversationSessions)
-                .HasForeignKey(d => d.UserId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("AIConversationSessions_usr_UserId_fkey");
-        });
-
-        modelBuilder.Entity<AiinterviewQuestion>(entity =>
-        {
-            entity.HasKey(e => e.AiinterviewQuestionsId).HasName("AIInterviewQuestions_pkey");
-
-            entity.ToTable("AIInterviewQuestions");
-
-            entity.HasIndex(e => new { e.AiinterviewSessionsId, e.SortOrder }, "IX_AIInterviewQuestions_SessionId_SortOrder");
-
-            entity.Property(e => e.AiinterviewQuestionsId)
-                .HasDefaultValueSql("gen_random_uuid()")
-                .HasColumnName("AIInterviewQuestionsId");
-            entity.Property(e => e.AiinterviewSessionsId).HasColumnName("AIInterviewSessionsId");
-            entity.Property(e => e.Aianalysis).HasColumnName("AIAnalysis");
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
-            entity.Property(e => e.Score).HasPrecision(5, 2);
-            entity.Property(e => e.SortOrder).HasDefaultValue(0);
-
-            entity.HasOne(d => d.AiinterviewSessions).WithMany(p => p.AiinterviewQuestions)
-                .HasForeignKey(d => d.AiinterviewSessionsId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("AIInterviewQuestions_aiIntv_AIInterviewSessionsId_fkey");
-        });
-
-        modelBuilder.Entity<AiinterviewSession>(entity =>
-        {
-            entity.HasKey(e => e.AiinterviewSessionsId).HasName("AIInterviewSessions_pkey");
-
-            entity.ToTable("AIInterviewSessions");
-
-            entity.HasIndex(e => new { e.JobPostsId, e.FreelancerProfilesId }, "AIInterviewSessions_jp_JobPostsId_flPro_FreelancerProfilesI_key").IsUnique();
-
-            entity.HasIndex(e => e.FreelancerProfilesId, "IX_AIInterviewSessions_FreelancerProfilesId");
-
-            entity.HasIndex(e => e.JobPostsId, "IX_AIInterviewSessions_JobPostsId");
-
-            entity.HasIndex(e => e.Status, "IX_AIInterviewSessions_Status");
-
-            entity.Property(e => e.AiinterviewSessionsId)
-                .HasDefaultValueSql("gen_random_uuid()")
-                .HasColumnName("AIInterviewSessionsId");
-            entity.Property(e => e.Aifeedback).HasColumnName("AIFeedback");
-            entity.Property(e => e.ClientProfilesId).HasColumnName("ClientProfilesId");
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
-            entity.Property(e => e.FreelancerProfilesId).HasColumnName("FreelancerProfilesId");
-            entity.Property(e => e.JobPostsId).HasColumnName("JobPostsId");
-            entity.Property(e => e.OverallScore).HasPrecision(5, 2);
-            entity.Property(e => e.ProposalsId).HasColumnName("ProposalsId");
-            entity.Property(e => e.Status).HasComment("Enum InterviewStatus: 0=Pending, 1=InProgress, 2=Completed, 3=Cancelled");
-
-            entity.HasOne(d => d.ClientProfiles).WithMany(p => p.AiinterviewSessions)
-                .HasForeignKey(d => d.ClientProfilesId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("AIInterviewSessions_clPro_ClientProfilesId_fkey");
-
-            entity.HasOne(d => d.FreelancerProfiles).WithMany(p => p.AiinterviewSessions)
-                .HasForeignKey(d => d.FreelancerProfilesId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("AIInterviewSessions_flPro_FreelancerProfilesId_fkey");
-
-            entity.HasOne(d => d.JobPosts).WithMany(p => p.AiinterviewSessions)
-                .HasForeignKey(d => d.JobPostsId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("AIInterviewSessions_jp_JobPostsId_fkey");
-
-            entity.HasOne(d => d.Proposals).WithMany(p => p.AiinterviewSessions)
-                .HasForeignKey(d => d.ProposalsId)
-                .HasConstraintName("AIInterviewSessions_propo_ProposalsId_fkey");
-        });
-
-        modelBuilder.Entity<Aimessage>(entity =>
-        {
-            entity.HasKey(e => e.AimessagesId).HasName("AIMessages_pkey");
-
-            entity.ToTable("AIMessages");
-
-            entity.HasIndex(e => new { e.AiconversationSessionsId, e.SortOrder }, "IX_AIMessages_SessionId_SortOrder");
-
-            entity.Property(e => e.AimessagesId)
-                .HasDefaultValueSql("gen_random_uuid()")
-                .HasColumnName("AIMessagesId");
-            entity.Property(e => e.AiconversationSessionsId).HasColumnName("AIConversationSessionsId");
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
-            entity.Property(e => e.Role).HasMaxLength(20);
-            entity.Property(e => e.SortOrder).HasDefaultValue(0);
-            entity.Property(e => e.TokensUsed).HasDefaultValue(0);
-
-            entity.HasOne(d => d.AiconversationSessions).WithMany(p => p.Aimessages)
-                .HasForeignKey(d => d.AiconversationSessionsId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("AIMessages_aiSess_AIConversationSessionsId_fkey");
-        });
 
         modelBuilder.Entity<Category>(entity =>
         {
@@ -290,25 +144,6 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.HasOne(d => d.ParentCategory).WithMany(p => p.InverseParentCategory)
                 .HasForeignKey(d => d.ParentCategoryId)
                 .HasConstraintName("Categories_ParentCategoryId_fkey");
-        });
-
-        modelBuilder.Entity<Certification>(entity =>
-        {
-            entity.HasKey(e => e.CertificationsId).HasName("Certifications_pkey");
-
-            entity.HasIndex(e => e.FreelancerId, "IX_Certifications_FreelancerId");
-
-            entity.Property(e => e.CertificationsId)
-                .HasDefaultValueSql("gen_random_uuid()")
-                .HasColumnName("CertificationsId");
-            entity.Property(e => e.FreelancerId).HasColumnName("FreelancerId");
-            entity.Property(e => e.IssuingOrganization).HasMaxLength(300);
-            entity.Property(e => e.Name).HasMaxLength(300);
-
-            entity.HasOne(d => d.Freelancer).WithMany(p => p.Certifications)
-                .HasForeignKey(d => d.FreelancerId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("Certifications_fl_FreelancerId_fkey");
         });
 
         modelBuilder.Entity<ClientProfile>(entity =>
@@ -521,58 +356,7 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
                 .HasConstraintName("DisputeMessages_usr_SenderId_fkey");
         });
 
-        modelBuilder.Entity<Education>(entity =>
-        {
-            entity.HasKey(e => e.EducationsId).HasName("Educations_pkey");
 
-            entity.HasIndex(e => e.FreelancerId, "IX_Educations_FreelancerId");
-
-            entity.Property(e => e.EducationsId)
-                .HasDefaultValueSql("gen_random_uuid()")
-                .HasColumnName("EducationsId");
-            entity.Property(e => e.Degree).HasMaxLength(200);
-            entity.Property(e => e.FieldOfStudy).HasMaxLength(200);
-            entity.Property(e => e.FreelancerId).HasColumnName("FreelancerId");
-            entity.Property(e => e.Institution).HasMaxLength(300);
-
-            entity.HasOne(d => d.Freelancer).WithMany(p => p.Educations)
-                .HasForeignKey(d => d.FreelancerId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("Educations_fl_FreelancerId_fkey");
-        });
-
-        modelBuilder.Entity<EsignAuditTrail>(entity =>
-        {
-            entity.HasKey(e => e.EsignAuditTrailsId).HasName("ESignAuditTrails_pkey");
-
-            entity.ToTable("ESignAuditTrails");
-
-            entity.HasIndex(e => e.Action, "IX_ESignAuditTrails_Action");
-
-            entity.HasIndex(e => new { e.EsignDocumentsId, e.CreatedAt }, "IX_ESignAuditTrails_DocId_CreatedAt").IsDescending(false, true);
-
-            entity.HasIndex(e => e.UserId, "IX_ESignAuditTrails_UserId");
-
-            entity.Property(e => e.EsignAuditTrailsId)
-                .HasDefaultValueSql("gen_random_uuid()")
-                .HasColumnName("ESignAuditTrailsId");
-            entity.Property(e => e.Action).HasComment("Enum ESignAuditAction: 0=DocumentCreated, 1=DocumentViewed, 2=SignatureAdded, 3=SignatureDeclined, 4=DocumentFinalized, 5=DocumentExported, 6=DocumentVoided");
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
-            entity.Property(e => e.EsignDocumentsId).HasColumnName("ESignDocumentsId");
-            entity.Property(e => e.IpAddress).HasMaxLength(45);
-            entity.Property(e => e.Metadata).HasColumnType("jsonb");
-            entity.Property(e => e.UserId).HasColumnName("UserId");
-
-            entity.HasOne(d => d.EsignDocuments).WithMany(p => p.EsignAuditTrails)
-                .HasForeignKey(d => d.EsignDocumentsId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("ESignAuditTrails_eDoc_ESignDocumentsId_fkey");
-
-            entity.HasOne(d => d.User).WithMany(p => p.EsignAuditTrails)
-                .HasForeignKey(d => d.UserId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("ESignAuditTrails_usr_UserId_fkey");
-        });
 
         modelBuilder.Entity<EsignDocument>(entity =>
         {
@@ -696,7 +480,7 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.HasIndex(e => e.IsActive, "IX_FAQs_IsActive");
 
             entity.Property(e => e.FaqsId)
-                .HasDefaultValueSql("gen_random_uuid()")
+                .UseIdentityByDefaultColumn()
                 .HasColumnName("FAQsId");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.FaqcategoriesId).HasColumnName("FAQCategoriesId");
@@ -718,7 +502,7 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.HasIndex(e => e.Slug, "IX_FAQCategories_Slug").IsUnique();
 
             entity.Property(e => e.FaqcategoriesId)
-                .HasDefaultValueSql("gen_random_uuid()")
+                .UseIdentityByDefaultColumn()
                 .HasColumnName("FAQCategoriesId");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.IsActive).HasDefaultValue(true);
@@ -1072,20 +856,12 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
         {
             entity.HasKey(e => e.PortfolioItemsId).HasName("PortfolioItems_pkey");
 
-            entity.HasIndex(e => e.CategoryId, "IX_PortfolioItems_CategoryId");
-
             entity.HasIndex(e => e.FreelancerId, "IX_PortfolioItems_FreelancerId");
 
             entity.Property(e => e.PortfolioItemsId)
                 .HasDefaultValueSql("gen_random_uuid()")
                 .HasColumnName("PortfolioItemsId");
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.FreelancerId).HasColumnName("FreelancerId");
-            entity.Property(e => e.Title).HasMaxLength(300);
-
-            entity.HasOne(d => d.Category).WithMany(p => p.PortfolioItems)
-                .HasForeignKey(d => d.CategoryId)
-                .HasConstraintName("PortfolioItems_CategoryId_fkey");
 
             entity.HasOne(d => d.Freelancer).WithMany(p => p.PortfolioItems)
                 .HasForeignKey(d => d.FreelancerId)
@@ -1391,11 +1167,15 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
 
             entity.HasIndex(e => e.Role, "IX_Users_Role");
 
+            entity.HasIndex(e => e.Email, "IX_Users_Email").IsUnique();
+
             entity.Property(e => e.UserId)
                 .HasDefaultValueSql("gen_random_uuid()")
                 .HasColumnName("UserId");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.FullName).HasMaxLength(200);
+            entity.Property(e => e.Email).HasMaxLength(255);
+            entity.Property(e => e.Password).HasMaxLength(255);
             entity.Property(e => e.IsActive).HasDefaultValue(true);
             entity.Property(e => e.IsEmailVerified).HasDefaultValue(false);
             entity.Property(e => e.PhoneNumber).HasMaxLength(20);

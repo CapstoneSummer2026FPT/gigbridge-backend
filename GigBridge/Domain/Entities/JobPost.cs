@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
 namespace Domain.Entities;
@@ -43,7 +43,7 @@ public partial class JobPost
     public string? Location { get; set; }
 
     /// <summary>
-    /// Enum JobPostStatus: 0=Draft, 1=Open, 2=InProgress, 3=Closed, 4=Cancelled
+    /// Enum JobPostStatus: 0=Draft (Client), 1=Open (All), 2=Closed(Client), 3=Cancelled(Client,Admin)
     /// </summary>
     public int Status { get; set; }
 
@@ -59,10 +59,6 @@ public partial class JobPost
     public DateTime CreatedAt { get; set; }
 
     public DateTime? UpdatedAt { get; set; }
-
-    public virtual ICollection<AiconversationSession> AiconversationSessions { get; set; } = new List<AiconversationSession>();
-
-    public virtual ICollection<AiinterviewSession> AiinterviewSessions { get; set; } = new List<AiinterviewSession>();
 
     public virtual Category? Category { get; set; }
 

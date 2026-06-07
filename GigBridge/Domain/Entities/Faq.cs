@@ -5,9 +5,9 @@ namespace Domain.Entities;
 
 public partial class Faq
 {
-    public Guid FaqsId { get; set; }
+    public int FaqsId { get; set; }
 
-    public Guid FaqcategoriesId { get; set; }
+    public int FaqcategoriesId { get; set; }
 
     public string Question { get; set; } = null!;
 
