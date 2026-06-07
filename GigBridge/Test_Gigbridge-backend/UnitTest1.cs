@@ -1,12 +1,8 @@
-namespace Test_Gigbridge_backend {
-    public class Tests {
-        [SetUp]
-        public void Setup() {
-        }
-
-        [Test]
+namespace Test_Gigbridge_Backend {
+    public class UnitTest1 {
+        [Fact]
         public void Test1() {
-            Assert.Pass();
+
         }
     }
 }
