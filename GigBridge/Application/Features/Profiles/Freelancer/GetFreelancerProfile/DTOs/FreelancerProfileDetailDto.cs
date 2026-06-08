@@ -21,6 +21,7 @@ public class FreelancerProfileDetailDto
     public string? UserEmail { get; set; }
     public string? UserAvatar { get; set; }
     public double Rating { get; set; }
+    public int EloPoints { get; set; }
 
     public List<FreelancerSkillDto> Skills { get; set; } = new();
     public List<PortfolioItemDto> PortfolioItems { get; set; } = new();

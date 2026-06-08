@@ -85,6 +85,10 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
 
     public virtual DbSet<SubscriptionPlan> SubscriptionPlans { get; set; }
 
+    public virtual DbSet<UserEloPointTransaction> UserEloPointTransactions { get; set; }
+
+    public virtual DbSet<UserEloScore> UserEloScores { get; set; }
+
     public virtual DbSet<User> Users { get; set; }
 
     public virtual DbSet<WorkExperience> WorkExperiences { get; set; }
@@ -1157,6 +1161,65 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.Price).HasPrecision(18, 2);
             entity.Property(e => e.SortOrder).HasDefaultValue(0);
             entity.Property(e => e.TargetRole).HasComment("Enum UserRole: 0=Client, 1=Freelancer, NULL=Both");
+        });
+
+        modelBuilder.Entity<UserEloPointTransaction>(entity =>
+        {
+            entity.HasKey(e => e.UserEloPointTransactionsId).HasName("UserEloPointTransactions_pkey");
+
+            entity.HasIndex(e => e.IdempotencyKey, "IX_UserEloPointTransactions_IdempotencyKey").IsUnique();
+
+            entity.HasIndex(e => new { e.SourceEntityType, e.SourceEntityId }, "IX_UserEloPointTransactions_SourceEntity");
+
+            entity.HasIndex(e => new { e.UserId, e.CreatedAt }, "IX_UserEloPointTransactions_UserId_CreatedAt").IsDescending(false, true);
+
+            entity.Property(e => e.UserEloPointTransactionsId)
+                .HasDefaultValueSql("gen_random_uuid()")
+                .HasColumnName("UserEloPointTransactionsId");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.IdempotencyKey).HasMaxLength(200);
+            entity.Property(e => e.Metadata).HasColumnType("jsonb");
+            entity.Property(e => e.PointsAfter).HasDefaultValue(0);
+            entity.Property(e => e.Reason).HasComment("Enum UserEloPointReason: 0=InitialGrant, 1=InactivityPenalty, 2=ReturnBonus, 3=JobCompletion, 4=ReviewRating");
+            entity.Property(e => e.SourceEntityType).HasMaxLength(50);
+            entity.Property(e => e.UserId).HasColumnName("UserId");
+
+            entity.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_UserEloPointTransactions_PointsAfter_NonNegative", "\"PointsAfter\" >= 0");
+            });
+
+            entity.HasOne(d => d.User).WithMany(p => p.UserEloPointTransactions)
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("UserEloPointTransactions_usr_UserId_fkey");
+        });
+
+        modelBuilder.Entity<UserEloScore>(entity =>
+        {
+            entity.HasKey(e => e.UserEloScoresId).HasName("UserEloScores_pkey");
+
+            entity.HasIndex(e => e.CurrentPoints, "IX_UserEloScores_CurrentPoints").IsDescending();
+
+            entity.HasIndex(e => e.UserId, "IX_UserEloScores_UserId").IsUnique();
+
+            entity.Property(e => e.UserEloScoresId)
+                .HasDefaultValueSql("gen_random_uuid()")
+                .HasColumnName("UserEloScoresId");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.CurrentPoints).HasDefaultValue(100);
+            entity.Property(e => e.LastActivityAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.UserId).HasColumnName("UserId");
+
+            entity.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_UserEloScores_CurrentPoints_NonNegative", "\"CurrentPoints\" >= 0");
+            });
+
+            entity.HasOne(d => d.User).WithOne(p => p.UserEloScore)
+                .HasForeignKey<UserEloScore>(d => d.UserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("UserEloScores_usr_UserId_fkey");
         });
 
         modelBuilder.Entity<User>(entity =>

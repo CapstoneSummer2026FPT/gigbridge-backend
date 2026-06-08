@@ -1,5 +1,6 @@
 ﻿using Application.Features.JobPosts.Public.GetAvailableJobPosts.DTOs;
 using Domain.Entities;
+using Domain.Services;
 
 namespace Application.Features.JobPosts.Common;
 
@@ -22,6 +23,7 @@ internal static class JobPostProjection
             ExperienceLevelRequired: jobPost.ExperienceLevelRequired,
             LocationType: jobPost.LocationType,
             CreatedAt: jobPost.CreatedAt,
+            EloPoints: jobPost.ClientProfiles?.User?.UserEloScore?.CurrentPoints ?? UserEloCalculator.DefaultPoints,
             SkillNames: jobPost.JobPostSkills
                 .Where(jobPostSkill => jobPostSkill.Skills is not null)
                 .Select(jobPostSkill => jobPostSkill.Skills.Name)

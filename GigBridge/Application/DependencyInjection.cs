@@ -1,6 +1,7 @@
 using Application.Common.Behaviours;
 using Application.Common.Interfaces.IService;
 using Application.Common.Mappings;
+using Application.Common.Services;
 using FluentValidation;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
@@ -22,6 +23,7 @@ public static class DependencyInjection
             cfg.AddBehavior(typeof(IPipelineBehavior<,>), typeof(PerformanceBehaviour<,>));
         });
         services.AddAutoMapper(cfg => { }, typeof(MappingProfile));
+        services.AddScoped<IUserEloService, UserEloService>();
         return services;
     }
 }

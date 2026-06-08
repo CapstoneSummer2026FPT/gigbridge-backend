@@ -17,6 +17,7 @@ public class RegisterCommandHandler : IRequestHandler<RegisterCommand, UserDTO>
     private readonly IPasswordHasher _passwordHasher;
     private readonly IDateTimeService _dateTimeService;
     private readonly ICacheService _cacheService;
+    private readonly IUserEloService _userEloService;
     private readonly IMapper _mapper;
 
     public RegisterCommandHandler(
@@ -24,12 +25,14 @@ public class RegisterCommandHandler : IRequestHandler<RegisterCommand, UserDTO>
         IPasswordHasher passwordHasher,
         IDateTimeService dateTimeService,
         ICacheService cacheService,
+        IUserEloService userEloService,
         IMapper mapper)
     {
         _context = context;
         _passwordHasher = passwordHasher;
         _dateTimeService = dateTimeService;
         _cacheService = cacheService;
+        _userEloService = userEloService;
         _mapper = mapper;
     }
 
@@ -56,6 +59,7 @@ public class RegisterCommandHandler : IRequestHandler<RegisterCommand, UserDTO>
         var user = CreateUser(registerRequest.role!.Value, email, registerRequest.FullName, registerRequest.Password);
 
         _context.Set<User>().Add(user);
+        await _userEloService.InitializeNewUserAsync(user, cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
         await _cacheService.RemoveAsync(verificationKey, cancellationToken);
 

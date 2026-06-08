@@ -92,4 +92,8 @@ public partial class User
     public virtual ICollection<SavedJob> SavedJobs { get; set; } = new List<SavedJob>();
 
     public virtual ICollection<Subscription> Subscriptions { get; set; } = new List<Subscription>();
+
+    public virtual UserEloScore? UserEloScore { get; set; }
+
+    public virtual ICollection<UserEloPointTransaction> UserEloPointTransactions { get; set; } = new List<UserEloPointTransaction>();
 }
