@@ -1,6 +1,7 @@
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Common.Models;
+using Infrastructure.BackgroundServices;
 using Infrastructure.Persistence;
 using Infrastructure.Services.Auth;
 using Infrastructure.Services.Common;
@@ -38,8 +39,9 @@ public static class DependencyInjection
         services.AddScoped<IMediaService, MediaService>();
         services.AddScoped<INotificationService, NotificationService>();
         services.AddTransient<IDateTimeService, DateTimeService>();
+        services.AddHostedService<DeadlineWarningService>();
 
-        
+
         // External payment service
         services.AddKeyedSingleton("OrderClient", (sp, key) =>
         {
