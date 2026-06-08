@@ -3,6 +3,7 @@ using Application.Common.Interfaces.IService;
 using Infrastructure;
 using Infrastructure.Persistence;
 using Project_API.Extensions;
+using Project_API.Services.Notification;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -17,6 +18,7 @@ builder.Services.AddSwaggerWithBearerAuth();
 builder.Services.AddCorsPolicy();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, Project_API.Services.CurrentUserService>();
+builder.Services.AddScoped<INotificationSender, SignalRNotificationSender>();
 builder.Services.AddSignalR();
 
 if (!builder.Environment.IsEnvironment("Testing"))
