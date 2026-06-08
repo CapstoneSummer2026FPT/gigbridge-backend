@@ -15,9 +15,7 @@ public class CreateBroadcastCommandValidator : AbstractValidator<CreateBroadcast
             .MaximumLength(2000).WithMessage("Content must be at most 2000 characters.");
 
         RuleFor(x => x.Type)
-            .Must(type => Enum.IsDefined(typeof(NotificationType), type))
-            .WithMessage("Invalid notification type.");
-
+              .IsInEnum().WithMessage("Invalid notification type.");
         RuleFor(x => x.Target)
             .IsInEnum().WithMessage("Invalid notification target.");
 

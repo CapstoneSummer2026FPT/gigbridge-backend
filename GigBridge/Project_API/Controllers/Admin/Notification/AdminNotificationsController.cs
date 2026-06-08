@@ -5,20 +5,15 @@ using Domain.Enums;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Project_API.Controllers.Common;
 
 namespace Project_API.Controllers.Admin.Notification;
 
 [ApiController]
 [Route("api/admin/notifications")]
 [Authorize(Roles = nameof(UserRole.Admin))]
-public class AdminNotificationsController : ControllerBase
+public class AdminNotificationsController : BaseApiController
 {
-    private readonly IMediator _mediator;
-
-    public AdminNotificationsController(IMediator mediator)
-    {
-        _mediator = mediator;
-    }
 
     [HttpPost("broadcast")]
     public async Task<IActionResult> Broadcast([FromBody] CreateAdminBroadcastRequest request)
@@ -35,7 +30,7 @@ public class AdminNotificationsController : ControllerBase
             SendEmail = request.SendEmail
         };
 
-        await _mediator.Send(command);
+        await Mediator.Send(command);
         return Ok(ApiResponse<object>.Ok(null!, "Broadcast notification sent successfully."));
     }
 }

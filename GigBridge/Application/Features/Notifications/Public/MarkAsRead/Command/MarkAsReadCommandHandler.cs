@@ -30,7 +30,10 @@ public class MarkAsReadCommandHandler : IRequestHandler<MarkAsReadCommand>
             throw new ForbiddenAccessException("You do not have permission to mark this notification as read.");
         }
 
-        notification.IsRead = true;
+        if (notification.IsRead == true)
+        {
+            return;
+        }
         notification.ReadAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync(cancellationToken);

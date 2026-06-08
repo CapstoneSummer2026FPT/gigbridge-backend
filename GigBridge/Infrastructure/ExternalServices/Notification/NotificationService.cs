@@ -97,10 +97,9 @@ public class NotificationService : INotificationService
         _context.Set<Domain.Entities.Notification>().AddRange(notifications);
         await _context.SaveChangesAsync(cancellationToken);
 
-        foreach (var notification in notifications)
-        {
-            await _notificationSender.SendToUserAsync(notification.UserId, MapToDto(notification), cancellationToken);
-        }
+        var sendTasks = notifications.Select(n =>
+        _notificationSender.SendToUserAsync(n.UserId, MapToDto(n), cancellationToken));
+        await Task.WhenAll(sendTasks);
 
         if (sendEmail && _emailService is not null)
         {
@@ -163,7 +162,7 @@ public class NotificationService : INotificationService
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Failed to send broadcast email to user {UserId} ({Email}).", user.UserId, user.Email);
+                _logger.LogWarning(ex, "Failed to send broadcast email to user {UserId}.", user.UserId);
             }
         }
     }
@@ -173,7 +172,7 @@ public class NotificationService : INotificationService
         return new NotificationDto
         {
             Id = notification.NotificationsId,
-            Type = notification.Type,
+            Type = (NotificationType)notification.Type,
             Title = notification.Title,
             Content = notification.Content,
             ReferenceId = notification.ReferenceId,
