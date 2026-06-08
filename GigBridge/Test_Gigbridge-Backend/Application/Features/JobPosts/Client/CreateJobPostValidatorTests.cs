@@ -1,7 +1,7 @@
 using Application.Features.JobPosts.Client.CreateJobPost.Commands;
 using Application.Features.JobPosts.Client.CreateJobPost.DTOs;
 
-namespace Test_Gigbridge_Backend.Application.Features.JobPosts;
+namespace Test_Gigbridge_Backend.Application.Features.JobPosts.Client;
 
 public class CreateJobPostValidatorTests
 {

@@ -26,4 +26,17 @@
     <Using Include="Xunit" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Application\Features\JobPosts\Freelancer\" />
+    <Folder Include="Application\Features\JobPosts\Common\" />
+    <Folder Include="Application\Features\JobPosts\Public\" />
+    <Folder Include="Application\Features\Admin\" />
+    <Folder Include="Application\Features\Profiles\Client\" />
+    <Folder Include="Application\Features\Profiles\Common\" />
+    <Folder Include="Application\Features\Profiles\Public\" />
+    <Folder Include="Application\Features\Proposals\Client\" />
+    <Folder Include="Application\Features\Proposals\Common\" />
+    <Folder Include="Application\Features\Proposals\Public\" />
+  </ItemGroup>
+
 </Project>
