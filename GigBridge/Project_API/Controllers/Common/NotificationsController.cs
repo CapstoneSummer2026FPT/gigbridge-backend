@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Application.Common.Models;
 using Application.Features.Notifications.Commands.MarkAllAsRead;
 using Application.Features.Notifications.Commands.MarkAsRead;
@@ -14,8 +15,8 @@ public class NotificationsController : BaseApiController
 {
     [HttpGet]
     public async Task<IActionResult> GetNotifications(
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 20,
+        [FromQuery][Range(1, int.MaxValue)] int page = 1,
+        [FromQuery][Range(1, 100)] int pageSize = 20,
         [FromQuery] bool unreadOnly = false)
     {
         if (!TryGetCurrentUserId(out var userId))

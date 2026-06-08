@@ -2,6 +2,7 @@ using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Features.Notifications.Common.DTOs;
 using Domain.Entities;
+using Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -39,7 +40,7 @@ public class GetNotificationsQueryHandler : IRequestHandler<GetNotificationsQuer
             .Select(n => new NotificationDto
             {
                 Id = n.NotificationsId,
-                Type = n.Type,
+                Type = (NotificationType)n.Type,
                 Title = n.Title,
                 Content = n.Content,
                 ReferenceId = n.ReferenceId,

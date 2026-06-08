@@ -1,9 +1,10 @@
 using Application.Common.Interfaces;
+using Application.Features.Notifications.Commands.MarkAllAsRead;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
-namespace Application.Features.Notifications.Commands.MarkAllAsRead;
+namespace Application.Features.Notifications.Public.MarkAllAsRead.Command;
 
 public class MarkAllAsReadCommandHandler : IRequestHandler<MarkAllAsReadCommand>
 {

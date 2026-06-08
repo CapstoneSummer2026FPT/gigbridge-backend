@@ -1,9 +1,11 @@
+using Domain.Enums;
+
 namespace Application.Features.Notifications.Common.DTOs;
 
 public class NotificationDto
 {
     public Guid Id { get; set; }
-    public int Type { get; set; }
+    public NotificationType Type { get; set; }
     public string Title { get; set; } = string.Empty;
     public string? Content { get; set; }
     public Guid? ReferenceId { get; set; }
