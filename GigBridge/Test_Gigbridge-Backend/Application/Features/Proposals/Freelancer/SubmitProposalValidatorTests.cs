@@ -1,7 +1,7 @@
 using Application.Features.Proposals.Freelancer.SubmitProposal.Commands;
 using Application.Features.Proposals.Freelancer.SubmitProposal.DTOs;
 
-namespace Test_Gigbridge_Backend.Application.Features.Proposals;
+namespace Test_Gigbridge_Backend.Application.Features.Proposals.Freelancer;
 
 public class SubmitProposalValidatorTests
 {

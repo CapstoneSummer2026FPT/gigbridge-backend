@@ -1,7 +1,7 @@
 using Application.Features.Profiles.FreelancerProfile.CreateFreelancerProfile.Commands;
 using Application.Features.Profiles.FreelancerProfile.CreateFreelancerProfile.DTOs;
 
-namespace Test_Gigbridge_Backend.Application.Features.Profiles;
+namespace Test_Gigbridge_Backend.Application.Features.Profiles.Freelancer;
 
 public class CreateFreelancerProfileCommandValidatorTests
 {
