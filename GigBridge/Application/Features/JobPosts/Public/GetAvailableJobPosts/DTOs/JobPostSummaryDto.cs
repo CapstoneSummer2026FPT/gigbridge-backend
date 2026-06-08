@@ -13,5 +13,6 @@ public record JobPostSummaryDto(
     int? ExperienceLevelRequired,
     int? LocationType,
     DateTime CreatedAt,
+    int EloPoints,
     List<string> SkillNames
 );

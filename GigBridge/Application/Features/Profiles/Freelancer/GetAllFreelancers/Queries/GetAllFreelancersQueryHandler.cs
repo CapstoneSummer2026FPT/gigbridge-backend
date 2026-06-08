@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Application.Common.Interfaces;
 using Application.Features.Profiles.FreelancerProfile.GetFreelancerProfile.DTOs;
 using Domain.Entities;
+using Domain.Services;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using FreelancerProfileEntity = Domain.Entities.FreelancerProfile;
@@ -27,9 +28,10 @@ public class GetAllFreelancersQueryHandler
         CancellationToken cancellationToken)
     {
         // Start query with active users
-        var query = _context.Set<FreelancerProfileEntity>()
+        IQueryable<FreelancerProfileEntity> query = _context.Set<FreelancerProfileEntity>()
             .AsNoTracking()
             .Include(p => p.User)
+                .ThenInclude(u => u.UserEloScore)
             .Include(p => p.FreelancerSkills)
                 .ThenInclude(fs => fs.Skills)
             .Include(p => p.PortfolioItems)
@@ -53,6 +55,12 @@ public class GetAllFreelancersQueryHandler
                 query = query.Where(p => p.Availability == availValue);
             }
         }
+
+        query = query
+            .OrderByDescending(p => p.User.UserEloScore != null
+                ? p.User.UserEloScore.CurrentPoints
+                : UserEloCalculator.DefaultPoints)
+            .ThenByDescending(p => p.CreatedAt);
 
         var freelancerProfiles = await query.ToListAsync(cancellationToken);
 
@@ -89,6 +97,7 @@ public class GetAllFreelancersQueryHandler
                 UserEmail = fp.User.Email,
                 UserAvatar = fp.User.Avatar,
                 Rating = Math.Round(avgRating, 1),
+                EloPoints = fp.User.UserEloScore?.CurrentPoints ?? UserEloCalculator.DefaultPoints,
 
                 Skills = fp.FreelancerSkills.Select(fs => new FreelancerSkillDto
                 {

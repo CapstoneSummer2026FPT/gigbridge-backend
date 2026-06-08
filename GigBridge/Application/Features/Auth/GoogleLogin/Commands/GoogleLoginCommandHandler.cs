@@ -18,6 +18,7 @@ public class GoogleLoginCommandHandler : IRequestHandler<GoogleLoginCommand, (Lo
     private readonly IGoogleAuthService _googleAuthService;
     private readonly IJwtService _jwtService;
     private readonly IDateTimeService _dateTimeService;
+    private readonly IUserEloService _userEloService;
     private readonly IMapper _mapper;
 
     public GoogleLoginCommandHandler(
@@ -25,12 +26,14 @@ public class GoogleLoginCommandHandler : IRequestHandler<GoogleLoginCommand, (Lo
         IGoogleAuthService googleAuthService,
         IJwtService jwtService,
         IDateTimeService dateTimeService,
+        IUserEloService userEloService,
         IMapper mapper)
     {
         _context = context;
         _googleAuthService = googleAuthService;
         _jwtService = jwtService;
         _dateTimeService = dateTimeService;
+        _userEloService = userEloService;
         _mapper = mapper;
     }
 
@@ -38,6 +41,7 @@ public class GoogleLoginCommandHandler : IRequestHandler<GoogleLoginCommand, (Lo
     {
         var googleUser = await _googleAuthService.VerifyAuthCodeAsync(request.AuthCode, cancellationToken);
         var user = await FindUserAsync(googleUser.Email, cancellationToken);
+        var isNewUser = user is null;
 
         if (user is null)
         {
@@ -48,11 +52,17 @@ public class GoogleLoginCommandHandler : IRequestHandler<GoogleLoginCommand, (Lo
 
             user = CreateUser(googleUser, ResolveRole(request.Role));
             _context.Set<User>().Add(user);
+            await _userEloService.InitializeNewUserAsync(user, cancellationToken);
         }
 
         if (!user.IsActive)
         {
             throw new UnauthorizedAccessException("Your account has been suspended by the administrator");
+        }
+
+        if (!isNewUser)
+        {
+            await _userEloService.ApplyLoginActivityAsync(user, cancellationToken);
         }
 
         var refreshToken = RotateRefreshToken(user);

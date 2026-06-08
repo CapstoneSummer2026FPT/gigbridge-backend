@@ -5,6 +5,7 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Features.Profiles.ClientProfile.GetClientProfile.DTOs;
 using Domain.Entities;
+using Domain.Services;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using ClientProfileEntity = Domain.Entities.ClientProfile;
@@ -28,6 +29,7 @@ public class GetClientProfileQueryHandler
         var clientProfile = await _context.Set<ClientProfileEntity>()
             .AsNoTracking()
             .Include(p => p.User)
+                .ThenInclude(u => u.UserEloScore)
             .FirstOrDefaultAsync(p => p.UserId == request.UserId, cancellationToken);
 
         if (clientProfile == null)
@@ -50,7 +52,8 @@ public class GetClientProfileQueryHandler
 
             UserFullName = clientProfile.User.FullName,
             UserEmail = clientProfile.User.Email,
-            UserAvatar = clientProfile.User.Avatar
+            UserAvatar = clientProfile.User.Avatar,
+            EloPoints = clientProfile.User.UserEloScore?.CurrentPoints ?? UserEloCalculator.DefaultPoints
         };
 
         return detailDto;
