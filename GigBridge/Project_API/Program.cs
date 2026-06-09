@@ -1,8 +1,8 @@
 using Application;
 using Application.Common.Interfaces.IService;
 using Infrastructure;
-using Infrastructure.Persistence;
 using Project_API.Extensions;
+using Project_API.Hubs;
 using Project_API.Services.Notification;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -62,8 +62,8 @@ app.UseAuthorization();
 
 app.MapHealthChecks("/health");
 app.MapControllers();
-app.MapHub<Project_API.Hubs.ChatHub>("/hubs/chat");
-app.MapHub<Project_API.Hubs.NotificationHub>("/hubs/notification");
+app.MapHub<ChatHub>("/hubs/chat");
+app.MapHub<NotificationHub>("/hubs/notification");
 
 if (!app.Environment.IsEnvironment("Testing"))
 {
