@@ -1,10 +1,11 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
+using Application.Features.Notifications.Public.MarkAsRead.Command;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
-namespace Application.Features.Notifications.Commands.MarkAsRead;
+namespace Application.Features.Notifications.Public.MarkAsRead.Command;
 
 public class MarkAsReadCommandHandler : IRequestHandler<MarkAsReadCommand>
 {
@@ -34,6 +35,8 @@ public class MarkAsReadCommandHandler : IRequestHandler<MarkAsReadCommand>
         {
             return;
         }
+
+        notification.IsRead = true;
         notification.ReadAt = DateTime.UtcNow;
 
         await _context.SaveChangesAsync(cancellationToken);

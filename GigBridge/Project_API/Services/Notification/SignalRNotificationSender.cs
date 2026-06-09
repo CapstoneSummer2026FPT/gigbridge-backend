@@ -1,3 +1,4 @@
+using Application.Common.Exceptions;
 using Application.Common.Interfaces.IService;
 using Application.Features.Notifications.Common.DTOs;
 using Microsoft.AspNetCore.SignalR;

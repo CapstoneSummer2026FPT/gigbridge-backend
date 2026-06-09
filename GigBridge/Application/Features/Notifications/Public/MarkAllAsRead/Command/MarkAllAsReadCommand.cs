@@ -1,6 +1,6 @@
 using MediatR;
 
-namespace Application.Features.Notifications.Commands.MarkAllAsRead;
+namespace Application.Features.Notifications.Public.MarkAllAsRead.Command;
 
 public class MarkAllAsReadCommand : IRequest
 {

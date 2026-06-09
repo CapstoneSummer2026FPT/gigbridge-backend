@@ -1,11 +1,11 @@
+using Application.Common.Models;
+using Application.Features.Notifications.Common.DTOs;
 using MediatR;
 
 namespace Application.Features.Notifications.Queries.GetNotifications;
 
-public class GetNotificationsQuery : IRequest<GetNotificationsResponse>
+public class GetNotificationsQuery : PaginatedQuery, IRequest<PaginatedList<NotificationDto>>
 {
     public Guid UserId { get; set; }
-    public int PageIndex { get; set; } = 1;
-    public int PageSize { get; set; } = 20;
     public bool UnreadOnly { get; set; }
 }
