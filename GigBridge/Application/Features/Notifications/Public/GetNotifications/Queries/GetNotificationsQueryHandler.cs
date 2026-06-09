@@ -1,5 +1,5 @@
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Models;
 using Application.Features.Notifications.Common.DTOs;
 using Domain.Entities;
 using Domain.Enums;
@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.Notifications.Queries.GetNotifications;
 
-public class GetNotificationsQueryHandler : IRequestHandler<GetNotificationsQuery, GetNotificationsResponse>
+public class GetNotificationsQueryHandler : IRequestHandler<GetNotificationsQuery, PaginatedList<NotificationDto>>
 {
     private readonly IApplicationDbContext _context;
 
@@ -17,10 +17,10 @@ public class GetNotificationsQueryHandler : IRequestHandler<GetNotificationsQuer
         _context = context;
     }
 
-    public async Task<GetNotificationsResponse> Handle(GetNotificationsQuery request, CancellationToken cancellationToken)
+    public async Task<PaginatedList<NotificationDto>> Handle(GetNotificationsQuery request, CancellationToken cancellationToken)
     {
-        var pageIndex = NormalizePageIndex(request.PageIndex);
-        var pageSize = NormalizePageSize(request.PageSize);
+        var pageNumber = request.PageNumber < 1 ? 1 : request.PageNumber;
+        var pageSize = request.PageSize is < 1 or > 20 ? 20 : request.PageSize;
 
         var query = _context.Set<Notification>()
             .AsNoTracking()
@@ -35,7 +35,7 @@ public class GetNotificationsQueryHandler : IRequestHandler<GetNotificationsQuer
 
         var items = await query
             .OrderByDescending(n => n.CreatedAt)
-            .Skip((pageIndex - 1) * pageSize)
+            .Skip((pageNumber - 1) * pageSize)
             .Take(pageSize)
             .Select(n => new NotificationDto
             {
@@ -51,16 +51,6 @@ public class GetNotificationsQueryHandler : IRequestHandler<GetNotificationsQuer
             })
             .ToListAsync(cancellationToken);
 
-        return new GetNotificationsResponse
-        {
-            Items = items,
-            TotalCount = totalCount,
-            PageIndex = pageIndex,
-            PageSize = pageSize
-        };
+        return new PaginatedList<NotificationDto>(items, totalCount, pageNumber, pageSize);
     }
-
-    private static int NormalizePageIndex(int pageIndex) => pageIndex < 1 ? 1 : pageIndex;
-
-    private static int NormalizePageSize(int pageSize) => pageSize is < 1 or > 100 ? 20 : pageSize;
 }

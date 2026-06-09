@@ -1,4 +1,5 @@
 using Application.Common.Interfaces;
+using Application.Common.Interfaces.IService;
 using Domain.Entities;
 using Domain.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -6,13 +7,14 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-namespace Infrastructure.BackgroundServices;
+namespace Application.Common.Services;
 
-public class DeadlineWarningService : BackgroundService
+public class DeadlineWarningService : BackgroundService, IDeadlineWarningService
 {
+    private static readonly TimeSpan CheckInterval = TimeSpan.FromHours(6);
+
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<DeadlineWarningService> _logger;
-    private static readonly TimeSpan CheckInterval = TimeSpan.FromHours(6);
 
     public DeadlineWarningService(
         IServiceScopeFactory scopeFactory,
@@ -41,11 +43,16 @@ public class DeadlineWarningService : BackgroundService
         }
     }
 
-    private async Task CheckDeadlinesAsync(CancellationToken cancellationToken)
+    public async Task CheckDeadlinesAsync(CancellationToken cancellationToken)
     {
         using var scope = _scopeFactory.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
 
+        await CheckDeadlinesAsync(context, cancellationToken);
+    }
+
+    private async Task CheckDeadlinesAsync(IApplicationDbContext context, CancellationToken cancellationToken)
+    {
         var now = DateTime.UtcNow;
         var warningThreshold = now.AddHours(24);
 
@@ -108,7 +115,7 @@ public class DeadlineWarningService : BackgroundService
                 continue;
             }
 
-            var remainingHours = (int)(job.Deadline!.Value - now).TotalHours;
+            var remainingHours = (int)Math.Round((job.Deadline!.Value - now).TotalHours);
             var notification = new Notification
             {
                 UserId = clientUserId,

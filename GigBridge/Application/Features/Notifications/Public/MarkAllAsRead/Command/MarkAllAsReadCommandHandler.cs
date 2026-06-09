@@ -1,5 +1,4 @@
 using Application.Common.Interfaces;
-using Application.Features.Notifications.Commands.MarkAllAsRead;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;

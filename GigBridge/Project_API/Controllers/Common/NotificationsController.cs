@@ -1,8 +1,8 @@
 using System.ComponentModel.DataAnnotations;
 using Application.Common.Models;
-using Application.Features.Notifications.Commands.MarkAllAsRead;
-using Application.Features.Notifications.Commands.MarkAsRead;
 using Application.Features.Notifications.Common.DTOs;
+using Application.Features.Notifications.Public.MarkAllAsRead.Command;
+using Application.Features.Notifications.Public.MarkAsRead.Command;
 using Application.Features.Notifications.Queries.GetNotifications;
 using Application.Features.Notifications.Queries.GetUnreadCount;
 using Microsoft.AspNetCore.Authorization;
@@ -16,7 +16,7 @@ public class NotificationsController : BaseApiController
     [HttpGet]
     public async Task<IActionResult> GetNotifications(
         [FromQuery][Range(1, int.MaxValue)] int page = 1,
-        [FromQuery][Range(1, 100)] int pageSize = 20,
+        [FromQuery][Range(1, 20)] int pageSize = 20,
         [FromQuery] bool unreadOnly = false)
     {
         if (!TryGetCurrentUserId(out var userId))
@@ -27,13 +27,13 @@ public class NotificationsController : BaseApiController
         var query = new GetNotificationsQuery
         {
             UserId = userId,
-            PageIndex = page,
+            PageNumber = page,
             PageSize = pageSize,
             UnreadOnly = unreadOnly
         };
 
         var result = await Mediator.Send(query);
-        return Ok(ApiResponse<GetNotificationsResponse>.Ok(result, "Notifications retrieved successfully."));
+        return Ok(ApiResponse<PaginatedList<NotificationDto>>.Ok(result, "Notifications retrieved successfully."));
     }
 
     [HttpGet("unread-count")]
