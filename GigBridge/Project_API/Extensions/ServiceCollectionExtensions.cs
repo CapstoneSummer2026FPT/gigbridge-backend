@@ -31,24 +31,27 @@ public static class ServiceCollectionExtensions
                 ValidAudience = jwtSettings["Audience"],
                 IssuerSigningKey = new SymmetricSecurityKey(secretKey),
 
-               ClockSkew = TimeSpan.Zero
-           };
-           options.Events = new JwtBearerEvents {
-               OnMessageReceived = context =>
-               {
-                   var accessToken = context.Request.Query["access_token"];
-                   var path = context.HttpContext.Request.Path;
+                ClockSkew = TimeSpan.Zero
+            };
+            options.Events = new JwtBearerEvents
+            {
+                OnMessageReceived = context =>
+                {
+                    var accessToken = context.Request.Query["access_token"];
+                    var path = context.HttpContext.Request.Path;
 
-                   if (!string.IsNullOrEmpty(accessToken) &&
-                       path.StartsWithSegments("/hubs")) {
-                       context.Token = accessToken;
-                   }
+                    if (!string.IsNullOrEmpty(accessToken) &&
+                        path.StartsWithSegments("/hubs"))
+                    {
+                        context.Token = accessToken;
+                    }
 
-                   return Task.CompletedTask;
-               }
-           };
-       });
-       return services;
+                    return Task.CompletedTask;
+                }
+            };
+        });
+
+        return services;
     }
 
     public static IServiceCollection AddSwaggerWithBearerAuth(this IServiceCollection services)
