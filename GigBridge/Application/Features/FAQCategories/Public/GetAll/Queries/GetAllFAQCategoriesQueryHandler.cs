@@ -31,7 +31,6 @@ public sealed class GetAllFAQCategoriesQueryHandler : IRequestHandler<GetAllFAQC
         {
             Id = c.FaqcategoriesId,
             Name = c.Name,
-            NameVi = c.NameVi,
             Slug = c.Slug,
             SortOrder = c.SortOrder,
             IsActive = c.IsActive,

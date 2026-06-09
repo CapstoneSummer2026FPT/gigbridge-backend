@@ -11,8 +11,6 @@ public partial class Skill
 
     public string Name { get; set; } = null!;
 
-    public string? NameVi { get; set; }
-
     public bool IsActive { get; set; }
 
     public DateTime CreatedAt { get; set; }

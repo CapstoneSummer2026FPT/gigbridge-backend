@@ -22,9 +22,6 @@ public sealed class UpdateFAQCategoryCommandValidator : AbstractValidator<Update
                 .MaximumLength(200).When(x => x.Request.Slug is not null)
                 .WithMessage("Slug must not exceed 200 characters");
 
-            RuleFor(x => x.Request.NameVi)
-                .MaximumLength(200).When(x => x.Request.NameVi is not null)
-                .WithMessage("Vietnamese name must not exceed 200 characters");
         });
     }
 }
