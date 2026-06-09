@@ -30,7 +30,6 @@ public sealed class CreateFAQCategoryCommandHandler : IRequestHandler<CreateFAQC
         var category = new Faqcategory
         {
             Name = categoryRequest.Name.Trim(),
-            NameVi = categoryRequest.NameVi?.Trim(),
             Slug = slug,
             SortOrder = categoryRequest.SortOrder ?? 0,
             IsActive = true,
@@ -44,7 +43,6 @@ public sealed class CreateFAQCategoryCommandHandler : IRequestHandler<CreateFAQC
         {
             Id = category.FaqcategoriesId,
             Name = category.Name,
-            NameVi = category.NameVi,
             Slug = category.Slug,
             SortOrder = category.SortOrder,
             IsActive = category.IsActive,

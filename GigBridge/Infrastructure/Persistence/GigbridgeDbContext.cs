@@ -141,7 +141,6 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.IsActive).HasDefaultValue(true);
             entity.Property(e => e.Name).HasMaxLength(200);
-            entity.Property(e => e.NameVi).HasMaxLength(200);
             entity.Property(e => e.Slug).HasMaxLength(200);
             entity.Property(e => e.SortOrder).HasDefaultValue(0);
 
@@ -463,7 +462,6 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.IsActive).HasDefaultValue(true);
             entity.Property(e => e.Name).HasMaxLength(300);
-            entity.Property(e => e.NameVi).HasMaxLength(300);
             entity.Property(e => e.PlaceholderSchema).HasColumnType("jsonb");
             entity.Property(e => e.Version).HasDefaultValue(1);
 
@@ -511,7 +509,6 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.IsActive).HasDefaultValue(true);
             entity.Property(e => e.Name).HasMaxLength(200);
-            entity.Property(e => e.NameVi).HasMaxLength(200);
             entity.Property(e => e.Slug).HasMaxLength(200);
             entity.Property(e => e.SortOrder).HasDefaultValue(0);
         });
@@ -1100,7 +1097,6 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.IsActive).HasDefaultValue(true);
             entity.Property(e => e.Name).HasMaxLength(200);
-            entity.Property(e => e.NameVi).HasMaxLength(200);
 
             entity.HasOne(d => d.Categories).WithMany(p => p.Skills)
                 .HasForeignKey(d => d.CategoriesId)
@@ -1157,7 +1153,6 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.Features).HasColumnType("jsonb");
             entity.Property(e => e.IsActive).HasDefaultValue(true);
             entity.Property(e => e.Name).HasMaxLength(200);
-            entity.Property(e => e.NameVi).HasMaxLength(200);
             entity.Property(e => e.Price).HasPrecision(18, 2);
             entity.Property(e => e.SortOrder).HasDefaultValue(0);
             entity.Property(e => e.TargetRole).HasComment("Enum UserRole: 0=Client, 1=Freelancer, NULL=Both");

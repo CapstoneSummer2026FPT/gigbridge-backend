@@ -19,9 +19,7 @@ public sealed class CreateFAQCategoryCommandValidator : AbstractValidator<Create
                 .NotEmpty().WithMessage("Slug is required")
                 .MaximumLength(200).WithMessage("Slug must not exceed 200 characters");
 
-            RuleFor(x => x.Request.NameVi)
-                .MaximumLength(200).When(x => x.Request.NameVi is not null)
-                .WithMessage("Vietnamese name must not exceed 200 characters");
+
         });
     }
 }
