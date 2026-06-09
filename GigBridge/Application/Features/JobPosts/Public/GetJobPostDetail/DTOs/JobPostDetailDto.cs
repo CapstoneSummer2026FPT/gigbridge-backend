@@ -18,7 +18,7 @@ public record JobPostDetailDto(
     int? ExperienceLevelRequired,
     int? LocationType,
     string? Location,
-    DateTime? ApplicationDeadline,
+    DateTime? EndDate,
     DateTime CreatedAt,
     List<JobPostSkillDto> Skills,
     List<AttachmentDto> Attachments

@@ -1256,7 +1256,7 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnName("JobPostsId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
-                    b.Property<DateTime?>("ApplicationDeadline")
+                    b.Property<DateTime?>("EndDate")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<decimal?>("BudgetMax")
@@ -1341,7 +1341,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasKey("JobPostsId")
                         .HasName("JobPosts_pkey");
 
-                    b.HasIndex(new[] { "ApplicationDeadline" }, "IX_JobPosts_ApplicationDeadline");
+                    b.HasIndex(new[] { "EndDate" }, "IX_JobPosts_EndDate");
 
                     b.HasIndex(new[] { "CategoryId" }, "IX_JobPosts_CategoryId");
 

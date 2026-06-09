@@ -65,7 +65,7 @@ public class SubmitProposalCommandHandler : IRequestHandler<SubmitProposalComman
             throw new BadRequestException("This job post is not accepting proposals.");
         }
 
-        if (jobPost.ApplicationDeadline.HasValue && jobPost.ApplicationDeadline.Value <= _dateTimeService.UtcNow)
+        if (jobPost.EndDate.HasValue && jobPost.EndDate.Value <= _dateTimeService.UtcNow)
         {
             throw new BadRequestException("This job post application deadline has passed.");
         }
