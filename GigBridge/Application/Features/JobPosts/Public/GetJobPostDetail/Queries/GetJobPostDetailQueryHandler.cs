@@ -49,7 +49,7 @@ public class GetJobPostDetailQueryHandler : IRequestHandler<GetJobPostDetailQuer
             ExperienceLevelRequired: jobPost.ExperienceLevelRequired,
             LocationType: jobPost.LocationType,
             Location: jobPost.Location,
-            ApplicationDeadline: jobPost.ApplicationDeadline,
+            EndDate: jobPost.EndDate,
             CreatedAt: jobPost.CreatedAt,
             Skills: jobPost.JobPostSkills
                 .Where(jobPostSkill => jobPostSkill.Skills is not null)

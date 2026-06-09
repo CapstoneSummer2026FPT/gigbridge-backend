@@ -35,7 +35,7 @@ public class UpdateJobPostRequest
 
     public string? Location { get; set; }
 
-    public DateTime? ApplicationDeadline { get; set; }
+    public DateTime? EndDate { get; set; }
 
     public List<Guid> SkillIds { get; set; } = new();
 }

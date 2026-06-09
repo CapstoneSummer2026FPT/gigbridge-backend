@@ -12,8 +12,8 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(GigbridgeDbContext))]
-    [Migration("20260420193911_InitialCreate")]
-    partial class InitialCreate
+    [Migration("20260609191831_RemoveParentCategories")]
+    partial class RemoveParentCategories
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -27,16 +27,20 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.AdminAuditLog", b =>
                 {
-                    b.Property<Guid>("AalAdminAuditLogsId")
+                    b.Property<Guid>("AdminAuditLogsId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("aal_AdminAuditLogsId")
+                        .HasColumnName("AdminAuditLogsId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
                     b.Property<string>("Action")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("AdminId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("AdminId");
 
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
@@ -63,16 +67,12 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<string>("UserAgent")
                         .HasColumnType("text");
 
-                    b.Property<Guid>("UsrAdminId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("usr_AdminId");
-
-                    b.HasKey("AalAdminAuditLogsId")
+                    b.HasKey("AdminAuditLogsId")
                         .HasName("AdminAuditLogs_pkey");
 
                     b.HasIndex(new[] { "Action" }, "IX_AdminAuditLogs_Action");
 
-                    b.HasIndex(new[] { "UsrAdminId" }, "IX_AdminAuditLogs_AdminId");
+                    b.HasIndex(new[] { "AdminId" }, "IX_AdminAuditLogs_AdminId");
 
                     b.HasIndex(new[] { "CreatedAt" }, "IX_AdminAuditLogs_CreatedAt");
 
@@ -81,239 +81,12 @@ namespace Infrastructure.Persistence.Migrations
                     b.ToTable("AdminAuditLogs");
                 });
 
-            modelBuilder.Entity("Domain.Entities.AiconversationSession", b =>
-                {
-                    b.Property<Guid>("AiSessAiconversationSessionsId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("aiSess_AIConversationSessionsId")
-                        .HasDefaultValueSql("gen_random_uuid()");
-
-                    b.Property<Guid?>("ContContractsId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("cont_ContractsId");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasDefaultValueSql("now()");
-
-                    b.Property<bool?>("IsActive")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true);
-
-                    b.Property<Guid?>("JpJobPostsId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("jp_JobPostsId");
-
-                    b.Property<string>("ModelUsed")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<string>("Title")
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
-
-                    b.Property<int?>("TotalTokensUsed")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0);
-
-                    b.Property<int>("Type")
-                        .HasColumnType("integer")
-                        .HasComment("Enum AISessionType: 0=WorkAssistant, 1=ProfileOptimizer, 2=JobPostGenerator, 3=ProposalGenerator");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("UsrUserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("usr_UserId");
-
-                    b.HasKey("AiSessAiconversationSessionsId")
-                        .HasName("AIConversationSessions_pkey");
-
-                    b.HasIndex("JpJobPostsId");
-
-                    b.HasIndex(new[] { "ContContractsId" }, "IX_AIConversationSessions_ContractsId");
-
-                    b.HasIndex(new[] { "Type" }, "IX_AIConversationSessions_Type");
-
-                    b.HasIndex(new[] { "UsrUserId" }, "IX_AIConversationSessions_UserId");
-
-                    b.HasIndex(new[] { "UsrUserId", "Type" }, "IX_AIConversationSessions_UserId_Type");
-
-                    b.ToTable("AIConversationSessions", (string)null);
-                });
-
-            modelBuilder.Entity("Domain.Entities.AiinterviewQuestion", b =>
-                {
-                    b.Property<Guid>("AiQAiinterviewQuestionsId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("aiQ_AIInterviewQuestionsId")
-                        .HasDefaultValueSql("gen_random_uuid()");
-
-                    b.Property<Guid>("AiIntvAiinterviewSessionsId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("aiIntv_AIInterviewSessionsId");
-
-                    b.Property<string>("Aianalysis")
-                        .HasColumnType("text")
-                        .HasColumnName("AIAnalysis");
-
-                    b.Property<string>("Answer")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("AnsweredAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasDefaultValueSql("now()");
-
-                    b.Property<string>("Question")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<decimal?>("Score")
-                        .HasPrecision(5, 2)
-                        .HasColumnType("numeric(5,2)");
-
-                    b.Property<int?>("SortOrder")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0);
-
-                    b.HasKey("AiQAiinterviewQuestionsId")
-                        .HasName("AIInterviewQuestions_pkey");
-
-                    b.HasIndex(new[] { "AiIntvAiinterviewSessionsId", "SortOrder" }, "IX_AIInterviewQuestions_SessionId_SortOrder");
-
-                    b.ToTable("AIInterviewQuestions", (string)null);
-                });
-
-            modelBuilder.Entity("Domain.Entities.AiinterviewSession", b =>
-                {
-                    b.Property<Guid>("AiIntvAiinterviewSessionsId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("aiIntv_AIInterviewSessionsId")
-                        .HasDefaultValueSql("gen_random_uuid()");
-
-                    b.Property<string>("Aifeedback")
-                        .HasColumnType("text")
-                        .HasColumnName("AIFeedback");
-
-                    b.Property<Guid>("ClProClientProfilesId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("clPro_ClientProfilesId");
-
-                    b.Property<DateTime?>("CompletedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasDefaultValueSql("now()");
-
-                    b.Property<Guid>("FlProFreelancerProfilesId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("flPro_FreelancerProfilesId");
-
-                    b.Property<Guid>("JpJobPostsId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("jp_JobPostsId");
-
-                    b.Property<decimal?>("OverallScore")
-                        .HasPrecision(5, 2)
-                        .HasColumnType("numeric(5,2)");
-
-                    b.Property<Guid?>("PropoProposalsId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("propo_ProposalsId");
-
-                    b.Property<DateTime?>("StartedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer")
-                        .HasComment("Enum InterviewStatus: 0=Pending, 1=InProgress, 2=Completed, 3=Cancelled");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("AiIntvAiinterviewSessionsId")
-                        .HasName("AIInterviewSessions_pkey");
-
-                    b.HasIndex("ClProClientProfilesId");
-
-                    b.HasIndex("PropoProposalsId");
-
-                    b.HasIndex(new[] { "JpJobPostsId", "FlProFreelancerProfilesId" }, "AIInterviewSessions_jp_JobPostsId_flPro_FreelancerProfilesI_key")
-                        .IsUnique();
-
-                    b.HasIndex(new[] { "FlProFreelancerProfilesId" }, "IX_AIInterviewSessions_FreelancerProfilesId");
-
-                    b.HasIndex(new[] { "JpJobPostsId" }, "IX_AIInterviewSessions_JobPostsId");
-
-                    b.HasIndex(new[] { "Status" }, "IX_AIInterviewSessions_Status");
-
-                    b.ToTable("AIInterviewSessions", (string)null);
-                });
-
-            modelBuilder.Entity("Domain.Entities.Aimessage", b =>
-                {
-                    b.Property<Guid>("AiMsgAimessagesId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("aiMsg_AIMessagesId")
-                        .HasDefaultValueSql("gen_random_uuid()");
-
-                    b.Property<Guid>("AiSessAiconversationSessionsId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("aiSess_AIConversationSessionsId");
-
-                    b.Property<string>("Content")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasDefaultValueSql("now()");
-
-                    b.Property<string>("Role")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<int?>("SortOrder")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0);
-
-                    b.Property<int?>("TokensUsed")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0);
-
-                    b.HasKey("AiMsgAimessagesId")
-                        .HasName("AIMessages_pkey");
-
-                    b.HasIndex(new[] { "AiSessAiconversationSessionsId", "SortOrder" }, "IX_AIMessages_SessionId_SortOrder");
-
-                    b.ToTable("AIMessages", (string)null);
-                });
-
             modelBuilder.Entity("Domain.Entities.Category", b =>
                 {
-                    b.Property<Guid>("CateCategoriesId")
+                    b.Property<Guid>("CategoriesId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("cate_CategoriesId")
+                        .HasColumnName("CategoriesId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
                     b.Property<DateTime>("CreatedAt")
@@ -334,11 +107,7 @@ namespace Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
-                    b.Property<string>("NameVi")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<Guid?>("ParentCategoryId")
+                    b.Property<Guid?>("ParentCategoryCategoriesId")
                         .HasColumnType("uuid");
 
                     b.Property<string>("Slug")
@@ -351,12 +120,12 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasDefaultValue(0);
 
-                    b.HasKey("CateCategoriesId")
+                    b.HasKey("CategoriesId")
                         .HasName("Categories_pkey");
 
-                    b.HasIndex(new[] { "IsActive" }, "IX_Categories_IsActive");
+                    b.HasIndex("ParentCategoryCategoriesId");
 
-                    b.HasIndex(new[] { "ParentCategoryId" }, "IX_Categories_ParentCategoryId");
+                    b.HasIndex(new[] { "IsActive" }, "IX_Categories_IsActive");
 
                     b.HasIndex(new[] { "Slug" }, "IX_Categories_Slug")
                         .IsUnique();
@@ -364,50 +133,12 @@ namespace Infrastructure.Persistence.Migrations
                     b.ToTable("Categories");
                 });
 
-            modelBuilder.Entity("Domain.Entities.Certification", b =>
-                {
-                    b.Property<Guid>("CerCertificationsId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("cer_CertificationsId")
-                        .HasDefaultValueSql("gen_random_uuid()");
-
-                    b.Property<string>("CredentialUrl")
-                        .HasColumnType("text");
-
-                    b.Property<DateOnly?>("ExpirationDate")
-                        .HasColumnType("date");
-
-                    b.Property<Guid>("FlFreelancerId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("fl_FreelancerId");
-
-                    b.Property<DateOnly?>("IssueDate")
-                        .HasColumnType("date");
-
-                    b.Property<string>("IssuingOrganization")
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
-
-                    b.HasKey("CerCertificationsId")
-                        .HasName("Certifications_pkey");
-
-                    b.HasIndex(new[] { "FlFreelancerId" }, "IX_Certifications_FreelancerId");
-
-                    b.ToTable("Certifications");
-                });
-
             modelBuilder.Entity("Domain.Entities.ClientProfile", b =>
                 {
-                    b.Property<Guid>("ClProClientProfilesId")
+                    b.Property<Guid>("ClientProfilesId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("clPro_ClientProfilesId")
+                        .HasColumnName("ClientProfilesId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
                     b.Property<string>("CompanyDescription")
@@ -440,17 +171,17 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<Guid>("UsrUserId")
+                    b.Property<Guid>("UserId")
                         .HasColumnType("uuid")
-                        .HasColumnName("usr_UserId");
+                        .HasColumnName("UserId");
 
-                    b.HasKey("ClProClientProfilesId")
+                    b.HasKey("ClientProfilesId")
                         .HasName("ClientProfiles_pkey");
 
-                    b.HasIndex(new[] { "UsrUserId" }, "ClientProfiles_usr_UserId_key")
+                    b.HasIndex(new[] { "UserId" }, "ClientProfiles_usr_UserId_key")
                         .IsUnique();
 
-                    b.HasIndex(new[] { "UsrUserId" }, "IX_ClientProfiles_UserId")
+                    b.HasIndex(new[] { "UserId" }, "IX_ClientProfiles_UserId")
                         .IsUnique();
 
                     b.ToTable("ClientProfiles");
@@ -458,15 +189,15 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.Contract", b =>
                 {
-                    b.Property<Guid>("ContContractsId")
+                    b.Property<Guid>("ContractsId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("cont_ContractsId")
+                        .HasColumnName("ContractsId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
-                    b.Property<Guid>("ClProClientProfilesId")
+                    b.Property<Guid>("ClientProfilesId")
                         .HasColumnType("uuid")
-                        .HasColumnName("clPro_ClientProfilesId");
+                        .HasColumnName("ClientProfilesId");
 
                     b.Property<DateTime?>("CompletedAt")
                         .HasColumnType("timestamp with time zone");
@@ -487,21 +218,21 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnName("ESignContractPdfUrl")
                         .HasComment("v1.2: URL bản hợp đồng lao động e-sign PDF khi có tranh chấp thanh toán");
 
-                    b.Property<Guid>("FlProFreelancerProfilesId")
+                    b.Property<Guid>("FreelancerProfilesId")
                         .HasColumnType("uuid")
-                        .HasColumnName("flPro_FreelancerProfilesId");
+                        .HasColumnName("FreelancerProfilesId");
 
-                    b.Property<Guid>("JpJobPostsId")
+                    b.Property<Guid>("JobPostsId")
                         .HasColumnType("uuid")
-                        .HasColumnName("jp_JobPostsId");
+                        .HasColumnName("JobPostsId");
 
                     b.Property<int>("PaymentType")
                         .HasColumnType("integer")
                         .HasComment("Enum PaymentType: 0=Fixed, 1=Hourly");
 
-                    b.Property<Guid?>("PropoProposalsId")
+                    b.Property<Guid?>("ProposalsId")
                         .HasColumnType("uuid")
-                        .HasColumnName("propo_ProposalsId");
+                        .HasColumnName("ProposalsId");
 
                     b.Property<DateOnly?>("StartDate")
                         .HasColumnType("date");
@@ -522,21 +253,21 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.HasKey("ContContractsId")
+                    b.HasKey("ContractsId")
                         .HasName("Contracts_pkey");
 
-                    b.HasIndex(new[] { "PropoProposalsId" }, "Contracts_propo_ProposalsId_key")
+                    b.HasIndex(new[] { "ProposalsId" }, "Contracts_propo_ProposalsId_key")
                         .IsUnique();
 
-                    b.HasIndex(new[] { "ClProClientProfilesId" }, "IX_Contracts_ClientProfilesId");
+                    b.HasIndex(new[] { "ClientProfilesId" }, "IX_Contracts_ClientProfilesId");
 
-                    b.HasIndex(new[] { "ClProClientProfilesId", "Status" }, "IX_Contracts_ClientProfilesId_Status");
+                    b.HasIndex(new[] { "ClientProfilesId", "Status" }, "IX_Contracts_ClientProfilesId_Status");
 
-                    b.HasIndex(new[] { "FlProFreelancerProfilesId" }, "IX_Contracts_FreelancerProfilesId");
+                    b.HasIndex(new[] { "FreelancerProfilesId" }, "IX_Contracts_FreelancerProfilesId");
 
-                    b.HasIndex(new[] { "FlProFreelancerProfilesId", "Status" }, "IX_Contracts_FreelancerProfilesId_Status");
+                    b.HasIndex(new[] { "FreelancerProfilesId", "Status" }, "IX_Contracts_FreelancerProfilesId_Status");
 
-                    b.HasIndex(new[] { "JpJobPostsId" }, "IX_Contracts_JobPostsId");
+                    b.HasIndex(new[] { "JobPostsId" }, "IX_Contracts_JobPostsId");
 
                     b.HasIndex(new[] { "Status" }, "IX_Contracts_Status");
 
@@ -545,15 +276,15 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.Conversation", b =>
                 {
-                    b.Property<Guid>("ConvConversationsId")
+                    b.Property<Guid>("ConversationsId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("conv_ConversationsId")
+                        .HasColumnName("ConversationsId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
-                    b.Property<Guid?>("ContContractsId")
+                    b.Property<Guid?>("ContractsId")
                         .HasColumnType("uuid")
-                        .HasColumnName("cont_ContractsId");
+                        .HasColumnName("ContractsId");
 
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
@@ -572,52 +303,56 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<Guid>("UsrUser1Id")
+                    b.Property<Guid>("User1Id")
                         .HasColumnType("uuid")
-                        .HasColumnName("usr_User1Id");
+                        .HasColumnName("User1Id");
 
-                    b.Property<Guid>("UsrUser2Id")
+                    b.Property<Guid>("User2Id")
                         .HasColumnType("uuid")
-                        .HasColumnName("usr_User2Id");
+                        .HasColumnName("User2Id");
 
-                    b.HasKey("ConvConversationsId")
+                    b.HasKey("ConversationsId")
                         .HasName("Conversations_pkey");
 
-                    b.HasIndex(new[] { "UsrUser1Id", "UsrUser2Id", "ContContractsId" }, "Conversations_usr_User1Id_usr_User2Id_cont_ContractsId_key")
+                    b.HasIndex(new[] { "User1Id", "User2Id", "ContractsId" }, "Conversations_usr_User1Id_usr_User2Id_cont_ContractsId_key")
                         .IsUnique();
 
-                    b.HasIndex(new[] { "ContContractsId" }, "IX_Conversations_ContractsId");
+                    b.HasIndex(new[] { "ContractsId" }, "IX_Conversations_ContractsId");
 
                     b.HasIndex(new[] { "LastMessageAt" }, "IX_Conversations_LastMessageAt")
                         .IsDescending();
 
-                    b.HasIndex(new[] { "UsrUser1Id" }, "IX_Conversations_User1Id");
+                    b.HasIndex(new[] { "User1Id" }, "IX_Conversations_User1Id");
 
-                    b.HasIndex(new[] { "UsrUser2Id" }, "IX_Conversations_User2Id");
+                    b.HasIndex(new[] { "User2Id" }, "IX_Conversations_User2Id");
 
                     b.ToTable("Conversations");
                 });
 
             modelBuilder.Entity("Domain.Entities.Dispute", b =>
                 {
-                    b.Property<Guid>("DispDisputesId")
+                    b.Property<Guid>("DisputesId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("disp_DisputesId")
+                        .HasColumnName("DisputesId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
-                    b.Property<Guid>("ContContractsId")
+                    b.Property<Guid>("ContractsId")
                         .HasColumnType("uuid")
-                        .HasColumnName("cont_ContractsId");
+                        .HasColumnName("ContractsId");
 
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
                         .HasDefaultValueSql("now()");
 
-                    b.Property<Guid?>("MStoneMilestonesId")
+                    b.Property<Guid>("InitiatorId")
                         .HasColumnType("uuid")
-                        .HasColumnName("mStone_MilestonesId");
+                        .HasColumnName("InitiatorId");
+
+                    b.Property<Guid?>("MilestonesId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("MilestonesId");
 
                     b.Property<string>("Reason")
                         .IsRequired()
@@ -643,18 +378,14 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<Guid>("UsrInitiatorId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("usr_InitiatorId");
-
-                    b.HasKey("DispDisputesId")
+                    b.HasKey("DisputesId")
                         .HasName("Disputes_pkey");
 
-                    b.HasIndex("MStoneMilestonesId");
+                    b.HasIndex("MilestonesId");
 
-                    b.HasIndex(new[] { "ContContractsId" }, "IX_Disputes_ContractsId");
+                    b.HasIndex(new[] { "ContractsId" }, "IX_Disputes_ContractsId");
 
-                    b.HasIndex(new[] { "UsrInitiatorId" }, "IX_Disputes_InitiatorId");
+                    b.HasIndex(new[] { "InitiatorId" }, "IX_Disputes_InitiatorId");
 
                     b.HasIndex(new[] { "ResolvedByAdminId" }, "IX_Disputes_ResolvedByAdminId");
 
@@ -665,10 +396,10 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.DisputeEvidence", b =>
                 {
-                    b.Property<Guid>("DispEvDisputeEvidenceId")
+                    b.Property<Guid>("DisputeEvidenceId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("dispEv_DisputeEvidenceId")
+                        .HasColumnName("DisputeEvidenceId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
                     b.Property<DateTime>("CreatedAt")
@@ -679,9 +410,9 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<string>("Description")
                         .HasColumnType("text");
 
-                    b.Property<Guid>("DispDisputesId")
+                    b.Property<Guid>("DisputesId")
                         .HasColumnType("uuid")
-                        .HasColumnName("disp_DisputesId");
+                        .HasColumnName("DisputesId");
 
                     b.Property<string>("FileName")
                         .IsRequired()
@@ -695,26 +426,26 @@ namespace Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<Guid>("UsrUploadedById")
+                    b.Property<Guid>("UploadedById")
                         .HasColumnType("uuid")
-                        .HasColumnName("usr_UploadedById");
+                        .HasColumnName("UploadedById");
 
-                    b.HasKey("DispEvDisputeEvidenceId")
+                    b.HasKey("DisputeEvidenceId")
                         .HasName("DisputeEvidence_pkey");
 
-                    b.HasIndex("UsrUploadedById");
+                    b.HasIndex("UploadedById");
 
-                    b.HasIndex(new[] { "DispDisputesId" }, "IX_DisputeEvidence_DisputesId");
+                    b.HasIndex(new[] { "DisputesId" }, "IX_DisputeEvidence_DisputesId");
 
                     b.ToTable("DisputeEvidence", (string)null);
                 });
 
             modelBuilder.Entity("Domain.Entities.DisputeMessage", b =>
                 {
-                    b.Property<Guid>("DispMsgDisputeMessagesId")
+                    b.Property<Guid>("DisputeMessagesId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("dispMsg_DisputeMessagesId")
+                        .HasColumnName("DisputeMessagesId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
                     b.Property<string>("Content")
@@ -726,128 +457,35 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasDefaultValueSql("now()");
 
-                    b.Property<Guid>("DispDisputesId")
+                    b.Property<Guid>("DisputesId")
                         .HasColumnType("uuid")
-                        .HasColumnName("disp_DisputesId");
+                        .HasColumnName("DisputesId");
 
-                    b.Property<Guid>("UsrSenderId")
+                    b.Property<Guid>("SenderId")
                         .HasColumnType("uuid")
-                        .HasColumnName("usr_SenderId");
+                        .HasColumnName("SenderId");
 
-                    b.HasKey("DispMsgDisputeMessagesId")
+                    b.HasKey("DisputeMessagesId")
                         .HasName("DisputeMessages_pkey");
 
-                    b.HasIndex("UsrSenderId");
+                    b.HasIndex("SenderId");
 
-                    b.HasIndex(new[] { "DispDisputesId", "CreatedAt" }, "IX_DisputeMessages_DisputesId_CreatedAt");
+                    b.HasIndex(new[] { "DisputesId", "CreatedAt" }, "IX_DisputeMessages_DisputesId_CreatedAt");
 
                     b.ToTable("DisputeMessages");
                 });
 
-            modelBuilder.Entity("Domain.Entities.Education", b =>
-                {
-                    b.Property<Guid>("EEducationsId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("e_EducationsId")
-                        .HasDefaultValueSql("gen_random_uuid()");
-
-                    b.Property<string>("Degree")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("Description")
-                        .HasColumnType("text");
-
-                    b.Property<DateOnly?>("EndDate")
-                        .HasColumnType("date");
-
-                    b.Property<string>("FieldOfStudy")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<Guid>("FlFreelancerId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("fl_FreelancerId");
-
-                    b.Property<string>("Institution")
-                        .IsRequired()
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
-
-                    b.Property<DateOnly?>("StartDate")
-                        .HasColumnType("date");
-
-                    b.HasKey("EEducationsId")
-                        .HasName("Educations_pkey");
-
-                    b.HasIndex(new[] { "FlFreelancerId" }, "IX_Educations_FreelancerId");
-
-                    b.ToTable("Educations");
-                });
-
-            modelBuilder.Entity("Domain.Entities.EsignAuditTrail", b =>
-                {
-                    b.Property<Guid>("EAuditEsignAuditTrailsId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("eAudit_ESignAuditTrailsId")
-                        .HasDefaultValueSql("gen_random_uuid()");
-
-                    b.Property<int>("Action")
-                        .HasColumnType("integer")
-                        .HasComment("Enum ESignAuditAction: 0=DocumentCreated, 1=DocumentViewed, 2=SignatureAdded, 3=SignatureDeclined, 4=DocumentFinalized, 5=DocumentExported, 6=DocumentVoided");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasDefaultValueSql("now()");
-
-                    b.Property<string>("Description")
-                        .HasColumnType("text");
-
-                    b.Property<Guid>("EDocEsignDocumentsId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("eDoc_ESignDocumentsId");
-
-                    b.Property<string>("IpAddress")
-                        .HasMaxLength(45)
-                        .HasColumnType("character varying(45)");
-
-                    b.Property<string>("Metadata")
-                        .HasColumnType("jsonb");
-
-                    b.Property<string>("UserAgent")
-                        .HasColumnType("text");
-
-                    b.Property<Guid>("UsrUserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("usr_UserId");
-
-                    b.HasKey("EAuditEsignAuditTrailsId")
-                        .HasName("ESignAuditTrails_pkey");
-
-                    b.HasIndex(new[] { "Action" }, "IX_ESignAuditTrails_Action");
-
-                    b.HasIndex(new[] { "EDocEsignDocumentsId", "CreatedAt" }, "IX_ESignAuditTrails_DocId_CreatedAt")
-                        .IsDescending(false, true);
-
-                    b.HasIndex(new[] { "UsrUserId" }, "IX_ESignAuditTrails_UserId");
-
-                    b.ToTable("ESignAuditTrails", (string)null);
-                });
-
             modelBuilder.Entity("Domain.Entities.EsignDocument", b =>
                 {
-                    b.Property<Guid>("EDocEsignDocumentsId")
+                    b.Property<Guid>("EsignDocumentsId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("eDoc_ESignDocumentsId")
+                        .HasColumnName("ESignDocumentsId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
-                    b.Property<Guid?>("ContContractsId")
+                    b.Property<Guid?>("ContractsId")
                         .HasColumnType("uuid")
-                        .HasColumnName("cont_ContractsId");
+                        .HasColumnName("ContractsId");
 
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
@@ -863,9 +501,9 @@ namespace Infrastructure.Persistence.Migrations
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
 
-                    b.Property<Guid>("ETplEsignTemplatesId")
+                    b.Property<Guid>("EsignTemplatesId")
                         .HasColumnType("uuid")
-                        .HasColumnName("eTpl_ESignTemplatesId");
+                        .HasColumnName("ESignTemplatesId");
 
                     b.Property<DateTime?>("ExpiresAt")
                         .HasColumnType("timestamp with time zone");
@@ -876,9 +514,9 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("FinalizedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<Guid>("JpJobPostsId")
+                    b.Property<Guid>("JobPostsId")
                         .HasColumnType("uuid")
-                        .HasColumnName("jp_JobPostsId");
+                        .HasColumnName("JobPostsId");
 
                     b.Property<string>("RenderedHtmlContent")
                         .IsRequired()
@@ -893,18 +531,18 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.HasKey("EDocEsignDocumentsId")
+                    b.HasKey("EsignDocumentsId")
                         .HasName("ESignDocuments_pkey");
 
-                    b.HasIndex("ETplEsignTemplatesId");
+                    b.HasIndex("EsignTemplatesId");
 
-                    b.HasIndex(new[] { "ContContractsId" }, "ESignDocuments_cont_ContractsId_key")
+                    b.HasIndex(new[] { "ContractsId" }, "ESignDocuments_cont_ContractsId_key")
                         .IsUnique();
 
                     b.HasIndex(new[] { "DocumentCode" }, "IX_ESignDocuments_DocumentCode")
                         .IsUnique();
 
-                    b.HasIndex(new[] { "JpJobPostsId" }, "IX_ESignDocuments_JobPostsId");
+                    b.HasIndex(new[] { "JobPostsId" }, "IX_ESignDocuments_JobPostsId");
 
                     b.HasIndex(new[] { "Status" }, "IX_ESignDocuments_Status");
 
@@ -916,10 +554,10 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.EsignSignature", b =>
                 {
-                    b.Property<Guid>("ESigEsignSignaturesId")
+                    b.Property<Guid>("EsignSignaturesId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("eSig_ESignSignaturesId")
+                        .HasColumnName("ESignSignaturesId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
                     b.Property<DateTime>("CreatedAt")
@@ -933,9 +571,9 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("DeclinedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<Guid>("EDocEsignDocumentsId")
+                    b.Property<Guid>("EsignDocumentsId")
                         .HasColumnType("uuid")
-                        .HasColumnName("eDoc_ESignDocumentsId");
+                        .HasColumnName("ESignDocumentsId");
 
                     b.Property<string>("IpAddress")
                         .HasMaxLength(45)
@@ -967,33 +605,33 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<string>("UserAgent")
                         .HasColumnType("text");
 
-                    b.Property<Guid>("UsrUserId")
+                    b.Property<Guid>("UserId")
                         .HasColumnType("uuid")
-                        .HasColumnName("usr_UserId");
+                        .HasColumnName("UserId");
 
-                    b.HasKey("ESigEsignSignaturesId")
+                    b.HasKey("EsignSignaturesId")
                         .HasName("ESignSignatures_pkey");
 
-                    b.HasIndex(new[] { "EDocEsignDocumentsId", "UsrUserId" }, "ESignSignatures_eDoc_ESignDocumentsId_usr_UserId_key")
+                    b.HasIndex(new[] { "EsignDocumentsId", "UserId" }, "ESignSignatures_eDoc_ESignDocumentsId_usr_UserId_key")
                         .IsUnique();
 
-                    b.HasIndex(new[] { "EDocEsignDocumentsId", "Status" }, "IX_ESignSignatures_DocId_Status");
+                    b.HasIndex(new[] { "EsignDocumentsId", "Status" }, "IX_ESignSignatures_DocId_Status");
 
-                    b.HasIndex(new[] { "EDocEsignDocumentsId" }, "IX_ESignSignatures_ESignDocumentsId");
+                    b.HasIndex(new[] { "EsignDocumentsId" }, "IX_ESignSignatures_ESignDocumentsId");
 
                     b.HasIndex(new[] { "Status" }, "IX_ESignSignatures_Status");
 
-                    b.HasIndex(new[] { "UsrUserId" }, "IX_ESignSignatures_UserId");
+                    b.HasIndex(new[] { "UserId" }, "IX_ESignSignatures_UserId");
 
                     b.ToTable("ESignSignatures", (string)null);
                 });
 
             modelBuilder.Entity("Domain.Entities.EsignTemplate", b =>
                 {
-                    b.Property<Guid>("ETplEsignTemplatesId")
+                    b.Property<Guid>("EsignTemplatesId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("eTpl_ESignTemplatesId")
+                        .HasColumnName("ESignTemplatesId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
                     b.Property<DateTime>("CreatedAt")
@@ -1021,10 +659,6 @@ namespace Infrastructure.Persistence.Migrations
                         .HasMaxLength(300)
                         .HasColumnType("character varying(300)");
 
-                    b.Property<string>("NameVi")
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
-
                     b.Property<string>("PlaceholderSchema")
                         .HasColumnType("jsonb");
 
@@ -1036,7 +670,7 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasDefaultValue(1);
 
-                    b.HasKey("ETplEsignTemplatesId")
+                    b.HasKey("EsignTemplatesId")
                         .HasName("ESignTemplates_pkey");
 
                     b.HasIndex(new[] { "CreatedBy" }, "IX_ESignTemplates_CreatedBy");
@@ -1050,11 +684,12 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.Faq", b =>
                 {
-                    b.Property<Guid>("FaqFaqsId")
+                    b.Property<int>("FaqsId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("faq_FAQsId")
-                        .HasDefaultValueSql("gen_random_uuid()");
+                        .HasColumnType("integer")
+                        .HasColumnName("FAQsId");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("FaqsId"));
 
                     b.Property<string>("Answer")
                         .IsRequired()
@@ -1068,9 +703,9 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasDefaultValueSql("now()");
 
-                    b.Property<Guid>("FaqCatFaqcategoriesId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("faqCat_FAQCategoriesId");
+                    b.Property<int>("FaqcategoriesId")
+                        .HasColumnType("integer")
+                        .HasColumnName("FAQCategoriesId");
 
                     b.Property<bool?>("IsActive")
                         .ValueGeneratedOnAdd()
@@ -1092,10 +727,10 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.HasKey("FaqFaqsId")
+                    b.HasKey("FaqsId")
                         .HasName("FAQs_pkey");
 
-                    b.HasIndex(new[] { "FaqCatFaqcategoriesId" }, "IX_FAQs_FAQCategoriesId");
+                    b.HasIndex(new[] { "FaqcategoriesId" }, "IX_FAQs_FAQCategoriesId");
 
                     b.HasIndex(new[] { "IsActive" }, "IX_FAQs_IsActive");
 
@@ -1104,11 +739,12 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.Faqcategory", b =>
                 {
-                    b.Property<Guid>("FaqCatFaqcategoriesId")
+                    b.Property<int>("FaqcategoriesId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("faqCat_FAQCategoriesId")
-                        .HasDefaultValueSql("gen_random_uuid()");
+                        .HasColumnType("integer")
+                        .HasColumnName("FAQCategoriesId");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("FaqcategoriesId"));
 
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
@@ -1125,10 +761,6 @@ namespace Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
-                    b.Property<string>("NameVi")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
                     b.Property<string>("Slug")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -1139,7 +771,7 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasDefaultValue(0);
 
-                    b.HasKey("FaqCatFaqcategoriesId")
+                    b.HasKey("FaqcategoriesId")
                         .HasName("FAQCategories_pkey");
 
                     b.HasIndex(new[] { "Slug" }, "IX_FAQCategories_Slug")
@@ -1150,10 +782,10 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.FreelancerProfile", b =>
                 {
-                    b.Property<Guid>("FlProFreelancerProfilesId")
+                    b.Property<Guid>("FreelancerProfilesId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("flPro_FreelancerProfilesId")
+                        .HasColumnName("FreelancerProfilesId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
                     b.Property<int?>("Availability")
@@ -1192,21 +824,21 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<Guid>("UsrUserId")
+                    b.Property<Guid>("UserId")
                         .HasColumnType("uuid")
-                        .HasColumnName("usr_UserId");
+                        .HasColumnName("UserId");
 
-                    b.HasKey("FlProFreelancerProfilesId")
+                    b.HasKey("FreelancerProfilesId")
                         .HasName("FreelancerProfiles_pkey");
 
-                    b.HasIndex(new[] { "UsrUserId" }, "FreelancerProfiles_usr_UserId_key")
+                    b.HasIndex(new[] { "UserId" }, "FreelancerProfiles_usr_UserId_key")
                         .IsUnique();
 
                     b.HasIndex(new[] { "Availability" }, "IX_FreelancerProfiles_Availability");
 
                     b.HasIndex(new[] { "ExperienceLevel" }, "IX_FreelancerProfiles_ExperienceLevel");
 
-                    b.HasIndex(new[] { "UsrUserId" }, "IX_FreelancerProfiles_UserId")
+                    b.HasIndex(new[] { "UserId" }, "IX_FreelancerProfiles_UserId")
                         .IsUnique();
 
                     b.ToTable("FreelancerProfiles");
@@ -1214,46 +846,46 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.FreelancerSkill", b =>
                 {
-                    b.Property<Guid>("FSkillFreelancerSkillsId")
+                    b.Property<Guid>("FreelancerSkillsId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("fSkill_FreelancerSkillsId")
+                        .HasColumnName("FreelancerSkillsId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
-                    b.Property<Guid>("FlFreelancerId")
+                    b.Property<Guid>("FreelancerId")
                         .HasColumnType("uuid")
-                        .HasColumnName("fl_FreelancerId");
+                        .HasColumnName("FreelancerId");
 
                     b.Property<int?>("ProficiencyLevel")
                         .HasColumnType("integer")
                         .HasComment("Enum ProficiencyLevel: 0=Beginner, 1=Intermediate, 2=Advanced, 3=Expert");
 
-                    b.Property<Guid>("SkSkillsId")
+                    b.Property<Guid>("SkillsId")
                         .HasColumnType("uuid")
-                        .HasColumnName("sk_SkillsId");
+                        .HasColumnName("SkillsId");
 
                     b.Property<int?>("YearsOfExperience")
                         .HasColumnType("integer");
 
-                    b.HasKey("FSkillFreelancerSkillsId")
+                    b.HasKey("FreelancerSkillsId")
                         .HasName("FreelancerSkills_pkey");
 
-                    b.HasIndex(new[] { "FlFreelancerId", "SkSkillsId" }, "FreelancerSkills_fl_FreelancerId_sk_SkillsId_key")
+                    b.HasIndex(new[] { "FreelancerId", "SkillsId" }, "FreelancerSkills_fl_FreelancerId_sk_SkillsId_key")
                         .IsUnique();
 
-                    b.HasIndex(new[] { "FlFreelancerId" }, "IX_FreelancerSkills_FreelancerId");
+                    b.HasIndex(new[] { "FreelancerId" }, "IX_FreelancerSkills_FreelancerId");
 
-                    b.HasIndex(new[] { "SkSkillsId" }, "IX_FreelancerSkills_SkillsId");
+                    b.HasIndex(new[] { "SkillsId" }, "IX_FreelancerSkills_SkillsId");
 
                     b.ToTable("FreelancerSkills");
                 });
 
             modelBuilder.Entity("Domain.Entities.JobPost", b =>
                 {
-                    b.Property<Guid>("JpJobPostsId")
+                    b.Property<Guid>("JobPostsId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("jp_JobPostsId")
+                        .HasColumnName("JobPostsId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
                     b.Property<DateTime?>("EndDate")
@@ -1274,9 +906,9 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("CategoryId")
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("ClProClientProfilesId")
+                    b.Property<Guid>("ClientProfilesId")
                         .HasColumnType("uuid")
-                        .HasColumnName("clPro_ClientProfilesId");
+                        .HasColumnName("ClientProfilesId");
 
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
@@ -1338,14 +970,14 @@ namespace Infrastructure.Persistence.Migrations
                         .HasDefaultValue(0)
                         .HasComment("Enum JobPostVisibility: 0=Public, 1=Private, 2=InviteOnly");
 
-                    b.HasKey("JpJobPostsId")
+                    b.HasKey("JobPostsId")
                         .HasName("JobPosts_pkey");
 
                     b.HasIndex(new[] { "EndDate" }, "IX_JobPosts_EndDate");
 
                     b.HasIndex(new[] { "CategoryId" }, "IX_JobPosts_CategoryId");
 
-                    b.HasIndex(new[] { "ClProClientProfilesId" }, "IX_JobPosts_ClientProfilesId");
+                    b.HasIndex(new[] { "ClientProfilesId" }, "IX_JobPosts_ClientProfilesId");
 
                     b.HasIndex(new[] { "CreatedAt" }, "IX_JobPosts_CreatedAt")
                         .IsDescending();
@@ -1362,10 +994,10 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.JobPostAttachment", b =>
                 {
-                    b.Property<Guid>("JpAttachJobPostAttachmentsId")
+                    b.Property<Guid>("JobPostAttachmentsId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("jpAttach_JobPostAttachmentsId")
+                        .HasColumnName("JobPostAttachmentsId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
                     b.Property<DateTime>("CreatedAt")
@@ -1385,24 +1017,24 @@ namespace Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<Guid>("JpJobPostsId")
+                    b.Property<Guid>("JobPostsId")
                         .HasColumnType("uuid")
-                        .HasColumnName("jp_JobPostsId");
+                        .HasColumnName("JobPostsId");
 
-                    b.HasKey("JpAttachJobPostAttachmentsId")
+                    b.HasKey("JobPostAttachmentsId")
                         .HasName("JobPostAttachments_pkey");
 
-                    b.HasIndex(new[] { "JpJobPostsId" }, "IX_JobPostAttachments_JobPostsId");
+                    b.HasIndex(new[] { "JobPostsId" }, "IX_JobPostAttachments_JobPostsId");
 
                     b.ToTable("JobPostAttachments");
                 });
 
             modelBuilder.Entity("Domain.Entities.JobPostSkill", b =>
                 {
-                    b.Property<Guid>("JpSkillJobPostSkillsId")
+                    b.Property<Guid>("JobPostSkillsId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("jpSkill_JobPostSkillsId")
+                        .HasColumnName("JobPostSkillsId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
                     b.Property<bool?>("IsRequired")
@@ -1410,22 +1042,22 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(true);
 
-                    b.Property<Guid>("JpJobPostsId")
+                    b.Property<Guid>("JobPostsId")
                         .HasColumnType("uuid")
-                        .HasColumnName("jp_JobPostsId");
+                        .HasColumnName("JobPostsId");
 
-                    b.Property<Guid>("SkSkillsId")
+                    b.Property<Guid>("SkillsId")
                         .HasColumnType("uuid")
-                        .HasColumnName("sk_SkillsId");
+                        .HasColumnName("SkillsId");
 
-                    b.HasKey("JpSkillJobPostSkillsId")
+                    b.HasKey("JobPostSkillsId")
                         .HasName("JobPostSkills_pkey");
 
-                    b.HasIndex(new[] { "JpJobPostsId" }, "IX_JobPostSkills_JobPostsId");
+                    b.HasIndex(new[] { "JobPostsId" }, "IX_JobPostSkills_JobPostsId");
 
-                    b.HasIndex(new[] { "SkSkillsId" }, "IX_JobPostSkills_SkillsId");
+                    b.HasIndex(new[] { "SkillsId" }, "IX_JobPostSkills_SkillsId");
 
-                    b.HasIndex(new[] { "JpJobPostsId", "SkSkillsId" }, "JobPostSkills_jp_JobPostsId_sk_SkillsId_key")
+                    b.HasIndex(new[] { "JobPostsId", "SkillsId" }, "JobPostSkills_jp_JobPostsId_sk_SkillsId_key")
                         .IsUnique();
 
                     b.ToTable("JobPostSkills");
@@ -1433,18 +1065,18 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.Message", b =>
                 {
-                    b.Property<Guid>("MsgMessagesId")
+                    b.Property<Guid>("MessagesId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("msg_MessagesId")
+                        .HasColumnName("MessagesId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
                     b.Property<string>("Content")
                         .HasColumnType("text");
 
-                    b.Property<Guid>("ConvConversationsId")
+                    b.Property<Guid>("ConversationsId")
                         .HasColumnType("uuid")
-                        .HasColumnName("conv_ConversationsId");
+                        .HasColumnName("ConversationsId");
 
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
@@ -1466,6 +1098,10 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(false);
 
+                    b.Property<Guid>("SenderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("SenderId");
+
                     b.Property<int?>("Type")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
@@ -1475,29 +1111,25 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<Guid>("UsrSenderId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("usr_SenderId");
-
-                    b.HasKey("MsgMessagesId")
+                    b.HasKey("MessagesId")
                         .HasName("Messages_pkey");
 
-                    b.HasIndex(new[] { "ConvConversationsId", "CreatedAt" }, "IX_Messages_ConversationsId_CreatedAt")
+                    b.HasIndex(new[] { "ConversationsId", "CreatedAt" }, "IX_Messages_ConversationsId_CreatedAt")
                         .IsDescending(false, true);
 
                     b.HasIndex(new[] { "IsRead" }, "IX_Messages_IsRead");
 
-                    b.HasIndex(new[] { "UsrSenderId" }, "IX_Messages_SenderId");
+                    b.HasIndex(new[] { "SenderId" }, "IX_Messages_SenderId");
 
                     b.ToTable("Messages");
                 });
 
             modelBuilder.Entity("Domain.Entities.MessageAttachment", b =>
                 {
-                    b.Property<Guid>("MsgAttachMessageAttachmentsId")
+                    b.Property<Guid>("MessageAttachmentsId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("msgAttach_MessageAttachmentsId")
+                        .HasColumnName("MessageAttachmentsId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
                     b.Property<string>("ContentType")
@@ -1521,24 +1153,24 @@ namespace Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<Guid>("MsgMessagesId")
+                    b.Property<Guid>("MessagesId")
                         .HasColumnType("uuid")
-                        .HasColumnName("msg_MessagesId");
+                        .HasColumnName("MessagesId");
 
-                    b.HasKey("MsgAttachMessageAttachmentsId")
+                    b.HasKey("MessageAttachmentsId")
                         .HasName("MessageAttachments_pkey");
 
-                    b.HasIndex(new[] { "MsgMessagesId" }, "IX_MessageAttachments_MessagesId");
+                    b.HasIndex(new[] { "MessagesId" }, "IX_MessageAttachments_MessagesId");
 
                     b.ToTable("MessageAttachments");
                 });
 
             modelBuilder.Entity("Domain.Entities.Milestone", b =>
                 {
-                    b.Property<Guid>("MStoneMilestonesId")
+                    b.Property<Guid>("MilestonesId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("mStone_MilestonesId")
+                        .HasColumnName("MilestonesId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
                     b.Property<decimal>("Amount")
@@ -1548,9 +1180,9 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("ApprovedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<Guid>("ContContractsId")
+                    b.Property<Guid>("ContractsId")
                         .HasColumnType("uuid")
-                        .HasColumnName("cont_ContractsId");
+                        .HasColumnName("ContractsId");
 
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
@@ -1583,12 +1215,12 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.HasKey("MStoneMilestonesId")
+                    b.HasKey("MilestonesId")
                         .HasName("Milestones_pkey");
 
-                    b.HasIndex(new[] { "ContContractsId" }, "IX_Milestones_ContractsId");
+                    b.HasIndex(new[] { "ContractsId" }, "IX_Milestones_ContractsId");
 
-                    b.HasIndex(new[] { "ContContractsId", "SortOrder" }, "IX_Milestones_ContractsId_SortOrder");
+                    b.HasIndex(new[] { "ContractsId", "SortOrder" }, "IX_Milestones_ContractsId_SortOrder");
 
                     b.HasIndex(new[] { "Status" }, "IX_Milestones_Status");
 
@@ -1597,10 +1229,10 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.MilestoneAttachment", b =>
                 {
-                    b.Property<Guid>("MStoneAttachMilestoneAttachmentsId")
+                    b.Property<Guid>("MilestoneAttachmentsId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("mStoneAttach_MilestoneAttachmentsId")
+                        .HasColumnName("MilestoneAttachmentsId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
                     b.Property<DateTime>("CreatedAt")
@@ -1620,29 +1252,29 @@ namespace Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<Guid>("MStoneMilestonesId")
+                    b.Property<Guid>("MilestonesId")
                         .HasColumnType("uuid")
-                        .HasColumnName("mStone_MilestonesId");
+                        .HasColumnName("MilestonesId");
 
                     b.Property<Guid?>("UploadedByUserId")
                         .HasColumnType("uuid");
 
-                    b.HasKey("MStoneAttachMilestoneAttachmentsId")
+                    b.HasKey("MilestoneAttachmentsId")
                         .HasName("MilestoneAttachments_pkey");
 
                     b.HasIndex("UploadedByUserId");
 
-                    b.HasIndex(new[] { "MStoneMilestonesId" }, "IX_MilestoneAttachments_MilestonesId");
+                    b.HasIndex(new[] { "MilestonesId" }, "IX_MilestoneAttachments_MilestonesId");
 
                     b.ToTable("MilestoneAttachments");
                 });
 
             modelBuilder.Entity("Domain.Entities.Notification", b =>
                 {
-                    b.Property<Guid>("NotiNotificationsId")
+                    b.Property<Guid>("NotificationsId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("noti_NotificationsId")
+                        .HasColumnName("NotificationsId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
                     b.Property<string>("Content")
@@ -1677,29 +1309,29 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasComment("Enum NotificationType: 0=NewJob, 1=ProposalReceived, 2=ProposalStatusChanged, 3=ContractStarted, 4=MilestoneUpdated, 5=PaymentProofUploaded, 6=PaymentConfirmed, 7=ChatMessage, 8=DisputeUpdate, 9=ReviewReceived, 10=SystemAlert, 11=AIInterviewInvite, 12=SubscriptionExpiring");
 
-                    b.Property<Guid>("UsrUserId")
+                    b.Property<Guid>("UserId")
                         .HasColumnType("uuid")
-                        .HasColumnName("usr_UserId");
+                        .HasColumnName("UserId");
 
-                    b.HasKey("NotiNotificationsId")
+                    b.HasKey("NotificationsId")
                         .HasName("Notifications_pkey");
 
                     b.HasIndex(new[] { "ReferenceId", "ReferenceType" }, "IX_Notifications_ReferenceId_ReferenceType");
 
-                    b.HasIndex(new[] { "UsrUserId", "CreatedAt" }, "IX_Notifications_UserId_CreatedAt")
+                    b.HasIndex(new[] { "UserId", "CreatedAt" }, "IX_Notifications_UserId_CreatedAt")
                         .IsDescending(false, true);
 
-                    b.HasIndex(new[] { "UsrUserId", "IsRead" }, "IX_Notifications_UserId_IsRead");
+                    b.HasIndex(new[] { "UserId", "IsRead" }, "IX_Notifications_UserId_IsRead");
 
                     b.ToTable("Notifications");
                 });
 
             modelBuilder.Entity("Domain.Entities.PaymentProof", b =>
                 {
-                    b.Property<Guid>("PpPaymentProofsId")
+                    b.Property<Guid>("PaymentProofsId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("pp_PaymentProofsId")
+                        .HasColumnName("PaymentProofsId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
                     b.Property<DateTime?>("ConfirmedAt")
@@ -1725,9 +1357,9 @@ namespace Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<Guid>("MStoneMilestonesId")
+                    b.Property<Guid>("MilestonesId")
                         .HasColumnType("uuid")
-                        .HasColumnName("mStone_MilestonesId");
+                        .HasColumnName("MilestonesId");
 
                     b.Property<string>("Note")
                         .HasColumnType("text");
@@ -1738,28 +1370,28 @@ namespace Infrastructure.Persistence.Migrations
                         .HasDefaultValue(0)
                         .HasComment("Enum PaymentProofStatus: 0=Pending, 1=Confirmed, 2=Disputed");
 
-                    b.Property<Guid>("UsrUploadedById")
+                    b.Property<Guid>("UploadedById")
                         .HasColumnType("uuid")
-                        .HasColumnName("usr_UploadedById");
+                        .HasColumnName("UploadedById");
 
-                    b.HasKey("PpPaymentProofsId")
+                    b.HasKey("PaymentProofsId")
                         .HasName("PaymentProofs_pkey");
 
-                    b.HasIndex(new[] { "MStoneMilestonesId" }, "IX_PaymentProofs_MilestonesId");
+                    b.HasIndex(new[] { "MilestonesId" }, "IX_PaymentProofs_MilestonesId");
 
                     b.HasIndex(new[] { "Status" }, "IX_PaymentProofs_Status");
 
-                    b.HasIndex(new[] { "UsrUploadedById" }, "IX_PaymentProofs_UploadedById");
+                    b.HasIndex(new[] { "UploadedById" }, "IX_PaymentProofs_UploadedById");
 
                     b.ToTable("PaymentProofs");
                 });
 
             modelBuilder.Entity("Domain.Entities.PlatformSetting", b =>
                 {
-                    b.Property<Guid>("PsPlatformSettingsId")
+                    b.Property<Guid>("PlatformSettingsId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("ps_PlatformSettingsId")
+                        .HasColumnName("PlatformSettingsId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
                     b.Property<string>("DataType")
@@ -1786,7 +1418,7 @@ namespace Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.HasKey("PsPlatformSettingsId")
+                    b.HasKey("PlatformSettingsId")
                         .HasName("PlatformSettings_pkey");
 
                     b.HasIndex("UpdatedByAdminId");
@@ -1799,62 +1431,46 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.PortfolioItem", b =>
                 {
-                    b.Property<Guid>("PiPortfolioItemsId")
+                    b.Property<Guid>("PortfolioItemsId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("pi_PortfolioItemsId")
+                        .HasColumnName("PortfolioItemsId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
-                    b.Property<Guid?>("CategoryId")
+                    b.Property<Guid?>("CategoryCategoriesId")
                         .HasColumnType("uuid");
 
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasDefaultValueSql("now()");
-
-                    b.Property<string>("Description")
-                        .HasColumnType("text");
-
-                    b.Property<Guid>("FlFreelancerId")
+                    b.Property<Guid>("FreelancerId")
                         .HasColumnType("uuid")
-                        .HasColumnName("fl_FreelancerId");
-
-                    b.Property<string>("ImageUrls")
-                        .HasColumnType("text");
+                        .HasColumnName("FreelancerId");
 
                     b.Property<string>("ProjectUrl")
                         .HasColumnType("text");
 
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
-
-                    b.HasKey("PiPortfolioItemsId")
+                    b.HasKey("PortfolioItemsId")
                         .HasName("PortfolioItems_pkey");
 
-                    b.HasIndex(new[] { "CategoryId" }, "IX_PortfolioItems_CategoryId");
+                    b.HasIndex("CategoryCategoriesId");
 
-                    b.HasIndex(new[] { "FlFreelancerId" }, "IX_PortfolioItems_FreelancerId");
+                    b.HasIndex(new[] { "FreelancerId" }, "IX_PortfolioItems_FreelancerId");
 
                     b.ToTable("PortfolioItems");
                 });
 
             modelBuilder.Entity("Domain.Entities.Proposal", b =>
                 {
-                    b.Property<Guid>("PropoProposalsId")
+                    b.Property<Guid>("ProposalsId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("propo_ProposalsId")
+                        .HasColumnName("ProposalsId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
                     b.Property<string>("CoverLetter")
                         .HasColumnType("text");
 
-                    b.Property<Guid>("FlProFreelancerProfilesId")
+                    b.Property<Guid>("FreelancerProfilesId")
                         .HasColumnType("uuid")
-                        .HasColumnName("flPro_FreelancerProfilesId");
+                        .HasColumnName("FreelancerProfilesId");
 
                     b.Property<bool?>("IsAigenerated")
                         .ValueGeneratedOnAdd()
@@ -1862,9 +1478,9 @@ namespace Infrastructure.Persistence.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("IsAIGenerated");
 
-                    b.Property<Guid>("JpJobPostsId")
+                    b.Property<Guid>("JobPostsId")
                         .HasColumnType("uuid")
-                        .HasColumnName("jp_JobPostsId");
+                        .HasColumnName("JobPostsId");
 
                     b.Property<string>("ProposedDuration")
                         .HasMaxLength(100)
@@ -1884,20 +1500,20 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.HasKey("PropoProposalsId")
+                    b.HasKey("ProposalsId")
                         .HasName("Proposals_pkey");
 
-                    b.HasIndex(new[] { "FlProFreelancerProfilesId" }, "IX_Proposals_FreelancerProfilesId");
+                    b.HasIndex(new[] { "FreelancerProfilesId" }, "IX_Proposals_FreelancerProfilesId");
 
-                    b.HasIndex(new[] { "FlProFreelancerProfilesId", "Status" }, "IX_Proposals_FreelancerProfilesId_Status");
+                    b.HasIndex(new[] { "FreelancerProfilesId", "Status" }, "IX_Proposals_FreelancerProfilesId_Status");
 
-                    b.HasIndex(new[] { "JpJobPostsId" }, "IX_Proposals_JobPostsId");
+                    b.HasIndex(new[] { "JobPostsId" }, "IX_Proposals_JobPostsId");
 
-                    b.HasIndex(new[] { "JpJobPostsId", "Status" }, "IX_Proposals_JobPostsId_Status");
+                    b.HasIndex(new[] { "JobPostsId", "Status" }, "IX_Proposals_JobPostsId_Status");
 
                     b.HasIndex(new[] { "Status" }, "IX_Proposals_Status");
 
-                    b.HasIndex(new[] { "JpJobPostsId", "FlProFreelancerProfilesId" }, "Proposals_jp_JobPostsId_flPro_FreelancerProfilesId_key")
+                    b.HasIndex(new[] { "JobPostsId", "FreelancerProfilesId" }, "Proposals_jp_JobPostsId_flPro_FreelancerProfilesId_key")
                         .IsUnique();
 
                     b.ToTable("Proposals");
@@ -1905,10 +1521,10 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.ProposalAttachment", b =>
                 {
-                    b.Property<Guid>("PropoAttachProposalAttachmentsId")
+                    b.Property<Guid>("ProposalAttachmentsId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("propoAttach_ProposalAttachmentsId")
+                        .HasColumnName("ProposalAttachmentsId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
                     b.Property<DateTime>("CreatedAt")
@@ -1928,24 +1544,24 @@ namespace Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<Guid>("PropoProposalsId")
+                    b.Property<Guid>("ProposalsId")
                         .HasColumnType("uuid")
-                        .HasColumnName("propo_ProposalsId");
+                        .HasColumnName("ProposalsId");
 
-                    b.HasKey("PropoAttachProposalAttachmentsId")
+                    b.HasKey("ProposalAttachmentsId")
                         .HasName("ProposalAttachments_pkey");
 
-                    b.HasIndex(new[] { "PropoProposalsId" }, "IX_ProposalAttachments_ProposalsId");
+                    b.HasIndex(new[] { "ProposalsId" }, "IX_ProposalAttachments_ProposalsId");
 
                     b.ToTable("ProposalAttachments");
                 });
 
             modelBuilder.Entity("Domain.Entities.RefreshToken", b =>
                 {
-                    b.Property<Guid>("RtId")
+                    b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("rt_Id")
+                        .HasColumnName("Id")
                         .HasDefaultValueSql("gen_random_uuid()");
 
                     b.Property<DateTime>("CreatedAt")
@@ -1963,11 +1579,11 @@ namespace Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<Guid>("UsrUserId")
+                    b.Property<Guid>("UserId")
                         .HasColumnType("uuid")
-                        .HasColumnName("usr_UserId");
+                        .HasColumnName("UserId");
 
-                    b.HasKey("RtId")
+                    b.HasKey("Id")
                         .HasName("RefreshTokens_pkey");
 
                     b.HasIndex(new[] { "ExpiresAt" }, "IX_RefreshTokens_ExpiresAt");
@@ -1975,17 +1591,17 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "Token" }, "IX_RefreshTokens_Token")
                         .IsUnique();
 
-                    b.HasIndex(new[] { "UsrUserId" }, "IX_RefreshTokens_UserId");
+                    b.HasIndex(new[] { "UserId" }, "IX_RefreshTokens_UserId");
 
                     b.ToTable("RefreshTokens");
                 });
 
             modelBuilder.Entity("Domain.Entities.Report", b =>
                 {
-                    b.Property<Guid>("RptReportsId")
+                    b.Property<Guid>("ReportsId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("rpt_ReportsId")
+                        .HasColumnName("ReportsId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
                     b.Property<string>("AdminAttachmentFileName")
@@ -2016,6 +1632,10 @@ namespace Infrastructure.Persistence.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
+                    b.Property<Guid>("ReporterId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("ReporterId");
+
                     b.Property<DateTime?>("ResolvedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -2035,16 +1655,12 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<Guid>("UsrReporterId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("usr_ReporterId");
-
-                    b.HasKey("RptReportsId")
+                    b.HasKey("ReportsId")
                         .HasName("Reports_pkey");
 
                     b.HasIndex(new[] { "ReportedEntityId", "ReportedEntityType" }, "IX_Reports_ReportedEntityId_ReportedEntityType");
 
-                    b.HasIndex(new[] { "UsrReporterId" }, "IX_Reports_ReporterId");
+                    b.HasIndex(new[] { "ReporterId" }, "IX_Reports_ReporterId");
 
                     b.HasIndex(new[] { "ResolvedByAdminId" }, "IX_Reports_ResolvedByAdminId");
 
@@ -2055,10 +1671,10 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.Review", b =>
                 {
-                    b.Property<Guid>("RevReviewsId")
+                    b.Property<Guid>("ReviewsId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("rev_ReviewsId")
+                        .HasColumnName("ReviewsId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
                     b.Property<string>("Comment")
@@ -2067,9 +1683,9 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<int?>("CommunicationRating")
                         .HasColumnType("integer");
 
-                    b.Property<Guid>("ContContractsId")
+                    b.Property<Guid>("ContractsId")
                         .HasColumnType("uuid")
-                        .HasColumnName("cont_ContractsId");
+                        .HasColumnName("ContractsId");
 
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
@@ -2087,32 +1703,32 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<int>("Rating")
                         .HasColumnType("integer");
 
+                    b.Property<Guid>("RevieweeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("RevieweeId");
+
+                    b.Property<Guid>("ReviewerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("ReviewerId");
+
                     b.Property<int?>("TimelinessRating")
                         .HasColumnType("integer");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<Guid>("UsrRevieweeId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("usr_RevieweeId");
-
-                    b.Property<Guid>("UsrReviewerId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("usr_ReviewerId");
-
-                    b.HasKey("RevReviewsId")
+                    b.HasKey("ReviewsId")
                         .HasName("Reviews_pkey");
 
-                    b.HasIndex(new[] { "ContContractsId" }, "IX_Reviews_ContractsId");
+                    b.HasIndex(new[] { "ContractsId" }, "IX_Reviews_ContractsId");
 
-                    b.HasIndex(new[] { "UsrRevieweeId" }, "IX_Reviews_RevieweeId");
+                    b.HasIndex(new[] { "RevieweeId" }, "IX_Reviews_RevieweeId");
 
-                    b.HasIndex(new[] { "UsrRevieweeId", "IsVisible" }, "IX_Reviews_RevieweeId_IsVisible");
+                    b.HasIndex(new[] { "RevieweeId", "IsVisible" }, "IX_Reviews_RevieweeId_IsVisible");
 
-                    b.HasIndex(new[] { "UsrReviewerId" }, "IX_Reviews_ReviewerId");
+                    b.HasIndex(new[] { "ReviewerId" }, "IX_Reviews_ReviewerId");
 
-                    b.HasIndex(new[] { "ContContractsId", "UsrReviewerId" }, "Reviews_cont_ContractsId_usr_ReviewerId_key")
+                    b.HasIndex(new[] { "ContractsId", "ReviewerId" }, "Reviews_cont_ContractsId_usr_ReviewerId_key")
                         .IsUnique();
 
                     b.ToTable("Reviews");
@@ -2120,10 +1736,10 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.SavedFreelancer", b =>
                 {
-                    b.Property<Guid>("SfSavedFreelancersId")
+                    b.Property<Guid>("SavedFreelancersId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("sf_SavedFreelancersId")
+                        .HasColumnName("SavedFreelancersId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
                     b.Property<DateTime>("CreatedAt")
@@ -2131,22 +1747,22 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasDefaultValueSql("now()");
 
-                    b.Property<Guid>("FlProFreelancerProfilesId")
+                    b.Property<Guid>("FreelancerProfilesId")
                         .HasColumnType("uuid")
-                        .HasColumnName("flPro_FreelancerProfilesId");
+                        .HasColumnName("FreelancerProfilesId");
 
-                    b.Property<Guid>("UsrUserId")
+                    b.Property<Guid>("UserId")
                         .HasColumnType("uuid")
-                        .HasColumnName("usr_UserId");
+                        .HasColumnName("UserId");
 
-                    b.HasKey("SfSavedFreelancersId")
+                    b.HasKey("SavedFreelancersId")
                         .HasName("SavedFreelancers_pkey");
 
-                    b.HasIndex(new[] { "FlProFreelancerProfilesId" }, "IX_SavedFreelancers_FreelancerProfilesId");
+                    b.HasIndex(new[] { "FreelancerProfilesId" }, "IX_SavedFreelancers_FreelancerProfilesId");
 
-                    b.HasIndex(new[] { "UsrUserId" }, "IX_SavedFreelancers_UserId");
+                    b.HasIndex(new[] { "UserId" }, "IX_SavedFreelancers_UserId");
 
-                    b.HasIndex(new[] { "UsrUserId", "FlProFreelancerProfilesId" }, "SavedFreelancers_usr_UserId_flPro_FreelancerProfilesId_key")
+                    b.HasIndex(new[] { "UserId", "FreelancerProfilesId" }, "SavedFreelancers_usr_UserId_flPro_FreelancerProfilesId_key")
                         .IsUnique();
 
                     b.ToTable("SavedFreelancers");
@@ -2154,10 +1770,10 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.SavedJob", b =>
                 {
-                    b.Property<Guid>("SjSavedJobsId")
+                    b.Property<Guid>("SavedJobsId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("sj_SavedJobsId")
+                        .HasColumnName("SavedJobsId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
                     b.Property<DateTime>("CreatedAt")
@@ -2165,22 +1781,22 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasDefaultValueSql("now()");
 
-                    b.Property<Guid>("JpJobPostsId")
+                    b.Property<Guid>("JobPostsId")
                         .HasColumnType("uuid")
-                        .HasColumnName("jp_JobPostsId");
+                        .HasColumnName("JobPostsId");
 
-                    b.Property<Guid>("UsrUserId")
+                    b.Property<Guid>("UserId")
                         .HasColumnType("uuid")
-                        .HasColumnName("usr_UserId");
+                        .HasColumnName("UserId");
 
-                    b.HasKey("SjSavedJobsId")
+                    b.HasKey("SavedJobsId")
                         .HasName("SavedJobs_pkey");
 
-                    b.HasIndex(new[] { "JpJobPostsId" }, "IX_SavedJobs_JobPostsId");
+                    b.HasIndex(new[] { "JobPostsId" }, "IX_SavedJobs_JobPostsId");
 
-                    b.HasIndex(new[] { "UsrUserId" }, "IX_SavedJobs_UserId");
+                    b.HasIndex(new[] { "UserId" }, "IX_SavedJobs_UserId");
 
-                    b.HasIndex(new[] { "UsrUserId", "JpJobPostsId" }, "SavedJobs_usr_UserId_jp_JobPostsId_key")
+                    b.HasIndex(new[] { "UserId", "JobPostsId" }, "SavedJobs_usr_UserId_jp_JobPostsId_key")
                         .IsUnique();
 
                     b.ToTable("SavedJobs");
@@ -2188,15 +1804,15 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.Skill", b =>
                 {
-                    b.Property<Guid>("SkSkillsId")
+                    b.Property<Guid>("SkillsId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("sk_SkillsId")
+                        .HasColumnName("SkillsId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
-                    b.Property<Guid>("CateCategoriesId")
+                    b.Property<Guid>("CategoriesId")
                         .HasColumnType("uuid")
-                        .HasColumnName("cate_CategoriesId");
+                        .HasColumnName("CategoriesId");
 
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
@@ -2213,14 +1829,10 @@ namespace Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
-                    b.Property<string>("NameVi")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.HasKey("SkSkillsId")
+                    b.HasKey("SkillsId")
                         .HasName("Skills_pkey");
 
-                    b.HasIndex(new[] { "CateCategoriesId" }, "IX_Skills_CategoriesId");
+                    b.HasIndex(new[] { "CategoriesId" }, "IX_Skills_CategoriesId");
 
                     b.HasIndex(new[] { "IsActive" }, "IX_Skills_IsActive");
 
@@ -2231,10 +1843,10 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.Subscription", b =>
                 {
-                    b.Property<Guid>("SubSubscriptionsId")
+                    b.Property<Guid>("SubscriptionsId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("sub_SubscriptionsId")
+                        .HasColumnName("SubscriptionsId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
                     b.Property<bool?>("AutoRenew")
@@ -2264,35 +1876,35 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasComment("Enum SubscriptionStatus: 0=Active, 1=Expired, 2=Cancelled");
 
-                    b.Property<Guid>("SubPlanSubscriptionPlansId")
+                    b.Property<Guid>("SubscriptionPlansId")
                         .HasColumnType("uuid")
-                        .HasColumnName("subPlan_SubscriptionPlansId");
+                        .HasColumnName("SubscriptionPlansId");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<Guid>("UsrUserId")
+                    b.Property<Guid>("UserId")
                         .HasColumnType("uuid")
-                        .HasColumnName("usr_UserId");
+                        .HasColumnName("UserId");
 
-                    b.HasKey("SubSubscriptionsId")
+                    b.HasKey("SubscriptionsId")
                         .HasName("Subscriptions_pkey");
 
                     b.HasIndex(new[] { "EndDate" }, "IX_Subscriptions_EndDate");
 
-                    b.HasIndex(new[] { "SubPlanSubscriptionPlansId" }, "IX_Subscriptions_SubscriptionPlansId");
+                    b.HasIndex(new[] { "SubscriptionPlansId" }, "IX_Subscriptions_SubscriptionPlansId");
 
-                    b.HasIndex(new[] { "UsrUserId", "Status" }, "IX_Subscriptions_UserId_Status");
+                    b.HasIndex(new[] { "UserId", "Status" }, "IX_Subscriptions_UserId_Status");
 
                     b.ToTable("Subscriptions");
                 });
 
             modelBuilder.Entity("Domain.Entities.SubscriptionPlan", b =>
                 {
-                    b.Property<Guid>("SubPlanSubscriptionPlansId")
+                    b.Property<Guid>("SubscriptionPlansId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("subPlan_SubscriptionPlansId")
+                        .HasColumnName("SubscriptionPlansId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
                     b.Property<DateTime>("CreatedAt")
@@ -2325,10 +1937,6 @@ namespace Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
-                    b.Property<string>("NameVi")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
                     b.Property<decimal>("Price")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
@@ -2345,7 +1953,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.HasKey("SubPlanSubscriptionPlansId")
+                    b.HasKey("SubscriptionPlansId")
                         .HasName("SubscriptionPlans_pkey");
 
                     b.HasIndex(new[] { "IsActive" }, "IX_SubscriptionPlans_IsActive");
@@ -2357,10 +1965,10 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.User", b =>
                 {
-                    b.Property<Guid>("UsrUserId")
+                    b.Property<Guid>("UserId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("usr_UserId")
+                        .HasColumnName("UserId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
                     b.Property<string>("Avatar")
@@ -2370,6 +1978,14 @@ namespace Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
                         .HasDefaultValueSql("now()");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("EmailVerificationToken")
+                        .HasColumnType("text");
 
                     b.Property<string>("FullName")
                         .IsRequired()
@@ -2386,6 +2002,13 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(false);
 
+                    b.Property<bool>("IsSetup")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Password")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
                     b.Property<string>("PhoneNumber")
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
@@ -2396,15 +2019,33 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(5)")
                         .HasDefaultValueSql("'vi'::character varying");
 
+                    b.Property<string>("Provider")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ProviderId")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("RefreshTokenExpiry")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RefreshTokenHash")
+                        .HasColumnType("text");
+
                     b.Property<int>("Role")
                         .HasColumnType("integer")
                         .HasComment("Enum UserRole: 0=Client, 1=Freelancer, 2=Admin");
 
+                    b.Property<DateTime?>("TokenExpiry")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.HasKey("UsrUserId")
+                    b.HasKey("UserId")
                         .HasName("Users_pkey");
+
+                    b.HasIndex(new[] { "Email" }, "IX_Users_Email")
+                        .IsUnique();
 
                     b.HasIndex(new[] { "IsActive" }, "IX_Users_IsActive");
 
@@ -2413,12 +2054,127 @@ namespace Infrastructure.Persistence.Migrations
                     b.ToTable("Users");
                 });
 
-            modelBuilder.Entity("Domain.Entities.WorkExperience", b =>
+            modelBuilder.Entity("Domain.Entities.UserEloPointTransaction", b =>
                 {
-                    b.Property<Guid>("WeWorkExperiencesId")
+                    b.Property<Guid>("UserEloPointTransactionsId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("we_WorkExperiencesId")
+                        .HasColumnName("UserEloPointTransactionsId")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Metadata")
+                        .HasColumnType("jsonb");
+
+                    b.Property<int>("PointsAfter")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("PointsBefore")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PointsDelta")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Reason")
+                        .HasColumnType("integer")
+                        .HasComment("Enum UserEloPointReason: 0=InitialGrant, 1=InactivityPenalty, 2=ReturnBonus, 3=JobCompletion, 4=ReviewRating");
+
+                    b.Property<Guid?>("SourceEntityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SourceEntityType")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("UserId");
+
+                    b.HasKey("UserEloPointTransactionsId")
+                        .HasName("UserEloPointTransactions_pkey");
+
+                    b.HasIndex(new[] { "IdempotencyKey" }, "IX_UserEloPointTransactions_IdempotencyKey")
+                        .IsUnique();
+
+                    b.HasIndex(new[] { "SourceEntityType", "SourceEntityId" }, "IX_UserEloPointTransactions_SourceEntity");
+
+                    b.HasIndex(new[] { "UserId", "CreatedAt" }, "IX_UserEloPointTransactions_UserId_CreatedAt")
+                        .IsDescending(false, true);
+
+                    b.ToTable("UserEloPointTransactions", t =>
+                        {
+                            t.HasCheckConstraint("CK_UserEloPointTransactions_PointsAfter_NonNegative", "\"PointsAfter\" >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("Domain.Entities.UserEloScore", b =>
+                {
+                    b.Property<Guid>("UserEloScoresId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("UserEloScoresId")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<int>("CurrentPoints")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(100);
+
+                    b.Property<DateTime>("LastActivityAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime?>("LastInactivityPenaltyAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("LastReturnBonusAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("UserId");
+
+                    b.HasKey("UserEloScoresId")
+                        .HasName("UserEloScores_pkey");
+
+                    b.HasIndex(new[] { "CurrentPoints" }, "IX_UserEloScores_CurrentPoints")
+                        .IsDescending();
+
+                    b.HasIndex(new[] { "UserId" }, "IX_UserEloScores_UserId")
+                        .IsUnique();
+
+                    b.ToTable("UserEloScores", t =>
+                        {
+                            t.HasCheckConstraint("CK_UserEloScores_CurrentPoints_NonNegative", "\"CurrentPoints\" >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("Domain.Entities.WorkExperience", b =>
+                {
+                    b.Property<Guid>("WorkExperiencesId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("WorkExperiencesId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
                     b.Property<string>("CompanyName")
@@ -2432,9 +2188,9 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<DateOnly?>("EndDate")
                         .HasColumnType("date");
 
-                    b.Property<Guid>("FlFreelancerId")
+                    b.Property<Guid>("FreelancerId")
                         .HasColumnType("uuid")
-                        .HasColumnName("fl_FreelancerId");
+                        .HasColumnName("FreelancerId");
 
                     b.Property<bool?>("IsCurrentJob")
                         .ValueGeneratedOnAdd()
@@ -2449,209 +2205,122 @@ namespace Infrastructure.Persistence.Migrations
                         .HasMaxLength(300)
                         .HasColumnType("character varying(300)");
 
-                    b.HasKey("WeWorkExperiencesId")
+                    b.HasKey("WorkExperiencesId")
                         .HasName("WorkExperiences_pkey");
 
-                    b.HasIndex(new[] { "FlFreelancerId" }, "IX_WorkExperiences_FreelancerId");
+                    b.HasIndex(new[] { "FreelancerId" }, "IX_WorkExperiences_FreelancerId");
 
                     b.ToTable("WorkExperiences");
                 });
 
             modelBuilder.Entity("Domain.Entities.AdminAuditLog", b =>
                 {
-                    b.HasOne("Domain.Entities.User", "UsrAdmin")
+                    b.HasOne("Domain.Entities.User", "Admin")
                         .WithMany("AdminAuditLogs")
-                        .HasForeignKey("UsrAdminId")
+                        .HasForeignKey("AdminId")
                         .IsRequired()
                         .HasConstraintName("AdminAuditLogs_usr_AdminId_fkey");
 
-                    b.Navigation("UsrAdmin");
-                });
-
-            modelBuilder.Entity("Domain.Entities.AiconversationSession", b =>
-                {
-                    b.HasOne("Domain.Entities.Contract", "ContContracts")
-                        .WithMany("AiconversationSessions")
-                        .HasForeignKey("ContContractsId")
-                        .HasConstraintName("AIConversationSessions_cont_ContractsId_fkey");
-
-                    b.HasOne("Domain.Entities.JobPost", "JpJobPosts")
-                        .WithMany("AiconversationSessions")
-                        .HasForeignKey("JpJobPostsId")
-                        .HasConstraintName("AIConversationSessions_jp_JobPostsId_fkey");
-
-                    b.HasOne("Domain.Entities.User", "UsrUser")
-                        .WithMany("AiconversationSessions")
-                        .HasForeignKey("UsrUserId")
-                        .IsRequired()
-                        .HasConstraintName("AIConversationSessions_usr_UserId_fkey");
-
-                    b.Navigation("ContContracts");
-
-                    b.Navigation("JpJobPosts");
-
-                    b.Navigation("UsrUser");
-                });
-
-            modelBuilder.Entity("Domain.Entities.AiinterviewQuestion", b =>
-                {
-                    b.HasOne("Domain.Entities.AiinterviewSession", "AiIntvAiinterviewSessions")
-                        .WithMany("AiinterviewQuestions")
-                        .HasForeignKey("AiIntvAiinterviewSessionsId")
-                        .IsRequired()
-                        .HasConstraintName("AIInterviewQuestions_aiIntv_AIInterviewSessionsId_fkey");
-
-                    b.Navigation("AiIntvAiinterviewSessions");
-                });
-
-            modelBuilder.Entity("Domain.Entities.AiinterviewSession", b =>
-                {
-                    b.HasOne("Domain.Entities.ClientProfile", "ClProClientProfiles")
-                        .WithMany("AiinterviewSessions")
-                        .HasForeignKey("ClProClientProfilesId")
-                        .IsRequired()
-                        .HasConstraintName("AIInterviewSessions_clPro_ClientProfilesId_fkey");
-
-                    b.HasOne("Domain.Entities.FreelancerProfile", "FlProFreelancerProfiles")
-                        .WithMany("AiinterviewSessions")
-                        .HasForeignKey("FlProFreelancerProfilesId")
-                        .IsRequired()
-                        .HasConstraintName("AIInterviewSessions_flPro_FreelancerProfilesId_fkey");
-
-                    b.HasOne("Domain.Entities.JobPost", "JpJobPosts")
-                        .WithMany("AiinterviewSessions")
-                        .HasForeignKey("JpJobPostsId")
-                        .IsRequired()
-                        .HasConstraintName("AIInterviewSessions_jp_JobPostsId_fkey");
-
-                    b.HasOne("Domain.Entities.Proposal", "PropoProposals")
-                        .WithMany("AiinterviewSessions")
-                        .HasForeignKey("PropoProposalsId")
-                        .HasConstraintName("AIInterviewSessions_propo_ProposalsId_fkey");
-
-                    b.Navigation("ClProClientProfiles");
-
-                    b.Navigation("FlProFreelancerProfiles");
-
-                    b.Navigation("JpJobPosts");
-
-                    b.Navigation("PropoProposals");
-                });
-
-            modelBuilder.Entity("Domain.Entities.Aimessage", b =>
-                {
-                    b.HasOne("Domain.Entities.AiconversationSession", "AiSessAiconversationSessions")
-                        .WithMany("Aimessages")
-                        .HasForeignKey("AiSessAiconversationSessionsId")
-                        .IsRequired()
-                        .HasConstraintName("AIMessages_aiSess_AIConversationSessionsId_fkey");
-
-                    b.Navigation("AiSessAiconversationSessions");
+                    b.Navigation("Admin");
                 });
 
             modelBuilder.Entity("Domain.Entities.Category", b =>
                 {
                     b.HasOne("Domain.Entities.Category", "ParentCategory")
                         .WithMany("InverseParentCategory")
-                        .HasForeignKey("ParentCategoryId")
-                        .HasConstraintName("Categories_ParentCategoryId_fkey");
+                        .HasForeignKey("ParentCategoryCategoriesId");
 
                     b.Navigation("ParentCategory");
                 });
 
-            modelBuilder.Entity("Domain.Entities.Certification", b =>
-                {
-                    b.HasOne("Domain.Entities.FreelancerProfile", "FlFreelancer")
-                        .WithMany("Certifications")
-                        .HasForeignKey("FlFreelancerId")
-                        .IsRequired()
-                        .HasConstraintName("Certifications_fl_FreelancerId_fkey");
-
-                    b.Navigation("FlFreelancer");
-                });
-
             modelBuilder.Entity("Domain.Entities.ClientProfile", b =>
                 {
-                    b.HasOne("Domain.Entities.User", "UsrUser")
+                    b.HasOne("Domain.Entities.User", "User")
                         .WithOne("ClientProfile")
-                        .HasForeignKey("Domain.Entities.ClientProfile", "UsrUserId")
+                        .HasForeignKey("Domain.Entities.ClientProfile", "UserId")
                         .IsRequired()
                         .HasConstraintName("ClientProfiles_usr_UserId_fkey");
 
-                    b.Navigation("UsrUser");
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Domain.Entities.Contract", b =>
                 {
-                    b.HasOne("Domain.Entities.ClientProfile", "ClProClientProfiles")
+                    b.HasOne("Domain.Entities.ClientProfile", "ClientProfiles")
                         .WithMany("Contracts")
-                        .HasForeignKey("ClProClientProfilesId")
+                        .HasForeignKey("ClientProfilesId")
                         .IsRequired()
                         .HasConstraintName("Contracts_clPro_ClientProfilesId_fkey");
 
-                    b.HasOne("Domain.Entities.FreelancerProfile", "FlProFreelancerProfiles")
+                    b.HasOne("Domain.Entities.FreelancerProfile", "FreelancerProfiles")
                         .WithMany("Contracts")
-                        .HasForeignKey("FlProFreelancerProfilesId")
+                        .HasForeignKey("FreelancerProfilesId")
                         .IsRequired()
                         .HasConstraintName("Contracts_flPro_FreelancerProfilesId_fkey");
 
-                    b.HasOne("Domain.Entities.JobPost", "JpJobPosts")
+                    b.HasOne("Domain.Entities.JobPost", "JobPosts")
                         .WithMany("Contracts")
-                        .HasForeignKey("JpJobPostsId")
+                        .HasForeignKey("JobPostsId")
                         .IsRequired()
                         .HasConstraintName("Contracts_jp_JobPostsId_fkey");
 
-                    b.HasOne("Domain.Entities.Proposal", "PropoProposals")
+                    b.HasOne("Domain.Entities.Proposal", "Proposals")
                         .WithOne("Contract")
-                        .HasForeignKey("Domain.Entities.Contract", "PropoProposalsId")
+                        .HasForeignKey("Domain.Entities.Contract", "ProposalsId")
                         .HasConstraintName("Contracts_propo_ProposalsId_fkey");
 
-                    b.Navigation("ClProClientProfiles");
+                    b.Navigation("ClientProfiles");
 
-                    b.Navigation("FlProFreelancerProfiles");
+                    b.Navigation("FreelancerProfiles");
 
-                    b.Navigation("JpJobPosts");
+                    b.Navigation("JobPosts");
 
-                    b.Navigation("PropoProposals");
+                    b.Navigation("Proposals");
                 });
 
             modelBuilder.Entity("Domain.Entities.Conversation", b =>
                 {
-                    b.HasOne("Domain.Entities.Contract", "ContContracts")
+                    b.HasOne("Domain.Entities.Contract", "Contracts")
                         .WithMany("Conversations")
-                        .HasForeignKey("ContContractsId")
+                        .HasForeignKey("ContractsId")
                         .HasConstraintName("Conversations_cont_ContractsId_fkey");
 
-                    b.HasOne("Domain.Entities.User", "UsrUser1")
-                        .WithMany("ConversationUsrUser1s")
-                        .HasForeignKey("UsrUser1Id")
+                    b.HasOne("Domain.Entities.User", "User1")
+                        .WithMany("ConversationUser1s")
+                        .HasForeignKey("User1Id")
                         .IsRequired()
                         .HasConstraintName("Conversations_usr_User1Id_fkey");
 
-                    b.HasOne("Domain.Entities.User", "UsrUser2")
-                        .WithMany("ConversationUsrUser2s")
-                        .HasForeignKey("UsrUser2Id")
+                    b.HasOne("Domain.Entities.User", "User2")
+                        .WithMany("ConversationUser2s")
+                        .HasForeignKey("User2Id")
                         .IsRequired()
                         .HasConstraintName("Conversations_usr_User2Id_fkey");
 
-                    b.Navigation("ContContracts");
+                    b.Navigation("Contracts");
 
-                    b.Navigation("UsrUser1");
+                    b.Navigation("User1");
 
-                    b.Navigation("UsrUser2");
+                    b.Navigation("User2");
                 });
 
             modelBuilder.Entity("Domain.Entities.Dispute", b =>
                 {
-                    b.HasOne("Domain.Entities.Contract", "ContContracts")
+                    b.HasOne("Domain.Entities.Contract", "Contracts")
                         .WithMany("Disputes")
-                        .HasForeignKey("ContContractsId")
+                        .HasForeignKey("ContractsId")
                         .IsRequired()
                         .HasConstraintName("Disputes_cont_ContractsId_fkey");
 
-                    b.HasOne("Domain.Entities.Milestone", "MStoneMilestones")
+                    b.HasOne("Domain.Entities.User", "Initiator")
+                        .WithMany("DisputeInitiators")
+                        .HasForeignKey("InitiatorId")
+                        .IsRequired()
+                        .HasConstraintName("Disputes_usr_InitiatorId_fkey");
+
+                    b.HasOne("Domain.Entities.Milestone", "Milestones")
                         .WithMany("Disputes")
-                        .HasForeignKey("MStoneMilestonesId")
+                        .HasForeignKey("MilestonesId")
                         .HasConstraintName("Disputes_mStone_MilestonesId_fkey");
 
                     b.HasOne("Domain.Entities.User", "ResolvedByAdmin")
@@ -2659,132 +2328,96 @@ namespace Infrastructure.Persistence.Migrations
                         .HasForeignKey("ResolvedByAdminId")
                         .HasConstraintName("Disputes_ResolvedByAdminId_fkey");
 
-                    b.HasOne("Domain.Entities.User", "UsrInitiator")
-                        .WithMany("DisputeUsrInitiators")
-                        .HasForeignKey("UsrInitiatorId")
-                        .IsRequired()
-                        .HasConstraintName("Disputes_usr_InitiatorId_fkey");
+                    b.Navigation("Contracts");
 
-                    b.Navigation("ContContracts");
+                    b.Navigation("Initiator");
 
-                    b.Navigation("MStoneMilestones");
+                    b.Navigation("Milestones");
 
                     b.Navigation("ResolvedByAdmin");
-
-                    b.Navigation("UsrInitiator");
                 });
 
             modelBuilder.Entity("Domain.Entities.DisputeEvidence", b =>
                 {
-                    b.HasOne("Domain.Entities.Dispute", "DispDisputes")
+                    b.HasOne("Domain.Entities.Dispute", "Disputes")
                         .WithMany("DisputeEvidences")
-                        .HasForeignKey("DispDisputesId")
+                        .HasForeignKey("DisputesId")
                         .IsRequired()
                         .HasConstraintName("DisputeEvidence_disp_DisputesId_fkey");
 
-                    b.HasOne("Domain.Entities.User", "UsrUploadedBy")
+                    b.HasOne("Domain.Entities.User", "UploadedBy")
                         .WithMany("DisputeEvidences")
-                        .HasForeignKey("UsrUploadedById")
+                        .HasForeignKey("UploadedById")
                         .IsRequired()
                         .HasConstraintName("DisputeEvidence_usr_UploadedById_fkey");
 
-                    b.Navigation("DispDisputes");
+                    b.Navigation("Disputes");
 
-                    b.Navigation("UsrUploadedBy");
+                    b.Navigation("UploadedBy");
                 });
 
             modelBuilder.Entity("Domain.Entities.DisputeMessage", b =>
                 {
-                    b.HasOne("Domain.Entities.Dispute", "DispDisputes")
+                    b.HasOne("Domain.Entities.Dispute", "Disputes")
                         .WithMany("DisputeMessages")
-                        .HasForeignKey("DispDisputesId")
+                        .HasForeignKey("DisputesId")
                         .IsRequired()
                         .HasConstraintName("DisputeMessages_disp_DisputesId_fkey");
 
-                    b.HasOne("Domain.Entities.User", "UsrSender")
+                    b.HasOne("Domain.Entities.User", "Sender")
                         .WithMany("DisputeMessages")
-                        .HasForeignKey("UsrSenderId")
+                        .HasForeignKey("SenderId")
                         .IsRequired()
                         .HasConstraintName("DisputeMessages_usr_SenderId_fkey");
 
-                    b.Navigation("DispDisputes");
+                    b.Navigation("Disputes");
 
-                    b.Navigation("UsrSender");
-                });
-
-            modelBuilder.Entity("Domain.Entities.Education", b =>
-                {
-                    b.HasOne("Domain.Entities.FreelancerProfile", "FlFreelancer")
-                        .WithMany("Educations")
-                        .HasForeignKey("FlFreelancerId")
-                        .IsRequired()
-                        .HasConstraintName("Educations_fl_FreelancerId_fkey");
-
-                    b.Navigation("FlFreelancer");
-                });
-
-            modelBuilder.Entity("Domain.Entities.EsignAuditTrail", b =>
-                {
-                    b.HasOne("Domain.Entities.EsignDocument", "EDocEsignDocuments")
-                        .WithMany("EsignAuditTrails")
-                        .HasForeignKey("EDocEsignDocumentsId")
-                        .IsRequired()
-                        .HasConstraintName("ESignAuditTrails_eDoc_ESignDocumentsId_fkey");
-
-                    b.HasOne("Domain.Entities.User", "UsrUser")
-                        .WithMany("EsignAuditTrails")
-                        .HasForeignKey("UsrUserId")
-                        .IsRequired()
-                        .HasConstraintName("ESignAuditTrails_usr_UserId_fkey");
-
-                    b.Navigation("EDocEsignDocuments");
-
-                    b.Navigation("UsrUser");
+                    b.Navigation("Sender");
                 });
 
             modelBuilder.Entity("Domain.Entities.EsignDocument", b =>
                 {
-                    b.HasOne("Domain.Entities.Contract", "ContContracts")
+                    b.HasOne("Domain.Entities.Contract", "Contracts")
                         .WithOne("EsignDocument")
-                        .HasForeignKey("Domain.Entities.EsignDocument", "ContContractsId")
+                        .HasForeignKey("Domain.Entities.EsignDocument", "ContractsId")
                         .HasConstraintName("ESignDocuments_cont_ContractsId_fkey");
 
-                    b.HasOne("Domain.Entities.EsignTemplate", "ETplEsignTemplates")
+                    b.HasOne("Domain.Entities.EsignTemplate", "EsignTemplates")
                         .WithMany("EsignDocuments")
-                        .HasForeignKey("ETplEsignTemplatesId")
+                        .HasForeignKey("EsignTemplatesId")
                         .IsRequired()
                         .HasConstraintName("ESignDocuments_eTpl_ESignTemplatesId_fkey");
 
-                    b.HasOne("Domain.Entities.JobPost", "JpJobPosts")
+                    b.HasOne("Domain.Entities.JobPost", "JobPosts")
                         .WithMany("EsignDocuments")
-                        .HasForeignKey("JpJobPostsId")
+                        .HasForeignKey("JobPostsId")
                         .IsRequired()
                         .HasConstraintName("ESignDocuments_jp_JobPostsId_fkey");
 
-                    b.Navigation("ContContracts");
+                    b.Navigation("Contracts");
 
-                    b.Navigation("ETplEsignTemplates");
+                    b.Navigation("EsignTemplates");
 
-                    b.Navigation("JpJobPosts");
+                    b.Navigation("JobPosts");
                 });
 
             modelBuilder.Entity("Domain.Entities.EsignSignature", b =>
                 {
-                    b.HasOne("Domain.Entities.EsignDocument", "EDocEsignDocuments")
+                    b.HasOne("Domain.Entities.EsignDocument", "EsignDocuments")
                         .WithMany("EsignSignatures")
-                        .HasForeignKey("EDocEsignDocumentsId")
+                        .HasForeignKey("EsignDocumentsId")
                         .IsRequired()
                         .HasConstraintName("ESignSignatures_eDoc_ESignDocumentsId_fkey");
 
-                    b.HasOne("Domain.Entities.User", "UsrUser")
+                    b.HasOne("Domain.Entities.User", "User")
                         .WithMany("EsignSignatures")
-                        .HasForeignKey("UsrUserId")
+                        .HasForeignKey("UserId")
                         .IsRequired()
                         .HasConstraintName("ESignSignatures_usr_UserId_fkey");
 
-                    b.Navigation("EDocEsignDocuments");
+                    b.Navigation("EsignDocuments");
 
-                    b.Navigation("UsrUser");
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Domain.Entities.EsignTemplate", b =>
@@ -2800,43 +2433,43 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.Faq", b =>
                 {
-                    b.HasOne("Domain.Entities.Faqcategory", "FaqCatFaqcategories")
+                    b.HasOne("Domain.Entities.Faqcategory", "Faqcategories")
                         .WithMany("Faqs")
-                        .HasForeignKey("FaqCatFaqcategoriesId")
+                        .HasForeignKey("FaqcategoriesId")
                         .IsRequired()
                         .HasConstraintName("FAQs_faqCat_FAQCategoriesId_fkey");
 
-                    b.Navigation("FaqCatFaqcategories");
+                    b.Navigation("Faqcategories");
                 });
 
             modelBuilder.Entity("Domain.Entities.FreelancerProfile", b =>
                 {
-                    b.HasOne("Domain.Entities.User", "UsrUser")
+                    b.HasOne("Domain.Entities.User", "User")
                         .WithOne("FreelancerProfile")
-                        .HasForeignKey("Domain.Entities.FreelancerProfile", "UsrUserId")
+                        .HasForeignKey("Domain.Entities.FreelancerProfile", "UserId")
                         .IsRequired()
                         .HasConstraintName("FreelancerProfiles_usr_UserId_fkey");
 
-                    b.Navigation("UsrUser");
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Domain.Entities.FreelancerSkill", b =>
                 {
-                    b.HasOne("Domain.Entities.FreelancerProfile", "FlFreelancer")
+                    b.HasOne("Domain.Entities.FreelancerProfile", "Freelancer")
                         .WithMany("FreelancerSkills")
-                        .HasForeignKey("FlFreelancerId")
+                        .HasForeignKey("FreelancerId")
                         .IsRequired()
                         .HasConstraintName("FreelancerSkills_fl_FreelancerId_fkey");
 
-                    b.HasOne("Domain.Entities.Skill", "SkSkills")
+                    b.HasOne("Domain.Entities.Skill", "Skills")
                         .WithMany("FreelancerSkills")
-                        .HasForeignKey("SkSkillsId")
+                        .HasForeignKey("SkillsId")
                         .IsRequired()
                         .HasConstraintName("FreelancerSkills_sk_SkillsId_fkey");
 
-                    b.Navigation("FlFreelancer");
+                    b.Navigation("Freelancer");
 
-                    b.Navigation("SkSkills");
+                    b.Navigation("Skills");
                 });
 
             modelBuilder.Entity("Domain.Entities.JobPost", b =>
@@ -2846,93 +2479,93 @@ namespace Infrastructure.Persistence.Migrations
                         .HasForeignKey("CategoryId")
                         .HasConstraintName("JobPosts_CategoryId_fkey");
 
-                    b.HasOne("Domain.Entities.ClientProfile", "ClProClientProfiles")
+                    b.HasOne("Domain.Entities.ClientProfile", "ClientProfiles")
                         .WithMany("JobPosts")
-                        .HasForeignKey("ClProClientProfilesId")
+                        .HasForeignKey("ClientProfilesId")
                         .IsRequired()
                         .HasConstraintName("JobPosts_clPro_ClientProfilesId_fkey");
 
                     b.Navigation("Category");
 
-                    b.Navigation("ClProClientProfiles");
+                    b.Navigation("ClientProfiles");
                 });
 
             modelBuilder.Entity("Domain.Entities.JobPostAttachment", b =>
                 {
-                    b.HasOne("Domain.Entities.JobPost", "JpJobPosts")
+                    b.HasOne("Domain.Entities.JobPost", "JobPosts")
                         .WithMany("JobPostAttachments")
-                        .HasForeignKey("JpJobPostsId")
+                        .HasForeignKey("JobPostsId")
                         .IsRequired()
                         .HasConstraintName("JobPostAttachments_jp_JobPostsId_fkey");
 
-                    b.Navigation("JpJobPosts");
+                    b.Navigation("JobPosts");
                 });
 
             modelBuilder.Entity("Domain.Entities.JobPostSkill", b =>
                 {
-                    b.HasOne("Domain.Entities.JobPost", "JpJobPosts")
+                    b.HasOne("Domain.Entities.JobPost", "JobPosts")
                         .WithMany("JobPostSkills")
-                        .HasForeignKey("JpJobPostsId")
+                        .HasForeignKey("JobPostsId")
                         .IsRequired()
                         .HasConstraintName("JobPostSkills_jp_JobPostsId_fkey");
 
-                    b.HasOne("Domain.Entities.Skill", "SkSkills")
+                    b.HasOne("Domain.Entities.Skill", "Skills")
                         .WithMany("JobPostSkills")
-                        .HasForeignKey("SkSkillsId")
+                        .HasForeignKey("SkillsId")
                         .IsRequired()
                         .HasConstraintName("JobPostSkills_sk_SkillsId_fkey");
 
-                    b.Navigation("JpJobPosts");
+                    b.Navigation("JobPosts");
 
-                    b.Navigation("SkSkills");
+                    b.Navigation("Skills");
                 });
 
             modelBuilder.Entity("Domain.Entities.Message", b =>
                 {
-                    b.HasOne("Domain.Entities.Conversation", "ConvConversations")
+                    b.HasOne("Domain.Entities.Conversation", "Conversations")
                         .WithMany("Messages")
-                        .HasForeignKey("ConvConversationsId")
+                        .HasForeignKey("ConversationsId")
                         .IsRequired()
                         .HasConstraintName("Messages_conv_ConversationsId_fkey");
 
-                    b.HasOne("Domain.Entities.User", "UsrSender")
+                    b.HasOne("Domain.Entities.User", "Sender")
                         .WithMany("Messages")
-                        .HasForeignKey("UsrSenderId")
+                        .HasForeignKey("SenderId")
                         .IsRequired()
                         .HasConstraintName("Messages_usr_SenderId_fkey");
 
-                    b.Navigation("ConvConversations");
+                    b.Navigation("Conversations");
 
-                    b.Navigation("UsrSender");
+                    b.Navigation("Sender");
                 });
 
             modelBuilder.Entity("Domain.Entities.MessageAttachment", b =>
                 {
-                    b.HasOne("Domain.Entities.Message", "MsgMessages")
+                    b.HasOne("Domain.Entities.Message", "Messages")
                         .WithMany("MessageAttachments")
-                        .HasForeignKey("MsgMessagesId")
+                        .HasForeignKey("MessagesId")
                         .IsRequired()
                         .HasConstraintName("MessageAttachments_msg_MessagesId_fkey");
 
-                    b.Navigation("MsgMessages");
+                    b.Navigation("Messages");
                 });
 
             modelBuilder.Entity("Domain.Entities.Milestone", b =>
                 {
-                    b.HasOne("Domain.Entities.Contract", "ContContracts")
+                    b.HasOne("Domain.Entities.Contract", "Contracts")
                         .WithMany("Milestones")
-                        .HasForeignKey("ContContractsId")
+                        .HasForeignKey("ContractsId")
                         .IsRequired()
                         .HasConstraintName("Milestones_cont_ContractsId_fkey");
 
-                    b.Navigation("ContContracts");
+                    b.Navigation("Contracts");
                 });
 
             modelBuilder.Entity("Domain.Entities.MilestoneAttachment", b =>
                 {
-                    b.HasOne("Domain.Entities.Milestone", "MStoneMilestones")
+                    b.HasOne("Domain.Entities.Milestone", "Milestones")
                         .WithMany("MilestoneAttachments")
-                        .HasForeignKey("MStoneMilestonesId")
+                        .HasForeignKey("MilestonesId")
                         .IsRequired()
                         .HasConstraintName("MilestoneAttachments_mStone_MilestonesId_fkey");
 
@@ -2941,39 +2574,39 @@ namespace Infrastructure.Persistence.Migrations
                         .HasForeignKey("UploadedByUserId")
                         .HasConstraintName("MilestoneAttachments_UploadedByUserId_fkey");
 
-                    b.Navigation("MStoneMilestones");
+                    b.Navigation("Milestones");
 
                     b.Navigation("UploadedByUser");
                 });
 
             modelBuilder.Entity("Domain.Entities.Notification", b =>
                 {
-                    b.HasOne("Domain.Entities.User", "UsrUser")
+                    b.HasOne("Domain.Entities.User", "User")
                         .WithMany("Notifications")
-                        .HasForeignKey("UsrUserId")
+                        .HasForeignKey("UserId")
                         .IsRequired()
                         .HasConstraintName("Notifications_usr_UserId_fkey");
 
-                    b.Navigation("UsrUser");
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Domain.Entities.PaymentProof", b =>
                 {
-                    b.HasOne("Domain.Entities.Milestone", "MStoneMilestones")
+                    b.HasOne("Domain.Entities.Milestone", "Milestones")
                         .WithMany("PaymentProofs")
-                        .HasForeignKey("MStoneMilestonesId")
+                        .HasForeignKey("MilestonesId")
                         .IsRequired()
                         .HasConstraintName("PaymentProofs_mStone_MilestonesId_fkey");
 
-                    b.HasOne("Domain.Entities.User", "UsrUploadedBy")
+                    b.HasOne("Domain.Entities.User", "UploadedBy")
                         .WithMany("PaymentProofs")
-                        .HasForeignKey("UsrUploadedById")
+                        .HasForeignKey("UploadedById")
                         .IsRequired()
                         .HasConstraintName("PaymentProofs_usr_UploadedById_fkey");
 
-                    b.Navigation("MStoneMilestones");
+                    b.Navigation("Milestones");
 
-                    b.Navigation("UsrUploadedBy");
+                    b.Navigation("UploadedBy");
                 });
 
             modelBuilder.Entity("Domain.Entities.PlatformSetting", b =>
@@ -2988,195 +2621,204 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.PortfolioItem", b =>
                 {
-                    b.HasOne("Domain.Entities.Category", "Category")
+                    b.HasOne("Domain.Entities.Category", null)
                         .WithMany("PortfolioItems")
-                        .HasForeignKey("CategoryId")
-                        .HasConstraintName("PortfolioItems_CategoryId_fkey");
+                        .HasForeignKey("CategoryCategoriesId");
 
-                    b.HasOne("Domain.Entities.FreelancerProfile", "FlFreelancer")
+                    b.HasOne("Domain.Entities.FreelancerProfile", "Freelancer")
                         .WithMany("PortfolioItems")
-                        .HasForeignKey("FlFreelancerId")
+                        .HasForeignKey("FreelancerId")
                         .IsRequired()
                         .HasConstraintName("PortfolioItems_fl_FreelancerId_fkey");
 
-                    b.Navigation("Category");
-
-                    b.Navigation("FlFreelancer");
+                    b.Navigation("Freelancer");
                 });
 
             modelBuilder.Entity("Domain.Entities.Proposal", b =>
                 {
-                    b.HasOne("Domain.Entities.FreelancerProfile", "FlProFreelancerProfiles")
+                    b.HasOne("Domain.Entities.FreelancerProfile", "FreelancerProfiles")
                         .WithMany("Proposals")
-                        .HasForeignKey("FlProFreelancerProfilesId")
+                        .HasForeignKey("FreelancerProfilesId")
                         .IsRequired()
                         .HasConstraintName("Proposals_flPro_FreelancerProfilesId_fkey");
 
-                    b.HasOne("Domain.Entities.JobPost", "JpJobPosts")
+                    b.HasOne("Domain.Entities.JobPost", "JobPosts")
                         .WithMany("Proposals")
-                        .HasForeignKey("JpJobPostsId")
+                        .HasForeignKey("JobPostsId")
                         .IsRequired()
                         .HasConstraintName("Proposals_jp_JobPostsId_fkey");
 
-                    b.Navigation("FlProFreelancerProfiles");
+                    b.Navigation("FreelancerProfiles");
 
-                    b.Navigation("JpJobPosts");
+                    b.Navigation("JobPosts");
                 });
 
             modelBuilder.Entity("Domain.Entities.ProposalAttachment", b =>
                 {
-                    b.HasOne("Domain.Entities.Proposal", "PropoProposals")
+                    b.HasOne("Domain.Entities.Proposal", "Proposals")
                         .WithMany("ProposalAttachments")
-                        .HasForeignKey("PropoProposalsId")
+                        .HasForeignKey("ProposalsId")
                         .IsRequired()
                         .HasConstraintName("ProposalAttachments_propo_ProposalsId_fkey");
 
-                    b.Navigation("PropoProposals");
+                    b.Navigation("Proposals");
                 });
 
             modelBuilder.Entity("Domain.Entities.RefreshToken", b =>
                 {
-                    b.HasOne("Domain.Entities.User", "UsrUser")
+                    b.HasOne("Domain.Entities.User", "User")
                         .WithMany("RefreshTokens")
-                        .HasForeignKey("UsrUserId")
+                        .HasForeignKey("UserId")
                         .IsRequired()
                         .HasConstraintName("RefreshTokens_usr_UserId_fkey");
 
-                    b.Navigation("UsrUser");
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Domain.Entities.Report", b =>
                 {
+                    b.HasOne("Domain.Entities.User", "Reporter")
+                        .WithMany("ReportReporters")
+                        .HasForeignKey("ReporterId")
+                        .IsRequired()
+                        .HasConstraintName("Reports_usr_ReporterId_fkey");
+
                     b.HasOne("Domain.Entities.User", "ResolvedByAdmin")
                         .WithMany("ReportResolvedByAdmins")
                         .HasForeignKey("ResolvedByAdminId")
                         .HasConstraintName("Reports_ResolvedByAdminId_fkey");
 
-                    b.HasOne("Domain.Entities.User", "UsrReporter")
-                        .WithMany("ReportUsrReporters")
-                        .HasForeignKey("UsrReporterId")
-                        .IsRequired()
-                        .HasConstraintName("Reports_usr_ReporterId_fkey");
+                    b.Navigation("Reporter");
 
                     b.Navigation("ResolvedByAdmin");
-
-                    b.Navigation("UsrReporter");
                 });
 
             modelBuilder.Entity("Domain.Entities.Review", b =>
                 {
-                    b.HasOne("Domain.Entities.Contract", "ContContracts")
+                    b.HasOne("Domain.Entities.Contract", "Contracts")
                         .WithMany("Reviews")
-                        .HasForeignKey("ContContractsId")
+                        .HasForeignKey("ContractsId")
                         .IsRequired()
                         .HasConstraintName("Reviews_cont_ContractsId_fkey");
 
-                    b.HasOne("Domain.Entities.User", "UsrReviewee")
-                        .WithMany("ReviewUsrReviewees")
-                        .HasForeignKey("UsrRevieweeId")
+                    b.HasOne("Domain.Entities.User", "Reviewee")
+                        .WithMany("ReviewReviewees")
+                        .HasForeignKey("RevieweeId")
                         .IsRequired()
                         .HasConstraintName("Reviews_usr_RevieweeId_fkey");
 
-                    b.HasOne("Domain.Entities.User", "UsrReviewer")
-                        .WithMany("ReviewUsrReviewers")
-                        .HasForeignKey("UsrReviewerId")
+                    b.HasOne("Domain.Entities.User", "Reviewer")
+                        .WithMany("ReviewReviewers")
+                        .HasForeignKey("ReviewerId")
                         .IsRequired()
                         .HasConstraintName("Reviews_usr_ReviewerId_fkey");
 
-                    b.Navigation("ContContracts");
+                    b.Navigation("Contracts");
 
-                    b.Navigation("UsrReviewee");
+                    b.Navigation("Reviewee");
 
-                    b.Navigation("UsrReviewer");
+                    b.Navigation("Reviewer");
                 });
 
             modelBuilder.Entity("Domain.Entities.SavedFreelancer", b =>
                 {
-                    b.HasOne("Domain.Entities.FreelancerProfile", "FlProFreelancerProfiles")
+                    b.HasOne("Domain.Entities.FreelancerProfile", "FreelancerProfiles")
                         .WithMany("SavedFreelancers")
-                        .HasForeignKey("FlProFreelancerProfilesId")
+                        .HasForeignKey("FreelancerProfilesId")
                         .IsRequired()
                         .HasConstraintName("SavedFreelancers_flPro_FreelancerProfilesId_fkey");
 
-                    b.HasOne("Domain.Entities.User", "UsrUser")
+                    b.HasOne("Domain.Entities.User", "User")
                         .WithMany("SavedFreelancers")
-                        .HasForeignKey("UsrUserId")
+                        .HasForeignKey("UserId")
                         .IsRequired()
                         .HasConstraintName("SavedFreelancers_usr_UserId_fkey");
 
-                    b.Navigation("FlProFreelancerProfiles");
+                    b.Navigation("FreelancerProfiles");
 
-                    b.Navigation("UsrUser");
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Domain.Entities.SavedJob", b =>
                 {
-                    b.HasOne("Domain.Entities.JobPost", "JpJobPosts")
+                    b.HasOne("Domain.Entities.JobPost", "JobPosts")
                         .WithMany("SavedJobs")
-                        .HasForeignKey("JpJobPostsId")
+                        .HasForeignKey("JobPostsId")
                         .IsRequired()
                         .HasConstraintName("SavedJobs_jp_JobPostsId_fkey");
 
-                    b.HasOne("Domain.Entities.User", "UsrUser")
+                    b.HasOne("Domain.Entities.User", "User")
                         .WithMany("SavedJobs")
-                        .HasForeignKey("UsrUserId")
+                        .HasForeignKey("UserId")
                         .IsRequired()
                         .HasConstraintName("SavedJobs_usr_UserId_fkey");
 
-                    b.Navigation("JpJobPosts");
+                    b.Navigation("JobPosts");
 
-                    b.Navigation("UsrUser");
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Domain.Entities.Skill", b =>
                 {
-                    b.HasOne("Domain.Entities.Category", "CateCategories")
+                    b.HasOne("Domain.Entities.Category", "Categories")
                         .WithMany("Skills")
-                        .HasForeignKey("CateCategoriesId")
+                        .HasForeignKey("CategoriesId")
                         .IsRequired()
                         .HasConstraintName("Skills_cate_CategoriesId_fkey");
 
-                    b.Navigation("CateCategories");
+                    b.Navigation("Categories");
                 });
 
             modelBuilder.Entity("Domain.Entities.Subscription", b =>
                 {
-                    b.HasOne("Domain.Entities.SubscriptionPlan", "SubPlanSubscriptionPlans")
+                    b.HasOne("Domain.Entities.SubscriptionPlan", "SubscriptionPlans")
                         .WithMany("Subscriptions")
-                        .HasForeignKey("SubPlanSubscriptionPlansId")
+                        .HasForeignKey("SubscriptionPlansId")
                         .IsRequired()
                         .HasConstraintName("Subscriptions_subPlan_SubscriptionPlansId_fkey");
 
-                    b.HasOne("Domain.Entities.User", "UsrUser")
+                    b.HasOne("Domain.Entities.User", "User")
                         .WithMany("Subscriptions")
-                        .HasForeignKey("UsrUserId")
+                        .HasForeignKey("UserId")
                         .IsRequired()
                         .HasConstraintName("Subscriptions_usr_UserId_fkey");
 
-                    b.Navigation("SubPlanSubscriptionPlans");
+                    b.Navigation("SubscriptionPlans");
 
-                    b.Navigation("UsrUser");
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Domain.Entities.UserEloPointTransaction", b =>
+                {
+                    b.HasOne("Domain.Entities.User", "User")
+                        .WithMany("UserEloPointTransactions")
+                        .HasForeignKey("UserId")
+                        .IsRequired()
+                        .HasConstraintName("UserEloPointTransactions_usr_UserId_fkey");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Domain.Entities.UserEloScore", b =>
+                {
+                    b.HasOne("Domain.Entities.User", "User")
+                        .WithOne("UserEloScore")
+                        .HasForeignKey("Domain.Entities.UserEloScore", "UserId")
+                        .IsRequired()
+                        .HasConstraintName("UserEloScores_usr_UserId_fkey");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Domain.Entities.WorkExperience", b =>
                 {
-                    b.HasOne("Domain.Entities.FreelancerProfile", "FlFreelancer")
+                    b.HasOne("Domain.Entities.FreelancerProfile", "Freelancer")
                         .WithMany("WorkExperiences")
-                        .HasForeignKey("FlFreelancerId")
+                        .HasForeignKey("FreelancerId")
                         .IsRequired()
                         .HasConstraintName("WorkExperiences_fl_FreelancerId_fkey");
 
-                    b.Navigation("FlFreelancer");
-                });
-
-            modelBuilder.Entity("Domain.Entities.AiconversationSession", b =>
-                {
-                    b.Navigation("Aimessages");
-                });
-
-            modelBuilder.Entity("Domain.Entities.AiinterviewSession", b =>
-                {
-                    b.Navigation("AiinterviewQuestions");
+                    b.Navigation("Freelancer");
                 });
 
             modelBuilder.Entity("Domain.Entities.Category", b =>
@@ -3192,8 +2834,6 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.ClientProfile", b =>
                 {
-                    b.Navigation("AiinterviewSessions");
-
                     b.Navigation("Contracts");
 
                     b.Navigation("JobPosts");
@@ -3201,8 +2841,6 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.Contract", b =>
                 {
-                    b.Navigation("AiconversationSessions");
-
                     b.Navigation("Conversations");
 
                     b.Navigation("Disputes");
@@ -3228,8 +2866,6 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.EsignDocument", b =>
                 {
-                    b.Navigation("EsignAuditTrails");
-
                     b.Navigation("EsignSignatures");
                 });
 
@@ -3245,13 +2881,7 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.FreelancerProfile", b =>
                 {
-                    b.Navigation("AiinterviewSessions");
-
-                    b.Navigation("Certifications");
-
                     b.Navigation("Contracts");
-
-                    b.Navigation("Educations");
 
                     b.Navigation("FreelancerSkills");
 
@@ -3266,10 +2896,6 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.JobPost", b =>
                 {
-                    b.Navigation("AiconversationSessions");
-
-                    b.Navigation("AiinterviewSessions");
-
                     b.Navigation("Contracts");
 
                     b.Navigation("EsignDocuments");
@@ -3299,8 +2925,6 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.Proposal", b =>
                 {
-                    b.Navigation("AiinterviewSessions");
-
                     b.Navigation("Contract");
 
                     b.Navigation("ProposalAttachments");
@@ -3322,23 +2946,19 @@ namespace Infrastructure.Persistence.Migrations
                 {
                     b.Navigation("AdminAuditLogs");
 
-                    b.Navigation("AiconversationSessions");
-
                     b.Navigation("ClientProfile");
 
-                    b.Navigation("ConversationUsrUser1s");
+                    b.Navigation("ConversationUser1s");
 
-                    b.Navigation("ConversationUsrUser2s");
+                    b.Navigation("ConversationUser2s");
 
                     b.Navigation("DisputeEvidences");
+
+                    b.Navigation("DisputeInitiators");
 
                     b.Navigation("DisputeMessages");
 
                     b.Navigation("DisputeResolvedByAdmins");
-
-                    b.Navigation("DisputeUsrInitiators");
-
-                    b.Navigation("EsignAuditTrails");
 
                     b.Navigation("EsignSignatures");
 
@@ -3358,19 +2978,23 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.Navigation("RefreshTokens");
 
+                    b.Navigation("ReportReporters");
+
                     b.Navigation("ReportResolvedByAdmins");
 
-                    b.Navigation("ReportUsrReporters");
+                    b.Navigation("ReviewReviewees");
 
-                    b.Navigation("ReviewUsrReviewees");
-
-                    b.Navigation("ReviewUsrReviewers");
+                    b.Navigation("ReviewReviewers");
 
                     b.Navigation("SavedFreelancers");
 
                     b.Navigation("SavedJobs");
 
                     b.Navigation("Subscriptions");
+
+                    b.Navigation("UserEloPointTransactions");
+
+                    b.Navigation("UserEloScore");
                 });
 #pragma warning restore 612, 618
         }
