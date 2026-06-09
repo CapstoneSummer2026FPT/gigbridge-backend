@@ -9,8 +9,6 @@ public partial class Category
 
     public string Name { get; set; } = null!;
 
-    public string? NameVi { get; set; }
-
     public string Slug { get; set; } = null!;
 
     public string? Description { get; set; }
