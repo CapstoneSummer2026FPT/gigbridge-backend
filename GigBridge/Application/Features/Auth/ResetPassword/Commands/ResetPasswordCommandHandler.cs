@@ -10,49 +10,49 @@ public class ResetPasswordCommandHandler : IRequestHandler<ResetPasswordCommand>
 {
     private readonly IApplicationDbContext _context;
     private readonly IPasswordHasher _passwordHasher;
-    private readonly IDateTimeService _dateTimeService;
+    private readonly ICacheService _cacheService;
 
     public ResetPasswordCommandHandler(
         IApplicationDbContext context,
         IPasswordHasher passwordHasher,
-        IDateTimeService dateTimeService)
+        ICacheService cacheService)
     {
         _context = context;
         _passwordHasher = passwordHasher;
-        _dateTimeService = dateTimeService;
+        _cacheService = cacheService;
     }
 
     public async Task Handle(ResetPasswordCommand request, CancellationToken cancellationToken)
     {
         var resetRequest = request.Request;
-        var email = resetRequest.Email.Trim();
+        var email = resetRequest.Email.Trim().ToLowerInvariant();
         var user = await _context.Set<User>()
-            .FirstOrDefaultAsync(u => u.Email.ToLower() == email.ToLower(), cancellationToken);
+            .FirstOrDefaultAsync(u => u.Email.ToLower() == email, cancellationToken);
 
         if (user is null)
         {
             throw new InvalidOperationException("Email does not exist");
         }
 
-        EnsureResetTokenIsValid(user, resetRequest.PasswordResetToken);
+        await EnsureOtpIsValidAsync(email, resetRequest.Otp, cancellationToken);
 
         user.Password = _passwordHasher.HashPassword(resetRequest.NewPassword);
         user.EmailVerificationToken = null;
         user.TokenExpiry = null;
 
         await _context.SaveChangesAsync(cancellationToken);
+        
+        // Remove verification status from cache so it cannot be reused
+        await _cacheService.RemoveAsync($"verified_email:{email}", cancellationToken);
     }
 
-    private void EnsureResetTokenIsValid(User user, string resetToken)
+    private async Task EnsureOtpIsValidAsync(string email, string otp, CancellationToken cancellationToken)
     {
-        if (resetToken != user.EmailVerificationToken)
-        {
-            throw new InvalidOperationException("wrong email verification token");
-        }
+        var cachedOtp = await _cacheService.GetAsync<string>($"verified_email:{email}", cancellationToken);
 
-        if (user.TokenExpiry < _dateTimeService.UtcNow)
+        if (string.IsNullOrEmpty(cachedOtp) || cachedOtp != otp)
         {
-            throw new InvalidOperationException("Token has expired");
+            throw new InvalidOperationException("Invalid or expired OTP verification code.");
         }
     }
 }

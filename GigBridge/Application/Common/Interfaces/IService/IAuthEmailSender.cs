@@ -7,4 +7,6 @@ public interface IAuthEmailSender
     Task SendPasswordResetEmailAsync(string email, string token, CancellationToken cancellationToken = default);
 
     Task SendOtpEmailAsync(string email, string otp, CancellationToken cancellationToken = default);
+
+    Task SendForgotPasswordOtpEmailAsync(string email, string otp, CancellationToken cancellationToken = default);
 }

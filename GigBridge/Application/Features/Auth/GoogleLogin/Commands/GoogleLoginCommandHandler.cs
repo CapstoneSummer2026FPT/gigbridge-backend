@@ -12,12 +12,13 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.Auth.GoogleLogin.Commands;
 
-public class GoogleLoginCommandHandler : IRequestHandler<GoogleLoginCommand, (LoginResponse LoginData, string RefreshToken)>
+public class GoogleLoginCommandHandler : IRequestHandler<GoogleLoginCommand, (LoginResponse LoginData, string RefreshToken, DateTime RefreshTokenExpiry)>
 {
     private readonly IApplicationDbContext _context;
     private readonly IGoogleAuthService _googleAuthService;
     private readonly IJwtService _jwtService;
     private readonly IDateTimeService _dateTimeService;
+    private readonly IUserEloService _userEloService;
     private readonly IMapper _mapper;
 
     public GoogleLoginCommandHandler(
@@ -25,29 +26,43 @@ public class GoogleLoginCommandHandler : IRequestHandler<GoogleLoginCommand, (Lo
         IGoogleAuthService googleAuthService,
         IJwtService jwtService,
         IDateTimeService dateTimeService,
+        IUserEloService userEloService,
         IMapper mapper)
     {
         _context = context;
         _googleAuthService = googleAuthService;
         _jwtService = jwtService;
         _dateTimeService = dateTimeService;
+        _userEloService = userEloService;
         _mapper = mapper;
     }
 
-    public async Task<(LoginResponse LoginData, string RefreshToken)> Handle(GoogleLoginCommand request, CancellationToken cancellationToken)
+    public async Task<(LoginResponse LoginData, string RefreshToken, DateTime RefreshTokenExpiry)> Handle(GoogleLoginCommand request, CancellationToken cancellationToken)
     {
         var googleUser = await _googleAuthService.VerifyAuthCodeAsync(request.AuthCode, cancellationToken);
         var user = await FindUserAsync(googleUser.Email, cancellationToken);
+        var isNewUser = user is null;
 
         if (user is null)
         {
+            if (request.IsFromSignIn == true)
+            {
+                throw new BadRequestException("Your account does not have a role set up yet. Please select a role on the sign-up page before signing in.");
+            }
+
             user = CreateUser(googleUser, ResolveRole(request.Role));
             _context.Set<User>().Add(user);
+            await _userEloService.InitializeNewUserAsync(user, cancellationToken);
         }
 
         if (!user.IsActive)
         {
             throw new UnauthorizedAccessException("Your account has been suspended by the administrator");
+        }
+
+        if (!isNewUser)
+        {
+            await _userEloService.ApplyLoginActivityAsync(user, cancellationToken);
         }
 
         var refreshToken = RotateRefreshToken(user);
@@ -58,7 +73,7 @@ public class GoogleLoginCommandHandler : IRequestHandler<GoogleLoginCommand, (Lo
             User = _mapper.Map<UserDTO>(user),
             Token = _jwtService.GenerateToken(user),
             refreshToken = refreshToken
-        }, refreshToken);
+        }, refreshToken, user.RefreshTokenExpiry ?? DateTime.UtcNow);
     }
 
     private Task<User?> FindUserAsync(string email, CancellationToken cancellationToken)
@@ -108,7 +123,7 @@ public class GoogleLoginCommandHandler : IRequestHandler<GoogleLoginCommand, (Lo
     {
         var refreshToken = _jwtService.GenerateRefreshToken();
         user.RefreshTokenHash = _jwtService.HashRefreshToken(refreshToken);
-        user.RefreshTokenExpiry = _dateTimeService.UtcNow.AddDays(7);
+        user.RefreshTokenExpiry = _dateTimeService.UtcNow.AddMinutes(_jwtService.GetRefreshTokenExpiryMinutes());
         return refreshToken;
     }
 }

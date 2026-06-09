@@ -2071,6 +2071,121 @@ namespace Infrastructure.Persistence.Migrations
                     b.ToTable("Users");
                 });
 
+            modelBuilder.Entity("Domain.Entities.UserEloPointTransaction", b =>
+                {
+                    b.Property<Guid>("UserEloPointTransactionsId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("UserEloPointTransactionsId")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Metadata")
+                        .HasColumnType("jsonb");
+
+                    b.Property<int>("PointsAfter")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("PointsBefore")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PointsDelta")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Reason")
+                        .HasColumnType("integer")
+                        .HasComment("Enum UserEloPointReason: 0=InitialGrant, 1=InactivityPenalty, 2=ReturnBonus, 3=JobCompletion, 4=ReviewRating");
+
+                    b.Property<Guid?>("SourceEntityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SourceEntityType")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("UserId");
+
+                    b.HasKey("UserEloPointTransactionsId")
+                        .HasName("UserEloPointTransactions_pkey");
+
+                    b.HasIndex(new[] { "IdempotencyKey" }, "IX_UserEloPointTransactions_IdempotencyKey")
+                        .IsUnique();
+
+                    b.HasIndex(new[] { "SourceEntityType", "SourceEntityId" }, "IX_UserEloPointTransactions_SourceEntity");
+
+                    b.HasIndex(new[] { "UserId", "CreatedAt" }, "IX_UserEloPointTransactions_UserId_CreatedAt")
+                        .IsDescending(false, true);
+
+                    b.ToTable("UserEloPointTransactions", t =>
+                        {
+                            t.HasCheckConstraint("CK_UserEloPointTransactions_PointsAfter_NonNegative", "\"PointsAfter\" >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("Domain.Entities.UserEloScore", b =>
+                {
+                    b.Property<Guid>("UserEloScoresId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("UserEloScoresId")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<int>("CurrentPoints")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(100);
+
+                    b.Property<DateTime>("LastActivityAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime?>("LastInactivityPenaltyAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("LastReturnBonusAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("UserId");
+
+                    b.HasKey("UserEloScoresId")
+                        .HasName("UserEloScores_pkey");
+
+                    b.HasIndex(new[] { "CurrentPoints" }, "IX_UserEloScores_CurrentPoints")
+                        .IsDescending();
+
+                    b.HasIndex(new[] { "UserId" }, "IX_UserEloScores_UserId")
+                        .IsUnique();
+
+                    b.ToTable("UserEloScores", t =>
+                        {
+                            t.HasCheckConstraint("CK_UserEloScores_CurrentPoints_NonNegative", "\"CurrentPoints\" >= 0");
+                        });
+                });
+
             modelBuilder.Entity("Domain.Entities.WorkExperience", b =>
                 {
                     b.Property<Guid>("WorkExperiencesId")
@@ -2691,6 +2806,28 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("Domain.Entities.UserEloPointTransaction", b =>
+                {
+                    b.HasOne("Domain.Entities.User", "User")
+                        .WithMany("UserEloPointTransactions")
+                        .HasForeignKey("UserId")
+                        .IsRequired()
+                        .HasConstraintName("UserEloPointTransactions_usr_UserId_fkey");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Domain.Entities.UserEloScore", b =>
+                {
+                    b.HasOne("Domain.Entities.User", "User")
+                        .WithOne("UserEloScore")
+                        .HasForeignKey("Domain.Entities.UserEloScore", "UserId")
+                        .IsRequired()
+                        .HasConstraintName("UserEloScores_usr_UserId_fkey");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("Domain.Entities.WorkExperience", b =>
                 {
                     b.HasOne("Domain.Entities.FreelancerProfile", "Freelancer")
@@ -2872,6 +3009,10 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("SavedJobs");
 
                     b.Navigation("Subscriptions");
+
+                    b.Navigation("UserEloPointTransactions");
+
+                    b.Navigation("UserEloScore");
                 });
 #pragma warning restore 612, 618
         }

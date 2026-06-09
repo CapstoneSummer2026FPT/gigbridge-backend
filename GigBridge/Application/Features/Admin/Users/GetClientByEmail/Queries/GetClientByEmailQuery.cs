@@ -4,4 +4,4 @@ using MediatR;
 
 namespace Application.Features.Admin.Users.GetClientByEmail.Queries;
 
-public record GetClientByEmailQuery(string Email) : IRequest<AdminUserDto?>, IRequireAdmin;
+public record GetClientByEmailQuery(string Email) : IRequest<AdminUserDto?>;

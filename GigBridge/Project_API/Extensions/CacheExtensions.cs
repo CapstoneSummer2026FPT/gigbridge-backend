@@ -3,11 +3,15 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using Application.Common.Interfaces.IService;
 namespace Project_API.Extensions;
-public static class CacheExtensions {
-    public static IServiceCollection AddHybridCache(this IServiceCollection services, IConfiguration configuration) {
+
+
+public static class CacheExtensions
+{
+    public static IServiceCollection AddHybridCache(this IServiceCollection services, IConfiguration configuration)
+    {
         services.AddMemoryCache();
         services.AddStackExchangeRedisCache(options => {
-            options.Configuration = configuration.GetConnectionString("Redis") ?? "localhost:6379";
+            options.Configuration = configuration.GetConnectionString("Redis:ConnectionString") ?? "localhost:6379";
             options.InstanceName = "GigBridge_";
         });
         services.AddSingleton<ICacheService, HybridCacheService>();

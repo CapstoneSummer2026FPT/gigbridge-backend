@@ -7,6 +7,7 @@ using Project_API.Services.Notification;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Services.AddControllers();
 
 // Layer registrations (Clean Architecture)
 builder.Services.AddApplicationServices();
@@ -33,18 +34,18 @@ var app = builder.Build();
 app.UseSwagger();
 app.UseSwaggerUI();
 
-using (var scope = app.Services.CreateScope())
-{
-    try
-    {
-        var db = scope.ServiceProvider.GetRequiredService<GigbridgeDbContext>();
-        await DbSeeder.SeedLocalOnlyAsync<GigbridgeDbContext>(app.Services);
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"Seed failed: {ex.Message}");
-    }
-}
+//using (var scope = app.Services.CreateScope())
+//{
+//    try
+//    {
+//        var db = scope.ServiceProvider.GetRequiredService<GigbridgeDbContext>();
+//        await DbSeeder.SeedLocalOnlyAsync<GigbridgeDbContext>(app.Services);
+//    }
+//    catch (Exception ex)
+//    {
+//        Console.WriteLine($"Seed failed: {ex.Message}");
+//    }
+//}
 
 app.UseMiddleware<Project_API.Middleware.ExceptionHandlingMiddleware>();
 app.UseMiddleware<Project_API.Middleware.RequestLoggingMiddleware>();

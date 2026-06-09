@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
-    <RootNamespace>Test_Gigbridge_backend</RootNamespace>
+    <RootNamespace>Test_Gigbridge_Backend</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
 
@@ -13,13 +13,30 @@
   <ItemGroup>
     <PackageReference Include="coverlet.collector" Version="6.0.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
-    <PackageReference Include="NUnit" Version="3.14.0" />
-    <PackageReference Include="NUnit.Analyzers" Version="3.9.0" />
-    <PackageReference Include="NUnit3TestAdapter" Version="4.5.0" />
+    <PackageReference Include="xunit" Version="2.5.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
   </ItemGroup>
 
   <ItemGroup>
-    <Using Include="NUnit.Framework" />
+    <ProjectReference Include="..\Application\Application.csproj" />
+    <ProjectReference Include="..\Domain\Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Application\Features\JobPosts\Freelancer\" />
+    <Folder Include="Application\Features\JobPosts\Common\" />
+    <Folder Include="Application\Features\JobPosts\Public\" />
+    <Folder Include="Application\Features\Admin\" />
+    <Folder Include="Application\Features\Profiles\Client\" />
+    <Folder Include="Application\Features\Profiles\Common\" />
+    <Folder Include="Application\Features\Profiles\Public\" />
+    <Folder Include="Application\Features\Proposals\Client\" />
+    <Folder Include="Application\Features\Proposals\Common\" />
+    <Folder Include="Application\Features\Proposals\Public\" />
   </ItemGroup>
 
 </Project>
