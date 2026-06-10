@@ -83,7 +83,6 @@ public class CreateJobPostValidatorTests
             Currency: "VND",
             EstimatedDuration: "2 weeks",
             MaxHires: 1,
-            ExperienceLevelRequired: 1,
             Location: "Remote",
             Visibility: 1,
             EndDate: DateTime.UtcNow.AddDays(7),

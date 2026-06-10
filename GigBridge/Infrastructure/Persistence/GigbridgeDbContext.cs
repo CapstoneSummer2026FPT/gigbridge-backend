@@ -518,8 +518,6 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
 
             entity.HasIndex(e => e.Availability, "IX_FreelancerProfiles_Availability");
 
-            entity.HasIndex(e => e.ExperienceLevel, "IX_FreelancerProfiles_ExperienceLevel");
-
             entity.HasIndex(e => e.UserId, "IX_FreelancerProfiles_UserId").IsUnique();
 
             entity.Property(e => e.FreelancerProfilesId)
@@ -529,7 +527,6 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
                 .HasDefaultValue(0)
                 .HasComment("Enum Availability: 0=FullTime, 1=PartTime, 2=NotAvailable");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
-            entity.Property(e => e.ExperienceLevel).HasComment("Enum ExperienceLevel: 0=Entry, 1=Intermediate, 2=Expert");
             entity.Property(e => e.Location).HasMaxLength(300);
             entity.Property(e => e.Title).HasMaxLength(300);
             entity.Property(e => e.UserId).HasColumnName("UserId");
@@ -597,7 +594,6 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
                 .HasMaxLength(5)
                 .HasDefaultValueSql("'VND'::character varying");
             entity.Property(e => e.EstimatedDuration).HasMaxLength(100);
-            entity.Property(e => e.ExperienceLevelRequired).HasComment("Enum ExperienceLevel: 0=Entry, 1=Intermediate, 2=Expert");
             entity.Property(e => e.IsAigenerated)
                 .HasDefaultValue(false)
                 .HasColumnName("IsAIGenerated");
