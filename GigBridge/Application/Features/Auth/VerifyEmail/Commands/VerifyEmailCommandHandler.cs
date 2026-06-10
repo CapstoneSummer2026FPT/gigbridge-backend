@@ -1,3 +1,4 @@
+using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Domain.Entities;
@@ -24,12 +25,12 @@ public class VerifyEmailCommandHandler : IRequestHandler<VerifyEmailCommand>
 
         if (user is null)
         {
-            throw new InvalidOperationException("Invalid token");
+            throw new BadRequestException("Invalid token");
         }
 
         if (user.TokenExpiry < _dateTimeService.UtcNow)
         {
-            throw new InvalidOperationException("Token has expired");
+            throw new BadRequestException("Token has expired");
         }
 
         user.IsEmailVerified = true;

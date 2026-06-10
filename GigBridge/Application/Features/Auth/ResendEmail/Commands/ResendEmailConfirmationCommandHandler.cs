@@ -1,3 +1,4 @@
+using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Domain.Entities;
@@ -30,12 +31,12 @@ public class ResendEmailConfirmationCommandHandler : IRequestHandler<ResendEmail
 
         if (user is null)
         {
-            throw new InvalidOperationException("Email does not exist");
+            throw new NotFoundException("Email does not exist");
         }
 
         if (user.IsEmailVerified)
         {
-            throw new InvalidOperationException("Account has already been verified");
+            throw new BadRequestException("Account has already been verified");
         }
 
         var token = Guid.NewGuid().ToString();
