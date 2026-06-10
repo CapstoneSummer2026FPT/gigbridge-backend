@@ -63,7 +63,6 @@ public class CreateJobPostValidatorTests
             EstimatedDuration: "2 weeks",
             MaxHires: 1,
             ExperienceLevelRequired: 1,
-            LocationType: 0,
             Location: "Remote",
             Visibility: 1,
             EndDate: DateTime.UtcNow.AddDays(7),
