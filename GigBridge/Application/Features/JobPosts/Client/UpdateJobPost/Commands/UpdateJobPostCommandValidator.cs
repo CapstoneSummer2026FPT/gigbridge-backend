@@ -50,10 +50,6 @@ public class UpdateJobPostCommandValidator : AbstractValidator<UpdateJobPostComm
             .When(x => x.Request.MaxHires.HasValue)
             .WithMessage("MaxHires must be greater than 0.");
 
-        RuleFor(x => x.Request.ExperienceLevelRequired)
-            .Must(x => x == null || x == 0 || x == 1 || x == 2)
-            .WithMessage("ExperienceLevelRequired must be 0=Entry, 1=Intermediate, or 2=Expert.");
-
         RuleFor(x => x.Request.EndDate)
             .GreaterThan(DateTime.UtcNow)
             .When(x => x.Request.EndDate.HasValue)

@@ -14,7 +14,6 @@ public record JobPostDetailDto(
     string? Currency,
     string? EstimatedDuration,
     int? MaxHires,
-    int? ExperienceLevelRequired,
     string? Location,
     DateTime? EndDate,
     DateTime CreatedAt,

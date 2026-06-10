@@ -85,7 +85,6 @@ public class GetAllFreelancersQueryHandler
                 UserId = fp.UserId,
                 Title = fp.Title,
                 Bio = fp.Bio,
-                ExperienceLevel = fp.ExperienceLevel,
                 Availability = fp.Availability,
                 Location = fp.Location,
                 ProfileCompletionScore = fp.ProfileCompletionScore,

@@ -45,7 +45,6 @@ public class GetJobPostDetailQueryHandler : IRequestHandler<GetJobPostDetailQuer
             Currency: jobPost.Currency,
             EstimatedDuration: jobPost.EstimatedDuration,
             MaxHires: jobPost.MaxHires,
-            ExperienceLevelRequired: jobPost.ExperienceLevelRequired,
             Location: jobPost.Location,
             EndDate: jobPost.EndDate,
             CreatedAt: jobPost.CreatedAt,

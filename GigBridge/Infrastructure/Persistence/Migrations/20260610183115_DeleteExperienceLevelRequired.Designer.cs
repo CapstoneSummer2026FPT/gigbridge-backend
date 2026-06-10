@@ -3,6 +3,7 @@ using System;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(GigbridgeDbContext))]
-    partial class GigbridgeDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260610183115_DeleteExperienceLevelRequired")]
+    partial class DeleteExperienceLevelRequired
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -893,6 +896,10 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasDefaultValueSql("now()");
 
+                    b.Property<int?>("ExperienceLevel")
+                        .HasColumnType("integer")
+                        .HasComment("Enum ExperienceLevel: 0=Entry, 1=Intermediate, 2=Expert");
+
                     b.Property<string>("Location")
                         .HasMaxLength(300)
                         .HasColumnType("character varying(300)");
@@ -918,6 +925,8 @@ namespace Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.HasIndex(new[] { "Availability" }, "IX_FreelancerProfiles_Availability");
+
+                    b.HasIndex(new[] { "ExperienceLevel" }, "IX_FreelancerProfiles_ExperienceLevel");
 
                     b.HasIndex(new[] { "UserId" }, "IX_FreelancerProfiles_UserId")
                         .IsUnique();

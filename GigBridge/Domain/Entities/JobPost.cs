@@ -25,11 +25,6 @@ public partial class JobPost
 
     public int? MaxHires { get; set; }
 
-    /// <summary>
-    /// Enum ExperienceLevel: 0=Entry, 1=Intermediate, 2=Expert
-    /// </summary>
-    public int? ExperienceLevelRequired { get; set; }
-
     public string? Location { get; set; }
 
     /// <summary>
