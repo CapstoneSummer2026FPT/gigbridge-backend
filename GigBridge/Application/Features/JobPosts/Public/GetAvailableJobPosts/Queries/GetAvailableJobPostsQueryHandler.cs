@@ -52,11 +52,6 @@ public class GetAvailableJobPostsQueryHandler : IRequestHandler<GetAvailableJobP
                     jobPostSkill.Skills.Name.ToLower().Contains(keyword)));
         }
 
-        if (request.BudgetType.HasValue)
-        {
-            query = query.Where(jobPost => jobPost.BudgetType == request.BudgetType.Value);
-        }
-
         if (request.SkillIds is { Count: > 0 })
         {
             query = query.Where(jobPost =>

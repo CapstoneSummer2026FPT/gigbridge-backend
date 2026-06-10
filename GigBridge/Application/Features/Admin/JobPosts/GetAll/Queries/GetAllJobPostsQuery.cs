@@ -8,7 +8,6 @@ public record GetAllJobPostsQuery(
     int PageSize = 10,
     string? Search = null,
     int? Status = null,
-    int? BudgetType = null,
     List<Guid>? SkillIds = null,
     decimal? BudgetMin = null,
     decimal? BudgetMax = null,

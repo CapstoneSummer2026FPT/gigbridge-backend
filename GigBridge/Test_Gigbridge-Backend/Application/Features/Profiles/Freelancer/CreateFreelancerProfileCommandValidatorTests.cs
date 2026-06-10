@@ -18,18 +18,6 @@ public class CreateFreelancerProfileCommandValidatorTests
     }
 
     [Fact]
-    public void Validate_ReturnsErrorWhenHourlyRateIsZero()
-    {
-        var dto = CreateValidDto();
-        dto.HourlyRate = 0;
-        var command = new CreateFreelancerProfileCommand(dto);
-
-        var result = _validator.Validate(command);
-
-        Assert.Contains(result.Errors, error => error.PropertyName == "Dto.HourlyRate");
-    }
-
-    [Fact]
     public void Validate_ReturnsErrorWhenExperienceLevelIsOutsideSupportedRange()
     {
         var dto = CreateValidDto();
@@ -47,7 +35,6 @@ public class CreateFreelancerProfileCommandValidatorTests
         {
             Title = "Backend Developer",
             Bio = "Experienced .NET developer focused on clean application architecture.",
-            HourlyRate = 25m,
             ExperienceLevel = 1,
             Availability = 0,
             Location = "Ho Chi Minh City"

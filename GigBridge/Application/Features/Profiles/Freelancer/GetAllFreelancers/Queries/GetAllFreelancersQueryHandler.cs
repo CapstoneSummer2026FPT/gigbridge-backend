@@ -85,7 +85,6 @@ public class GetAllFreelancersQueryHandler
                 UserId = fp.UserId,
                 Title = fp.Title,
                 Bio = fp.Bio,
-                HourlyRate = fp.HourlyRate,
                 ExperienceLevel = fp.ExperienceLevel,
                 Availability = fp.Availability,
                 Location = fp.Location,

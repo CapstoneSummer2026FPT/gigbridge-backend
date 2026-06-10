@@ -61,7 +61,6 @@ public class UpdateJobPostCommandHandler : IRequestHandler<UpdateJobPostCommand,
         jobPost.Title = request.Title.Trim();
         jobPost.Description = request.Description.Trim();
         jobPost.CategoryId = request.CategoryId;
-        jobPost.BudgetType = request.BudgetType;
         jobPost.BudgetMin = request.BudgetMin;
         jobPost.BudgetMax = request.BudgetMax;
         jobPost.Currency = string.IsNullOrWhiteSpace(request.Currency)
@@ -71,7 +70,6 @@ public class UpdateJobPostCommandHandler : IRequestHandler<UpdateJobPostCommand,
         jobPost.EstimatedDuration = request.EstimatedDuration;
         jobPost.MaxHires = request.MaxHires;
         jobPost.ExperienceLevelRequired = request.ExperienceLevelRequired;
-        jobPost.LocationType = request.LocationType;
         jobPost.Location = request.Location;
         jobPost.EndDate = request.EndDate;
         jobPost.UpdatedAt = _dateTimeService.UtcNow;

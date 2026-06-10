@@ -22,11 +22,6 @@ public partial class Contract
     public decimal TotalBudget { get; set; }
 
     /// <summary>
-    /// Enum PaymentType: 0=Fixed, 1=Hourly
-    /// </summary>
-    public int PaymentType { get; set; }
-
-    /// <summary>
     /// Enum ContractStatus: 0=Active, 1=Completed, 2=Cancelled, 3=Disputed
     /// </summary>
     public int Status { get; set; }

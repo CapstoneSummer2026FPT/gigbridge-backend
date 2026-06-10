@@ -20,7 +20,7 @@ internal static class ProposalProjection
             FreelancerProfilesId = proposal.FreelancerProfilesId,
             FreelancerName = proposal.FreelancerProfiles?.User?.FullName ?? string.Empty,
             CoverLetter = proposal.CoverLetter ?? string.Empty,
-            ProposedRate = proposal.ProposedRate ?? 0m,
+            ProposedBudget = proposal.ProposedBudget ?? 0m,
             ProposedDuration = proposal.ProposedDuration ?? string.Empty,
             Status = proposal.Status,
             SubmittedAt = proposal.SubmittedAt ?? DateTime.MinValue,

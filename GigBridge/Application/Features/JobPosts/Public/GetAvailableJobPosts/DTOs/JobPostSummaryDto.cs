@@ -7,11 +7,9 @@ public record JobPostSummaryDto(
     Guid JobPostsId,
     string Title,
     string DescriptionPreview,
-    int BudgetType,
     decimal? BudgetMin,
     decimal? BudgetMax,
     int? ExperienceLevelRequired,
-    int? LocationType,
     DateTime CreatedAt,
     int EloPoints,
     List<string> SkillNames
