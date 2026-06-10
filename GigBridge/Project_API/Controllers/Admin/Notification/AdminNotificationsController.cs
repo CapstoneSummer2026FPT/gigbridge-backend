@@ -18,8 +18,14 @@ public class AdminNotificationsController : BaseApiController
     [HttpPost("broadcast")]
     public async Task<IActionResult> Broadcast([FromBody] CreateAdminBroadcastRequest request)
     {
+        if (!TryGetCurrentUserId(out var adminId))
+        {
+            return InvalidTokenResponse();
+        }
+
         var command = new CreateBroadcastCommand
         {
+            CreatedByAdminId = adminId,
             Target = request.Target,
             TargetUserId = request.TargetUserId,
             Type = request.Type,
@@ -27,6 +33,7 @@ public class AdminNotificationsController : BaseApiController
             Content = request.Content,
             ReferenceId = request.ReferenceId,
             ReferenceType = request.ReferenceType,
+            ExpiresAt = request.ExpiresAt,
             SendEmail = request.SendEmail
         };
 

@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using Application.Common.Models;
 using Application.Features.Notifications.Common.DTOs;
+using Application.Features.Notifications.Public.MarkBroadcastAsRead.Command;
 using Application.Features.Notifications.Public.MarkAllAsRead.Command;
 using Application.Features.Notifications.Public.MarkAsRead.Command;
 using Application.Features.Notifications.Queries.GetNotifications;
@@ -65,6 +66,24 @@ public class NotificationsController : BaseApiController
 
         await Mediator.Send(command);
         return Ok(ApiResponse<object>.Ok(null!, "Notification marked as read."));
+    }
+
+    [HttpPut("broadcast-recipients/{recipientId:guid}/read")]
+    public async Task<IActionResult> MarkBroadcastAsRead(Guid recipientId)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return InvalidTokenResponse();
+        }
+
+        var command = new MarkBroadcastAsReadCommand
+        {
+            BroadcastRecipientId = recipientId,
+            UserId = userId
+        };
+
+        await Mediator.Send(command);
+        return Ok(ApiResponse<object>.Ok(null!, "Broadcast notification marked as read."));
     }
 
     [HttpPut("read-all")]

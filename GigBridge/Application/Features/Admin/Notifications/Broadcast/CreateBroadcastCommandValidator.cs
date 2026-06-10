@@ -25,5 +25,9 @@ public class CreateBroadcastCommandValidator : AbstractValidator<CreateBroadcast
 
         RuleFor(x => x.ReferenceType)
             .MaximumLength(50).WithMessage("ReferenceType must be at most 50 characters.");
+
+        RuleFor(x => x.ExpiresAt)
+            .Must(expiresAt => !expiresAt.HasValue || expiresAt.Value > DateTime.UtcNow)
+            .WithMessage("ExpiresAt must be in the future.");
     }
 }
