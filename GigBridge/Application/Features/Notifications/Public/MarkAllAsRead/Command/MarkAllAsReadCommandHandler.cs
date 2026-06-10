@@ -18,16 +18,16 @@ public class MarkAllAsReadCommandHandler : IRequestHandler<MarkAllAsReadCommand>
     {
         var now = DateTime.UtcNow;
 
-        var unreadNotifications = await _context.Set<Notification>()
+        await _context.Set<Notification>()
             .Where(n => n.UserId == request.UserId && (n.IsRead == null || n.IsRead == false))
-            .ToListAsync(cancellationToken);
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(n => n.IsRead, true)
+                .SetProperty(n => n.ReadAt, now), cancellationToken);
 
-        foreach (var notification in unreadNotifications)
-        {
-            notification.IsRead = true;
-            notification.ReadAt = now;
-        }
-
-        await _context.SaveChangesAsync(cancellationToken);
+        await _context.Set<BroadcastNotificationRecipient>()
+            .Where(r => r.UserId == request.UserId && (r.IsRead == null || r.IsRead == false))
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(r => r.IsRead, true)
+                .SetProperty(r => r.ReadAt, now), cancellationToken);
     }
 }

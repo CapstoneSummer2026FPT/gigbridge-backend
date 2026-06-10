@@ -73,6 +73,8 @@ public partial class User
 
     public virtual ICollection<Notification> Notifications { get; set; } = new List<Notification>();
 
+    public virtual ICollection<BroadcastNotificationRecipient> BroadcastNotificationRecipients { get; set; } = new List<BroadcastNotificationRecipient>();
+
     public virtual ICollection<PaymentProof> PaymentProofs { get; set; } = new List<PaymentProof>();
 
     public virtual ICollection<PlatformSetting> PlatformSettings { get; set; } = new List<PlatformSetting>();

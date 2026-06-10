@@ -23,6 +23,8 @@ public class CreateBroadcastCommandHandler : IRequestHandler<CreateBroadcastComm
             request.ReferenceType,
             request.TargetUserId,
             request.SendEmail,
+            request.CreatedByAdminId,
+            request.ExpiresAt,
             cancellationToken);
     }
 }
