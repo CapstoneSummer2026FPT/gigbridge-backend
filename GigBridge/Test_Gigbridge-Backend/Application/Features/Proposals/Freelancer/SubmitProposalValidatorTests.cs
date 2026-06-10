@@ -40,14 +40,36 @@ public class SubmitProposalValidatorTests
     }
 
     [Fact]
-    public void Validate_ReturnsErrorWhenProposedRateIsNegative()
+    public void Validate_ReturnsErrorWhenProposedBudgetIsMissing()
     {
-        var request = CreateValidRequest() with { ProposedRate = -1m };
+        var request = CreateValidRequest() with { ProposedBudget = null };
         var command = new SubmitProposalCommand(request, Guid.NewGuid());
 
         var result = _validator.Validate(command);
 
-        Assert.Contains(result.Errors, error => error.PropertyName == "Request.ProposedRate");
+        Assert.Contains(result.Errors, error => error.PropertyName == "Request.ProposedBudget");
+    }
+
+    [Fact]
+    public void Validate_ReturnsErrorWhenProposedBudgetIsNegative()
+    {
+        var request = CreateValidRequest() with { ProposedBudget = -1m };
+        var command = new SubmitProposalCommand(request, Guid.NewGuid());
+
+        var result = _validator.Validate(command);
+
+        Assert.Contains(result.Errors, error => error.PropertyName == "Request.ProposedBudget");
+    }
+
+    [Fact]
+    public void Validate_ReturnsErrorWhenProposedBudgetIsZero()
+    {
+        var request = CreateValidRequest() with { ProposedBudget = 0m };
+        var command = new SubmitProposalCommand(request, Guid.NewGuid());
+
+        var result = _validator.Validate(command);
+
+        Assert.Contains(result.Errors, error => error.PropertyName == "Request.ProposedBudget");
     }
 
     private static SubmitProposalRequest CreateValidRequest()
@@ -55,7 +77,7 @@ public class SubmitProposalValidatorTests
         return new SubmitProposalRequest(
             JobPostsId: Guid.NewGuid(),
             CoverLetter: "I can deliver this feature with clean architecture and clear communication throughout the project.",
-            ProposedRate: 500m,
+            ProposedBudget: 500m,
             ProposedDuration: "10 days");
     }
 }

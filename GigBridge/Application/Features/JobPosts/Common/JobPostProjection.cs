@@ -17,7 +17,6 @@ internal static class JobPostProjection
             JobPostsId: jobPost.JobPostsId,
             Title: jobPost.Title,
             DescriptionPreview: CreatePreview(jobPost.Description),
-            BudgetType: jobPost.BudgetType,
             BudgetMin: jobPost.BudgetMin,
             BudgetMax: jobPost.BudgetMax,
             ExperienceLevelRequired: jobPost.ExperienceLevelRequired,

@@ -18,20 +18,42 @@ public class CreateJobPostValidatorTests
     }
 
     [Fact]
-    public void Validate_ReturnsErrorWhenBudgetTypeIsUnsupported()
+    public void Validate_ReturnsNoErrorsWhenBudgetMinEqualsBudgetMax()
     {
-        var request = CreateValidRequest() with { BudgetType = 3 };
+        var request = CreateValidRequest() with { BudgetMin = 1000m, BudgetMax = 1000m };
         var command = new CreateJobPostCommand(request, Guid.NewGuid());
 
         var result = _validator.Validate(command);
 
-        Assert.Contains(result.Errors, error => error.PropertyName == "Request.BudgetType");
+        Assert.True(result.IsValid);
     }
 
     [Fact]
-    public void Validate_ReturnsErrorWhenBudgetMaxIsNotGreaterThanBudgetMin()
+    public void Validate_ReturnsErrorWhenBudgetMinIsGreaterThanBudgetMax()
     {
-        var request = CreateValidRequest() with { BudgetMin = 1000m, BudgetMax = 1000m };
+        var request = CreateValidRequest() with { BudgetMin = 1001m, BudgetMax = 1000m };
+        var command = new CreateJobPostCommand(request, Guid.NewGuid());
+
+        var result = _validator.Validate(command);
+
+        Assert.Contains(result.Errors, error => error.PropertyName == "Request.BudgetMax");
+    }
+
+    [Fact]
+    public void Validate_ReturnsErrorWhenBudgetMinIsNegative()
+    {
+        var request = CreateValidRequest() with { BudgetMin = -1m };
+        var command = new CreateJobPostCommand(request, Guid.NewGuid());
+
+        var result = _validator.Validate(command);
+
+        Assert.Contains(result.Errors, error => error.PropertyName == "Request.BudgetMin");
+    }
+
+    [Fact]
+    public void Validate_ReturnsErrorWhenBudgetMaxIsNegative()
+    {
+        var request = CreateValidRequest() with { BudgetMax = -1m };
         var command = new CreateJobPostCommand(request, Guid.NewGuid());
 
         var result = _validator.Validate(command);
@@ -56,7 +78,6 @@ public class CreateJobPostValidatorTests
             Title: "Build a booking module",
             Description: "Create booking workflow and notification logic.",
             CategoryId: Guid.NewGuid(),
-            BudgetType: 0,
             BudgetMin: 500m,
             BudgetMax: 1000m,
             Currency: "VND",

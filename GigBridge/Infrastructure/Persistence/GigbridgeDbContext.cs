@@ -199,7 +199,6 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
                 .HasColumnName("ESignContractPdfUrl");
             entity.Property(e => e.FreelancerProfilesId).HasColumnName("FreelancerProfilesId");
             entity.Property(e => e.JobPostsId).HasColumnName("JobPostsId");
-            entity.Property(e => e.PaymentType).HasComment("PaymentType: Fixed");
             entity.Property(e => e.ProposalsId).HasColumnName("ProposalsId");
             entity.Property(e => e.Status).HasComment("Enum ContractStatus: 0=Active, 1=Completed, 2=Cancelled, 3=Disputed");
             entity.Property(e => e.Title).HasMaxLength(500);
@@ -592,7 +591,6 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
                 .HasColumnName("JobPostsId");
             entity.Property(e => e.BudgetMax).HasPrecision(18, 2);
             entity.Property(e => e.BudgetMin).HasPrecision(18, 2);
-            entity.Property(e => e.BudgetType).HasComment("BudgetType: 0=Fixed");
             entity.Property(e => e.ClientProfilesId).HasColumnName("ClientProfilesId");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.Currency)
@@ -943,7 +941,7 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
                 .HasColumnName("IsAIGenerated");
             entity.Property(e => e.JobPostsId).HasColumnName("JobPostsId");
             entity.Property(e => e.ProposedDuration).HasMaxLength(100);
-            entity.Property(e => e.ProposedRate).HasPrecision(18, 2);
+            entity.Property(e => e.ProposedBudget).HasPrecision(18, 2);
             entity.Property(e => e.Status).HasComment("Enum ProposalStatus: 0=Pending, 1=Shortlisted, 2=Accepted, 3=Rejected, 4=Withdrawn");
 
             entity.HasOne(d => d.FreelancerProfiles).WithMany(p => p.Proposals)

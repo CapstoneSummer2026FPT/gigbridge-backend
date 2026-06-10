@@ -7,7 +7,6 @@ public record CreateJobPostRequest(
     string Title,
     string Description,
     Guid? CategoryId,
-    int BudgetType,
     decimal? BudgetMin,
     decimal? BudgetMax,
     string? Currency,

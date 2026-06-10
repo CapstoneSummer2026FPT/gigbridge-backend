@@ -9,7 +9,6 @@ public record JobPostDetailDto(
     Guid ClientProfilesId,
     string Title,
     string Description,
-    int BudgetType,
     decimal? BudgetMin,
     decimal? BudgetMax,
     string? Currency,

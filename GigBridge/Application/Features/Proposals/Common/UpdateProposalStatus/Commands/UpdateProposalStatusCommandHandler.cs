@@ -27,6 +27,7 @@ public class UpdateProposalStatusCommandHandler
     {
         var proposal = await _context.Set<Proposal>()
             .Include(proposal => proposal.JobPosts)
+            .Include(proposal => proposal.Contract)
             .FirstOrDefaultAsync(
                 proposal => proposal.ProposalsId == command.ProposalId,
                 cancellationToken);
@@ -107,7 +108,42 @@ public class UpdateProposalStatusCommandHandler
 
             proposal.JobPosts.Status = 2;
             proposal.JobPosts.UpdatedAt = _dateTimeService.UtcNow;
+
+            CreateContractIfMissing(proposal);
         }
+    }
+
+    private void CreateContractIfMissing(Proposal proposal)
+    {
+        if (proposal.Contract is not null)
+        {
+            return;
+        }
+
+        if (!proposal.ProposedBudget.HasValue || proposal.ProposedBudget.Value <= 0)
+        {
+            throw new BadRequestException("Accepted proposals must include a proposed budget.");
+        }
+
+        var now = _dateTimeService.UtcNow;
+
+        _context.Set<Contract>().Add(new Contract
+        {
+            ContractsId = Guid.NewGuid(),
+            JobPostsId = proposal.JobPostsId,
+            ClientProfilesId = proposal.JobPosts.ClientProfilesId,
+            FreelancerProfilesId = proposal.FreelancerProfilesId,
+            ProposalsId = proposal.ProposalsId,
+            Title = proposal.JobPosts.Title,
+            Description = proposal.JobPosts.Description,
+            TotalBudget = proposal.ProposedBudget.Value,
+            Status = 0,
+            StartDate = DateOnly.FromDateTime(now),
+            EndDate = proposal.JobPosts.EndDate.HasValue
+                ? DateOnly.FromDateTime(proposal.JobPosts.EndDate.Value)
+                : null,
+            CreatedAt = now
+        });
     }
 
     private static void UpdateStatusByFreelancer(

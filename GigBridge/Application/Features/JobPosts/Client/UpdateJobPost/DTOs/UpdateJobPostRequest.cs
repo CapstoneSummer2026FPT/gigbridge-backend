@@ -8,11 +8,6 @@ public class UpdateJobPostRequest
 
     public Guid? CategoryId { get; set; }
 
-    /// <summary>
-    /// Enum BudgetType: 0=Fixed
-    /// </summary>
-    public int BudgetType { get; set; }
-
     public decimal? BudgetMin { get; set; }
 
     public decimal? BudgetMax { get; set; }

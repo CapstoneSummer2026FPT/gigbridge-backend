@@ -40,7 +40,6 @@ public class GetJobPostDetailQueryHandler : IRequestHandler<GetJobPostDetailQuer
             ClientProfilesId: jobPost.ClientProfilesId,
             Title: jobPost.Title,
             Description: jobPost.Description,
-            BudgetType: jobPost.BudgetType,
             BudgetMin: jobPost.BudgetMin,
             BudgetMax: jobPost.BudgetMax,
             Currency: jobPost.Currency,

@@ -7,7 +7,6 @@ public record JobPostSummaryDto(
     Guid JobPostsId,
     string Title,
     string DescriptionPreview,
-    int BudgetType,
     decimal? BudgetMin,
     decimal? BudgetMax,
     int? ExperienceLevelRequired,

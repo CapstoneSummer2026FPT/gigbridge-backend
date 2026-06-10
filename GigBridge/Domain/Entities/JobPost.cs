@@ -15,11 +15,6 @@ public partial class JobPost
 
     public Guid? CategoryId { get; set; }
 
-    /// <summary>
-    //BudgetType: Fixed
-    /// </summary>
-    public int BudgetType { get; set; }
-
     public decimal? BudgetMin { get; set; }
 
     public decimal? BudgetMax { get; set; }
