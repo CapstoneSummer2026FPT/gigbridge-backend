@@ -19,6 +19,7 @@ namespace Application.Features.Auth.Login.Commands
         private readonly IPasswordHasher _passwordHasher;
         private readonly IJwtService _jwtService;
         private readonly IDateTimeService _dateTimeService;
+        private readonly IUserEloService _userEloService;
         private readonly IMapper _mapper;
 
         public LoginWithRefreshCommandHandler(
@@ -26,12 +27,14 @@ namespace Application.Features.Auth.Login.Commands
             IPasswordHasher passwordHasher,
             IJwtService jwtService,
             IDateTimeService dateTimeService,
+            IUserEloService userEloService,
             IMapper mapper)
         {
             _context = context;
             _passwordHasher = passwordHasher;
             _jwtService = jwtService;
             _dateTimeService = dateTimeService;
+            _userEloService = userEloService;
             _mapper = mapper;
         }
 
@@ -49,6 +52,7 @@ namespace Application.Features.Auth.Login.Commands
 
             EnsureUserCanLogin(user);
 
+            await _userEloService.ApplyLoginActivityAsync(user, cancellationToken);
             var refreshToken = RotateRefreshToken(user);
             await _context.SaveChangesAsync(cancellationToken);
 

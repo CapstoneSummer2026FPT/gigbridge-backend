@@ -17,6 +17,10 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
 
     public virtual DbSet<Category> Categories { get; set; }
 
+    public virtual DbSet<BroadcastNotification> BroadcastNotifications { get; set; }
+
+    public virtual DbSet<BroadcastNotificationRecipient> BroadcastNotificationRecipients { get; set; }
+
     public virtual DbSet<ClientProfile> ClientProfiles { get; set; }
 
     public virtual DbSet<Contract> Contracts { get; set; }
@@ -85,6 +89,10 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
 
     public virtual DbSet<SubscriptionPlan> SubscriptionPlans { get; set; }
 
+    public virtual DbSet<UserEloPointTransaction> UserEloPointTransactions { get; set; }
+
+    public virtual DbSet<UserEloScore> UserEloScores { get; set; }
+
     public virtual DbSet<User> Users { get; set; }
 
     public virtual DbSet<WorkExperience> WorkExperiences { get; set; }
@@ -127,8 +135,6 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
 
             entity.HasIndex(e => e.IsActive, "IX_Categories_IsActive");
 
-            entity.HasIndex(e => e.ParentCategoryId, "IX_Categories_ParentCategoryId");
-
             entity.HasIndex(e => e.Slug, "IX_Categories_Slug").IsUnique();
 
             entity.Property(e => e.CategoriesId)
@@ -137,13 +143,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.IsActive).HasDefaultValue(true);
             entity.Property(e => e.Name).HasMaxLength(200);
-            entity.Property(e => e.NameVi).HasMaxLength(200);
             entity.Property(e => e.Slug).HasMaxLength(200);
             entity.Property(e => e.SortOrder).HasDefaultValue(0);
-
-            entity.HasOne(d => d.ParentCategory).WithMany(p => p.InverseParentCategory)
-                .HasForeignKey(d => d.ParentCategoryId)
-                .HasConstraintName("Categories_ParentCategoryId_fkey");
         });
 
         modelBuilder.Entity<ClientProfile>(entity =>
@@ -198,7 +199,6 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
                 .HasColumnName("ESignContractPdfUrl");
             entity.Property(e => e.FreelancerProfilesId).HasColumnName("FreelancerProfilesId");
             entity.Property(e => e.JobPostsId).HasColumnName("JobPostsId");
-            entity.Property(e => e.PaymentType).HasComment("Enum PaymentType: 0=Fixed, 1=Hourly");
             entity.Property(e => e.ProposalsId).HasColumnName("ProposalsId");
             entity.Property(e => e.Status).HasComment("Enum ContractStatus: 0=Active, 1=Completed, 2=Cancelled, 3=Disputed");
             entity.Property(e => e.Title).HasMaxLength(500);
@@ -459,7 +459,6 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.IsActive).HasDefaultValue(true);
             entity.Property(e => e.Name).HasMaxLength(300);
-            entity.Property(e => e.NameVi).HasMaxLength(300);
             entity.Property(e => e.PlaceholderSchema).HasColumnType("jsonb");
             entity.Property(e => e.Version).HasDefaultValue(1);
 
@@ -507,7 +506,6 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.IsActive).HasDefaultValue(true);
             entity.Property(e => e.Name).HasMaxLength(200);
-            entity.Property(e => e.NameVi).HasMaxLength(200);
             entity.Property(e => e.Slug).HasMaxLength(200);
             entity.Property(e => e.SortOrder).HasDefaultValue(0);
         });
@@ -520,8 +518,6 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
 
             entity.HasIndex(e => e.Availability, "IX_FreelancerProfiles_Availability");
 
-            entity.HasIndex(e => e.ExperienceLevel, "IX_FreelancerProfiles_ExperienceLevel");
-
             entity.HasIndex(e => e.UserId, "IX_FreelancerProfiles_UserId").IsUnique();
 
             entity.Property(e => e.FreelancerProfilesId)
@@ -531,8 +527,6 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
                 .HasDefaultValue(0)
                 .HasComment("Enum Availability: 0=FullTime, 1=PartTime, 2=NotAvailable");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
-            entity.Property(e => e.ExperienceLevel).HasComment("Enum ExperienceLevel: 0=Entry, 1=Intermediate, 2=Expert");
-            entity.Property(e => e.HourlyRate).HasPrecision(18, 2);
             entity.Property(e => e.Location).HasMaxLength(300);
             entity.Property(e => e.Title).HasMaxLength(300);
             entity.Property(e => e.UserId).HasColumnName("UserId");
@@ -575,7 +569,7 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
         {
             entity.HasKey(e => e.JobPostsId).HasName("JobPosts_pkey");
 
-            entity.HasIndex(e => e.ApplicationDeadline, "IX_JobPosts_ApplicationDeadline");
+            entity.HasIndex(e => e.EndDate, "IX_JobPosts_EndDate");
 
             entity.HasIndex(e => e.CategoryId, "IX_JobPosts_CategoryId");
 
@@ -594,21 +588,15 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
                 .HasColumnName("JobPostsId");
             entity.Property(e => e.BudgetMax).HasPrecision(18, 2);
             entity.Property(e => e.BudgetMin).HasPrecision(18, 2);
-            entity.Property(e => e.BudgetType).HasComment("Enum BudgetType: 0=Fixed, 1=Hourly");
             entity.Property(e => e.ClientProfilesId).HasColumnName("ClientProfilesId");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.Currency)
                 .HasMaxLength(5)
                 .HasDefaultValueSql("'VND'::character varying");
             entity.Property(e => e.EstimatedDuration).HasMaxLength(100);
-            entity.Property(e => e.ExperienceLevelRequired).HasComment("Enum ExperienceLevel: 0=Entry, 1=Intermediate, 2=Expert");
             entity.Property(e => e.IsAigenerated)
                 .HasDefaultValue(false)
                 .HasColumnName("IsAIGenerated");
-            entity.Property(e => e.Location).HasMaxLength(300);
-            entity.Property(e => e.LocationType)
-                .HasDefaultValue(0)
-                .HasComment("Enum LocationType: 0=Remote, 1=OnSite, 2=Hybrid");
             entity.Property(e => e.Status).HasComment("Enum JobPostStatus: 0=Draft, 1=Open, 2=InProgress, 3=Closed, 4=Cancelled");
             entity.Property(e => e.Title).HasMaxLength(500);
             entity.Property(e => e.Visibility)
@@ -775,6 +763,57 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
                 .HasConstraintName("MilestoneAttachments_UploadedByUserId_fkey");
         });
 
+        modelBuilder.Entity<BroadcastNotification>(entity =>
+        {
+            entity.HasKey(e => e.BroadcastNotificationId).HasName("BroadcastNotifications_pkey");
+
+            entity.HasIndex(e => e.CreatedAt, "IX_BroadcastNotifications_CreatedAt").IsDescending(true);
+
+            entity.HasIndex(e => e.CreatedByAdminId, "IX_BroadcastNotifications_CreatedByAdminId");
+
+            entity.Property(e => e.BroadcastNotificationId)
+                .HasDefaultValueSql("gen_random_uuid()")
+                .HasColumnName("BroadcastNotificationId");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.ReferenceType).HasMaxLength(50);
+            entity.Property(e => e.Title).HasMaxLength(300);
+            entity.Property(e => e.Type).HasComment("Enum NotificationType");
+            entity.Property(e => e.TargetScope).HasComment("Enum NotificationTarget");
+            entity.Property(e => e.TargetRole).HasComment("Enum UserRole");
+
+            entity.HasOne(d => d.CreatedByAdmin).WithMany()
+                .HasForeignKey(d => d.CreatedByAdminId)
+                .HasConstraintName("BroadcastNotifications_CreatedByAdminId_fkey");
+        });
+
+        modelBuilder.Entity<BroadcastNotificationRecipient>(entity =>
+        {
+            entity.HasKey(e => e.BroadcastNotificationRecipientId).HasName("BroadcastNotificationRecipients_pkey");
+
+            entity.HasIndex(e => new { e.BroadcastNotificationId, e.UserId }, "IX_BroadcastRecipients_BroadcastNotificationId_UserId")
+                .IsUnique();
+
+            entity.HasIndex(e => new { e.UserId, e.IsRead }, "IX_BroadcastRecipients_UserId_IsRead");
+
+            entity.HasIndex(e => new { e.UserId, e.CreatedAt }, "IX_BroadcastRecipients_UserId_CreatedAt").IsDescending(false, true);
+
+            entity.Property(e => e.BroadcastNotificationRecipientId)
+                .HasDefaultValueSql("gen_random_uuid()")
+                .HasColumnName("BroadcastNotificationRecipientId");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.IsRead).HasDefaultValue(false);
+
+            entity.HasOne(d => d.BroadcastNotification).WithMany(p => p.Recipients)
+                .HasForeignKey(d => d.BroadcastNotificationId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("BroadcastRecipients_BroadcastNotificationId_fkey");
+
+            entity.HasOne(d => d.User).WithMany(p => p.BroadcastNotificationRecipients)
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("BroadcastRecipients_UserId_fkey");
+        });
+
         modelBuilder.Entity<Notification>(entity =>
         {
             entity.HasKey(e => e.NotificationsId).HasName("Notifications_pkey");
@@ -784,6 +823,10 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.HasIndex(e => new { e.UserId, e.CreatedAt }, "IX_Notifications_UserId_CreatedAt").IsDescending(false, true);
 
             entity.HasIndex(e => new { e.UserId, e.IsRead }, "IX_Notifications_UserId_IsRead");
+
+            entity.HasIndex(e => new { e.UserId, e.CreatedAt }, "IX_Notifications_Unread_UserId_CreatedAt")
+                .IsDescending(false, true)
+                .HasFilter("\"IsRead\" IS NOT TRUE");
 
             entity.Property(e => e.NotificationsId)
                 .HasDefaultValueSql("gen_random_uuid()")
@@ -894,7 +937,7 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
                 .HasColumnName("IsAIGenerated");
             entity.Property(e => e.JobPostsId).HasColumnName("JobPostsId");
             entity.Property(e => e.ProposedDuration).HasMaxLength(100);
-            entity.Property(e => e.ProposedRate).HasPrecision(18, 2);
+            entity.Property(e => e.ProposedBudget).HasPrecision(18, 2);
             entity.Property(e => e.Status).HasComment("Enum ProposalStatus: 0=Pending, 1=Shortlisted, 2=Accepted, 3=Rejected, 4=Withdrawn");
 
             entity.HasOne(d => d.FreelancerProfiles).WithMany(p => p.Proposals)
@@ -1096,7 +1139,6 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.IsActive).HasDefaultValue(true);
             entity.Property(e => e.Name).HasMaxLength(200);
-            entity.Property(e => e.NameVi).HasMaxLength(200);
 
             entity.HasOne(d => d.Categories).WithMany(p => p.Skills)
                 .HasForeignKey(d => d.CategoriesId)
@@ -1153,10 +1195,68 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.Features).HasColumnType("jsonb");
             entity.Property(e => e.IsActive).HasDefaultValue(true);
             entity.Property(e => e.Name).HasMaxLength(200);
-            entity.Property(e => e.NameVi).HasMaxLength(200);
             entity.Property(e => e.Price).HasPrecision(18, 2);
             entity.Property(e => e.SortOrder).HasDefaultValue(0);
             entity.Property(e => e.TargetRole).HasComment("Enum UserRole: 0=Client, 1=Freelancer, NULL=Both");
+        });
+
+        modelBuilder.Entity<UserEloPointTransaction>(entity =>
+        {
+            entity.HasKey(e => e.UserEloPointTransactionsId).HasName("UserEloPointTransactions_pkey");
+
+            entity.HasIndex(e => e.IdempotencyKey, "IX_UserEloPointTransactions_IdempotencyKey").IsUnique();
+
+            entity.HasIndex(e => new { e.SourceEntityType, e.SourceEntityId }, "IX_UserEloPointTransactions_SourceEntity");
+
+            entity.HasIndex(e => new { e.UserId, e.CreatedAt }, "IX_UserEloPointTransactions_UserId_CreatedAt").IsDescending(false, true);
+
+            entity.Property(e => e.UserEloPointTransactionsId)
+                .HasDefaultValueSql("gen_random_uuid()")
+                .HasColumnName("UserEloPointTransactionsId");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.IdempotencyKey).HasMaxLength(200);
+            entity.Property(e => e.Metadata).HasColumnType("jsonb");
+            entity.Property(e => e.PointsAfter).HasDefaultValue(0);
+            entity.Property(e => e.Reason).HasComment("Enum UserEloPointReason: 0=InitialGrant, 1=InactivityPenalty, 2=ReturnBonus, 3=JobCompletion, 4=ReviewRating");
+            entity.Property(e => e.SourceEntityType).HasMaxLength(50);
+            entity.Property(e => e.UserId).HasColumnName("UserId");
+
+            entity.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_UserEloPointTransactions_PointsAfter_NonNegative", "\"PointsAfter\" >= 0");
+            });
+
+            entity.HasOne(d => d.User).WithMany(p => p.UserEloPointTransactions)
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("UserEloPointTransactions_usr_UserId_fkey");
+        });
+
+        modelBuilder.Entity<UserEloScore>(entity =>
+        {
+            entity.HasKey(e => e.UserEloScoresId).HasName("UserEloScores_pkey");
+
+            entity.HasIndex(e => e.CurrentPoints, "IX_UserEloScores_CurrentPoints").IsDescending();
+
+            entity.HasIndex(e => e.UserId, "IX_UserEloScores_UserId").IsUnique();
+
+            entity.Property(e => e.UserEloScoresId)
+                .HasDefaultValueSql("gen_random_uuid()")
+                .HasColumnName("UserEloScoresId");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.CurrentPoints).HasDefaultValue(100);
+            entity.Property(e => e.LastActivityAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.UserId).HasColumnName("UserId");
+
+            entity.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_UserEloScores_CurrentPoints_NonNegative", "\"CurrentPoints\" >= 0");
+            });
+
+            entity.HasOne(d => d.User).WithOne(p => p.UserEloScore)
+                .HasForeignKey<UserEloScore>(d => d.UserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("UserEloScores_usr_UserId_fkey");
         });
 
         modelBuilder.Entity<User>(entity =>

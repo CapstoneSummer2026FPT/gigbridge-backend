@@ -54,11 +54,6 @@ public class GetAllJobPostsQueryHandler : IRequestHandler<GetAllJobPostsQuery, I
             query = query.Where(jobPost => jobPost.Status == request.Status.Value);
         }
 
-        if (request.BudgetType.HasValue)
-        {
-            query = query.Where(jobPost => jobPost.BudgetType == request.BudgetType.Value);
-        }
-
         if (request.SkillIds is { Count: > 0 })
         {
             query = query.Where(jobPost =>

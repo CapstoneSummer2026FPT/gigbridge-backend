@@ -30,9 +30,6 @@ public sealed class UpdateFAQCategoryCommandHandler : IRequestHandler<UpdateFAQC
         if (categoryRequest.Name is not null)
             category.Name = categoryRequest.Name.Trim();
 
-        if (categoryRequest.NameVi is not null)
-            category.NameVi = categoryRequest.NameVi.Trim();
-
         if (categoryRequest.Slug is not null)
         {
             var slug = categoryRequest.Slug.Trim().ToLowerInvariant().Replace(" ", "-");
@@ -57,7 +54,6 @@ public sealed class UpdateFAQCategoryCommandHandler : IRequestHandler<UpdateFAQC
         {
             Id = category.FaqcategoriesId,
             Name = category.Name,
-            NameVi = category.NameVi,
             Slug = category.Slug,
             SortOrder = category.SortOrder,
             IsActive = category.IsActive,

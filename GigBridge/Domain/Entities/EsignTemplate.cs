@@ -9,8 +9,6 @@ public partial class EsignTemplate
 
     public string Name { get; set; } = null!;
 
-    public string? NameVi { get; set; }
-
     public string HtmlContent { get; set; } = null!;
 
     public int Version { get; set; }

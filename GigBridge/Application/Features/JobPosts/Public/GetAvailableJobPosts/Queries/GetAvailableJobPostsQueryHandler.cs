@@ -2,6 +2,7 @@ using Application.Common.Interfaces;
 using Application.Features.JobPosts.Common;
 using Application.Features.JobPosts.Public.GetAvailableJobPosts.DTOs;
 using Domain.Entities;
+using Domain.Services;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -20,6 +21,9 @@ public class GetAvailableJobPostsQueryHandler : IRequestHandler<GetAvailableJobP
     {
         var query = _context.Set<JobPost>()
             .AsNoTracking()
+            .Include(jobPost => jobPost.ClientProfiles)
+                .ThenInclude(clientProfile => clientProfile.User)
+                .ThenInclude(user => user.UserEloScore)
             .Include(jobPost => jobPost.JobPostSkills)
                 .ThenInclude(jobPostSkill => jobPostSkill.Skills)
             .Where(jobPost => jobPost.Status == 1 && (jobPost.Visibility == null || jobPost.Visibility == 0));
@@ -46,11 +50,6 @@ public class GetAvailableJobPostsQueryHandler : IRequestHandler<GetAvailableJobP
                 jobPost.JobPostSkills.Any(jobPostSkill =>
                     jobPostSkill.Skills != null &&
                     jobPostSkill.Skills.Name.ToLower().Contains(keyword)));
-        }
-
-        if (request.BudgetType.HasValue)
-        {
-            query = query.Where(jobPost => jobPost.BudgetType == request.BudgetType.Value);
         }
 
         if (request.SkillIds is { Count: > 0 })
@@ -82,8 +81,16 @@ public class GetAvailableJobPostsQueryHandler : IRequestHandler<GetAvailableJobP
             "budgetmax" => request.SortDesc
                 ? query.OrderByDescending(jobPost => jobPost.BudgetMax)
                 : query.OrderBy(jobPost => jobPost.BudgetMax),
-            "newest" => query.OrderByDescending(jobPost => jobPost.CreatedAt),
-            _ => query.OrderByDescending(jobPost => jobPost.CreatedAt)
+            "newest" => query
+                .OrderByDescending(jobPost => jobPost.ClientProfiles.User.UserEloScore != null
+                    ? jobPost.ClientProfiles.User.UserEloScore.CurrentPoints
+                    : UserEloCalculator.DefaultPoints)
+                .ThenByDescending(jobPost => jobPost.CreatedAt),
+            _ => query
+                .OrderByDescending(jobPost => jobPost.ClientProfiles.User.UserEloScore != null
+                    ? jobPost.ClientProfiles.User.UserEloScore.CurrentPoints
+                    : UserEloCalculator.DefaultPoints)
+                .ThenByDescending(jobPost => jobPost.CreatedAt)
         };
     }
 

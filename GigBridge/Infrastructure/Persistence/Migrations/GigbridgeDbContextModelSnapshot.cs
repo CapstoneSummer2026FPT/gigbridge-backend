@@ -78,6 +78,104 @@ namespace Infrastructure.Persistence.Migrations
                     b.ToTable("AdminAuditLogs");
                 });
 
+            modelBuilder.Entity("Domain.Entities.BroadcastNotification", b =>
+                {
+                    b.Property<Guid>("BroadcastNotificationId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("BroadcastNotificationId")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<string>("Content")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid?>("CreatedByAdminId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ReferenceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ReferenceType")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<int?>("TargetRole")
+                        .HasColumnType("integer")
+                        .HasComment("Enum UserRole");
+
+                    b.Property<int>("TargetScope")
+                        .HasColumnType("integer")
+                        .HasComment("Enum NotificationTarget");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("integer")
+                        .HasComment("Enum NotificationType");
+
+                    b.HasKey("BroadcastNotificationId")
+                        .HasName("BroadcastNotifications_pkey");
+
+                    b.HasIndex(new[] { "CreatedAt" }, "IX_BroadcastNotifications_CreatedAt")
+                        .IsDescending();
+
+                    b.HasIndex(new[] { "CreatedByAdminId" }, "IX_BroadcastNotifications_CreatedByAdminId");
+
+                    b.ToTable("BroadcastNotifications");
+                });
+
+            modelBuilder.Entity("Domain.Entities.BroadcastNotificationRecipient", b =>
+                {
+                    b.Property<Guid>("BroadcastNotificationRecipientId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("BroadcastNotificationRecipientId")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<Guid>("BroadcastNotificationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<bool?>("IsRead")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<DateTime?>("ReadAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("BroadcastNotificationRecipientId")
+                        .HasName("BroadcastNotificationRecipients_pkey");
+
+                    b.HasIndex(new[] { "BroadcastNotificationId", "UserId" }, "IX_BroadcastRecipients_BroadcastNotificationId_UserId")
+                        .IsUnique();
+
+                    b.HasIndex(new[] { "UserId", "CreatedAt" }, "IX_BroadcastRecipients_UserId_CreatedAt")
+                        .IsDescending(false, true);
+
+                    b.HasIndex(new[] { "UserId", "IsRead" }, "IX_BroadcastRecipients_UserId_IsRead");
+
+                    b.ToTable("BroadcastNotificationRecipients");
+                });
+
             modelBuilder.Entity("Domain.Entities.Category", b =>
                 {
                     b.Property<Guid>("CategoriesId")
@@ -104,11 +202,7 @@ namespace Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
-                    b.Property<string>("NameVi")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<Guid?>("ParentCategoryId")
+                    b.Property<Guid?>("ParentCategoryCategoriesId")
                         .HasColumnType("uuid");
 
                     b.Property<string>("Slug")
@@ -124,9 +218,9 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasKey("CategoriesId")
                         .HasName("Categories_pkey");
 
-                    b.HasIndex(new[] { "IsActive" }, "IX_Categories_IsActive");
+                    b.HasIndex("ParentCategoryCategoriesId");
 
-                    b.HasIndex(new[] { "ParentCategoryId" }, "IX_Categories_ParentCategoryId");
+                    b.HasIndex(new[] { "IsActive" }, "IX_Categories_IsActive");
 
                     b.HasIndex(new[] { "Slug" }, "IX_Categories_Slug")
                         .IsUnique();
@@ -226,10 +320,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<Guid>("JobPostsId")
                         .HasColumnType("uuid")
                         .HasColumnName("JobPostsId");
-
-                    b.Property<int>("PaymentType")
-                        .HasColumnType("integer")
-                        .HasComment("Enum PaymentType: 0=Fixed, 1=Hourly");
 
                     b.Property<Guid?>("ProposalsId")
                         .HasColumnType("uuid")
@@ -660,10 +750,6 @@ namespace Infrastructure.Persistence.Migrations
                         .HasMaxLength(300)
                         .HasColumnType("character varying(300)");
 
-                    b.Property<string>("NameVi")
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
-
                     b.Property<string>("PlaceholderSchema")
                         .HasColumnType("jsonb");
 
@@ -766,10 +852,6 @@ namespace Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
-                    b.Property<string>("NameVi")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
                     b.Property<string>("Slug")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -811,14 +893,6 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasDefaultValueSql("now()");
 
-                    b.Property<int?>("ExperienceLevel")
-                        .HasColumnType("integer")
-                        .HasComment("Enum ExperienceLevel: 0=Entry, 1=Intermediate, 2=Expert");
-
-                    b.Property<decimal?>("HourlyRate")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
                     b.Property<string>("Location")
                         .HasMaxLength(300)
                         .HasColumnType("character varying(300)");
@@ -844,8 +918,6 @@ namespace Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.HasIndex(new[] { "Availability" }, "IX_FreelancerProfiles_Availability");
-
-                    b.HasIndex(new[] { "ExperienceLevel" }, "IX_FreelancerProfiles_ExperienceLevel");
 
                     b.HasIndex(new[] { "UserId" }, "IX_FreelancerProfiles_UserId")
                         .IsUnique();
@@ -897,9 +969,6 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnName("JobPostsId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
-                    b.Property<DateTime?>("ApplicationDeadline")
-                        .HasColumnType("timestamp with time zone");
-
                     b.Property<decimal?>("BudgetMax")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
@@ -907,10 +976,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<decimal?>("BudgetMin")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
-
-                    b.Property<int>("BudgetType")
-                        .HasColumnType("integer")
-                        .HasComment("Enum BudgetType: 0=Fixed, 1=Hourly");
 
                     b.Property<Guid?>("CategoryId")
                         .HasColumnType("uuid");
@@ -934,13 +999,12 @@ namespace Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<DateTime?>("EndDate")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<string>("EstimatedDuration")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
-
-                    b.Property<int?>("ExperienceLevelRequired")
-                        .HasColumnType("integer")
-                        .HasComment("Enum ExperienceLevel: 0=Entry, 1=Intermediate, 2=Expert");
 
                     b.Property<bool?>("IsAigenerated")
                         .ValueGeneratedOnAdd()
@@ -949,14 +1013,7 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnName("IsAIGenerated");
 
                     b.Property<string>("Location")
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
-
-                    b.Property<int?>("LocationType")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0)
-                        .HasComment("Enum LocationType: 0=Remote, 1=OnSite, 2=Hybrid");
+                        .HasColumnType("text");
 
                     b.Property<int?>("MaxHires")
                         .HasColumnType("integer");
@@ -982,14 +1039,14 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasKey("JobPostsId")
                         .HasName("JobPosts_pkey");
 
-                    b.HasIndex(new[] { "ApplicationDeadline" }, "IX_JobPosts_ApplicationDeadline");
-
                     b.HasIndex(new[] { "CategoryId" }, "IX_JobPosts_CategoryId");
 
                     b.HasIndex(new[] { "ClientProfilesId" }, "IX_JobPosts_ClientProfilesId");
 
                     b.HasIndex(new[] { "CreatedAt" }, "IX_JobPosts_CreatedAt")
                         .IsDescending();
+
+                    b.HasIndex(new[] { "EndDate" }, "IX_JobPosts_EndDate");
 
                     b.HasIndex(new[] { "Status" }, "IX_JobPosts_Status");
 
@@ -1327,6 +1384,10 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "ReferenceId", "ReferenceType" }, "IX_Notifications_ReferenceId_ReferenceType");
 
+                    b.HasIndex(new[] { "UserId", "CreatedAt" }, "IX_Notifications_Unread_UserId_CreatedAt")
+                        .IsDescending(false, true)
+                        .HasFilter("\"IsRead\" IS NOT TRUE");
+
                     b.HasIndex(new[] { "UserId", "CreatedAt" }, "IX_Notifications_UserId_CreatedAt")
                         .IsDescending(false, true);
 
@@ -1491,13 +1552,13 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("JobPostsId");
 
+                    b.Property<decimal?>("ProposedBudget")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
                     b.Property<string>("ProposedDuration")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
-
-                    b.Property<decimal?>("ProposedRate")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer")
@@ -1838,10 +1899,6 @@ namespace Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
-                    b.Property<string>("NameVi")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
                     b.HasKey("SkillsId")
                         .HasName("Skills_pkey");
 
@@ -1947,10 +2004,6 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("NameVi")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
@@ -2071,6 +2124,121 @@ namespace Infrastructure.Persistence.Migrations
                     b.ToTable("Users");
                 });
 
+            modelBuilder.Entity("Domain.Entities.UserEloPointTransaction", b =>
+                {
+                    b.Property<Guid>("UserEloPointTransactionsId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("UserEloPointTransactionsId")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Metadata")
+                        .HasColumnType("jsonb");
+
+                    b.Property<int>("PointsAfter")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("PointsBefore")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PointsDelta")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Reason")
+                        .HasColumnType("integer")
+                        .HasComment("Enum UserEloPointReason: 0=InitialGrant, 1=InactivityPenalty, 2=ReturnBonus, 3=JobCompletion, 4=ReviewRating");
+
+                    b.Property<Guid?>("SourceEntityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SourceEntityType")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("UserId");
+
+                    b.HasKey("UserEloPointTransactionsId")
+                        .HasName("UserEloPointTransactions_pkey");
+
+                    b.HasIndex(new[] { "IdempotencyKey" }, "IX_UserEloPointTransactions_IdempotencyKey")
+                        .IsUnique();
+
+                    b.HasIndex(new[] { "SourceEntityType", "SourceEntityId" }, "IX_UserEloPointTransactions_SourceEntity");
+
+                    b.HasIndex(new[] { "UserId", "CreatedAt" }, "IX_UserEloPointTransactions_UserId_CreatedAt")
+                        .IsDescending(false, true);
+
+                    b.ToTable("UserEloPointTransactions", t =>
+                        {
+                            t.HasCheckConstraint("CK_UserEloPointTransactions_PointsAfter_NonNegative", "\"PointsAfter\" >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("Domain.Entities.UserEloScore", b =>
+                {
+                    b.Property<Guid>("UserEloScoresId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("UserEloScoresId")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<int>("CurrentPoints")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(100);
+
+                    b.Property<DateTime>("LastActivityAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime?>("LastInactivityPenaltyAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("LastReturnBonusAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("UserId");
+
+                    b.HasKey("UserEloScoresId")
+                        .HasName("UserEloScores_pkey");
+
+                    b.HasIndex(new[] { "CurrentPoints" }, "IX_UserEloScores_CurrentPoints")
+                        .IsDescending();
+
+                    b.HasIndex(new[] { "UserId" }, "IX_UserEloScores_UserId")
+                        .IsUnique();
+
+                    b.ToTable("UserEloScores", t =>
+                        {
+                            t.HasCheckConstraint("CK_UserEloScores_CurrentPoints_NonNegative", "\"CurrentPoints\" >= 0");
+                        });
+                });
+
             modelBuilder.Entity("Domain.Entities.WorkExperience", b =>
                 {
                     b.Property<Guid>("WorkExperiencesId")
@@ -2126,12 +2294,41 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("Admin");
                 });
 
+            modelBuilder.Entity("Domain.Entities.BroadcastNotification", b =>
+                {
+                    b.HasOne("Domain.Entities.User", "CreatedByAdmin")
+                        .WithMany()
+                        .HasForeignKey("CreatedByAdminId")
+                        .HasConstraintName("BroadcastNotifications_CreatedByAdminId_fkey");
+
+                    b.Navigation("CreatedByAdmin");
+                });
+
+            modelBuilder.Entity("Domain.Entities.BroadcastNotificationRecipient", b =>
+                {
+                    b.HasOne("Domain.Entities.BroadcastNotification", "BroadcastNotification")
+                        .WithMany("Recipients")
+                        .HasForeignKey("BroadcastNotificationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("BroadcastRecipients_BroadcastNotificationId_fkey");
+
+                    b.HasOne("Domain.Entities.User", "User")
+                        .WithMany("BroadcastNotificationRecipients")
+                        .HasForeignKey("UserId")
+                        .IsRequired()
+                        .HasConstraintName("BroadcastRecipients_UserId_fkey");
+
+                    b.Navigation("BroadcastNotification");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("Domain.Entities.Category", b =>
                 {
                     b.HasOne("Domain.Entities.Category", "ParentCategory")
                         .WithMany("InverseParentCategory")
-                        .HasForeignKey("ParentCategoryId")
-                        .HasConstraintName("Categories_ParentCategoryId_fkey");
+                        .HasForeignKey("ParentCategoryCategoriesId");
 
                     b.Navigation("ParentCategory");
                 });
@@ -2691,6 +2888,28 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("Domain.Entities.UserEloPointTransaction", b =>
+                {
+                    b.HasOne("Domain.Entities.User", "User")
+                        .WithMany("UserEloPointTransactions")
+                        .HasForeignKey("UserId")
+                        .IsRequired()
+                        .HasConstraintName("UserEloPointTransactions_usr_UserId_fkey");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Domain.Entities.UserEloScore", b =>
+                {
+                    b.HasOne("Domain.Entities.User", "User")
+                        .WithOne("UserEloScore")
+                        .HasForeignKey("Domain.Entities.UserEloScore", "UserId")
+                        .IsRequired()
+                        .HasConstraintName("UserEloScores_usr_UserId_fkey");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("Domain.Entities.WorkExperience", b =>
                 {
                     b.HasOne("Domain.Entities.FreelancerProfile", "Freelancer")
@@ -2700,6 +2919,11 @@ namespace Infrastructure.Persistence.Migrations
                         .HasConstraintName("WorkExperiences_fl_FreelancerId_fkey");
 
                     b.Navigation("Freelancer");
+                });
+
+            modelBuilder.Entity("Domain.Entities.BroadcastNotification", b =>
+                {
+                    b.Navigation("Recipients");
                 });
 
             modelBuilder.Entity("Domain.Entities.Category", b =>
@@ -2827,6 +3051,8 @@ namespace Infrastructure.Persistence.Migrations
                 {
                     b.Navigation("AdminAuditLogs");
 
+                    b.Navigation("BroadcastNotificationRecipients");
+
                     b.Navigation("ClientProfile");
 
                     b.Navigation("ConversationUser1s");
@@ -2872,6 +3098,10 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("SavedJobs");
 
                     b.Navigation("Subscriptions");
+
+                    b.Navigation("UserEloPointTransactions");
+
+                    b.Navigation("UserEloScore");
                 });
 #pragma warning restore 612, 618
         }

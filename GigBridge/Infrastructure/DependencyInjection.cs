@@ -39,7 +39,7 @@ public static class DependencyInjection
         services.AddScoped<INotificationService, NotificationService>();
         services.AddTransient<IDateTimeService, DateTimeService>();
 
-        
+
         // External payment service
         services.AddKeyedSingleton("OrderClient", (sp, key) =>
         {

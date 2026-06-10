@@ -6,6 +6,7 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Features.Profiles.FreelancerProfile.GetFreelancerProfile.DTOs;
 using Domain.Entities;
+using Domain.Services;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using FreelancerProfileEntity = Domain.Entities.FreelancerProfile;
@@ -29,6 +30,7 @@ public class GetFreelancerProfileQueryHandler
         var freelancerProfile = await _context.Set<FreelancerProfileEntity>()
             .AsNoTracking()
             .Include(p => p.User)
+                .ThenInclude(u => u.UserEloScore)
             .Include(p => p.FreelancerSkills)
                 .ThenInclude(fs => fs.Skills)
             .Include(p => p.PortfolioItems)
@@ -52,8 +54,6 @@ public class GetFreelancerProfileQueryHandler
             UserId = freelancerProfile.UserId,
             Title = freelancerProfile.Title,
             Bio = freelancerProfile.Bio,
-            HourlyRate = freelancerProfile.HourlyRate,
-            ExperienceLevel = freelancerProfile.ExperienceLevel,
             Availability = freelancerProfile.Availability,
             Location = freelancerProfile.Location,
             ProfileCompletionScore = freelancerProfile.ProfileCompletionScore,
@@ -64,6 +64,7 @@ public class GetFreelancerProfileQueryHandler
             UserEmail = freelancerProfile.User.Email,
             UserAvatar = freelancerProfile.User.Avatar,
             Rating = Math.Round(avgRating, 1),
+            EloPoints = freelancerProfile.User.UserEloScore?.CurrentPoints ?? UserEloCalculator.DefaultPoints,
 
             Skills = freelancerProfile.FreelancerSkills.Select(fs => new FreelancerSkillDto
             {

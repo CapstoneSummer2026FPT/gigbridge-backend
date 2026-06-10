@@ -18,4 +18,5 @@ public class ClientProfileDetailDto
     public string? UserFullName { get; set; }
     public string? UserEmail { get; set; }
     public string? UserAvatar { get; set; }
+    public int EloPoints { get; set; }
 }

@@ -9,8 +9,6 @@ public class FreelancerProfileDetailDto
     public Guid UserId { get; set; }
     public string? Title { get; set; }
     public string? Bio { get; set; }
-    public decimal? HourlyRate { get; set; }
-    public int? ExperienceLevel { get; set; }
     public int? Availability { get; set; }
     public string? Location { get; set; }
     public int? ProfileCompletionScore { get; set; }
@@ -21,6 +19,7 @@ public class FreelancerProfileDetailDto
     public string? UserEmail { get; set; }
     public string? UserAvatar { get; set; }
     public double Rating { get; set; }
+    public int EloPoints { get; set; }
 
     public List<FreelancerSkillDto> Skills { get; set; } = new();
     public List<PortfolioItemDto> PortfolioItems { get; set; } = new();
