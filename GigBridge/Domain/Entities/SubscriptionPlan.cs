@@ -9,8 +9,6 @@ public partial class SubscriptionPlan
 
     public string Name { get; set; } = null!;
 
-    public string? NameVi { get; set; }
-
     public string? Description { get; set; }
 
     public decimal Price { get; set; }

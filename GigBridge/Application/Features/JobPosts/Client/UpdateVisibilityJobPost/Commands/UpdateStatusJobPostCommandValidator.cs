@@ -19,7 +19,7 @@ public class UpdateStatusJobPostCommandValidator
             .NotNull()
             .WithMessage("Request body is required.");
 
-        RuleFor(x => x.Request.Status)
+        RuleFor(x => x.Request.Status) 
             .Must(status => status == 0 || status == 1 || status == 2 || status == 3)
             .WithMessage("Status must be 0=Draft, 1=Open, 2=Closed, or 3=Cancelled.");
     }

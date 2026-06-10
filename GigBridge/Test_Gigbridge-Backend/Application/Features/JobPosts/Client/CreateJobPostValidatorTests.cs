@@ -42,12 +42,12 @@ public class CreateJobPostValidatorTests
     [Fact]
     public void Validate_ReturnsErrorWhenDeadlineIsInPast()
     {
-        var request = CreateValidRequest() with { ApplicationDeadline = DateTime.UtcNow.AddDays(-1) };
+        var request = CreateValidRequest() with { EndDate = DateTime.UtcNow.AddDays(-1) };
         var command = new CreateJobPostCommand(request, Guid.NewGuid());
 
         var result = _validator.Validate(command);
 
-        Assert.Contains(result.Errors, error => error.PropertyName == "Request.ApplicationDeadline");
+        Assert.Contains(result.Errors, error => error.PropertyName == "Request.EndDate");
     }
 
     private static CreateJobPostRequest CreateValidRequest()
@@ -66,7 +66,7 @@ public class CreateJobPostValidatorTests
             LocationType: 0,
             Location: "Remote",
             Visibility: 1,
-            ApplicationDeadline: DateTime.UtcNow.AddDays(7),
+            EndDate: DateTime.UtcNow.AddDays(7),
             SkillIds: new List<Guid> { Guid.NewGuid() });
     }
 }

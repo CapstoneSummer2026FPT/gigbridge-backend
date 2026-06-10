@@ -396,7 +396,7 @@ namespace Infrastructure.Persistence.Migrations
                     Location = table.Column<string>(type: "character varying(300)", maxLength: 300, nullable: true),
                     Status = table.Column<int>(type: "integer", nullable: false, comment: "Enum JobPostStatus: 0=Draft, 1=Open, 2=InProgress, 3=Closed, 4=Cancelled"),
                     Visibility = table.Column<int>(type: "integer", nullable: true, defaultValue: 0, comment: "Enum JobPostVisibility: 0=Public, 1=Private, 2=InviteOnly"),
-                    ApplicationDeadline = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    EndDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     IsAIGenerated = table.Column<bool>(type: "boolean", nullable: true, defaultValue: false),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
                     UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: true)
@@ -1636,9 +1636,9 @@ namespace Infrastructure.Persistence.Migrations
                 column: "jp_JobPostsId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_JobPosts_ApplicationDeadline",
+                name: "IX_JobPosts_EndDate",
                 table: "JobPosts",
-                column: "ApplicationDeadline");
+                column: "EndDate");
 
             migrationBuilder.CreateIndex(
                 name: "IX_JobPosts_CategoryId",

@@ -17,6 +17,6 @@ public record CreateJobPostRequest(
     int? LocationType,
     string? Location,
     int? Visibility,
-    DateTime? ApplicationDeadline,
+    DateTime? EndDate,
     List<Guid> SkillIds
 );

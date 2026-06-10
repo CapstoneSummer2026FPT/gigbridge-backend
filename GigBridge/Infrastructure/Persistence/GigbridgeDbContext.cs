@@ -131,8 +131,6 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
 
             entity.HasIndex(e => e.IsActive, "IX_Categories_IsActive");
 
-            entity.HasIndex(e => e.ParentCategoryId, "IX_Categories_ParentCategoryId");
-
             entity.HasIndex(e => e.Slug, "IX_Categories_Slug").IsUnique();
 
             entity.Property(e => e.CategoriesId)
@@ -141,13 +139,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.IsActive).HasDefaultValue(true);
             entity.Property(e => e.Name).HasMaxLength(200);
-            entity.Property(e => e.NameVi).HasMaxLength(200);
             entity.Property(e => e.Slug).HasMaxLength(200);
             entity.Property(e => e.SortOrder).HasDefaultValue(0);
-
-            entity.HasOne(d => d.ParentCategory).WithMany(p => p.InverseParentCategory)
-                .HasForeignKey(d => d.ParentCategoryId)
-                .HasConstraintName("Categories_ParentCategoryId_fkey");
         });
 
         modelBuilder.Entity<ClientProfile>(entity =>
@@ -463,7 +456,6 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.IsActive).HasDefaultValue(true);
             entity.Property(e => e.Name).HasMaxLength(300);
-            entity.Property(e => e.NameVi).HasMaxLength(300);
             entity.Property(e => e.PlaceholderSchema).HasColumnType("jsonb");
             entity.Property(e => e.Version).HasDefaultValue(1);
 
@@ -511,7 +503,6 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.IsActive).HasDefaultValue(true);
             entity.Property(e => e.Name).HasMaxLength(200);
-            entity.Property(e => e.NameVi).HasMaxLength(200);
             entity.Property(e => e.Slug).HasMaxLength(200);
             entity.Property(e => e.SortOrder).HasDefaultValue(0);
         });
@@ -579,7 +570,7 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
         {
             entity.HasKey(e => e.JobPostsId).HasName("JobPosts_pkey");
 
-            entity.HasIndex(e => e.ApplicationDeadline, "IX_JobPosts_ApplicationDeadline");
+            entity.HasIndex(e => e.EndDate, "IX_JobPosts_EndDate");
 
             entity.HasIndex(e => e.CategoryId, "IX_JobPosts_CategoryId");
 
@@ -1100,7 +1091,6 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.IsActive).HasDefaultValue(true);
             entity.Property(e => e.Name).HasMaxLength(200);
-            entity.Property(e => e.NameVi).HasMaxLength(200);
 
             entity.HasOne(d => d.Categories).WithMany(p => p.Skills)
                 .HasForeignKey(d => d.CategoriesId)
@@ -1157,7 +1147,6 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.Features).HasColumnType("jsonb");
             entity.Property(e => e.IsActive).HasDefaultValue(true);
             entity.Property(e => e.Name).HasMaxLength(200);
-            entity.Property(e => e.NameVi).HasMaxLength(200);
             entity.Property(e => e.Price).HasPrecision(18, 2);
             entity.Property(e => e.SortOrder).HasDefaultValue(0);
             entity.Property(e => e.TargetRole).HasComment("Enum UserRole: 0=Client, 1=Freelancer, NULL=Both");

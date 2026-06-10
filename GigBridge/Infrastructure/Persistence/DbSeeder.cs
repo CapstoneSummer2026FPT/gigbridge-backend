@@ -516,7 +516,7 @@ public static class DbSeeder
 
             new SeedTableData(
                 "JobPosts",
-                new[] { "JobPostsId", "ClientProfilesId", "Title", "Description", "CategoryId", "BudgetType", "BudgetMin", "BudgetMax", "Currency", "EstimatedDuration", "MaxHires", "ExperienceLevelRequired", "LocationType", "Location", "Status", "Visibility", "ApplicationDeadline", "IsAIGenerated", "CreatedAt" },
+                new[] { "JobPostsId", "ClientProfilesId", "Title", "Description", "CategoryId", "BudgetType", "BudgetMin", "BudgetMax", "Currency", "EstimatedDuration", "MaxHires", "ExperienceLevelRequired", "LocationType", "Location", "Status", "Visibility", "EndDate", "IsAIGenerated", "CreatedAt" },
                 new object?[][]
                 {
                 new object?[] { "111ebc99-9c0b-4ef8-bb6d-6bb9bd380101", "c1eebc99-9c0b-4ef8-bb6d-6bb9bd380c11", "Tuyển lập trình viên ReactJS xây dựng giao diện Dashboard Admin", "FPT Software cần tìm 1 Freelancer ReactJS có kinh nghiệm thiết kế dashboard quản lý tài chính. Dự án kéo dài khoảng 1 tháng, yêu cầu code sạch, sử dụng Tailwind CSS và tối ưu hóa performance tốt.", "b0eebc99-9c0b-4ef8-bb6d-6bb9bd380d02", 0, 15000000.0m, 25000000.0m, "VND", "1 tháng", 1, 1, 0, null, 1, 0, "2026-06-30", false, now.AddDays(-15) },

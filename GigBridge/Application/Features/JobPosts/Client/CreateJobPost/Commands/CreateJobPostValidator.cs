@@ -22,8 +22,8 @@ public class CreateJobPostValidator : AbstractValidator<CreateJobPostCommand>
             .When(x => x.Request.BudgetMin.HasValue && x.Request.BudgetMax.HasValue)
             .WithMessage("Ngân sách t?i da ph?i l?n hon ngân sách t?i thi?u.");
 
-        RuleFor(x => x.Request.ApplicationDeadline)
-            .GreaterThan(DateTime.UtcNow).When(x => x.Request.ApplicationDeadline.HasValue)
+        RuleFor(x => x.Request.EndDate)
+            .GreaterThan(DateTime.UtcNow).When(x => x.Request.EndDate.HasValue)
             .WithMessage("H?n chót ?ng tuy?n ph?i là ngày trong tuong lai.");
     }
 }
