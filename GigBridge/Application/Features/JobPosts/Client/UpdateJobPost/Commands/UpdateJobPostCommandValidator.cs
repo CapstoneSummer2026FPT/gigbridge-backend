@@ -62,9 +62,9 @@ public class UpdateJobPostCommandValidator : AbstractValidator<UpdateJobPostComm
             .Must(x => x == null || x == 0 || x == 1 || x == 2)
             .WithMessage("LocationType must be 0=Remote, 1=OnSite, or 2=Hybrid.");
 
-        RuleFor(x => x.Request.ApplicationDeadline)
+        RuleFor(x => x.Request.EndDate)
             .GreaterThan(DateTime.UtcNow)
-            .When(x => x.Request.ApplicationDeadline.HasValue)
-            .WithMessage("ApplicationDeadline must be in the future.");
+            .When(x => x.Request.EndDate.HasValue)
+            .WithMessage("EndDate must be in the future.");
     }
 }

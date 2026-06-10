@@ -73,7 +73,7 @@ public class UpdateJobPostCommandHandler : IRequestHandler<UpdateJobPostCommand,
         jobPost.ExperienceLevelRequired = request.ExperienceLevelRequired;
         jobPost.LocationType = request.LocationType;
         jobPost.Location = request.Location;
-        jobPost.ApplicationDeadline = request.ApplicationDeadline;
+        jobPost.EndDate = request.EndDate;
         jobPost.UpdatedAt = _dateTimeService.UtcNow;
     }
 

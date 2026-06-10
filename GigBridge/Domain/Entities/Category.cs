@@ -13,8 +13,6 @@ public partial class Category
 
     public string? Description { get; set; }
 
-    public Guid? ParentCategoryId { get; set; }
-
     public bool IsActive { get; set; }
 
     public int? SortOrder { get; set; }

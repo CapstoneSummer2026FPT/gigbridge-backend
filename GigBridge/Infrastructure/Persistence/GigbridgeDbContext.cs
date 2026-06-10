@@ -135,8 +135,6 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
 
             entity.HasIndex(e => e.IsActive, "IX_Categories_IsActive");
 
-            entity.HasIndex(e => e.ParentCategoryId, "IX_Categories_ParentCategoryId");
-
             entity.HasIndex(e => e.Slug, "IX_Categories_Slug").IsUnique();
 
             entity.Property(e => e.CategoriesId)
@@ -147,10 +145,6 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.Name).HasMaxLength(200);
             entity.Property(e => e.Slug).HasMaxLength(200);
             entity.Property(e => e.SortOrder).HasDefaultValue(0);
-
-            entity.HasOne(d => d.ParentCategory).WithMany(p => p.InverseParentCategory)
-                .HasForeignKey(d => d.ParentCategoryId)
-                .HasConstraintName("Categories_ParentCategoryId_fkey");
         });
 
         modelBuilder.Entity<ClientProfile>(entity =>
@@ -580,7 +574,7 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
         {
             entity.HasKey(e => e.JobPostsId).HasName("JobPosts_pkey");
 
-            entity.HasIndex(e => e.ApplicationDeadline, "IX_JobPosts_ApplicationDeadline");
+            entity.HasIndex(e => e.EndDate, "IX_JobPosts_EndDate");
 
             entity.HasIndex(e => e.CategoryId, "IX_JobPosts_CategoryId");
 
