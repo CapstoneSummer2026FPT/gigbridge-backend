@@ -17,6 +17,10 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
 
     public virtual DbSet<Category> Categories { get; set; }
 
+    public virtual DbSet<BroadcastNotification> BroadcastNotifications { get; set; }
+
+    public virtual DbSet<BroadcastNotificationRecipient> BroadcastNotificationRecipients { get; set; }
+
     public virtual DbSet<ClientProfile> ClientProfiles { get; set; }
 
     public virtual DbSet<Contract> Contracts { get; set; }
@@ -770,6 +774,57 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
                 .HasConstraintName("MilestoneAttachments_UploadedByUserId_fkey");
         });
 
+        modelBuilder.Entity<BroadcastNotification>(entity =>
+        {
+            entity.HasKey(e => e.BroadcastNotificationId).HasName("BroadcastNotifications_pkey");
+
+            entity.HasIndex(e => e.CreatedAt, "IX_BroadcastNotifications_CreatedAt").IsDescending(true);
+
+            entity.HasIndex(e => e.CreatedByAdminId, "IX_BroadcastNotifications_CreatedByAdminId");
+
+            entity.Property(e => e.BroadcastNotificationId)
+                .HasDefaultValueSql("gen_random_uuid()")
+                .HasColumnName("BroadcastNotificationId");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.ReferenceType).HasMaxLength(50);
+            entity.Property(e => e.Title).HasMaxLength(300);
+            entity.Property(e => e.Type).HasComment("Enum NotificationType");
+            entity.Property(e => e.TargetScope).HasComment("Enum NotificationTarget");
+            entity.Property(e => e.TargetRole).HasComment("Enum UserRole");
+
+            entity.HasOne(d => d.CreatedByAdmin).WithMany()
+                .HasForeignKey(d => d.CreatedByAdminId)
+                .HasConstraintName("BroadcastNotifications_CreatedByAdminId_fkey");
+        });
+
+        modelBuilder.Entity<BroadcastNotificationRecipient>(entity =>
+        {
+            entity.HasKey(e => e.BroadcastNotificationRecipientId).HasName("BroadcastNotificationRecipients_pkey");
+
+            entity.HasIndex(e => new { e.BroadcastNotificationId, e.UserId }, "IX_BroadcastRecipients_BroadcastNotificationId_UserId")
+                .IsUnique();
+
+            entity.HasIndex(e => new { e.UserId, e.IsRead }, "IX_BroadcastRecipients_UserId_IsRead");
+
+            entity.HasIndex(e => new { e.UserId, e.CreatedAt }, "IX_BroadcastRecipients_UserId_CreatedAt").IsDescending(false, true);
+
+            entity.Property(e => e.BroadcastNotificationRecipientId)
+                .HasDefaultValueSql("gen_random_uuid()")
+                .HasColumnName("BroadcastNotificationRecipientId");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.IsRead).HasDefaultValue(false);
+
+            entity.HasOne(d => d.BroadcastNotification).WithMany(p => p.Recipients)
+                .HasForeignKey(d => d.BroadcastNotificationId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("BroadcastRecipients_BroadcastNotificationId_fkey");
+
+            entity.HasOne(d => d.User).WithMany(p => p.BroadcastNotificationRecipients)
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("BroadcastRecipients_UserId_fkey");
+        });
+
         modelBuilder.Entity<Notification>(entity =>
         {
             entity.HasKey(e => e.NotificationsId).HasName("Notifications_pkey");
@@ -779,6 +834,10 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.HasIndex(e => new { e.UserId, e.CreatedAt }, "IX_Notifications_UserId_CreatedAt").IsDescending(false, true);
 
             entity.HasIndex(e => new { e.UserId, e.IsRead }, "IX_Notifications_UserId_IsRead");
+
+            entity.HasIndex(e => new { e.UserId, e.CreatedAt }, "IX_Notifications_Unread_UserId_CreatedAt")
+                .IsDescending(false, true)
+                .HasFilter("\"IsRead\" IS NOT TRUE");
 
             entity.Property(e => e.NotificationsId)
                 .HasDefaultValueSql("gen_random_uuid()")

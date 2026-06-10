@@ -11,5 +11,6 @@ public class CreateAdminBroadcastRequest
     public string? Content { get; set; }
     public Guid? ReferenceId { get; set; }
     public string? ReferenceType { get; set; }
+    public DateTime? ExpiresAt { get; set; }
     public bool SendEmail { get; set; }
 }

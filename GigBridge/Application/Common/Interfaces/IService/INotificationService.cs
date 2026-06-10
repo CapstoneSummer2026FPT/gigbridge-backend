@@ -22,5 +22,7 @@ public interface INotificationService
         string? referenceType = null,
         Guid? targetUserId = null,
         bool sendEmail = false,
+        Guid? createdByAdminId = null,
+        DateTime? expiresAt = null,
         CancellationToken cancellationToken = default);
 }
