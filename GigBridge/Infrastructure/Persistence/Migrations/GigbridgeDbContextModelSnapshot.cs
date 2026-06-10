@@ -203,6 +203,7 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(200)");
 
                     b.Property<Guid?>("ParentCategoryCategoriesId")
+                    b.Property<Guid?>("ParentCategoryCategoriesId")
                         .HasColumnType("uuid");
 
                     b.Property<string>("Slug")
@@ -220,11 +221,14 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ParentCategoryCategoriesId");
 
+                    b.HasIndex("ParentCategoryCategoriesId");
+
                     b.HasIndex(new[] { "IsActive" }, "IX_Categories_IsActive");
 
                     b.HasIndex(new[] { "Slug" }, "IX_Categories_Slug")
                         .IsUnique();
 
+                    b.ToTable("Categories", (string)null);
                     b.ToTable("Categories", (string)null);
                 });
 
@@ -279,6 +283,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "UserId" }, "IX_ClientProfiles_UserId")
                         .IsUnique();
 
+                    b.ToTable("ClientProfiles", (string)null);
                     b.ToTable("ClientProfiles", (string)null);
                 });
 
@@ -367,6 +372,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "Status" }, "IX_Contracts_Status");
 
                     b.ToTable("Contracts", (string)null);
+                    b.ToTable("Contracts", (string)null);
                 });
 
             modelBuilder.Entity("Domain.Entities.Conversation", b =>
@@ -421,6 +427,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "User2Id" }, "IX_Conversations_User2Id");
 
+                    b.ToTable("Conversations", (string)null);
                     b.ToTable("Conversations", (string)null);
                 });
 
@@ -486,6 +493,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "Status" }, "IX_Disputes_Status");
 
+                    b.ToTable("Disputes", (string)null);
                     b.ToTable("Disputes", (string)null);
                 });
 
@@ -567,6 +575,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "DisputesId", "CreatedAt" }, "IX_DisputeMessages_DisputesId_CreatedAt");
 
+                    b.ToTable("DisputeMessages", (string)null);
                     b.ToTable("DisputeMessages", (string)null);
                 });
 
@@ -937,6 +946,7 @@ namespace Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("FreelancerProfiles", (string)null);
+                    b.ToTable("FreelancerProfiles", (string)null);
                 });
 
             modelBuilder.Entity("Domain.Entities.FreelancerSkill", b =>
@@ -972,6 +982,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "SkillsId" }, "IX_FreelancerSkills_SkillsId");
 
+                    b.ToTable("FreelancerSkills", (string)null);
                     b.ToTable("FreelancerSkills", (string)null);
                 });
 
@@ -1016,6 +1027,9 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<string>("Description")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<DateTime?>("EndDate")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime?>("EndDate")
                         .HasColumnType("timestamp with time zone");
@@ -1077,6 +1091,8 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "EndDate" }, "IX_JobPosts_EndDate");
 
+                    b.HasIndex(new[] { "EndDate" }, "IX_JobPosts_EndDate");
+
                     b.HasIndex(new[] { "Status" }, "IX_JobPosts_Status");
 
                     b.HasIndex(new[] { "Status", "Visibility" }, "IX_JobPosts_Status_Visibility");
@@ -1084,6 +1100,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "Status", "Visibility", "CreatedAt" }, "IX_JobPosts_Status_Visibility_CreatedAt")
                         .IsDescending(false, false, true);
 
+                    b.ToTable("JobPosts", (string)null);
                     b.ToTable("JobPosts", (string)null);
                 });
 
@@ -1122,6 +1139,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "JobPostsId" }, "IX_JobPostAttachments_JobPostsId");
 
                     b.ToTable("JobPostAttachments", (string)null);
+                    b.ToTable("JobPostAttachments", (string)null);
                 });
 
             modelBuilder.Entity("Domain.Entities.JobPostSkill", b =>
@@ -1155,6 +1173,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "JobPostsId", "SkillsId" }, "JobPostSkills_jp_JobPostsId_sk_SkillsId_key")
                         .IsUnique();
 
+                    b.ToTable("JobPostSkills", (string)null);
                     b.ToTable("JobPostSkills", (string)null);
                 });
 
@@ -1217,6 +1236,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "SenderId" }, "IX_Messages_SenderId");
 
                     b.ToTable("Messages", (string)null);
+                    b.ToTable("Messages", (string)null);
                 });
 
             modelBuilder.Entity("Domain.Entities.MessageAttachment", b =>
@@ -1257,6 +1277,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "MessagesId" }, "IX_MessageAttachments_MessagesId");
 
+                    b.ToTable("MessageAttachments", (string)null);
                     b.ToTable("MessageAttachments", (string)null);
                 });
 
@@ -1320,6 +1341,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "Status" }, "IX_Milestones_Status");
 
                     b.ToTable("Milestones", (string)null);
+                    b.ToTable("Milestones", (string)null);
                 });
 
             modelBuilder.Entity("Domain.Entities.MilestoneAttachment", b =>
@@ -1361,6 +1383,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "MilestonesId" }, "IX_MilestoneAttachments_MilestonesId");
 
+                    b.ToTable("MilestoneAttachments", (string)null);
                     b.ToTable("MilestoneAttachments", (string)null);
                 });
 
@@ -1423,6 +1446,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "UserId", "IsRead" }, "IX_Notifications_UserId_IsRead");
 
                     b.ToTable("Notifications", (string)null);
+                    b.ToTable("Notifications", (string)null);
                 });
 
             modelBuilder.Entity("Domain.Entities.PaymentProof", b =>
@@ -1483,6 +1507,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "UploadedById" }, "IX_PaymentProofs_UploadedById");
 
                     b.ToTable("PaymentProofs", (string)null);
+                    b.ToTable("PaymentProofs", (string)null);
                 });
 
             modelBuilder.Entity("Domain.Entities.PlatformSetting", b =>
@@ -1526,6 +1551,7 @@ namespace Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("PlatformSettings", (string)null);
+                    b.ToTable("PlatformSettings", (string)null);
                 });
 
             modelBuilder.Entity("Domain.Entities.PortfolioItem", b =>
@@ -1553,6 +1579,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "FreelancerId" }, "IX_PortfolioItems_FreelancerId");
 
+                    b.ToTable("PortfolioItems", (string)null);
                     b.ToTable("PortfolioItems", (string)null);
                 });
 
@@ -1616,6 +1643,7 @@ namespace Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("Proposals", (string)null);
+                    b.ToTable("Proposals", (string)null);
                 });
 
             modelBuilder.Entity("Domain.Entities.ProposalAttachment", b =>
@@ -1652,6 +1680,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "ProposalsId" }, "IX_ProposalAttachments_ProposalsId");
 
+                    b.ToTable("ProposalAttachments", (string)null);
                     b.ToTable("ProposalAttachments", (string)null);
                 });
 
@@ -1692,6 +1721,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "UserId" }, "IX_RefreshTokens_UserId");
 
+                    b.ToTable("RefreshTokens", (string)null);
                     b.ToTable("RefreshTokens", (string)null);
                 });
 
@@ -1766,6 +1796,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "Status" }, "IX_Reports_Status");
 
                     b.ToTable("Reports", (string)null);
+                    b.ToTable("Reports", (string)null);
                 });
 
             modelBuilder.Entity("Domain.Entities.Review", b =>
@@ -1831,6 +1862,7 @@ namespace Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("Reviews", (string)null);
+                    b.ToTable("Reviews", (string)null);
                 });
 
             modelBuilder.Entity("Domain.Entities.SavedFreelancer", b =>
@@ -1865,6 +1897,7 @@ namespace Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("SavedFreelancers", (string)null);
+                    b.ToTable("SavedFreelancers", (string)null);
                 });
 
             modelBuilder.Entity("Domain.Entities.SavedJob", b =>
@@ -1898,6 +1931,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "UserId", "JobPostsId" }, "SavedJobs_usr_UserId_jp_JobPostsId_key")
                         .IsUnique();
 
+                    b.ToTable("SavedJobs", (string)null);
                     b.ToTable("SavedJobs", (string)null);
                 });
 
@@ -1937,6 +1971,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "Name" }, "IX_Skills_Name");
 
+                    b.ToTable("Skills", (string)null);
                     b.ToTable("Skills", (string)null);
                 });
 
@@ -1995,6 +2030,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "UserId", "Status" }, "IX_Subscriptions_UserId_Status");
 
+                    b.ToTable("Subscriptions", (string)null);
                     b.ToTable("Subscriptions", (string)null);
                 });
 
@@ -2059,6 +2095,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "TargetRole" }, "IX_SubscriptionPlans_TargetRole");
 
+                    b.ToTable("SubscriptionPlans", (string)null);
                     b.ToTable("SubscriptionPlans", (string)null);
                 });
 
@@ -2151,6 +2188,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "Role" }, "IX_Users_Role");
 
                     b.ToTable("Users", (string)null);
+                    b.ToTable("Users", (string)null);
                 });
 
             modelBuilder.Entity("Domain.Entities.UserEloPointTransaction", b =>
@@ -2212,6 +2250,7 @@ namespace Infrastructure.Persistence.Migrations
                         .IsDescending(false, true);
 
                     b.ToTable("UserEloPointTransactions", null, t =>
+                    b.ToTable("UserEloPointTransactions", null, t =>
                         {
                             t.HasCheckConstraint("CK_UserEloPointTransactions_PointsAfter_NonNegative", "\"PointsAfter\" >= 0");
                         });
@@ -2263,6 +2302,7 @@ namespace Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("UserEloScores", null, t =>
+                    b.ToTable("UserEloScores", null, t =>
                         {
                             t.HasCheckConstraint("CK_UserEloScores_CurrentPoints_NonNegative", "\"CurrentPoints\" >= 0");
                         });
@@ -2309,6 +2349,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "FreelancerId" }, "IX_WorkExperiences_FreelancerId");
 
+                    b.ToTable("WorkExperiences", (string)null);
                     b.ToTable("WorkExperiences", (string)null);
                 });
 
@@ -2357,6 +2398,7 @@ namespace Infrastructure.Persistence.Migrations
                 {
                     b.HasOne("Domain.Entities.Category", "ParentCategory")
                         .WithMany("InverseParentCategory")
+                        .HasForeignKey("ParentCategoryCategoriesId");
                         .HasForeignKey("ParentCategoryCategoriesId");
 
                     b.Navigation("ParentCategory");

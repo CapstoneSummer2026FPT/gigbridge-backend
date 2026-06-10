@@ -15,9 +15,6 @@ public class CreateFreelancerProfileCommandValidator : AbstractValidator<CreateF
             .NotEmpty().WithMessage("Bio is required.")
             .MaximumLength(2000).WithMessage("Bio cannot exceed 2000 characters.");
 
-        RuleFor(v => v.Dto.HourlyRate)
-            .GreaterThan(0).WithMessage("Hourly rate must be greater than 0.");
-
         RuleFor(v => v.Dto.ExperienceLevel)
             .InclusiveBetween(0, 2).WithMessage("Invalid experience level (0 = Entry, 1 = Intermediate, 2 = Expert).");
 

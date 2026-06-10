@@ -199,7 +199,7 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
                 .HasColumnName("ESignContractPdfUrl");
             entity.Property(e => e.FreelancerProfilesId).HasColumnName("FreelancerProfilesId");
             entity.Property(e => e.JobPostsId).HasColumnName("JobPostsId");
-            entity.Property(e => e.PaymentType).HasComment("Enum PaymentType: 0=Fixed, 1=Hourly");
+            entity.Property(e => e.PaymentType).HasComment("PaymentType: Fixed");
             entity.Property(e => e.ProposalsId).HasColumnName("ProposalsId");
             entity.Property(e => e.Status).HasComment("Enum ContractStatus: 0=Active, 1=Completed, 2=Cancelled, 3=Disputed");
             entity.Property(e => e.Title).HasMaxLength(500);
@@ -531,7 +531,6 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
                 .HasComment("Enum Availability: 0=FullTime, 1=PartTime, 2=NotAvailable");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.ExperienceLevel).HasComment("Enum ExperienceLevel: 0=Entry, 1=Intermediate, 2=Expert");
-            entity.Property(e => e.HourlyRate).HasPrecision(18, 2);
             entity.Property(e => e.Location).HasMaxLength(300);
             entity.Property(e => e.Title).HasMaxLength(300);
             entity.Property(e => e.UserId).HasColumnName("UserId");
@@ -593,7 +592,7 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
                 .HasColumnName("JobPostsId");
             entity.Property(e => e.BudgetMax).HasPrecision(18, 2);
             entity.Property(e => e.BudgetMin).HasPrecision(18, 2);
-            entity.Property(e => e.BudgetType).HasComment("Enum BudgetType: 0=Fixed, 1=Hourly");
+            entity.Property(e => e.BudgetType).HasComment("BudgetType: 0=Fixed");
             entity.Property(e => e.ClientProfilesId).HasColumnName("ClientProfilesId");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.Currency)
@@ -604,10 +603,6 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.IsAigenerated)
                 .HasDefaultValue(false)
                 .HasColumnName("IsAIGenerated");
-            entity.Property(e => e.Location).HasMaxLength(300);
-            entity.Property(e => e.LocationType)
-                .HasDefaultValue(0)
-                .HasComment("Enum LocationType: 0=Remote, 1=OnSite, 2=Hybrid");
             entity.Property(e => e.Status).HasComment("Enum JobPostStatus: 0=Draft, 1=Open, 2=InProgress, 3=Closed, 4=Cancelled");
             entity.Property(e => e.Title).HasMaxLength(500);
             entity.Property(e => e.Visibility)

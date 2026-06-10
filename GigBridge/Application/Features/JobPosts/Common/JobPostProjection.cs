@@ -21,7 +21,6 @@ internal static class JobPostProjection
             BudgetMin: jobPost.BudgetMin,
             BudgetMax: jobPost.BudgetMax,
             ExperienceLevelRequired: jobPost.ExperienceLevelRequired,
-            LocationType: jobPost.LocationType,
             CreatedAt: jobPost.CreatedAt,
             EloPoints: jobPost.ClientProfiles?.User?.UserEloScore?.CurrentPoints ?? UserEloCalculator.DefaultPoints,
             SkillNames: jobPost.JobPostSkills

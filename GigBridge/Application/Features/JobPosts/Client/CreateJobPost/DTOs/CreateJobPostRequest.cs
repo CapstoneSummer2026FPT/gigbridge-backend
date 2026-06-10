@@ -14,7 +14,6 @@ public record CreateJobPostRequest(
     string? EstimatedDuration,
     int? MaxHires,
     int? ExperienceLevelRequired,
-    int? LocationType,
     string? Location,
     int? Visibility,
     DateTime? EndDate,

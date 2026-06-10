@@ -70,7 +70,6 @@ public class CreateFreelancerProfileCommandHandler
         // Map inputs
         freelancerProfile.Title = request.Dto.Title?.Trim();
         freelancerProfile.Bio = request.Dto.Bio?.Trim();
-        freelancerProfile.HourlyRate = request.Dto.HourlyRate;
         freelancerProfile.ExperienceLevel = request.Dto.ExperienceLevel;
         freelancerProfile.Availability = request.Dto.Availability;
         freelancerProfile.Location = request.Dto.Location?.Trim();
@@ -79,17 +78,15 @@ public class CreateFreelancerProfileCommandHandler
         // Calculate profile completion score
         int score = 0;
         if (!string.IsNullOrWhiteSpace(freelancerProfile.Title)) score += 20;
-        if (!string.IsNullOrWhiteSpace(freelancerProfile.Bio)) score += 20;
-        if (freelancerProfile.HourlyRate > 0) score += 20;
+        if (!string.IsNullOrWhiteSpace(freelancerProfile.Bio)) score += 30;
         if (freelancerProfile.ExperienceLevel != null) score += 15;
         if (freelancerProfile.Availability != null) score += 15;
-        if (!string.IsNullOrWhiteSpace(freelancerProfile.Location)) score += 10;
+        if (!string.IsNullOrWhiteSpace(freelancerProfile.Location)) score += 20;
         freelancerProfile.ProfileCompletionScore = score;
 
         // Verify requirements to set IsSetup = true
         bool requirementsMet = !string.IsNullOrWhiteSpace(freelancerProfile.Title) &&
                                !string.IsNullOrWhiteSpace(freelancerProfile.Bio) &&
-                               freelancerProfile.HourlyRate > 0 &&
                                !string.IsNullOrWhiteSpace(freelancerProfile.Location);
 
         if (requirementsMet)

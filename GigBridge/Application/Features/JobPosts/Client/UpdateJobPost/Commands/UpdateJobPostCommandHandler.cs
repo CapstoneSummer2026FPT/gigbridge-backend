@@ -71,7 +71,6 @@ public class UpdateJobPostCommandHandler : IRequestHandler<UpdateJobPostCommand,
         jobPost.EstimatedDuration = request.EstimatedDuration;
         jobPost.MaxHires = request.MaxHires;
         jobPost.ExperienceLevelRequired = request.ExperienceLevelRequired;
-        jobPost.LocationType = request.LocationType;
         jobPost.Location = request.Location;
         jobPost.EndDate = request.EndDate;
         jobPost.UpdatedAt = _dateTimeService.UtcNow;

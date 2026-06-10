@@ -9,7 +9,7 @@ public class UpdateJobPostRequest
     public Guid? CategoryId { get; set; }
 
     /// <summary>
-    /// Enum BudgetType: 0=Fixed, 1=Hourly
+    /// Enum BudgetType: 0=Fixed
     /// </summary>
     public int BudgetType { get; set; }
 
@@ -27,11 +27,6 @@ public class UpdateJobPostRequest
     /// Enum ExperienceLevel: 0=Entry, 1=Intermediate, 2=Expert
     /// </summary>
     public int? ExperienceLevelRequired { get; set; }
-
-    /// <summary>
-    /// Enum LocationType: 0=Remote, 1=OnSite, 2=Hybrid
-    /// </summary>
-    public int? LocationType { get; set; }
 
     public string? Location { get; set; }
 

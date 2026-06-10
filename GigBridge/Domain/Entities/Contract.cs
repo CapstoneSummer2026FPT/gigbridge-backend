@@ -22,7 +22,7 @@ public partial class Contract
     public decimal TotalBudget { get; set; }
 
     /// <summary>
-    /// Enum PaymentType: 0=Fixed, 1=Hourly
+    /// Enum PaymentType: 0=Fixed
     /// </summary>
     public int PaymentType { get; set; }
 

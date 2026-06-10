@@ -54,7 +54,6 @@ public class GetFreelancerProfileQueryHandler
             UserId = freelancerProfile.UserId,
             Title = freelancerProfile.Title,
             Bio = freelancerProfile.Bio,
-            HourlyRate = freelancerProfile.HourlyRate,
             ExperienceLevel = freelancerProfile.ExperienceLevel,
             Availability = freelancerProfile.Availability,
             Location = freelancerProfile.Location,
