@@ -49,9 +49,9 @@ public partial class User
 
     public virtual ClientProfile? ClientProfile { get; set; }
 
-    public virtual ICollection<Conversation> ConversationUser1s { get; set; } = new List<Conversation>();
+    public virtual ICollection<Conversation> CreatedConversations { get; set; } = new List<Conversation>();
 
-    public virtual ICollection<Conversation> ConversationUser2s { get; set; } = new List<Conversation>();
+    public virtual ICollection<ConversationParticipant> ConversationParticipants { get; set; } = new List<ConversationParticipant>();
 
     public virtual ICollection<DisputeEvidence> DisputeEvidences { get; set; } = new List<DisputeEvidence>();
 
