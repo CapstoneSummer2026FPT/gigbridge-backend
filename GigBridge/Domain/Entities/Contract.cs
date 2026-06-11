@@ -11,7 +11,7 @@ public partial class Contract
 
     public Guid ClientProfilesId { get; set; }
 
-    public Guid FreelancerProfilesId { get; set; }
+    public Guid? FreelancerProfilesId { get; set; }
 
     public Guid? ProposalsId { get; set; }
 
@@ -22,7 +22,7 @@ public partial class Contract
     public decimal TotalBudget { get; set; }
 
     /// <summary>
-    /// Enum ContractStatus: 0=Active, 1=Completed, 2=Cancelled, 3=Disputed
+    /// Enum ContractStatus: 0=Draft, 1=PendingFreelancerSelection, 2=PendingEscrow, 3=PendingSignature, 4=Active, 5=Completed, 6=Cancelled, 7=Disputed
     /// </summary>
     public int Status { get; set; }
 
@@ -47,9 +47,11 @@ public partial class Contract
 
     public virtual ICollection<Dispute> Disputes { get; set; } = new List<Dispute>();
 
+    public virtual ContractEscrow? ContractEscrow { get; set; }
+
     public virtual EsignDocument? EsignDocument { get; set; }
 
-    public virtual FreelancerProfile FreelancerProfiles { get; set; } = null!;
+    public virtual FreelancerProfile? FreelancerProfiles { get; set; }
 
     public virtual JobPost JobPosts { get; set; } = null!;
 
