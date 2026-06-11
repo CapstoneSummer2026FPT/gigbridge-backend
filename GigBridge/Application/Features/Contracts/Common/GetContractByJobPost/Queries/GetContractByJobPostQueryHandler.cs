@@ -123,6 +123,7 @@ public class GetContractByJobPostQueryHandler
                     ContractEscrowId = escrow.ContractEscrowId,
                     RequiredAmount = escrow.RequiredAmount,
                     FundedAmount = escrow.FundedAmount,
+                    ReleasedAmount = escrow.ReleasedAmount,
                     RequiredPercentage = escrow.RequiredPercentage,
                     Currency = escrow.Currency,
                     Status = escrow.Status,

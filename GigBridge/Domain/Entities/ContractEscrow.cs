@@ -13,9 +13,11 @@ public partial class ContractEscrow
 
     public decimal FundedAmount { get; set; }
 
-    public decimal RequiredPercentage { get; set; } = 0.8m;
+    public decimal RequiredPercentage { get; set; } = 1.0m;
 
     public string Currency { get; set; } = "VND";
+
+    public decimal ReleasedAmount { get; set; }
 
     /// <summary>
     /// Enum ContractEscrowStatus: 0=PendingFunding, 1=PartiallyFunded, 2=Funded, 3=PartiallyReleased, 4=Released, 5=Refunded, 6=Cancelled, 7=Disputed

@@ -1,9 +1,9 @@
 using Application.Common.Models;
 using Application.Features.Chat.Common.Conversations.GetMine.DTOs;
-using Application.Features.Chat.Conversations.GetMine.Queries;
-using Application.Features.Chat.Conversations.MarkAsRead.Commands;
-using Application.Features.Chat.Negotiations.OpenFromInvite.Commands;
-using Application.Features.Chat.Negotiations.StartFromProposal.Commands;
+using Application.Features.Chat.Common.Conversations.GetMine.Queries;
+using Application.Features.Chat.Common.Conversations.MarkAsRead.Commands;
+using Application.Features.Chat.Common.Negotiations.OpenFromInvite.Commands;
+using Application.Features.Chat.Common.Negotiations.StartFromProposal.Commands;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 

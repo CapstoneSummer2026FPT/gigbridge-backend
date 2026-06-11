@@ -1,8 +1,8 @@
 using Application.Common.Models;
 using Application.Features.Chat.Common.Messages.GetConversationMessages.DTOs;
+using Application.Features.Chat.Common.Messages.GetConversationMessages.Queries;
+using Application.Features.Chat.Common.Messages.Send.Commands;
 using Application.Features.Chat.Common.Messages.Send.DTOs;
-using Application.Features.Chat.Messages.GetConversationMessages.Queries;
-using Application.Features.Chat.Messages.Send.Commands;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 

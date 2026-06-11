@@ -46,7 +46,7 @@ public sealed class SignContractCommandHandler :
 
         if (contract.Status != (int)ContractStatus.PendingSignature)
         {
-            throw new BadRequestException("Contract can only be signed after escrow is funded.");
+            throw new BadRequestException("Contract can only be signed after details are confirmed.");
         }
 
         var signerRole = await ResolveSignerRoleAsync(contract, command.UserId, cancellationToken);
@@ -105,7 +105,7 @@ public sealed class SignContractCommandHandler :
             document.Status = (int)ESignDocumentStatus.FullySigned;
             document.FinalizedAt = now;
             document.UpdatedAt = now;
-            contract.Status = (int)ContractStatus.Active;
+            contract.Status = (int)ContractStatus.PendingEscrow;
             contract.UpdatedAt = now;
 
             var conversations = await _context.Set<Conversation>()
@@ -120,7 +120,7 @@ public sealed class SignContractCommandHandler :
                     ContractConversationEvents.AddSystemMessage(
                         _context,
                         conversation,
-                        "Contract fully signed. Workroom is now active.",
+                        "Contract fully signed. Workroom is ready while escrow awaits funding.",
                         now);
                 }
             }
@@ -133,7 +133,7 @@ public sealed class SignContractCommandHandler :
 
         await _context.SaveChangesAsync(cancellationToken);
 
-        if (contract.Status == (int)ContractStatus.Active)
+        if (contract.Status == (int)ContractStatus.PendingEscrow)
         {
             var conversationIds = await _context.Set<Conversation>()
                 .Where(conversation => conversation.ContractsId == contract.ContractsId)
@@ -144,7 +144,7 @@ public sealed class SignContractCommandHandler :
             {
                 await _chatRealtimeNotifier.SendConversationEventAsync(
                     conversationId,
-                    "ContractActivated",
+                    "ContractFullySigned",
                     new { contractId = contract.ContractsId },
                     cancellationToken);
             }

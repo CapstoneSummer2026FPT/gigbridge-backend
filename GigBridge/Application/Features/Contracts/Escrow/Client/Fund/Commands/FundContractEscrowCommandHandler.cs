@@ -39,8 +39,7 @@ public sealed class FundContractEscrowCommandHandler :
 
         await ContractParticipantGuard.EnsureClientAsync(_context, contract, command.UserId, cancellationToken);
 
-        if (contract.Status == (int)ContractStatus.PendingSignature ||
-            contract.Status == (int)ContractStatus.Active)
+        if (contract.Status == (int)ContractStatus.Active)
         {
             var fundedEscrow = await GetEscrowAsync(contract.ContractsId, cancellationToken);
             return new FundContractEscrowResponse(
@@ -54,13 +53,25 @@ public sealed class FundContractEscrowCommandHandler :
 
         if (contract.Status != (int)ContractStatus.PendingEscrow)
         {
-            throw new BadRequestException("Contract escrow can only be funded after details are confirmed.");
+            throw new BadRequestException("Contract escrow can only be funded after both parties sign.");
+        }
+
+        var fullySignedDocument = await _context.Set<EsignDocument>()
+            .AnyAsync(
+                document =>
+                    document.ContractsId == contract.ContractsId &&
+                    document.Status == (int)ESignDocumentStatus.FullySigned,
+                cancellationToken);
+
+        if (!fullySignedDocument)
+        {
+            throw new BadRequestException("Contract escrow can only be funded after both parties sign.");
         }
 
         var escrow = await GetEscrowAsync(contract.ContractsId, cancellationToken);
         if (escrow.Status == (int)ContractEscrowStatus.Funded)
         {
-            contract.Status = (int)ContractStatus.PendingSignature;
+            contract.Status = (int)ContractStatus.Active;
             await _context.SaveChangesAsync(cancellationToken);
             return new FundContractEscrowResponse(
                 contract.ContractsId,
@@ -87,7 +98,6 @@ public sealed class FundContractEscrowCommandHandler :
         }
 
         var now = _dateTimeService.UtcNow;
-        await ContractEsignRenderer.EnsureDocumentAsync(_context, contract, now, cancellationToken);
 
         wallet.AvailableTokens -= requiredTokens;
         wallet.HeldTokens += requiredTokens;
@@ -97,7 +107,7 @@ public sealed class FundContractEscrowCommandHandler :
         escrow.Status = (int)ContractEscrowStatus.Funded;
         escrow.FundedAt = now;
 
-        contract.Status = (int)ContractStatus.PendingSignature;
+        contract.Status = (int)ContractStatus.Active;
         contract.UpdatedAt = now;
 
         _context.Set<WalletTransaction>().Add(new WalletTransaction
@@ -134,7 +144,7 @@ public sealed class FundContractEscrowCommandHandler :
         await ContractConversationEvents.AddSystemMessageAsync(
             _context,
             contract.ContractsId,
-            "Escrow funded from wallet. Contract is ready for signatures.",
+            "Escrow funded from wallet. Contract is now active.",
             now,
             cancellationToken);
 

@@ -1,8 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 using System.Security.Claims;
-using Application.Features.Chat.Conversations.EnsureParticipant.Queries;
-using Application.Features.Chat.Conversations.MarkAsRead.Commands;
+using Application.Features.Chat.Common.Conversations.EnsureParticipant.Queries;
+using Application.Features.Chat.Common.Conversations.MarkAsRead.Commands;
 using MediatR;
 
 namespace Project_API.Hubs;

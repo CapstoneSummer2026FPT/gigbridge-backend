@@ -60,9 +60,9 @@ public sealed class ConfirmContractDetailsCommandHandler :
             {
                 ContractEscrowId = Guid.NewGuid(),
                 ContractsId = contract.ContractsId,
-                RequiredAmount = contract.TotalBudget * 0.8m,
+                RequiredAmount = contract.TotalBudget,
                 FundedAmount = 0m,
-                RequiredPercentage = 0.8m,
+                RequiredPercentage = 1.0m,
                 Currency = "VND",
                 Status = (int)ContractEscrowStatus.PendingFunding,
                 CreatedAt = now
@@ -70,13 +70,13 @@ public sealed class ConfirmContractDetailsCommandHandler :
             _context.Set<ContractEscrow>().Add(escrow);
         }
 
-        contract.Status = (int)ContractStatus.PendingEscrow;
+        contract.Status = (int)ContractStatus.PendingSignature;
         contract.UpdatedAt = now;
 
         await ContractConversationEvents.AddSystemMessageAsync(
             _context,
             contract.ContractsId,
-            "Contract details confirmed. Escrow is ready for wallet funding.",
+            "Contract details confirmed. Contract is ready for signatures.",
             now,
             cancellationToken);
 

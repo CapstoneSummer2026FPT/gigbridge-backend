@@ -1,7 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces.IService;
-using Application.Features.Chat.Messages.Send.Commands;
-using Application.Features.Chat.Messages.Send.DTOs;
+using Application.Features.Chat.Common.Messages.Send.Commands;
+using Application.Features.Chat.Common.Messages.Send.DTOs;
 using Domain.Entities;
 using Domain.Enums;
 using Test_Gigbridge_Backend.TestSupport;

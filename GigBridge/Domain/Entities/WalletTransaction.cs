@@ -14,6 +14,8 @@ public partial class WalletTransaction
 
     public Guid? ContractEscrowId { get; set; }
 
+    public Guid? MilestonesId { get; set; }
+
     public decimal TokenAmount { get; set; }
 
     public decimal VndAmount { get; set; }
@@ -47,6 +49,8 @@ public partial class WalletTransaction
     public virtual Contract? Contract { get; set; }
 
     public virtual ContractEscrow? ContractEscrow { get; set; }
+
+    public virtual Milestone? Milestone { get; set; }
 
     public virtual User User { get; set; } = null!;
 

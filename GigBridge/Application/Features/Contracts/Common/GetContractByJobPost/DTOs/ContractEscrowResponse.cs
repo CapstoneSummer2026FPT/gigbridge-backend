@@ -8,6 +8,8 @@ public class ContractEscrowResponse
 
     public decimal FundedAmount { get; set; }
 
+    public decimal ReleasedAmount { get; set; }
+
     public decimal RequiredPercentage { get; set; }
 
     public string Currency { get; set; } = string.Empty;

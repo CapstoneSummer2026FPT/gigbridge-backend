@@ -259,10 +259,13 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
                 .HasMaxLength(5)
                 .HasDefaultValueSql("'VND'::character varying");
             entity.Property(e => e.FundedAmount).HasPrecision(18, 2);
+            entity.Property(e => e.ReleasedAmount)
+                .HasPrecision(18, 2)
+                .HasDefaultValue(0m);
             entity.Property(e => e.RequiredAmount).HasPrecision(18, 2);
             entity.Property(e => e.RequiredPercentage)
                 .HasPrecision(5, 4)
-                .HasDefaultValue(0.8m);
+                .HasDefaultValue(1.0m);
             entity.Property(e => e.Status)
                 .HasComment("Enum ContractEscrowStatus: 0=PendingFunding, 1=PartiallyFunded, 2=Funded, 3=PartiallyReleased, 4=Released, 5=Refunded, 6=Cancelled, 7=Disputed");
 
@@ -944,6 +947,9 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.Amount).HasPrecision(18, 2);
             entity.Property(e => e.ContractsId).HasColumnName("ContractsId");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.ReleasedAmount)
+                .HasPrecision(18, 2)
+                .HasDefaultValue(0m);
             entity.Property(e => e.SortOrder).HasDefaultValue(0);
             entity.Property(e => e.Status).HasComment("Enum MilestoneStatus: 0=Pending, 1=InProgress, 2=Submitted, 3=Approved, 4=PaymentProofUploaded, 5=PaymentConfirmed, 6=Disputed");
             entity.Property(e => e.Title).HasMaxLength(500);
@@ -1541,6 +1547,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
 
             entity.HasIndex(e => e.GatewayTransactionCode, "IX_WalletTransactions_GatewayTransactionCode");
 
+            entity.HasIndex(e => e.MilestonesId, "IX_WalletTransactions_MilestonesId");
+
             entity.HasIndex(e => e.Status, "IX_WalletTransactions_Status");
 
             entity.HasIndex(e => e.Type, "IX_WalletTransactions_Type");
@@ -1562,6 +1570,7 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.GatewayTransactionCode).HasMaxLength(200);
             entity.Property(e => e.IdempotencyKey).HasMaxLength(200);
             entity.Property(e => e.Metadata).HasColumnType("text");
+            entity.Property(e => e.MilestonesId).HasColumnName("MilestonesId");
             entity.Property(e => e.Note).HasMaxLength(1000);
             entity.Property(e => e.Status)
                 .HasComment("Enum WalletTransactionStatus: 0=Pending, 1=Succeeded, 2=Failed, 3=Cancelled");
@@ -1579,6 +1588,10 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.HasOne(d => d.ContractEscrow).WithMany(p => p.WalletTransactions)
                 .HasForeignKey(d => d.ContractEscrowId)
                 .HasConstraintName("WalletTransactions_cEsc_ContractEscrowId_fkey");
+
+            entity.HasOne(d => d.Milestone).WithMany()
+                .HasForeignKey(d => d.MilestonesId)
+                .HasConstraintName("WalletTransactions_mStone_MilestonesId_fkey");
 
             entity.HasOne(d => d.User).WithMany(p => p.WalletTransactions)
                 .HasForeignKey(d => d.UserId)

@@ -51,7 +51,7 @@ public class ContractWorkflowTests
     }
 
     [Fact]
-    public async Task SubmitAndFreelancerConfirm_CreatesEscrowOnceAtEightyPercent()
+    public async Task SubmitAndFreelancerConfirm_CreatesFullEscrowAndMovesToPendingSignature()
     {
         var fixture = new ContractWorkflowFixture();
         fixture.ApplyValidDetails();
@@ -78,20 +78,29 @@ public class ContractWorkflowTests
                 CancellationToken.None));
 
         var escrow = Assert.Single(fixture.Escrows.Entities);
-        Assert.Equal(800_000m, escrow.RequiredAmount);
+        Assert.Equal(1_000_000m, escrow.RequiredAmount);
+        Assert.Equal(1.0m, escrow.RequiredPercentage);
+        Assert.Equal(0m, escrow.FundedAmount);
         Assert.Equal((int)ContractEscrowStatus.PendingFunding, escrow.Status);
-        Assert.Equal((int)ContractStatus.PendingEscrow, fixture.Contract.Status);
+        Assert.Equal((int)ContractStatus.PendingSignature, fixture.Contract.Status);
     }
 
     [Fact]
-    public async Task FundEscrow_RequiresWalletBalanceAndActiveTemplate()
+    public async Task FundEscrow_RequiresFullySignedContractAndFundsOneHundredPercent()
     {
         var fixture = new ContractWorkflowFixture();
-        fixture.MoveToPendingEscrow();
+        fixture.MoveToPendingSignatureWithDocument();
 
         var handler = new FundContractEscrowCommandHandler(
             fixture.Context,
             new FixedDateTimeService(fixture.Now));
+
+        await Assert.ThrowsAsync<BadRequestException>(() =>
+            handler.Handle(
+                new FundContractEscrowCommand(fixture.ContractId, fixture.ClientUserId),
+                CancellationToken.None));
+
+        fixture.MoveToFullySignedPendingEscrow();
 
         await Assert.ThrowsAsync<BadRequestException>(() =>
             handler.Handle(
@@ -112,25 +121,25 @@ public class ContractWorkflowTests
                 new FundContractEscrowCommand(fixture.ContractId, fixture.ClientUserId),
                 CancellationToken.None));
 
-        fixture.AddTemplate();
+        fixture.Wallets.Entities[0].AvailableTokens = 1_000m;
 
         var result = await handler.Handle(
             new FundContractEscrowCommand(fixture.ContractId, fixture.ClientUserId),
             CancellationToken.None);
 
-        Assert.Equal(800_000m, result.RequiredAmountVnd);
-        Assert.Equal(800m, result.HeldTokens);
-        Assert.Equal(100m, fixture.Wallets.Entities[0].AvailableTokens);
-        Assert.Equal(800m, fixture.Wallets.Entities[0].HeldTokens);
+        Assert.Equal(1_000_000m, result.RequiredAmountVnd);
+        Assert.Equal(1_000m, result.HeldTokens);
+        Assert.Equal(0m, fixture.Wallets.Entities[0].AvailableTokens);
+        Assert.Equal(1_000m, fixture.Wallets.Entities[0].HeldTokens);
         Assert.Equal((int)ContractEscrowStatus.Funded, fixture.Escrows.Entities[0].Status);
-        Assert.Equal((int)ContractStatus.PendingSignature, fixture.Contract.Status);
+        Assert.Equal((int)ContractStatus.Active, fixture.Contract.Status);
         Assert.Single(fixture.EsignDocuments.Entities);
         Assert.Single(fixture.WalletTransactions.Entities);
         Assert.Single(fixture.EscrowTransactions.Entities);
     }
 
     [Fact]
-    public async Task SignContract_ActivatesAfterBothPartiesAndConvertsConversation()
+    public async Task SignContract_ConvertsWorkroomButWaitsForEscrowFunding()
     {
         var fixture = new ContractWorkflowFixture();
         fixture.MoveToPendingSignatureWithDocument();
@@ -171,7 +180,7 @@ public class ContractWorkflowTests
                 "test"),
             CancellationToken.None);
 
-        Assert.Equal((int)ContractStatus.Active, fixture.Contract.Status);
+        Assert.Equal((int)ContractStatus.PendingEscrow, fixture.Contract.Status);
         Assert.Equal((int)ESignDocumentStatus.FullySigned, fixture.EsignDocuments.Entities[0].Status);
         Assert.Equal((int)ConversationType.ContractWorkroom, fixture.Conversation.ConversationType);
         Assert.Equal(2, fixture.EsignSignatures.Entities.Count);
@@ -312,17 +321,17 @@ public class ContractWorkflowTests
             });
         }
 
-        public void MoveToPendingEscrow()
+        public void MoveToPendingSignature()
         {
             ApplyValidDetails();
-            Contract.Status = (int)ContractStatus.PendingEscrow;
+            Contract.Status = (int)ContractStatus.PendingSignature;
             Escrows.Add(new ContractEscrow
             {
                 ContractEscrowId = Guid.NewGuid(),
                 ContractsId = ContractId,
-                RequiredAmount = 800_000m,
+                RequiredAmount = 1_000_000m,
                 FundedAmount = 0m,
-                RequiredPercentage = 0.8m,
+                RequiredPercentage = 1.0m,
                 Currency = "VND",
                 Status = (int)ContractEscrowStatus.PendingFunding,
                 CreatedAt = Now
@@ -331,10 +340,7 @@ public class ContractWorkflowTests
 
         public void MoveToPendingSignatureWithDocument()
         {
-            MoveToPendingEscrow();
-            Contract.Status = (int)ContractStatus.PendingSignature;
-            Escrows.Entities[0].Status = (int)ContractEscrowStatus.Funded;
-            Escrows.Entities[0].FundedAmount = Escrows.Entities[0].RequiredAmount;
+            MoveToPendingSignature();
             var templateId = AddTemplate();
             EsignDocuments.Add(new EsignDocument
             {
@@ -345,6 +351,38 @@ public class ContractWorkflowTests
                 DocumentCode = "GB-TEST",
                 RenderedHtmlContent = "<html>contract</html>",
                 Status = (int)ESignDocumentStatus.PendingSignatures,
+                CreatedAt = Now
+            });
+        }
+
+        public void MoveToFullySignedPendingEscrow()
+        {
+            if (EsignDocuments.Entities.Count == 0)
+            {
+                MoveToPendingSignatureWithDocument();
+            }
+
+            Contract.Status = (int)ContractStatus.PendingEscrow;
+            EsignDocuments.Entities[0].Status = (int)ESignDocumentStatus.FullySigned;
+            EsignDocuments.Entities[0].FinalizedAt = Now;
+            EsignSignatures.Add(new EsignSignature
+            {
+                EsignSignaturesId = Guid.NewGuid(),
+                EsignDocumentsId = EsignDocuments.Entities[0].EsignDocumentsId,
+                UserId = ClientUserId,
+                SignerRole = (int)ESignerRole.Client,
+                Status = (int)ESignSignatureStatus.Signed,
+                SignedAt = Now,
+                CreatedAt = Now
+            });
+            EsignSignatures.Add(new EsignSignature
+            {
+                EsignSignaturesId = Guid.NewGuid(),
+                EsignDocumentsId = EsignDocuments.Entities[0].EsignDocumentsId,
+                UserId = FreelancerUserId,
+                SignerRole = (int)ESignerRole.Freelancer,
+                Status = (int)ESignSignatureStatus.Signed,
+                SignedAt = Now,
                 CreatedAt = Now
             });
         }
