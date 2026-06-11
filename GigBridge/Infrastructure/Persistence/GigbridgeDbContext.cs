@@ -720,7 +720,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
                 .HasColumnName("JobPostsId");
 
             entity.Property(e => e.QuestionText)
-                .IsRequired();
+                .IsRequired()
+                .HasMaxLength(1000);
 
             entity.Property(e => e.OrderIndex)
                 .HasDefaultValue(0);
@@ -1097,7 +1098,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
                 .HasColumnName("JobPostQuestionsId");
 
             entity.Property(e => e.AnswerText)
-                .IsRequired();
+                .IsRequired()
+                .HasMaxLength(4000);
 
             entity.Property(e => e.CreatedAt)
                 .HasDefaultValueSql("now()");

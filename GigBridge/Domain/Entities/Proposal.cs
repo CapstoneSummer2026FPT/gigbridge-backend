@@ -18,7 +18,7 @@ public partial class Proposal
     public string? ProposedDuration { get; set; }
 
     /// <summary>
-    /// Enum ProposalStatus: 0=Pending, 1=Shortlisted, 2=Accepted, 3=Rejected, 4=Withdrawn, 5=Draft
+    /// Enum ProposalStatus: 0=Draft, 1=Pending, 2=Shortlisted, 3=Accepted, 4=Rejected, 5=Withdrawn
     /// </summary>
     public int Status { get; set; }
 
