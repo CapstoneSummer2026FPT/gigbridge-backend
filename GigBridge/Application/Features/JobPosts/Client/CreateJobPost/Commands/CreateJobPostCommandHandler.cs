@@ -2,6 +2,7 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Domain.Entities;
+using Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -30,6 +31,7 @@ public class CreateJobPostCommandHandler : IRequestHandler<CreateJobPostCommand,
 
         var jobPost = CreateJobPost(command, clientProfile.ClientProfilesId);
         _context.Set<JobPost>().Add(jobPost);
+        _context.Set<Contract>().Add(CreateDraftContract(jobPost));
         await _context.SaveChangesAsync(cancellationToken);
 
         return jobPost.JobPostsId;
@@ -68,5 +70,25 @@ public class CreateJobPostCommandHandler : IRequestHandler<CreateJobPostCommand,
         }
 
         return jobPost;
+    }
+
+    private Contract CreateDraftContract(JobPost jobPost)
+    {
+        return new Contract
+        {
+            ContractsId = Guid.NewGuid(),
+            JobPostsId = jobPost.JobPostsId,
+            ClientProfilesId = jobPost.ClientProfilesId,
+            FreelancerProfilesId = null,
+            ProposalsId = null,
+            Title = jobPost.Title,
+            Description = jobPost.Description,
+            TotalBudget = jobPost.BudgetMin ?? jobPost.BudgetMax ?? 0m,
+            Status = (int)ContractStatus.PendingFreelancerSelection,
+            EndDate = jobPost.EndDate.HasValue
+                ? DateOnly.FromDateTime(jobPost.EndDate.Value)
+                : null,
+            CreatedAt = _dateTimeService.UtcNow
+        };
     }
 }

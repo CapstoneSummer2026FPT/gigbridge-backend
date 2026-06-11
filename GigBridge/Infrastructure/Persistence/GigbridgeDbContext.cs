@@ -25,6 +25,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
 
     public virtual DbSet<Contract> Contracts { get; set; }
 
+    public virtual DbSet<ContractEscrow> ContractEscrows { get; set; }
+
     public virtual DbSet<Conversation> Conversations { get; set; }
 
     public virtual DbSet<Dispute> Disputes { get; set; }
@@ -38,6 +40,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
     public virtual DbSet<EsignSignature> EsignSignatures { get; set; }
 
     public virtual DbSet<EsignTemplate> EsignTemplates { get; set; }
+
+    public virtual DbSet<EscrowTransaction> EscrowTransactions { get; set; }
 
     public virtual DbSet<Faq> Faqs { get; set; }
 
@@ -200,7 +204,7 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.FreelancerProfilesId).HasColumnName("FreelancerProfilesId");
             entity.Property(e => e.JobPostsId).HasColumnName("JobPostsId");
             entity.Property(e => e.ProposalsId).HasColumnName("ProposalsId");
-            entity.Property(e => e.Status).HasComment("Enum ContractStatus: 0=Active, 1=Completed, 2=Cancelled, 3=Disputed");
+            entity.Property(e => e.Status).HasComment("Enum ContractStatus: 0=Draft, 1=PendingFreelancerSelection, 2=PendingEscrow, 3=PendingSignature, 4=Active, 5=Completed, 6=Cancelled, 7=Disputed");
             entity.Property(e => e.Title).HasMaxLength(500);
             entity.Property(e => e.TotalBudget).HasPrecision(18, 2);
 
@@ -222,6 +226,70 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.HasOne(d => d.Proposals).WithOne(p => p.Contract)
                 .HasForeignKey<Contract>(d => d.ProposalsId)
                 .HasConstraintName("Contracts_propo_ProposalsId_fkey");
+        });
+
+        modelBuilder.Entity<ContractEscrow>(entity =>
+        {
+            entity.HasKey(e => e.ContractEscrowId).HasName("ContractEscrows_pkey");
+
+            entity.HasIndex(e => e.ContractsId, "IX_ContractEscrows_ContractsId").IsUnique();
+
+            entity.HasIndex(e => e.Status, "IX_ContractEscrows_Status");
+
+            entity.Property(e => e.ContractEscrowId)
+                .HasDefaultValueSql("gen_random_uuid()")
+                .HasColumnName("ContractEscrowId");
+            entity.Property(e => e.ContractsId).HasColumnName("ContractsId");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.Currency)
+                .HasMaxLength(5)
+                .HasDefaultValueSql("'VND'::character varying");
+            entity.Property(e => e.FundedAmount).HasPrecision(18, 2);
+            entity.Property(e => e.RequiredAmount).HasPrecision(18, 2);
+            entity.Property(e => e.RequiredPercentage)
+                .HasPrecision(5, 4)
+                .HasDefaultValue(0.8m);
+            entity.Property(e => e.Status)
+                .HasComment("Enum ContractEscrowStatus: 0=PendingFunding, 1=PartiallyFunded, 2=Funded, 3=PartiallyReleased, 4=Released, 5=Refunded, 6=Cancelled, 7=Disputed");
+
+            entity.HasOne(d => d.Contract).WithOne(p => p.ContractEscrow)
+                .HasForeignKey<ContractEscrow>(d => d.ContractsId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("ContractEscrows_cont_ContractsId_fkey");
+        });
+
+        modelBuilder.Entity<EscrowTransaction>(entity =>
+        {
+            entity.HasKey(e => e.EscrowTransactionId).HasName("EscrowTransactions_pkey");
+
+            entity.HasIndex(e => e.ContractEscrowId, "IX_EscrowTransactions_ContractEscrowId");
+
+            entity.HasIndex(e => e.GatewayTransactionCode, "IX_EscrowTransactions_GatewayTransactionCode");
+
+            entity.HasIndex(e => e.MilestonesId, "IX_EscrowTransactions_MilestonesId");
+
+            entity.HasIndex(e => e.Status, "IX_EscrowTransactions_Status");
+
+            entity.Property(e => e.EscrowTransactionId)
+                .HasDefaultValueSql("gen_random_uuid()")
+                .HasColumnName("EscrowTransactionId");
+            entity.Property(e => e.Amount).HasPrecision(18, 2);
+            entity.Property(e => e.ContractEscrowId).HasColumnName("ContractEscrowId");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.GatewayTransactionCode).HasMaxLength(200);
+            entity.Property(e => e.MilestonesId).HasColumnName("MilestonesId");
+            entity.Property(e => e.PaymentGateway).HasMaxLength(100);
+            entity.Property(e => e.Status).HasComment("Enum EscrowTransactionStatus: 0=Pending, 1=Succeeded, 2=Failed, 3=Cancelled");
+            entity.Property(e => e.Type).HasComment("Enum EscrowTransactionType: 0=Deposit, 1=ReleaseToFreelancer, 2=RefundToClient, 3=PlatformFee, 4=Adjustment");
+
+            entity.HasOne(d => d.ContractEscrow).WithMany(p => p.EscrowTransactions)
+                .HasForeignKey(d => d.ContractEscrowId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("EscrowTransactions_cEsc_ContractEscrowId_fkey");
+
+            entity.HasOne(d => d.Milestone).WithMany(p => p.EscrowTransactions)
+                .HasForeignKey(d => d.MilestonesId)
+                .HasConstraintName("EscrowTransactions_mStone_MilestonesId_fkey");
         });
 
         modelBuilder.Entity<Conversation>(entity =>
