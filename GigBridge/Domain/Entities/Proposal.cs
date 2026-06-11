@@ -18,7 +18,7 @@ public partial class Proposal
     public string? ProposedDuration { get; set; }
 
     /// <summary>
-    /// Enum ProposalStatus: 0=Pending, 1=Shortlisted, 2=Accepted, 3=Rejected, 4=Withdrawn
+    /// Enum ProposalStatus: 0=Pending, 1=Shortlisted, 2=Accepted, 3=Rejected, 4=Withdrawn, 5=Draft
     /// </summary>
     public int Status { get; set; }
 
@@ -35,4 +35,6 @@ public partial class Proposal
     public virtual JobPost JobPosts { get; set; } = null!;
 
     public virtual ICollection<ProposalAttachment> ProposalAttachments { get; set; } = new List<ProposalAttachment>();
+
+    public virtual ICollection<ProposalAnswer> ProposalAnswers { get; set; } = new List<ProposalAnswer>();
 }
