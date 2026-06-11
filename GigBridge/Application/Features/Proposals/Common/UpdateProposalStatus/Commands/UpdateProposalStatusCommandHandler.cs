@@ -60,7 +60,7 @@ public class UpdateProposalStatusCommandHandler
 
         if (isClientOwner)
         {
-            await UpdateStatusByClient(proposal, requestedStatus, cancellationToken);
+            UpdateStatusByClient(proposal, requestedStatus);
         }
         else if (isFreelancerOwner)
         {
@@ -78,98 +78,22 @@ public class UpdateProposalStatusCommandHandler
         return true;
     }
 
-    private async Task UpdateStatusByClient(
+    private static void UpdateStatusByClient(
         Proposal proposal,
-        int requestedStatus,
-        CancellationToken cancellationToken)
+        int requestedStatus)
     {
-        if (requestedStatus != 1 && requestedStatus != 2 && requestedStatus != 3)
+        if (requestedStatus == 2)
+        {
+            throw new BadRequestException("Accepting a proposal must go through negotiation final offer flow.");
+        }
+
+        if (requestedStatus != 1 && requestedStatus != 3)
         {
             throw new UnauthorizedAccessException(
-                "Client can only update proposal status to Shortlisted, Accepted, or Rejected.");
+                "Client can only update proposal status to Shortlisted or Rejected.");
         }
 
         proposal.Status = requestedStatus;
-
-        if (requestedStatus == 2)
-        {
-            var otherProposals = await _context.Set<Proposal>()
-                .Where(otherProposal =>
-                    otherProposal.JobPostsId == proposal.JobPostsId &&
-                    otherProposal.ProposalsId != proposal.ProposalsId &&
-                    (otherProposal.Status == 0 || otherProposal.Status == 1))
-                .ToListAsync(cancellationToken);
-
-            foreach (var otherProposal in otherProposals)
-            {
-                otherProposal.Status = 3;
-                otherProposal.UpdatedAt = _dateTimeService.UtcNow;
-            }
-
-            proposal.JobPosts.Status = 2;
-            proposal.JobPosts.UpdatedAt = _dateTimeService.UtcNow;
-
-            await AttachAcceptedProposalToDraftContract(proposal, cancellationToken);
-        }
-    }
-
-    private async Task AttachAcceptedProposalToDraftContract(
-        Proposal proposal,
-        CancellationToken cancellationToken)
-    {
-        if (!proposal.ProposedBudget.HasValue || proposal.ProposedBudget.Value <= 0)
-        {
-            throw new BadRequestException("Accepted proposals must include a proposed budget.");
-        }
-
-        var now = _dateTimeService.UtcNow;
-        var contract = await _context.Set<Contract>()
-            .FirstOrDefaultAsync(
-                contract => contract.JobPostsId == proposal.JobPostsId,
-                cancellationToken);
-
-        if (contract is null)
-        {
-            throw new NotFoundException("Contract draft does not exist for this job post.");
-        }
-
-        if (contract.Status != (int)ContractStatus.Draft &&
-            contract.Status != (int)ContractStatus.PendingFreelancerSelection)
-        {
-            throw new BadRequestException("Only draft contracts can be attached to an accepted proposal.");
-        }
-
-        contract.FreelancerProfilesId = proposal.FreelancerProfilesId;
-        contract.ProposalsId = proposal.ProposalsId;
-        contract.TotalBudget = proposal.ProposedBudget.Value;
-        contract.Status = (int)ContractStatus.PendingEscrow;
-        contract.StartDate ??= DateOnly.FromDateTime(now);
-        contract.EndDate ??= proposal.JobPosts.EndDate.HasValue
-            ? DateOnly.FromDateTime(proposal.JobPosts.EndDate.Value)
-            : null;
-        contract.UpdatedAt = now;
-
-        var escrowExists = await _context.Set<ContractEscrow>()
-            .AnyAsync(
-                escrow => escrow.ContractsId == contract.ContractsId,
-                cancellationToken);
-
-        if (escrowExists)
-        {
-            return;
-        }
-
-        _context.Set<ContractEscrow>().Add(new ContractEscrow
-        {
-            ContractEscrowId = Guid.NewGuid(),
-            ContractsId = contract.ContractsId,
-            RequiredAmount = contract.TotalBudget * 0.8m,
-            FundedAmount = 0m,
-            RequiredPercentage = 0.8m,
-            Currency = "VND",
-            Status = (int)ContractEscrowStatus.PendingFunding,
-            CreatedAt = now
-        });
     }
 
     private static void UpdateStatusByFreelancer(

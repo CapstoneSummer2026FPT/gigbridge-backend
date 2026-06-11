@@ -1,7 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces.IService;
 using Application.Features.Proposals.Common.UpdateProposalStatus.Commands;
-using Application.Features.Proposals.Common.UpdateProposalStatus.DTOs;
+using Application.Features.Proposals.Common.UpdateProposalStatus.Commands.DTOs;
 using Domain.Entities;
 using Domain.Enums;
 using Test_Gigbridge_Backend.TestSupport;
@@ -11,7 +11,7 @@ namespace Test_Gigbridge_Backend.Application.Features.Proposals.Common;
 public class UpdateProposalStatusCommandHandlerTests
 {
     [Fact]
-    public async Task Handle_AcceptProposal_AttachesExistingDraftContractAndCreatesEscrow()
+    public async Task Handle_AcceptProposal_ThrowsBadRequestBecauseFinalOfferFlowIsRequired()
     {
         var now = new DateTime(2026, 6, 10, 10, 0, 0, DateTimeKind.Utc);
         var context = new InMemoryApplicationDbContext();
@@ -77,29 +77,21 @@ public class UpdateProposalStatusCommandHandlerTests
             clientUserId,
             new UpdateProposalStatusRequest { Status = 2 });
 
-        var result = await handler.Handle(command, CancellationToken.None);
+        await Assert.ThrowsAsync<BadRequestException>(
+            () => handler.Handle(command, CancellationToken.None));
 
-        Assert.True(result);
-        Assert.Equal(2, acceptedProposal.Status);
-        Assert.Equal(3, otherProposal.Status);
-        Assert.Equal(2, jobPost.Status);
-        Assert.Equal(freelancerProfileId, draftContract.FreelancerProfilesId);
-        Assert.Equal(acceptedProposalId, draftContract.ProposalsId);
-        Assert.Equal(1234m, draftContract.TotalBudget);
-        Assert.Equal((int)ContractStatus.PendingEscrow, draftContract.Status);
-
-        var escrow = Assert.Single(escrows.Entities);
-        Assert.Equal(contractId, escrow.ContractsId);
-        Assert.Equal(987.2m, escrow.RequiredAmount);
-        Assert.Equal(0m, escrow.FundedAmount);
-        Assert.Equal(0.8m, escrow.RequiredPercentage);
-        Assert.Equal("VND", escrow.Currency);
-        Assert.Equal((int)ContractEscrowStatus.PendingFunding, escrow.Status);
-        Assert.Equal(now, escrow.CreatedAt);
+        Assert.Equal(0, acceptedProposal.Status);
+        Assert.Equal(1, otherProposal.Status);
+        Assert.Equal(1, jobPost.Status);
+        Assert.Null(draftContract.FreelancerProfilesId);
+        Assert.Null(draftContract.ProposalsId);
+        Assert.Equal(500m, draftContract.TotalBudget);
+        Assert.Equal((int)ContractStatus.PendingFreelancerSelection, draftContract.Status);
+        Assert.Empty(escrows.Entities);
     }
 
     [Fact]
-    public async Task Handle_AcceptProposalWithoutBudget_ThrowsBadRequest()
+    public async Task Handle_AcceptProposalWithoutBudget_ThrowsBadRequestBecauseFinalOfferFlowIsRequired()
     {
         var now = new DateTime(2026, 6, 10, 10, 0, 0, DateTimeKind.Utc);
         var context = new InMemoryApplicationDbContext();

@@ -9,6 +9,8 @@ public partial class EsignTemplate
 
     public string Name { get; set; } = null!;
 
+    public string TemplateCode { get; set; } = "CONTRACT_FIXED_PRICE";
+
     public string HtmlContent { get; set; } = null!;
 
     public int Version { get; set; }

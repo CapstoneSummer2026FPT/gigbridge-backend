@@ -1,6 +1,5 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.Exceptions;
 using Application.Features.FAQCategories.Shared.DTOs;
 using Domain.Entities;
 using MediatR;

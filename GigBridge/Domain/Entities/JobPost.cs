@@ -51,11 +51,15 @@ public partial class JobPost
 
     public virtual ICollection<Contract> Contracts { get; set; } = new List<Contract>();
 
+    public virtual ICollection<Conversation> Conversations { get; set; } = new List<Conversation>();
+
     public virtual ICollection<EsignDocument> EsignDocuments { get; set; } = new List<EsignDocument>();
 
     public virtual ICollection<JobPostAttachment> JobPostAttachments { get; set; } = new List<JobPostAttachment>();
 
     public virtual ICollection<JobPostSkill> JobPostSkills { get; set; } = new List<JobPostSkill>();
+
+    public virtual ICollection<NegotiationOffer> NegotiationOffers { get; set; } = new List<NegotiationOffer>();
 
     public virtual ICollection<Proposal> Proposals { get; set; } = new List<Proposal>();
 
