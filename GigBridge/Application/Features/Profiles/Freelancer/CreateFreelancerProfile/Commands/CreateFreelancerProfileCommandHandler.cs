@@ -70,17 +70,15 @@ public class CreateFreelancerProfileCommandHandler
         // Map inputs
         freelancerProfile.Title = request.Dto.Title?.Trim();
         freelancerProfile.Bio = request.Dto.Bio?.Trim();
-        freelancerProfile.ExperienceLevel = request.Dto.ExperienceLevel;
         freelancerProfile.Availability = request.Dto.Availability;
         freelancerProfile.Location = request.Dto.Location?.Trim();
         freelancerProfile.UpdatedAt = now;
 
         // Calculate profile completion score
         int score = 0;
-        if (!string.IsNullOrWhiteSpace(freelancerProfile.Title)) score += 20;
+        if (!string.IsNullOrWhiteSpace(freelancerProfile.Title)) score += 30;
         if (!string.IsNullOrWhiteSpace(freelancerProfile.Bio)) score += 30;
-        if (freelancerProfile.ExperienceLevel != null) score += 15;
-        if (freelancerProfile.Availability != null) score += 15;
+        if (freelancerProfile.Availability != null) score += 20;
         if (!string.IsNullOrWhiteSpace(freelancerProfile.Location)) score += 20;
         freelancerProfile.ProfileCompletionScore = score;
 
