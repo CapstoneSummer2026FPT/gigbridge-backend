@@ -1,6 +1,7 @@
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Common.Models;
+using Infrastructure.ExternalServices.Payments;
 using Infrastructure.Persistence;
 using Infrastructure.Services.Auth;
 using Infrastructure.Services.Common;
@@ -38,6 +39,8 @@ public static class DependencyInjection
         services.AddScoped<IMediaService, MediaService>();
         services.AddScoped<INotificationService, NotificationService>();
         services.AddTransient<IDateTimeService, DateTimeService>();
+        services.AddScoped<IWalletTopUpPaymentService>(provider =>
+            new PayOsWalletTopUpPaymentService(provider.GetRequiredKeyedService<PayOSClient>("OrderClient")));
 
 
         // External payment service

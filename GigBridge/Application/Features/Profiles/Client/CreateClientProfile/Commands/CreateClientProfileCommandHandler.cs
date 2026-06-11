@@ -1,7 +1,6 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using Application.Common.Domain;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
@@ -54,7 +53,7 @@ public class CreateClientProfileCommandHandler
 
         if (clientProfile == null)
         {
-            UserProfileFactory.AttachProfileForRole(user, now);
+            user.AttachProfileForRole(now);
             clientProfile = user.ClientProfile;
 
             if (clientProfile != null)

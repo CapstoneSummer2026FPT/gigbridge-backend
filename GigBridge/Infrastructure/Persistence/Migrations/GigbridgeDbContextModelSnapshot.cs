@@ -290,6 +290,9 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnName("ContractsId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
+                    b.Property<string>("CancellationTerms")
+                        .HasColumnType("text");
+
                     b.Property<Guid>("ClientProfilesId")
                         .HasColumnType("uuid")
                         .HasColumnName("ClientProfilesId");
@@ -297,12 +300,18 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("CompletedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("ConfidentialityTerms")
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
                         .HasDefaultValueSql("now()");
 
                     b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<string>("DisputeTerms")
                         .HasColumnType("text");
 
                     b.Property<DateOnly?>("EndDate")
@@ -317,13 +326,22 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("FreelancerProfilesId");
 
+                    b.Property<string>("IntellectualPropertyTerms")
+                        .HasColumnType("text");
+
                     b.Property<Guid>("JobPostsId")
                         .HasColumnType("uuid")
                         .HasColumnName("JobPostsId");
 
+                    b.Property<string>("PaymentTerms")
+                        .HasColumnType("text");
+
                     b.Property<Guid?>("ProposalsId")
                         .HasColumnType("uuid")
                         .HasColumnName("ProposalsId");
+
+                    b.Property<string>("ScopeOfWork")
+                        .HasColumnType("text");
 
                     b.Property<DateOnly?>("StartDate")
                         .HasColumnType("date");
@@ -971,6 +989,13 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<string>("PlaceholderSchema")
                         .HasColumnType("jsonb");
 
+                    b.Property<string>("TemplateCode")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasDefaultValue("CONTRACT_FIXED_PRICE");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -987,6 +1012,8 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "IsActive" }, "IX_ESignTemplates_IsActive");
 
                     b.HasIndex(new[] { "Name" }, "IX_ESignTemplates_Name");
+
+                    b.HasIndex(new[] { "TemplateCode", "IsActive" }, "IX_ESignTemplates_TemplateCode_IsActive");
 
                     b.ToTable("ESignTemplates", (string)null);
                 });
@@ -2566,6 +2593,149 @@ namespace Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Domain.Entities.UserWallet", b =>
+                {
+                    b.Property<Guid>("UserWalletsId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("UserWalletsId")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<decimal>("AvailableTokens")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<decimal>("HeldTokens")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("UserId");
+
+                    b.HasKey("UserWalletsId")
+                        .HasName("UserWallets_pkey");
+
+                    b.HasIndex(new[] { "UserId" }, "IX_UserWallets_UserId")
+                        .IsUnique();
+
+                    b.ToTable("UserWallets", t =>
+                        {
+                            t.HasCheckConstraint("CK_UserWallets_AvailableTokens_NonNegative", "\"AvailableTokens\" >= 0");
+
+                            t.HasCheckConstraint("CK_UserWallets_HeldTokens_NonNegative", "\"HeldTokens\" >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("Domain.Entities.WalletTransaction", b =>
+                {
+                    b.Property<Guid>("WalletTransactionsId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("WalletTransactionsId")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ContractEscrowId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("ContractEscrowId");
+
+                    b.Property<Guid?>("ContractsId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("ContractsId");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("GatewayOrderCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("GatewayProvider")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("GatewayTransactionCode")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("IdempotencyKey")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Metadata")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer")
+                        .HasComment("Enum WalletTransactionStatus: 0=Pending, 1=Succeeded, 2=Failed, 3=Cancelled");
+
+                    b.Property<decimal>("TokenAmount")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("integer")
+                        .HasComment("Enum WalletTransactionType: 0=AdminCredit, 1=TopUp, 2=EscrowHold, 3=EscrowRelease, 4=EscrowRefund, 5=Adjustment");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("UserId");
+
+                    b.Property<Guid>("UserWalletsId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("UserWalletsId");
+
+                    b.Property<decimal>("VndAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.HasKey("WalletTransactionsId")
+                        .HasName("WalletTransactions_pkey");
+
+                    b.HasIndex(new[] { "ContractEscrowId" }, "IX_WalletTransactions_ContractEscrowId");
+
+                    b.HasIndex(new[] { "ContractsId" }, "IX_WalletTransactions_ContractsId");
+
+                    b.HasIndex(new[] { "GatewayOrderCode" }, "IX_WalletTransactions_GatewayOrderCode");
+
+                    b.HasIndex(new[] { "GatewayTransactionCode" }, "IX_WalletTransactions_GatewayTransactionCode");
+
+                    b.HasIndex(new[] { "Status" }, "IX_WalletTransactions_Status");
+
+                    b.HasIndex(new[] { "Type" }, "IX_WalletTransactions_Type");
+
+                    b.HasIndex(new[] { "UserId", "CreatedAt" }, "IX_WalletTransactions_UserId_CreatedAt")
+                        .IsDescending(false, true);
+
+                    b.HasIndex(new[] { "UserId", "IdempotencyKey" }, "IX_WalletTransactions_UserId_IdempotencyKey")
+                        .IsUnique();
+
+                    b.HasIndex(new[] { "UserWalletsId" }, "IX_WalletTransactions_UserWalletsId");
+
+                    b.ToTable("WalletTransactions");
+                });
+
             modelBuilder.Entity("Domain.Entities.WorkExperience", b =>
                 {
                     b.Property<Guid>("WorkExperiencesId")
@@ -3367,6 +3537,50 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("Domain.Entities.UserWallet", b =>
+                {
+                    b.HasOne("Domain.Entities.User", "User")
+                        .WithOne("UserWallet")
+                        .HasForeignKey("Domain.Entities.UserWallet", "UserId")
+                        .IsRequired()
+                        .HasConstraintName("UserWallets_usr_UserId_fkey");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Domain.Entities.WalletTransaction", b =>
+                {
+                    b.HasOne("Domain.Entities.ContractEscrow", "ContractEscrow")
+                        .WithMany("WalletTransactions")
+                        .HasForeignKey("ContractEscrowId")
+                        .HasConstraintName("WalletTransactions_cEsc_ContractEscrowId_fkey");
+
+                    b.HasOne("Domain.Entities.Contract", "Contract")
+                        .WithMany("WalletTransactions")
+                        .HasForeignKey("ContractsId")
+                        .HasConstraintName("WalletTransactions_cont_ContractsId_fkey");
+
+                    b.HasOne("Domain.Entities.User", "User")
+                        .WithMany("WalletTransactions")
+                        .HasForeignKey("UserId")
+                        .IsRequired()
+                        .HasConstraintName("WalletTransactions_usr_UserId_fkey");
+
+                    b.HasOne("Domain.Entities.UserWallet", "UserWallet")
+                        .WithMany("WalletTransactions")
+                        .HasForeignKey("UserWalletsId")
+                        .IsRequired()
+                        .HasConstraintName("WalletTransactions_uWal_UserWalletsId_fkey");
+
+                    b.Navigation("Contract");
+
+                    b.Navigation("ContractEscrow");
+
+                    b.Navigation("User");
+
+                    b.Navigation("UserWallet");
+                });
+
             modelBuilder.Entity("Domain.Entities.WorkExperience", b =>
                 {
                     b.HasOne("Domain.Entities.FreelancerProfile", "Freelancer")
@@ -3416,11 +3630,15 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("NegotiationOffers");
 
                     b.Navigation("Reviews");
+
+                    b.Navigation("WalletTransactions");
                 });
 
             modelBuilder.Entity("Domain.Entities.ContractEscrow", b =>
                 {
                     b.Navigation("EscrowTransactions");
+
+                    b.Navigation("WalletTransactions");
                 });
 
             modelBuilder.Entity("Domain.Entities.Conversation", b =>
@@ -3590,6 +3808,15 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("UserEloPointTransactions");
 
                     b.Navigation("UserEloScore");
+
+                    b.Navigation("UserWallet");
+
+                    b.Navigation("WalletTransactions");
+                });
+
+            modelBuilder.Entity("Domain.Entities.UserWallet", b =>
+                {
+                    b.Navigation("WalletTransactions");
                 });
 #pragma warning restore 612, 618
         }

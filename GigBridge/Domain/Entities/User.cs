@@ -98,4 +98,8 @@ public partial class User
     public virtual UserEloScore? UserEloScore { get; set; }
 
     public virtual ICollection<UserEloPointTransaction> UserEloPointTransactions { get; set; } = new List<UserEloPointTransaction>();
+
+    public virtual UserWallet? UserWallet { get; set; }
+
+    public virtual ICollection<WalletTransaction> WalletTransactions { get; set; } = new List<WalletTransaction>();
 }

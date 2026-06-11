@@ -1,4 +1,3 @@
-using Application.Common.Domain;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
@@ -104,7 +103,7 @@ public class GoogleLoginCommandHandler : IRequestHandler<GoogleLoginCommand, (Lo
             Avatar = googleUser.PictureUrl
         };
 
-        UserProfileFactory.AttachProfileForRole(user, now);
+        user.AttachProfileForRole(now);
         return user;
     }
 

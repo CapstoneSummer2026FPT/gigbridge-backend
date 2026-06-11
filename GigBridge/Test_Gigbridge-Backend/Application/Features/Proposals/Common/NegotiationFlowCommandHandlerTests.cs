@@ -1,5 +1,6 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces.IService;
+using Application.Features.Chat.Common.FinalOffers.Respond.DTOs;
 using Application.Features.Chat.FinalOffers.Create.Commands;
 using Application.Features.Chat.FinalOffers.Create.DTOs;
 using Application.Features.Chat.FinalOffers.Respond.Commands;

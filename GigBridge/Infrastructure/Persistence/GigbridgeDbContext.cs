@@ -103,6 +103,10 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
 
     public virtual DbSet<User> Users { get; set; }
 
+    public virtual DbSet<UserWallet> UserWallets { get; set; }
+
+    public virtual DbSet<WalletTransaction> WalletTransactions { get; set; }
+
     public virtual DbSet<WorkExperience> WorkExperiences { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -208,6 +212,12 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.FreelancerProfilesId).HasColumnName("FreelancerProfilesId");
             entity.Property(e => e.JobPostsId).HasColumnName("JobPostsId");
             entity.Property(e => e.ProposalsId).HasColumnName("ProposalsId");
+            entity.Property(e => e.ScopeOfWork).HasColumnType("text");
+            entity.Property(e => e.PaymentTerms).HasColumnType("text");
+            entity.Property(e => e.IntellectualPropertyTerms).HasColumnType("text");
+            entity.Property(e => e.ConfidentialityTerms).HasColumnType("text");
+            entity.Property(e => e.CancellationTerms).HasColumnType("text");
+            entity.Property(e => e.DisputeTerms).HasColumnType("text");
             entity.Property(e => e.Status).HasComment("Enum ContractStatus: 0=Draft, 1=PendingFreelancerSelection, 2=InNegotiation, 3=PendingContractDetails, 4=PendingContractConfirmation, 5=PendingEscrow, 6=PendingSignature, 7=Active, 8=Completed, 9=Cancelled, 10=Disputed");
             entity.Property(e => e.Title).HasMaxLength(500);
             entity.Property(e => e.TotalBudget).HasPrecision(18, 2);
@@ -583,6 +593,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
 
             entity.HasIndex(e => e.Name, "IX_ESignTemplates_Name");
 
+            entity.HasIndex(e => new { e.TemplateCode, e.IsActive }, "IX_ESignTemplates_TemplateCode_IsActive");
+
             entity.Property(e => e.EsignTemplatesId)
                 .HasDefaultValueSql("gen_random_uuid()")
                 .HasColumnName("ESignTemplatesId");
@@ -590,6 +602,9 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.IsActive).HasDefaultValue(true);
             entity.Property(e => e.Name).HasMaxLength(300);
             entity.Property(e => e.PlaceholderSchema).HasColumnType("jsonb");
+            entity.Property(e => e.TemplateCode)
+                .HasMaxLength(100)
+                .HasDefaultValue("CONTRACT_FIXED_PRICE");
             entity.Property(e => e.Version).HasDefaultValue(1);
 
             entity.HasOne(d => d.CreatedByNavigation).WithMany(p => p.EsignTemplates)
@@ -1482,6 +1497,98 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
                 .HasMaxLength(5)
                 .HasDefaultValueSql("'vi'::character varying");
             entity.Property(e => e.Role).HasComment("Enum UserRole: 0=Client, 1=Freelancer, 2=Admin");
+        });
+
+        modelBuilder.Entity<UserWallet>(entity =>
+        {
+            entity.HasKey(e => e.UserWalletsId).HasName("UserWallets_pkey");
+
+            entity.HasIndex(e => e.UserId, "IX_UserWallets_UserId").IsUnique();
+
+            entity.Property(e => e.UserWalletsId)
+                .HasDefaultValueSql("gen_random_uuid()")
+                .HasColumnName("UserWalletsId");
+            entity.Property(e => e.AvailableTokens)
+                .HasPrecision(18, 4)
+                .HasDefaultValue(0m);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.HeldTokens)
+                .HasPrecision(18, 4)
+                .HasDefaultValue(0m);
+            entity.Property(e => e.UserId).HasColumnName("UserId");
+
+            entity.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_UserWallets_AvailableTokens_NonNegative", "\"AvailableTokens\" >= 0");
+                t.HasCheckConstraint("CK_UserWallets_HeldTokens_NonNegative", "\"HeldTokens\" >= 0");
+            });
+
+            entity.HasOne(d => d.User).WithOne(p => p.UserWallet)
+                .HasForeignKey<UserWallet>(d => d.UserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("UserWallets_usr_UserId_fkey");
+        });
+
+        modelBuilder.Entity<WalletTransaction>(entity =>
+        {
+            entity.HasKey(e => e.WalletTransactionsId).HasName("WalletTransactions_pkey");
+
+            entity.HasIndex(e => e.ContractEscrowId, "IX_WalletTransactions_ContractEscrowId");
+
+            entity.HasIndex(e => e.ContractsId, "IX_WalletTransactions_ContractsId");
+
+            entity.HasIndex(e => e.GatewayOrderCode, "IX_WalletTransactions_GatewayOrderCode");
+
+            entity.HasIndex(e => e.GatewayTransactionCode, "IX_WalletTransactions_GatewayTransactionCode");
+
+            entity.HasIndex(e => e.Status, "IX_WalletTransactions_Status");
+
+            entity.HasIndex(e => e.Type, "IX_WalletTransactions_Type");
+
+            entity.HasIndex(e => new { e.UserId, e.CreatedAt }, "IX_WalletTransactions_UserId_CreatedAt").IsDescending(false, true);
+
+            entity.HasIndex(e => new { e.UserId, e.IdempotencyKey }, "IX_WalletTransactions_UserId_IdempotencyKey").IsUnique();
+
+            entity.HasIndex(e => e.UserWalletsId, "IX_WalletTransactions_UserWalletsId");
+
+            entity.Property(e => e.WalletTransactionsId)
+                .HasDefaultValueSql("gen_random_uuid()")
+                .HasColumnName("WalletTransactionsId");
+            entity.Property(e => e.ContractEscrowId).HasColumnName("ContractEscrowId");
+            entity.Property(e => e.ContractsId).HasColumnName("ContractsId");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.GatewayOrderCode).HasMaxLength(100);
+            entity.Property(e => e.GatewayProvider).HasMaxLength(100);
+            entity.Property(e => e.GatewayTransactionCode).HasMaxLength(200);
+            entity.Property(e => e.IdempotencyKey).HasMaxLength(200);
+            entity.Property(e => e.Metadata).HasColumnType("text");
+            entity.Property(e => e.Note).HasMaxLength(1000);
+            entity.Property(e => e.Status)
+                .HasComment("Enum WalletTransactionStatus: 0=Pending, 1=Succeeded, 2=Failed, 3=Cancelled");
+            entity.Property(e => e.TokenAmount).HasPrecision(18, 4);
+            entity.Property(e => e.Type)
+                .HasComment("Enum WalletTransactionType: 0=AdminCredit, 1=TopUp, 2=EscrowHold, 3=EscrowRelease, 4=EscrowRefund, 5=Adjustment");
+            entity.Property(e => e.UserId).HasColumnName("UserId");
+            entity.Property(e => e.UserWalletsId).HasColumnName("UserWalletsId");
+            entity.Property(e => e.VndAmount).HasPrecision(18, 2);
+
+            entity.HasOne(d => d.Contract).WithMany(p => p.WalletTransactions)
+                .HasForeignKey(d => d.ContractsId)
+                .HasConstraintName("WalletTransactions_cont_ContractsId_fkey");
+
+            entity.HasOne(d => d.ContractEscrow).WithMany(p => p.WalletTransactions)
+                .HasForeignKey(d => d.ContractEscrowId)
+                .HasConstraintName("WalletTransactions_cEsc_ContractEscrowId_fkey");
+
+            entity.HasOne(d => d.User).WithMany(p => p.WalletTransactions)
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("WalletTransactions_usr_UserId_fkey");
+
+            entity.HasOne(d => d.UserWallet).WithMany(p => p.WalletTransactions)
+                .HasForeignKey(d => d.UserWalletsId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("WalletTransactions_uWal_UserWalletsId_fkey");
         });
 
         modelBuilder.Entity<WorkExperience>(entity =>

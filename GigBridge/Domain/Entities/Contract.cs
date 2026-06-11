@@ -21,6 +21,18 @@ public partial class Contract
 
     public decimal TotalBudget { get; set; }
 
+    public string? ScopeOfWork { get; set; }
+
+    public string? PaymentTerms { get; set; }
+
+    public string? IntellectualPropertyTerms { get; set; }
+
+    public string? ConfidentialityTerms { get; set; }
+
+    public string? CancellationTerms { get; set; }
+
+    public string? DisputeTerms { get; set; }
+
     /// <summary>
     /// Enum ContractStatus: 0=Draft, 1=PendingFreelancerSelection, 2=InNegotiation, 3=PendingContractDetails, 4=PendingContractConfirmation, 5=PendingEscrow, 6=PendingSignature, 7=Active, 8=Completed, 9=Cancelled, 10=Disputed
     /// </summary>
@@ -62,4 +74,6 @@ public partial class Contract
     public virtual Proposal? Proposals { get; set; }
 
     public virtual ICollection<Review> Reviews { get; set; } = new List<Review>();
+
+    public virtual ICollection<WalletTransaction> WalletTransactions { get; set; } = new List<WalletTransaction>();
 }

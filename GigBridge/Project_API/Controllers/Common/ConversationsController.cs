@@ -1,5 +1,5 @@
 using Application.Common.Models;
-using Application.Features.Chat.Conversations.GetMine.DTOs;
+using Application.Features.Chat.Common.Conversations.GetMine.DTOs;
 using Application.Features.Chat.Conversations.GetMine.Queries;
 using Application.Features.Chat.Conversations.MarkAsRead.Commands;
 using Application.Features.Chat.Negotiations.OpenFromInvite.Commands;

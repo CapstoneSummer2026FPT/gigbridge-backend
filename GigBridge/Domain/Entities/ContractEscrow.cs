@@ -33,4 +33,6 @@ public partial class ContractEscrow
     public virtual Contract Contract { get; set; } = null!;
 
     public virtual ICollection<EscrowTransaction> EscrowTransactions { get; set; } = new List<EscrowTransaction>();
+
+    public virtual ICollection<WalletTransaction> WalletTransactions { get; set; } = new List<WalletTransaction>();
 }
