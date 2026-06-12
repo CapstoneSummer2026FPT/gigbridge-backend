@@ -293,11 +293,7 @@ public class ContractWorkflowTests
 
         public void ApplyValidDetails()
         {
-            Contract.ScopeOfWork = "Build production release";
-            Contract.PaymentTerms = "Pay through escrow milestones";
-            Contract.IntellectualPropertyTerms = "Client owns final deliverables after full payment";
-            Contract.ConfidentialityTerms = "Both parties keep project data confidential";
-            Contract.CancellationTerms = "Cancellation requires written agreement";
+
             Contract.DisputeTerms = "Disputes are handled through GigBridge";
             Milestones.Add(new Milestone
             {
