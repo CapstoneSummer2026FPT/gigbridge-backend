@@ -86,6 +86,7 @@ public class WalletWorkflowTests
             null,
             "payos-ref-1",
             topUp.AmountVnd,
+            "valid-signature",
             null);
 
         await confirmHandler.Handle(new ConfirmWalletTopUpCommand(callback), CancellationToken.None);
@@ -95,6 +96,161 @@ public class WalletWorkflowTests
         Assert.Equal(50m, wallet.AvailableTokens);
         Assert.Single(fixture.Transactions.Entities);
         Assert.Equal((int)WalletTransactionStatus.Succeeded, fixture.Transactions.Entities[0].Status);
+    }
+
+    [Fact]
+    public async Task PayOsTopUp_InvalidAmountIsRejected()
+    {
+        var fixture = new WalletFixture();
+        var paymentService = new FakeWalletTopUpPaymentService();
+        var createHandler = new CreateWalletTopUpCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            paymentService);
+
+        var topUp = await createHandler.Handle(
+            new CreateWalletTopUpCommand(
+                fixture.ClientUserId,
+                new CreateWalletTopUpRequest(50m, "https://return", "https://cancel", "topup-amount")),
+            CancellationToken.None);
+
+        var confirmHandler = new ConfirmWalletTopUpCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now.AddMinutes(5)),
+            paymentService);
+
+        var callback = new PayOsTopUpCallbackRequest(
+            long.Parse(topUp.GatewayOrderCode),
+            true,
+            "00",
+            null,
+            "payos-ref-1",
+            topUp.AmountVnd + 1,
+            "valid-signature",
+            null);
+
+        await Assert.ThrowsAsync<BadRequestException>(() =>
+            confirmHandler.Handle(new ConfirmWalletTopUpCommand(callback), CancellationToken.None));
+
+        var wallet = Assert.Single(fixture.Wallets.Entities);
+        Assert.Equal(0m, wallet.AvailableTokens);
+    }
+
+    [Fact]
+    public async Task PayOsTopUp_InvalidSignatureIsRejected()
+    {
+        var fixture = new WalletFixture();
+        var paymentService = new FakeWalletTopUpPaymentService();
+        var createHandler = new CreateWalletTopUpCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            paymentService);
+
+        var topUp = await createHandler.Handle(
+            new CreateWalletTopUpCommand(
+                fixture.ClientUserId,
+                new CreateWalletTopUpRequest(25m, "https://return", "https://cancel", "topup-signature")),
+            CancellationToken.None);
+
+        var confirmHandler = new ConfirmWalletTopUpCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now.AddMinutes(5)),
+            paymentService);
+
+        var callback = new PayOsTopUpCallbackRequest(
+            long.Parse(topUp.GatewayOrderCode),
+            true,
+            "00",
+            null,
+            "payos-ref-1",
+            topUp.AmountVnd,
+            "invalid-signature",
+            null);
+
+        await Assert.ThrowsAsync<BadRequestException>(() =>
+            confirmHandler.Handle(new ConfirmWalletTopUpCommand(callback), CancellationToken.None));
+
+        var wallet = Assert.Single(fixture.Wallets.Entities);
+        Assert.Equal(0m, wallet.AvailableTokens);
+    }
+
+    [Fact]
+    public async Task PayOsTopUp_FailedCallbackMarksTransactionFailedWithoutCreditingWallet()
+    {
+        var fixture = new WalletFixture();
+        var paymentService = new FakeWalletTopUpPaymentService();
+        var createHandler = new CreateWalletTopUpCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            paymentService);
+
+        var topUp = await createHandler.Handle(
+            new CreateWalletTopUpCommand(
+                fixture.ClientUserId,
+                new CreateWalletTopUpRequest(10m, "https://return", "https://cancel", "topup-failed")),
+            CancellationToken.None);
+
+        var confirmHandler = new ConfirmWalletTopUpCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now.AddMinutes(5)),
+            paymentService);
+
+        var callback = new PayOsTopUpCallbackRequest(
+            long.Parse(topUp.GatewayOrderCode),
+            false,
+            "01",
+            "cancelled",
+            null,
+            topUp.AmountVnd,
+            "valid-signature",
+            null);
+
+        var result = await confirmHandler.Handle(new ConfirmWalletTopUpCommand(callback), CancellationToken.None);
+
+        var wallet = Assert.Single(fixture.Wallets.Entities);
+        Assert.Equal(0m, wallet.AvailableTokens);
+        Assert.Equal((int)WalletTransactionStatus.Failed, result.Status);
+        Assert.Equal("cancelled", fixture.Transactions.Entities[0].Note);
+    }
+
+    [Fact]
+    public async Task PayOsTopUp_CreateWithDuplicateIdempotencyKeyReturnsExistingTransaction()
+    {
+        var fixture = new WalletFixture();
+        var paymentService = new FakeWalletTopUpPaymentService();
+        var createHandler = new CreateWalletTopUpCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            paymentService);
+
+        var request = new CreateWalletTopUpRequest(15m, "https://return", "https://cancel", "topup-duplicate");
+
+        var first = await createHandler.Handle(
+            new CreateWalletTopUpCommand(fixture.ClientUserId, request),
+            CancellationToken.None);
+        var second = await createHandler.Handle(
+            new CreateWalletTopUpCommand(fixture.ClientUserId, request),
+            CancellationToken.None);
+
+        Assert.Equal(first.WalletTransactionId, second.WalletTransactionId);
+        Assert.Single(fixture.Transactions.Entities);
+    }
+
+    [Fact]
+    public async Task PayOsTopUp_InvalidTokenAmountIsRejected()
+    {
+        var fixture = new WalletFixture();
+        var createHandler = new CreateWalletTopUpCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new FakeWalletTopUpPaymentService());
+
+        await Assert.ThrowsAsync<BadRequestException>(() =>
+            createHandler.Handle(
+                new CreateWalletTopUpCommand(
+                    fixture.ClientUserId,
+                    new CreateWalletTopUpRequest(0m, null, null, null)),
+                CancellationToken.None));
     }
 
     private sealed class WalletFixture
@@ -147,6 +303,7 @@ public class WalletWorkflowTests
             CancellationToken cancellationToken)
         {
             return Task.FromResult(new WalletTopUpCallbackResult(
+                payload.Signature == "valid-signature",
                 payload.OrderCode,
                 payload.IsSucceeded,
                 payload.GatewayTransactionCode,
