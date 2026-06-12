@@ -1,5 +1,3 @@
-using System;
-using System.Collections.Generic;
 using Application.Common.Interfaces;
 using Domain.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -216,12 +214,6 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.FreelancerProfilesId).HasColumnName("FreelancerProfilesId");
             entity.Property(e => e.JobPostsId).HasColumnName("JobPostsId");
             entity.Property(e => e.ProposalsId).HasColumnName("ProposalsId");
-            entity.Property(e => e.ScopeOfWork).HasColumnType("text");
-            entity.Property(e => e.PaymentTerms).HasColumnType("text");
-            entity.Property(e => e.IntellectualPropertyTerms).HasColumnType("text");
-            entity.Property(e => e.ConfidentialityTerms).HasColumnType("text");
-            entity.Property(e => e.CancellationTerms).HasColumnType("text");
-            entity.Property(e => e.DisputeTerms).HasColumnType("text");
             entity.Property(e => e.Status).HasComment("Enum ContractStatus: 0=Draft, 1=PendingFreelancerSelection, 2=InNegotiation, 3=PendingContractDetails, 4=PendingContractConfirmation, 5=PendingEscrow, 6=PendingSignature, 7=Active, 8=Completed, 9=Cancelled, 10=Disputed");
             entity.Property(e => e.Title).HasMaxLength(500);
             entity.Property(e => e.TotalBudget).HasPrecision(18, 2);
