@@ -61,6 +61,8 @@ public partial class JobPost
 
     public virtual ICollection<NegotiationOffer> NegotiationOffers { get; set; } = new List<NegotiationOffer>();
 
+    public virtual ICollection<JobPostQuestion> JobPostQuestions { get; set; } = new List<JobPostQuestion>();
+
     public virtual ICollection<Proposal> Proposals { get; set; } = new List<Proposal>();
 
     public virtual ICollection<SavedJob> SavedJobs { get; set; } = new List<SavedJob>();

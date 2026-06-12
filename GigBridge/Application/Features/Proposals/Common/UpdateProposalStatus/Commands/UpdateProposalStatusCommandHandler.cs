@@ -37,9 +37,9 @@ public class UpdateProposalStatusCommandHandler
             throw new NotFoundException("Proposal does not exist.");
         }
 
-        if (proposal.Status == 2 || proposal.Status == 3 || proposal.Status == 4)
+        if (proposal.Status == 3 || proposal.Status == 4 || proposal.Status == 5)
         {
-            throw new Exception("Only pending or shortlisted proposal can be updated.");
+            throw new Exception("Only draft, pending or shortlisted proposal can be updated.");
         }
 
         var requestedStatus = command.Request.Status;
@@ -78,19 +78,41 @@ public class UpdateProposalStatusCommandHandler
         return true;
     }
 
-    private static void UpdateStatusByClient(
-        Proposal proposal,
-        int requestedStatus)
+    private async Task UpdateStatusByClient(
+    Proposal proposal,
+    int requestedStatus,
+    CancellationToken cancellationToken)
     {
-        if (requestedStatus == 2)
+        if (proposal.Status == 0)
         {
-            throw new BadRequestException("Accepting a proposal must go through negotiation final offer flow.");
+            throw new BadRequestException("Client cannot update draft proposal.");
         }
-
-        if (requestedStatus != 1 && requestedStatus != 3)
+        // 2 = Shortlisted, 3 = Accepted, 4 = Rejected
+        if (requestedStatus != 2 && requestedStatus != 3 && requestedStatus != 4)
         {
             throw new UnauthorizedAccessException(
-                "Client can only update proposal status to Shortlisted or Rejected.");
+                "Client can only update proposal status to Shortlisted, Accepted, or Rejected.");
+        }
+
+        proposal.Status = requestedStatus;
+
+        // 3 = Accepted
+        if (requestedStatus == 3)
+        {
+            proposal.JobPosts.Status = 3;
+            proposal.JobPosts.UpdatedAt = _dateTimeService.UtcNow;
+
+            await AttachAcceptedProposalToDraftContract(proposal, cancellationToken);
+        }
+    }
+
+    private async Task AttachAcceptedProposalToDraftContract(
+        Proposal proposal,
+        CancellationToken cancellationToken)
+    {
+        if (!proposal.ProposedBudget.HasValue || proposal.ProposedBudget.Value <= 0)
+        {
+            throw new BadRequestException("Accepted proposals must include a proposed budget.");
         }
 
         proposal.Status = requestedStatus;
@@ -100,12 +122,12 @@ public class UpdateProposalStatusCommandHandler
         Proposal proposal,
         int requestedStatus)
     {
-        if (requestedStatus != 4)
+        if (requestedStatus != 5)
         {
             throw new UnauthorizedAccessException(
                 "Freelancer can only withdraw their own proposal.");
         }
 
-        proposal.Status = 4;
+        proposal.Status = 5;
     }
 }

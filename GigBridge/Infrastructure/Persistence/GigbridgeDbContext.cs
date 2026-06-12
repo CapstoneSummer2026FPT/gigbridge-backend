@@ -57,6 +57,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
 
     public virtual DbSet<JobPostAttachment> JobPostAttachments { get; set; }
 
+    public virtual DbSet<JobPostQuestion> JobPostQuestions { get; set; }
+
     public virtual DbSet<JobPostSkill> JobPostSkills { get; set; }
 
     public virtual DbSet<Message> Messages { get; set; }
@@ -80,6 +82,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
     public virtual DbSet<Proposal> Proposals { get; set; }
 
     public virtual DbSet<ProposalAttachment> ProposalAttachments { get; set; }
+
+    public virtual DbSet<ProposalAnswer> ProposalAnswers { get; set; }
 
     public virtual DbSet<RefreshToken> RefreshTokens { get; set; }
 
@@ -779,6 +783,41 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("JobPostAttachments_jp_JobPostsId_fkey");
         });
+        modelBuilder.Entity<JobPostQuestion>(entity =>
+        {
+            entity.HasKey(e => e.JobPostQuestionsId).HasName("JobPostQuestions_pkey");
+
+            entity.HasIndex(e => e.JobPostsId, "IX_JobPostQuestions_JobPostsId");
+
+            entity.HasIndex(e => new { e.JobPostsId, e.OrderIndex }, "IX_JobPostQuestions_JobPostsId_OrderIndex")
+                .IsUnique();
+
+            entity.Property(e => e.JobPostQuestionsId)
+                .HasDefaultValueSql("gen_random_uuid()")
+                .HasColumnName("JobPostQuestionsId");
+
+            entity.Property(e => e.JobPostsId)
+                .HasColumnName("JobPostsId");
+
+            entity.Property(e => e.QuestionText)
+                .IsRequired()
+                .HasMaxLength(1000);
+
+            entity.Property(e => e.OrderIndex)
+                .HasDefaultValue(0);
+
+            entity.Property(e => e.IsRequired)
+                .HasDefaultValue(true);
+
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("now()");
+
+            entity.HasOne(d => d.JobPosts)
+                .WithMany(p => p.JobPostQuestions)
+                .HasForeignKey(d => d.JobPostsId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("JobPostQuestions_jp_JobPostsId_fkey");
+        });
 
         modelBuilder.Entity<JobPostSkill>(entity =>
         {
@@ -1188,6 +1227,46 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
                 .HasForeignKey(d => d.ProposalsId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("ProposalAttachments_propo_ProposalsId_fkey");
+        });
+        modelBuilder.Entity<ProposalAnswer>(entity =>
+        {
+            entity.HasKey(e => e.ProposalAnswersId).HasName("ProposalAnswers_pkey");
+
+            entity.HasIndex(e => e.ProposalsId, "IX_ProposalAnswers_ProposalsId");
+
+            entity.HasIndex(e => e.JobPostQuestionsId, "IX_ProposalAnswers_JobPostQuestionsId");
+
+            entity.HasIndex(e => new { e.ProposalsId, e.JobPostQuestionsId }, "ProposalAnswers_propo_ProposalsId_jpq_JobPostQuestionsId_key")
+                .IsUnique();
+
+            entity.Property(e => e.ProposalAnswersId)
+                .HasDefaultValueSql("gen_random_uuid()")
+                .HasColumnName("ProposalAnswersId");
+
+            entity.Property(e => e.ProposalsId)
+                .HasColumnName("ProposalsId");
+
+            entity.Property(e => e.JobPostQuestionsId)
+                .HasColumnName("JobPostQuestionsId");
+
+            entity.Property(e => e.AnswerText)
+                .IsRequired()
+                .HasMaxLength(4000);
+
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("now()");
+
+            entity.HasOne(d => d.Proposals)
+                .WithMany(p => p.ProposalAnswers)
+                .HasForeignKey(d => d.ProposalsId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("ProposalAnswers_propo_ProposalsId_fkey");
+
+            entity.HasOne(d => d.JobPostQuestions)
+                .WithMany(p => p.ProposalAnswers)
+                .HasForeignKey(d => d.JobPostQuestionsId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("ProposalAnswers_jpq_JobPostQuestionsId_fkey");
         });
 
         modelBuilder.Entity<RefreshToken>(entity =>
