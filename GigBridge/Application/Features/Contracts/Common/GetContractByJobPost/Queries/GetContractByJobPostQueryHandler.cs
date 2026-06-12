@@ -105,7 +105,6 @@ public class GetContractByJobPostQueryHandler
             Title = contract.Title,
             Description = contract.Description,
             TotalBudget = contract.TotalBudget,
-            DisputeTerms = contract.DisputeTerms,
             Status = contract.Status,
             StartDate = contract.StartDate,
             EndDate = contract.EndDate,

@@ -5,14 +5,6 @@ namespace Application.Features.Contracts.Common.Internal;
 
 internal static class ContractDetailsValidator
 {
-    public static void ValidateTerms(Contract contract)
-    {
-        if (
-            string.IsNullOrWhiteSpace(contract.DisputeTerms))
-        {
-            throw new BadRequestException("Contract details must include all required terms.");
-        }
-    }
 
     public static void ValidateMilestones(Contract contract, IReadOnlyCollection<Milestone> milestones)
     {

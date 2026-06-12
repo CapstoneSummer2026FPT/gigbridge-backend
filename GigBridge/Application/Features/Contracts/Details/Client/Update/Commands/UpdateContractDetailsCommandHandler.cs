@@ -44,10 +44,7 @@ public sealed class UpdateContractDetailsCommandHandler :
         await ContractParticipantGuard.EnsureClientAsync(_context, contract, command.UserId, cancellationToken);
 
         var now = _dateTimeService.UtcNow;
-        contract.DisputeTerms = command.Request.DisputeTerms;
         contract.UpdatedAt = now;
-
-        ContractDetailsValidator.ValidateTerms(contract);
 
         var newMilestones = command.Request.Milestones
             .Select((milestone, index) => new Milestone

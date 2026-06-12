@@ -115,7 +115,6 @@ internal static class ContractEsignRenderer
             ["{{Contract.TotalBudget}}"] = ($"{contract.TotalBudget:0.##} VND", false),
             ["{{Contract.StartDate}}"] = (contract.StartDate?.ToString("yyyy-MM-dd"), false),
             ["{{Contract.EndDate}}"] = (contract.EndDate?.ToString("yyyy-MM-dd"), false),
-            ["{{Contract.DisputeTerms}}"] = (contract.DisputeTerms, false),
             ["{{Client.Name}}"] = (clientUser?.FullName, false),
             ["{{Client.Email}}"] = (clientUser?.Email, false),
             ["{{Freelancer.Name}}"] = (freelancerUser?.FullName, false),

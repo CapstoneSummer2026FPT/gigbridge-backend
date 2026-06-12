@@ -18,8 +18,6 @@ public class ContractDetailResponse
 
     public decimal TotalBudget { get; set; }
 
-    public string? DisputeTerms { get; set; }
-
     public int Status { get; set; }
 
     public DateOnly? StartDate { get; set; }
