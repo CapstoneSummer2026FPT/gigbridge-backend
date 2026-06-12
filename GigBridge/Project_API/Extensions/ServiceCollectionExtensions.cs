@@ -103,8 +103,8 @@ public static class ServiceCollectionExtensions
                 {
                     var uri = new Uri(origin);
                     return uri.Host == "localhost"
-                        || uri.Host == "workhub.com.vn"
-                        || uri.Host == "www.workhub.com.vn"
+                        || uri.Host == "gigbridge.id.vn"
+                        || uri.Host == "www.gigbridge.id.vn"
                         || uri.Host.EndsWith(".vercel.app");
                 })
                 .AllowAnyHeader()

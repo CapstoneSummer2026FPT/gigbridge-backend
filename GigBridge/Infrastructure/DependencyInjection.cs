@@ -12,7 +12,6 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using PayOS;
 
 namespace Infrastructure;
@@ -30,13 +29,33 @@ public static class DependencyInjection
         services.AddScoped<IApplicationDbContext>(provider =>
             provider.GetRequiredService<GigbridgeDbContext>());
 
-        services.Configure<PayOsOptions>(configuration.GetSection(PayOsOptions.SectionName));
-        services.PostConfigure<PayOsOptions>(options =>
-        {
-            options.ClientId ??= Environment.GetEnvironmentVariable("PAYOS_CLIENT_ID");
-            options.ApiKey ??= Environment.GetEnvironmentVariable("PAYOS_API_KEY");
-            options.ChecksumKey ??= Environment.GetEnvironmentVariable("PAYOS_CHECKSUM_KEY");
-        });
+        services
+            .AddOptions<PayOsOptions>()
+            .Bind(configuration.GetSection(PayOsOptions.SectionName))
+            .PostConfigure(options =>
+            {
+                if (string.IsNullOrWhiteSpace(options.ClientId))
+                {
+                    options.ClientId = Environment.GetEnvironmentVariable("PAYOS_CLIENT_ID");
+                }
+
+                if (string.IsNullOrWhiteSpace(options.ApiKey))
+                {
+                    options.ApiKey = Environment.GetEnvironmentVariable("PAYOS_API_KEY");
+                }
+
+                if (string.IsNullOrWhiteSpace(options.ChecksumKey))
+                {
+                    options.ChecksumKey = Environment.GetEnvironmentVariable("PAYOS_CHECKSUM_KEY");
+                }
+            })
+            .Validate(
+                options =>
+                    !string.IsNullOrWhiteSpace(options.ClientId) &&
+                    !string.IsNullOrWhiteSpace(options.ApiKey) &&
+                    !string.IsNullOrWhiteSpace(options.ChecksumKey),
+                "PayOS configuration is missing. Set PAYOS_CLIENT_ID, PAYOS_API_KEY, and PAYOS_CHECKSUM_KEY.")
+            .ValidateOnStart();
 
         // Services
         services.AddScoped<IPasswordHasher, BCryptPasswordHasher>();
@@ -47,16 +66,7 @@ public static class DependencyInjection
         services.AddScoped<IMediaService, MediaService>();
         services.AddScoped<INotificationService, NotificationService>();
         services.AddTransient<IDateTimeService, DateTimeService>();
-        services.AddScoped<IWalletTopUpPaymentService>(provider =>
-        {
-            var options = provider.GetRequiredService<IOptions<PayOsOptions>>().Value;
-            if (options.UseMock)
-            {
-                return ActivatorUtilities.CreateInstance<MockWalletTopUpPaymentService>(provider);
-            }
-
-            return ActivatorUtilities.CreateInstance<PayOsWalletTopUpPaymentService>(provider);
-        });
+        services.AddScoped<IWalletTopUpPaymentService, PayOsWalletTopUpPaymentService>();
         services.AddScoped<IPayOsPaymentLinkClient>(provider =>
             new PayOsPaymentLinkClient(provider.GetRequiredKeyedService<PayOSClient>("OrderClient")));
 
@@ -64,7 +74,7 @@ public static class DependencyInjection
         // External payment service
         services.AddKeyedSingleton("OrderClient", (sp, key) =>
         {
-            var options = sp.GetRequiredService<IOptions<PayOsOptions>>().Value;
+            var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<PayOsOptions>>().Value;
             return new PayOSClient(new PayOSOptions
             {
                 ClientId = options.ClientId,
