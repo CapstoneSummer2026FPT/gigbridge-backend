@@ -80,8 +80,7 @@ public class UpdateProposalStatusCommandHandler
 
     private async Task UpdateStatusByClient(
     Proposal proposal,
-    int requestedStatus,
-    CancellationToken cancellationToken)
+    int requestedStatus)
     {
         if (proposal.Status == 0)
         {
@@ -102,21 +101,9 @@ public class UpdateProposalStatusCommandHandler
             proposal.JobPosts.Status = 3;
             proposal.JobPosts.UpdatedAt = _dateTimeService.UtcNow;
 
-            await AttachAcceptedProposalToDraftContract(proposal, cancellationToken);
         }
     }
 
-    private async Task AttachAcceptedProposalToDraftContract(
-        Proposal proposal,
-        CancellationToken cancellationToken)
-    {
-        if (!proposal.ProposedBudget.HasValue || proposal.ProposedBudget.Value <= 0)
-        {
-            throw new BadRequestException("Accepted proposals must include a proposed budget.");
-        }
-
-        proposal.Status = requestedStatus;
-    }
 
     private static void UpdateStatusByFreelancer(
         Proposal proposal,
