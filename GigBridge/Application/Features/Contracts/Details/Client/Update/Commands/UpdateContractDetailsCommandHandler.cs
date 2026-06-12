@@ -44,11 +44,6 @@ public sealed class UpdateContractDetailsCommandHandler :
         await ContractParticipantGuard.EnsureClientAsync(_context, contract, command.UserId, cancellationToken);
 
         var now = _dateTimeService.UtcNow;
-        contract.ScopeOfWork = command.Request.ScopeOfWork;
-        contract.PaymentTerms = command.Request.PaymentTerms;
-        contract.IntellectualPropertyTerms = command.Request.IntellectualPropertyTerms;
-        contract.ConfidentialityTerms = command.Request.ConfidentialityTerms;
-        contract.CancellationTerms = command.Request.CancellationTerms;
         contract.DisputeTerms = command.Request.DisputeTerms;
         contract.UpdatedAt = now;
 

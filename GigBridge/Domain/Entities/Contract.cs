@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-
 namespace Domain.Entities;
 
 public partial class Contract
@@ -20,17 +17,6 @@ public partial class Contract
     public string? Description { get; set; }
 
     public decimal TotalBudget { get; set; }
-
-    public string? ScopeOfWork { get; set; }
-
-    public string? PaymentTerms { get; set; }
-
-    public string? IntellectualPropertyTerms { get; set; }
-
-    public string? ConfidentialityTerms { get; set; }
-
-    public string? CancellationTerms { get; set; }
-
     public string? DisputeTerms { get; set; }
 
     /// <summary>
