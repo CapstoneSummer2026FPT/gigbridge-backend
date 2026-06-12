@@ -19,12 +19,22 @@ public sealed class MockWalletTopUpPaymentService : IWalletTopUpPaymentService
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        var checkoutUrl = $"https://payos.mock/gigbridge/top-ups/{request.OrderCode}";
+        var paymentLinkId = $"mock-{request.OrderCode}";
+        var returnUrl = request.ReturnUrl ?? _options.ReturnUrl ?? "http://localhost:5173/wallet/deposit?result=success";
+        var cancelUrl = request.CancelUrl ?? _options.CancelUrl ?? "http://localhost:5173/wallet/deposit?result=cancel";
+        var frontendOrigin = GetOrigin(returnUrl) ?? GetOrigin(cancelUrl) ?? "http://localhost:5173";
+        var checkoutUrl =
+            $"{frontendOrigin}/wallet/mock-checkout" +
+            $"?orderCode={request.OrderCode}" +
+            $"&amount={Uri.EscapeDataString(request.AmountVnd.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))}" +
+            $"&paymentLinkId={Uri.EscapeDataString(paymentLinkId)}" +
+            $"&returnUrl={Uri.EscapeDataString(returnUrl)}" +
+            $"&cancelUrl={Uri.EscapeDataString(cancelUrl)}";
 
         return Task.FromResult(new WalletTopUpPaymentResult(
             GatewayProvider,
             request.OrderCode.ToString(),
-            $"mock-{request.OrderCode}",
+            paymentLinkId,
             checkoutUrl));
     }
 
@@ -47,5 +57,12 @@ public sealed class MockWalletTopUpPaymentService : IWalletTopUpPaymentService
             payload.GatewayTransactionCode,
             payload.AmountVnd,
             payload.FailureReason));
+    }
+
+    private static string? GetOrigin(string url)
+    {
+        return Uri.TryCreate(url, UriKind.Absolute, out var uri)
+            ? uri.GetLeftPart(UriPartial.Authority)
+            : null;
     }
 }
