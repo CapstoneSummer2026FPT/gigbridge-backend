@@ -13,13 +13,6 @@ public partial class FreelancerProfile
 
     public string? Bio { get; set; }
 
-    public decimal? HourlyRate { get; set; }
-
-    /// <summary>
-    /// Enum ExperienceLevel: 0=Entry, 1=Intermediate, 2=Expert
-    /// </summary>
-    public int? ExperienceLevel { get; set; }
-
     /// <summary>
     /// Enum Availability: 0=FullTime, 1=PartTime, 2=NotAvailable
     /// </summary>

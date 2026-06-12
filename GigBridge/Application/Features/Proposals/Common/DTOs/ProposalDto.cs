@@ -10,7 +10,7 @@ public class ProposalDto
     public Guid FreelancerProfilesId { get; set; }
     public string FreelancerName { get; set; } = string.Empty;
     public string CoverLetter { get; set; } = string.Empty;
-    public decimal ProposedRate { get; set; }
+    public decimal ProposedBudget { get; set; }
     public string ProposedDuration { get; set; } = string.Empty;
     public int Status { get; set; }
     public DateTime SubmittedAt { get; set; }

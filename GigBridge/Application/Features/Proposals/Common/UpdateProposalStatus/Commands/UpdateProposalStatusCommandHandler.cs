@@ -2,6 +2,7 @@
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Domain.Entities;
+using Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -59,7 +60,7 @@ public class UpdateProposalStatusCommandHandler
 
         if (isClientOwner)
         {
-            await UpdateStatusByClient(proposal, requestedStatus, cancellationToken);
+            UpdateStatusByClient(proposal, requestedStatus);
         }
         else if (isFreelancerOwner)
         {
@@ -77,37 +78,22 @@ public class UpdateProposalStatusCommandHandler
         return true;
     }
 
-    private async Task UpdateStatusByClient(
+    private static void UpdateStatusByClient(
         Proposal proposal,
-        int requestedStatus,
-        CancellationToken cancellationToken)
+        int requestedStatus)
     {
-        if (requestedStatus != 1 && requestedStatus != 2 && requestedStatus != 3)
+        if (requestedStatus == 2)
+        {
+            throw new BadRequestException("Accepting a proposal must go through negotiation final offer flow.");
+        }
+
+        if (requestedStatus != 1 && requestedStatus != 3)
         {
             throw new UnauthorizedAccessException(
-                "Client can only update proposal status to Shortlisted, Accepted, or Rejected.");
+                "Client can only update proposal status to Shortlisted or Rejected.");
         }
 
         proposal.Status = requestedStatus;
-
-        if (requestedStatus == 2)
-        {
-            var otherProposals = await _context.Set<Proposal>()
-                .Where(otherProposal =>
-                    otherProposal.JobPostsId == proposal.JobPostsId &&
-                    otherProposal.ProposalsId != proposal.ProposalsId &&
-                    (otherProposal.Status == 0 || otherProposal.Status == 1))
-                .ToListAsync(cancellationToken);
-
-            foreach (var otherProposal in otherProposals)
-            {
-                otherProposal.Status = 3;
-                otherProposal.UpdatedAt = _dateTimeService.UtcNow;
-            }
-
-            proposal.JobPosts.Status = 2;
-            proposal.JobPosts.UpdatedAt = _dateTimeService.UtcNow;
-        }
     }
 
     private static void UpdateStatusByFreelancer(

@@ -13,7 +13,7 @@ public partial class Proposal
 
     public string? CoverLetter { get; set; }
 
-    public decimal? ProposedRate { get; set; }
+    public decimal? ProposedBudget { get; set; }
 
     public string? ProposedDuration { get; set; }
 
@@ -30,9 +30,13 @@ public partial class Proposal
 
     public virtual Contract? Contract { get; set; }
 
+    public virtual ICollection<Conversation> Conversations { get; set; } = new List<Conversation>();
+
     public virtual FreelancerProfile FreelancerProfiles { get; set; } = null!;
 
     public virtual JobPost JobPosts { get; set; } = null!;
+
+    public virtual ICollection<NegotiationOffer> NegotiationOffers { get; set; } = new List<NegotiationOffer>();
 
     public virtual ICollection<ProposalAttachment> ProposalAttachments { get; set; } = new List<ProposalAttachment>();
 }

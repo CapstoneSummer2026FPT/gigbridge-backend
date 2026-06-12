@@ -2,6 +2,7 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Domain.Entities;
+using Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -30,6 +31,7 @@ public class CreateJobPostCommandHandler : IRequestHandler<CreateJobPostCommand,
 
         var jobPost = CreateJobPost(command, clientProfile.ClientProfilesId);
         _context.Set<JobPost>().Add(jobPost);
+        _context.Set<Contract>().Add(CreateDraftContract(jobPost));
         await _context.SaveChangesAsync(cancellationToken);
 
         return jobPost.JobPostsId;
@@ -45,17 +47,14 @@ public class CreateJobPostCommandHandler : IRequestHandler<CreateJobPostCommand,
             Title = request.Title.Trim(),
             Description = request.Description.Trim(),
             CategoryId = request.CategoryId,
-            BudgetType = request.BudgetType,
             BudgetMin = request.BudgetMin,
             BudgetMax = request.BudgetMax,
             Currency = string.IsNullOrWhiteSpace(request.Currency) ? "USD" : request.Currency.Trim(),
             EstimatedDuration = request.EstimatedDuration,
             MaxHires = request.MaxHires,
-            ExperienceLevelRequired = request.ExperienceLevelRequired,
-            LocationType = request.LocationType,
             Location = request.Location,
             Visibility = request.Visibility ?? 0,
-            ApplicationDeadline = request.ApplicationDeadline,
+            EndDate = request.EndDate,
             Status = 1,
             CreatedAt = _dateTimeService.UtcNow
         };
@@ -71,5 +70,25 @@ public class CreateJobPostCommandHandler : IRequestHandler<CreateJobPostCommand,
         }
 
         return jobPost;
+    }
+
+    private Contract CreateDraftContract(JobPost jobPost)
+    {
+        return new Contract
+        {
+            ContractsId = Guid.NewGuid(),
+            JobPostsId = jobPost.JobPostsId,
+            ClientProfilesId = jobPost.ClientProfilesId,
+            FreelancerProfilesId = null,
+            ProposalsId = null,
+            Title = jobPost.Title,
+            Description = jobPost.Description,
+            TotalBudget = jobPost.BudgetMin ?? jobPost.BudgetMax ?? 0m,
+            Status = (int)ContractStatus.PendingFreelancerSelection,
+            EndDate = jobPost.EndDate.HasValue
+                ? DateOnly.FromDateTime(jobPost.EndDate.Value)
+                : null,
+            CreatedAt = _dateTimeService.UtcNow
+        };
     }
 }

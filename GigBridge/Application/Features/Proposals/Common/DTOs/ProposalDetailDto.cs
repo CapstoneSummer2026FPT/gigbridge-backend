@@ -14,7 +14,7 @@ public class ProposalDetailDto
 
     public string? CoverLetter { get; set; }
 
-    public decimal? ProposedRate { get; set; }
+    public decimal? ProposedBudget { get; set; }
 
     public string? ProposedDuration { get; set; }
 

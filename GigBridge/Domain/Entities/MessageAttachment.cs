@@ -13,9 +13,15 @@ public partial class MessageAttachment
 
     public string FileUrl { get; set; } = null!;
 
-    public long? FileSize { get; set; }
+    public string StorageProvider { get; set; } = null!;
 
-    public string? ContentType { get; set; }
+    public string? StorageObjectKey { get; set; }
+
+    public string MimeType { get; set; } = null!;
+
+    public string? FileExtension { get; set; }
+
+    public long FileSizeBytes { get; set; }
 
     public DateTime CreatedAt { get; set; }
 

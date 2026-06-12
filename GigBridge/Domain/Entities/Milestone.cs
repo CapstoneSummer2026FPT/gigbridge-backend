@@ -22,11 +22,17 @@ public partial class Milestone
 
     public int? SortOrder { get; set; }
 
+    public DateTime? StartedAt { get; set; }
+
     public DateTime? SubmittedAt { get; set; }
 
     public DateTime? ApprovedAt { get; set; }
 
     public DateTime? PaidAt { get; set; }
+
+    public decimal ReleasedAmount { get; set; }
+
+    public DateTime? LastReleasedAt { get; set; }
 
     public DateTime CreatedAt { get; set; }
 
@@ -35,6 +41,8 @@ public partial class Milestone
     public virtual Contract Contracts { get; set; } = null!;
 
     public virtual ICollection<Dispute> Disputes { get; set; } = new List<Dispute>();
+
+    public virtual ICollection<EscrowTransaction> EscrowTransactions { get; set; } = new List<EscrowTransaction>();
 
     public virtual ICollection<MilestoneAttachment> MilestoneAttachments { get; set; } = new List<MilestoneAttachment>();
 

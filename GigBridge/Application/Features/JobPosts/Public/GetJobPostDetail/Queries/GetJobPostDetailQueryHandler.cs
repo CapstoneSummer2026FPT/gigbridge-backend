@@ -40,16 +40,13 @@ public class GetJobPostDetailQueryHandler : IRequestHandler<GetJobPostDetailQuer
             ClientProfilesId: jobPost.ClientProfilesId,
             Title: jobPost.Title,
             Description: jobPost.Description,
-            BudgetType: jobPost.BudgetType,
             BudgetMin: jobPost.BudgetMin,
             BudgetMax: jobPost.BudgetMax,
             Currency: jobPost.Currency,
             EstimatedDuration: jobPost.EstimatedDuration,
             MaxHires: jobPost.MaxHires,
-            ExperienceLevelRequired: jobPost.ExperienceLevelRequired,
-            LocationType: jobPost.LocationType,
             Location: jobPost.Location,
-            ApplicationDeadline: jobPost.ApplicationDeadline,
+            EndDate: jobPost.EndDate,
             CreatedAt: jobPost.CreatedAt,
             Skills: jobPost.JobPostSkills
                 .Where(jobPostSkill => jobPostSkill.Skills is not null)

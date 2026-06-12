@@ -58,15 +58,15 @@ public class DeadlineWarningService : BackgroundService, IDeadlineWarningService
 
         var approachingDeadlineJobs = await context.Set<JobPost>()
             .AsNoTracking()
-            .Where(j => j.ApplicationDeadline != null
-                && j.ApplicationDeadline > now
-                && j.ApplicationDeadline <= warningThreshold
+            .Where(j => j.EndDate != null
+                && j.EndDate > now
+                && j.EndDate <= warningThreshold
                 && j.Status == 1) // 1 = Open/Active
             .Select(j => new
             {
                 j.JobPostsId,
                 j.Title,
-                Deadline = j.ApplicationDeadline,
+                Deadline = j.EndDate,
                 j.ClientProfilesId
             })
             .ToListAsync(cancellationToken);

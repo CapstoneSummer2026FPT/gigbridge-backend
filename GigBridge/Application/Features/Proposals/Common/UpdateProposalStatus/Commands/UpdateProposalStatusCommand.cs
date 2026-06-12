@@ -1,4 +1,4 @@
-﻿using Application.Features.Proposals.Common.UpdateProposalStatus.DTOs;
+﻿using Application.Features.Proposals.Common.UpdateProposalStatus.Commands.DTOs;
 using MediatR;
 
 namespace Application.Features.Proposals.Common.UpdateProposalStatus.Commands;
