@@ -34,11 +34,18 @@ public sealed class ConfirmWalletTopUpCommandHandler :
         var payload = new WalletTopUpCallbackPayload(
             callback.Data?.OrderCode ?? callback.OrderCode,
             callback.Success == true || callback.Code == "00",
-            callback.Data?.Reference ?? callback.GatewayTransactionCode,
+            callback.Data?.Reference ?? callback.Data?.PaymentLinkId ?? callback.GatewayTransactionCode,
             callback.Data?.Amount ?? callback.AmountVnd,
-            callback.Desc);
+            callback.Data?.Desc ?? callback.Desc,
+            callback.Signature,
+            callback.Data?.ToSignatureData() ?? new Dictionary<string, string?>());
 
         var verified = await _paymentService.VerifyCallbackAsync(payload, cancellationToken);
+        if (!verified.IsVerified)
+        {
+            throw new BadRequestException("PayOS callback signature is invalid.");
+        }
+
         if (!verified.OrderCode.HasValue)
         {
             throw new BadRequestException("PayOS callback is missing order code.");
@@ -58,6 +65,12 @@ public sealed class ConfirmWalletTopUpCommandHandler :
         }
 
         if (transaction.Status == (int)WalletTransactionStatus.Succeeded)
+        {
+            return WalletTransactionResponse.FromEntity(transaction);
+        }
+
+        if (transaction.Status == (int)WalletTransactionStatus.Failed ||
+            transaction.Status == (int)WalletTransactionStatus.Cancelled)
         {
             return WalletTransactionResponse.FromEntity(transaction);
         }

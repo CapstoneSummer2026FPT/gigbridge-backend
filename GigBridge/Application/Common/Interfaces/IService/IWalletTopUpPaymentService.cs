@@ -32,9 +32,12 @@ public sealed record WalletTopUpCallbackPayload(
     bool IsSucceeded,
     string? GatewayTransactionCode,
     decimal? AmountVnd,
-    string? FailureReason);
+    string? FailureReason,
+    string? Signature,
+    IReadOnlyDictionary<string, string?> SignatureData);
 
 public sealed record WalletTopUpCallbackResult(
+    bool IsVerified,
     long? OrderCode,
     bool IsSucceeded,
     string? GatewayTransactionCode,
