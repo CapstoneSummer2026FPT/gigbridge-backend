@@ -22,11 +22,17 @@ public partial class Milestone
 
     public int? SortOrder { get; set; }
 
+    public DateTime? StartedAt { get; set; }
+
     public DateTime? SubmittedAt { get; set; }
 
     public DateTime? ApprovedAt { get; set; }
 
     public DateTime? PaidAt { get; set; }
+
+    public decimal ReleasedAmount { get; set; }
+
+    public DateTime? LastReleasedAt { get; set; }
 
     public DateTime CreatedAt { get; set; }
 

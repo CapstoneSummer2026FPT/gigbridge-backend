@@ -1,4 +1,3 @@
-using Application.Common.Domain;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Features.Admin.Users.CreateNewUser.DTOs;
@@ -65,7 +64,7 @@ public class CreateNewUserCommandHandler : IRequestHandler<CreateNewUserCommand,
             CreatedAt = now
         };
 
-        UserProfileFactory.AttachProfileForRole(user, now);
+        user.AttachProfileForRole(now);
         return user;
     }
 }

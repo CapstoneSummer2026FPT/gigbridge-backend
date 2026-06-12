@@ -18,6 +18,18 @@ public class ContractDetailResponse
 
     public decimal TotalBudget { get; set; }
 
+    public string? ScopeOfWork { get; set; }
+
+    public string? PaymentTerms { get; set; }
+
+    public string? IntellectualPropertyTerms { get; set; }
+
+    public string? ConfidentialityTerms { get; set; }
+
+    public string? CancellationTerms { get; set; }
+
+    public string? DisputeTerms { get; set; }
+
     public int Status { get; set; }
 
     public DateOnly? StartDate { get; set; }

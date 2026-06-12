@@ -70,6 +70,28 @@ internal sealed class TestDbSet<TEntity> : DbSet<TEntity>, IQueryable<TEntity>, 
         return ValueTask.FromResult<EntityEntry<TEntity>>(null!);
     }
 
+    public override EntityEntry<TEntity> Remove(TEntity entity)
+    {
+        _entities.Remove(entity);
+        return null!;
+    }
+
+    public override void RemoveRange(params TEntity[] entities)
+    {
+        foreach (var entity in entities)
+        {
+            _entities.Remove(entity);
+        }
+    }
+
+    public override void RemoveRange(IEnumerable<TEntity> entities)
+    {
+        foreach (var entity in entities.ToList())
+        {
+            _entities.Remove(entity);
+        }
+    }
+
     public override IAsyncEnumerator<TEntity> GetAsyncEnumerator(
         CancellationToken cancellationToken = default)
     {

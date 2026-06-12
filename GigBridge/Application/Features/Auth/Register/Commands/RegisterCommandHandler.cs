@@ -1,4 +1,3 @@
-using Application.Common.Domain;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
@@ -83,7 +82,7 @@ public class RegisterCommandHandler : IRequestHandler<RegisterCommand, UserDTO>
             TokenExpiry = null
         };
 
-        UserProfileFactory.AttachProfileForRole(user, now);
+        user.AttachProfileForRole(now);
         return user;
     }
 }
