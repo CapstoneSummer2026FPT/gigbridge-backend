@@ -2,12 +2,13 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Application.Common.Models;
-using Application.Features.Profiles.FreelancerProfile.CreateFreelancerProfile.Commands;
 using Application.Features.Profiles.FreelancerProfile.CreateFreelancerProfile.DTOs;
 using Application.Features.Profiles.FreelancerProfile.GetAllFreelancers.Queries;
 using Application.Features.Profiles.FreelancerProfile.GetFreelancerProfile.DTOs;
 using Application.Features.Profiles.FreelancerProfile.GetFreelancerProfile.Queries;
 using Application.Features.Profiles.FreelancerProfile.GetMyFreelancerProfile.Queries;
+using Application.Features.Profiles.FreelancerProfile.UpdateFreelancerProfile.Commands;
+using Application.Features.Profiles.FreelancerProfile.UpdateFreelancerProfile.DTOs;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Project_API.Controllers.Common;
@@ -20,14 +21,14 @@ namespace Project_API.Controllers.Freelancer;
 public class FreelancerProfileController : BaseApiController
 {
     [HttpPut("freelancer")]
-    public async Task<IActionResult> CreateFreelancerProfile([FromBody] CreateFreelancerProfileDto dto)
+    public async Task<IActionResult> UpdateFreelancerProfile([FromBody] UpdateFreelancerProfileDto dto)
     {
         if (dto == null)
         {
             return BadRequest(ApiResponse<object>.BadRequest("Profile data is required"));
         }
 
-        var command = new CreateFreelancerProfileCommand(dto);
+        var command = new UpdateFreelancerProfileCommand(dto);
         var result = await Mediator.Send(command);
         return Ok(ApiResponse<FreelancerProfileResponseDto>.Ok(result, "Freelancer profile updated successfully"));
     }

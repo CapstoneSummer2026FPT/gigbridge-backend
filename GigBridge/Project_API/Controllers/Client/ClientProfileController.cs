@@ -1,10 +1,11 @@
 using System;
 using System.Threading.Tasks;
 using Application.Common.Models;
-using Application.Features.Profiles.ClientProfile.CreateClientProfile.DTOs;
 using Application.Features.Profiles.ClientProfile.GetClientProfile.DTOs;
-using Application.Features.Profiles.ClientProfile.CreateClientProfile.Commands;
+using Application.Features.Profiles.ClientProfile.CreateClientProfile.DTOs;
 using Application.Features.Profiles.ClientProfile.GetClientProfile.Queries;
+using Application.Features.Profiles.ClientProfile.UpdateClientProfile.Commands;
+using Application.Features.Profiles.ClientProfile.UpdateClientProfile.DTOs;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Project_API.Controllers.Common;
@@ -17,14 +18,14 @@ namespace Project_API.Controllers.Client;
 public class ClientProfileController : BaseApiController
 {
     [HttpPut("client")]
-    public async Task<IActionResult> CreateClientProfile([FromBody] CreateClientProfileDto dto)
+    public async Task<IActionResult> UpdateClientProfile([FromBody] UpdateClientProfileDto dto)
     {
         if (dto == null)
         {
             return BadRequest(ApiResponse<object>.BadRequest("Profile data is required"));
         }
 
-        var command = new CreateClientProfileCommand(dto);
+        var command = new UpdateClientProfileCommand(dto);
         var result = await Mediator.Send(command);
         return Ok(ApiResponse<ClientProfileResponseDto>.Ok(result, "Client profile updated successfully"));
     }
