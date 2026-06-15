@@ -1,11 +1,11 @@
-using System.Net;
-using System.Security.Cryptography;
-using System.Text;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Domain.Entities;
 using Domain.Enums;
 using Microsoft.EntityFrameworkCore;
+using System.Net;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace Application.Features.Contracts.Common.Internal;
 
@@ -115,12 +115,6 @@ internal static class ContractEsignRenderer
             ["{{Contract.TotalBudget}}"] = ($"{contract.TotalBudget:0.##} VND", false),
             ["{{Contract.StartDate}}"] = (contract.StartDate?.ToString("yyyy-MM-dd"), false),
             ["{{Contract.EndDate}}"] = (contract.EndDate?.ToString("yyyy-MM-dd"), false),
-            ["{{Contract.ScopeOfWork}}"] = (contract.ScopeOfWork, false),
-            ["{{Contract.PaymentTerms}}"] = (contract.PaymentTerms, false),
-            ["{{Contract.IntellectualPropertyTerms}}"] = (contract.IntellectualPropertyTerms, false),
-            ["{{Contract.ConfidentialityTerms}}"] = (contract.ConfidentialityTerms, false),
-            ["{{Contract.CancellationTerms}}"] = (contract.CancellationTerms, false),
-            ["{{Contract.DisputeTerms}}"] = (contract.DisputeTerms, false),
             ["{{Client.Name}}"] = (clientUser?.FullName, false),
             ["{{Client.Email}}"] = (clientUser?.Email, false),
             ["{{Freelancer.Name}}"] = (freelancerUser?.FullName, false),
