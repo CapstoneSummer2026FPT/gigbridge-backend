@@ -20,7 +20,8 @@ public class UpdateProposalStatusCommandValidator
             .WithMessage("Request body is required.");
 
         RuleFor(x => x.Request.Status)
-            .Must(status => status == 1 || status == 2 || status == 3 || status == 4)
-            .WithMessage("Status must be 1=Shortlisted, 2=Accepted, 3=Rejected, or 4=Withdrawn.");
+            .Must(status => status >= 1 && status <= 5)
+            .WithMessage("Status must be 1=Pending, 2=Shortlisted, 3=Accepted, 4=Rejected, or 5=Withdrawn.")
+            .When(x => x.Request is not null);
     }
 }
