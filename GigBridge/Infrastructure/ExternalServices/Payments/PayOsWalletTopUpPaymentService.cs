@@ -64,8 +64,39 @@ public sealed class PayOsWalletTopUpPaymentService : IWalletTopUpPaymentService
             payload.FailureReason));
     }
 
+    public async Task<WalletTopUpStatusResult> GetPaymentStatusAsync(
+        long orderCode,
+        CancellationToken cancellationToken)
+    {
+        var paymentLink = await _paymentLinkClient.GetAsync(orderCode, cancellationToken);
+        var status = paymentLink.Status?.Trim();
+        var normalizedStatus = NormalizeStatus(status);
+
+        var isSucceeded = normalizedStatus is "PAID" or "SUCCEEDED" or "SUCCESS";
+        var isCancelled = normalizedStatus is "CANCELLED" or "CANCELED";
+        var isFailed = normalizedStatus is "FAILED" or "EXPIRED";
+
+        return new WalletTopUpStatusResult(
+            paymentLink.OrderCode ?? orderCode,
+            status,
+            isSucceeded,
+            isCancelled,
+            isFailed,
+            paymentLink.Reference ?? paymentLink.PaymentLinkId,
+            paymentLink.Amount,
+            isCancelled || isFailed ? status : null);
+    }
+
     private static string ShortDescription(long orderCode)
     {
         return $"GB tokens {orderCode % 100000000}";
+    }
+
+    private static string? NormalizeStatus(string? status)
+    {
+        return status?
+            .Replace("-", string.Empty, StringComparison.Ordinal)
+            .Replace("_", string.Empty, StringComparison.Ordinal)
+            .ToUpperInvariant();
     }
 }
