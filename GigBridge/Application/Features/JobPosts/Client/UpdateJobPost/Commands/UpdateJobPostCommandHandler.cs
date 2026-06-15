@@ -70,6 +70,7 @@ public class UpdateJobPostCommandHandler : IRequestHandler<UpdateJobPostCommand,
         jobPost.EstimatedDuration = request.EstimatedDuration;
         jobPost.MaxHires = request.MaxHires;
         jobPost.Location = request.Location;
+        jobPost.Visibility = request.Visibility!.Value;
         jobPost.EndDate = request.EndDate;
         jobPost.UpdatedAt = _dateTimeService.UtcNow;
     }

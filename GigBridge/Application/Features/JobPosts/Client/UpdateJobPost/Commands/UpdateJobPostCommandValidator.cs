@@ -50,6 +50,12 @@ public class UpdateJobPostCommandValidator : AbstractValidator<UpdateJobPostComm
             .When(x => x.Request.MaxHires.HasValue)
             .WithMessage("MaxHires must be greater than 0.");
 
+        RuleFor(x => x.Request.Visibility)
+            .NotNull()
+            .WithMessage("Visibility is required.")
+            .Must(visibility => visibility == 0 || visibility == 1 || visibility == 2)
+            .WithMessage("Visibility must be 0=Public, 1=Private, or 2=InviteOnly.");
+
         RuleFor(x => x.Request.EndDate)
             .GreaterThan(DateTime.UtcNow)
             .When(x => x.Request.EndDate.HasValue)

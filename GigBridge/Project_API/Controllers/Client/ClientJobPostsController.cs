@@ -1,6 +1,9 @@
 using Application.Common.Models;
+using Application.Features.JobPosts.Client.CreateDraftJobPost.Commands;
+using Application.Features.JobPosts.Client.CreateDraftJobPost.DTOs;
 using Application.Features.JobPosts.Client.CreateJobPost.Commands;
 using Application.Features.JobPosts.Client.CreateJobPost.DTOs;
+using Application.Features.JobPosts.Client.GetMyJobPosts.DTOs;
 using Application.Features.JobPosts.Client.GetMyJobPosts.Queries;
 using Application.Features.JobPosts.Client.UpdateJobPost.Commands;
 using Application.Features.JobPosts.Client.UpdateJobPost.DTOs;
@@ -8,7 +11,6 @@ using Application.Features.JobPosts.Client.UpdateStatusJobPost.Commands;
 using Application.Features.JobPosts.Client.UpdateStatusJobPost.DTOs;
 using Application.Features.JobPosts.Client.UpdateVisibilityJobPost.Commands;
 using Application.Features.JobPosts.Client.UpdateVisibilityJobPost.DTOs;
-using Application.Features.JobPosts.Public.GetAvailableJobPosts.DTOs;
 using Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -21,6 +23,20 @@ namespace Project_API.Controllers.Client;
 [Authorize(Roles = nameof(UserRole.Client))]
 public class ClientJobPostsController : BaseApiController
 {
+    [HttpPost("draft")]
+    public async Task<IActionResult> CreateDraftJobPost()
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return InvalidTokenResponse();
+        }
+
+        var command = new CreateDraftJobPostCommand(userId);
+        var result = await Mediator.Send(command);
+
+        return Ok(ApiResponse<CreateDraftJobPostResponse>.Ok(result, "Draft job post created successfully"));
+    }
+
     [HttpPost]
     public async Task<IActionResult> CreateJobPost([FromBody] CreateJobPostRequest request)
     {
@@ -54,7 +70,7 @@ public class ClientJobPostsController : BaseApiController
 
         var result = await Mediator.Send(query);
 
-        return Ok(ApiResponse<IEnumerable<JobPostSummaryDto>>.Ok(result, "Success"));
+        return Ok(ApiResponse<IEnumerable<GetMyJobPostDto>>.Ok(result, "Success"));
     }
 
     [HttpPut("{jobPostId}")]
