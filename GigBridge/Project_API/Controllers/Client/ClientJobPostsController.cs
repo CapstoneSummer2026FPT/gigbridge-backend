@@ -3,6 +3,8 @@ using Application.Features.JobPosts.Client.CreateDraftJobPost.Commands;
 using Application.Features.JobPosts.Client.CreateDraftJobPost.DTOs;
 using Application.Features.JobPosts.Client.CreateJobPost.Commands;
 using Application.Features.JobPosts.Client.CreateJobPost.DTOs;
+using Application.Features.JobPosts.Client.GetMyJobPostDetail.DTOs;
+using Application.Features.JobPosts.Client.GetMyJobPostDetail.Queries;
 using Application.Features.JobPosts.Client.GetMyJobPosts.DTOs;
 using Application.Features.JobPosts.Client.GetMyJobPosts.Queries;
 using Application.Features.JobPosts.Client.UpdateJobPost.Commands;
@@ -71,6 +73,20 @@ public class ClientJobPostsController : BaseApiController
         var result = await Mediator.Send(query);
 
         return Ok(ApiResponse<IEnumerable<GetMyJobPostDto>>.Ok(result, "Success"));
+    }
+
+    [HttpGet("my-jobs/{jobPostId}")]
+    public async Task<IActionResult> GetMyJobPostDetail(Guid jobPostId)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return InvalidTokenResponse();
+        }
+
+        var query = new GetMyJobPostDetailQuery(userId, jobPostId);
+        var result = await Mediator.Send(query);
+
+        return Ok(ApiResponse<GetMyJobPostDetailDto>.Ok(result, "Success"));
     }
 
     [HttpPut("{jobPostId}")]
