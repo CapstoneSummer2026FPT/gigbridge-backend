@@ -15,11 +15,6 @@ public partial class JobPost
 
     public Guid? CategoryId { get; set; }
 
-    /// <summary>
-    /// Enum BudgetType: 0=Fixed, 1=Hourly
-    /// </summary>
-    public int BudgetType { get; set; }
-
     public decimal? BudgetMin { get; set; }
 
     public decimal? BudgetMax { get; set; }
@@ -29,16 +24,6 @@ public partial class JobPost
     public string? EstimatedDuration { get; set; }
 
     public int? MaxHires { get; set; }
-
-    /// <summary>
-    /// Enum ExperienceLevel: 0=Entry, 1=Intermediate, 2=Expert
-    /// </summary>
-    public int? ExperienceLevelRequired { get; set; }
-
-    /// <summary>
-    /// Enum LocationType: 0=Remote, 1=OnSite, 2=Hybrid
-    /// </summary>
-    public int? LocationType { get; set; }
 
     public string? Location { get; set; }
 
@@ -66,11 +51,17 @@ public partial class JobPost
 
     public virtual ICollection<Contract> Contracts { get; set; } = new List<Contract>();
 
+    public virtual ICollection<Conversation> Conversations { get; set; } = new List<Conversation>();
+
     public virtual ICollection<EsignDocument> EsignDocuments { get; set; } = new List<EsignDocument>();
 
     public virtual ICollection<JobPostAttachment> JobPostAttachments { get; set; } = new List<JobPostAttachment>();
 
     public virtual ICollection<JobPostSkill> JobPostSkills { get; set; } = new List<JobPostSkill>();
+
+    public virtual ICollection<NegotiationOffer> NegotiationOffers { get; set; } = new List<NegotiationOffer>();
+
+    public virtual ICollection<JobPostQuestion> JobPostQuestions { get; set; } = new List<JobPostQuestion>();
 
     public virtual ICollection<Proposal> Proposals { get; set; } = new List<Proposal>();
 

@@ -28,10 +28,6 @@ public class UpdateJobPostCommandValidator : AbstractValidator<UpdateJobPostComm
             .NotEmpty()
             .WithMessage("Description is required.");
 
-        RuleFor(x => x.Request.BudgetType)
-            .Must(x => x == 0 || x == 1)
-            .WithMessage("BudgetType must be 0=Fixed or 1=Hourly.");
-
         RuleFor(x => x.Request.BudgetMin)
             .GreaterThanOrEqualTo(0)
             .When(x => x.Request.BudgetMin.HasValue)
@@ -54,13 +50,11 @@ public class UpdateJobPostCommandValidator : AbstractValidator<UpdateJobPostComm
             .When(x => x.Request.MaxHires.HasValue)
             .WithMessage("MaxHires must be greater than 0.");
 
-        RuleFor(x => x.Request.ExperienceLevelRequired)
-            .Must(x => x == null || x == 0 || x == 1 || x == 2)
-            .WithMessage("ExperienceLevelRequired must be 0=Entry, 1=Intermediate, or 2=Expert.");
-
-        RuleFor(x => x.Request.LocationType)
-            .Must(x => x == null || x == 0 || x == 1 || x == 2)
-            .WithMessage("LocationType must be 0=Remote, 1=OnSite, or 2=Hybrid.");
+        RuleFor(x => x.Request.Visibility)
+            .NotNull()
+            .WithMessage("Visibility is required.")
+            .Must(visibility => visibility == 0 || visibility == 1 || visibility == 2)
+            .WithMessage("Visibility must be 0=Public, 1=Private, or 2=InviteOnly.");
 
         RuleFor(x => x.Request.EndDate)
             .GreaterThan(DateTime.UtcNow)

@@ -23,10 +23,11 @@ public class UpdateProposalCommandValidator : AbstractValidator<UpdateProposalCo
             .When(x => !string.IsNullOrWhiteSpace(x.Request.CoverLetter))
             .WithMessage("CoverLetter must not exceed 4000 characters.");
 
-        RuleFor(x => x.Request.ProposedRate)
+        RuleFor(x => x.Request.ProposedBudget)
+            .NotNull()
+            .WithMessage("ProposedBudget is required.")
             .GreaterThan(0)
-            .When(x => x.Request.ProposedRate.HasValue)
-            .WithMessage("ProposedRate must be greater than 0.");
+            .WithMessage("ProposedBudget must be greater than 0.");
 
         RuleFor(x => x.Request.ProposedDuration)
             .MaximumLength(100)

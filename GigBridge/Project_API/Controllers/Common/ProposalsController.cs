@@ -2,7 +2,7 @@
 using Application.Features.Proposals.Common.DTOs;
 using Application.Features.Proposals.Common.GetProposalDetail.Queries;
 using Application.Features.Proposals.Common.UpdateProposalStatus.Commands;
-using Application.Features.Proposals.Common.UpdateProposalStatus.DTOs;
+using Application.Features.Proposals.Common.UpdateProposalStatus.Commands.DTOs;
 using Application.Features.Proposals.Freelancer.GetMyProposalByJobPost.Queries;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;

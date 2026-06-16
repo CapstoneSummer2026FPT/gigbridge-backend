@@ -55,7 +55,7 @@ public class UpdateProposalCommandHandler : IRequestHandler<UpdateProposalComman
             ? null
             : command.Request.CoverLetter.Trim();
 
-        proposal.ProposedRate = command.Request.ProposedRate;
+        proposal.ProposedBudget = command.Request.ProposedBudget;
 
         proposal.ProposedDuration = string.IsNullOrWhiteSpace(command.Request.ProposedDuration)
             ? null

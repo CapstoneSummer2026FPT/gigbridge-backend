@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Features.Auth.Shared.DTOs;
@@ -65,9 +64,13 @@ public class NotificationService : INotificationService
         string? referenceType = null,
         Guid? targetUserId = null,
         bool sendEmail = false,
+        Guid? createdByAdminId = null,
+        DateTime? expiresAt = null,
         CancellationToken cancellationToken = default)
     {
-        var targetUserIds = await ResolveTargetUserIdsAsync(target, targetUserId, cancellationToken);
+        var targetUserIds = (await ResolveTargetUserIdsAsync(target, targetUserId, cancellationToken))
+            .Distinct()
+            .ToList();
 
         if (targetUserIds.Count == 0)
         {
@@ -76,29 +79,35 @@ public class NotificationService : INotificationService
         }
 
         var now = DateTime.UtcNow;
-        var notifications = new List<Domain.Entities.Notification>(targetUserIds.Count);
+        var broadcastNotification = new BroadcastNotification
+        {
+            Title = title,
+            Content = content,
+            Type = (int)type,
+            ReferenceId = referenceId,
+            ReferenceType = referenceType,
+            TargetScope = (int)target,
+            TargetRole = ResolveTargetRole(target),
+            CreatedByAdminId = createdByAdminId,
+            CreatedAt = now,
+            ExpiresAt = expiresAt
+        };
 
         foreach (var userId in targetUserIds)
         {
-            var notification = new Domain.Entities.Notification
+            broadcastNotification.Recipients.Add(new BroadcastNotificationRecipient
             {
                 UserId = userId,
-                Type = (int)type,
-                Title = title,
-                Content = content,
-                ReferenceId = referenceId,
-                ReferenceType = referenceType,
                 IsRead = false,
                 CreatedAt = now
-            };
-            notifications.Add(notification);
+            });
         }
 
-        _context.Set<Domain.Entities.Notification>().AddRange(notifications);
+        _context.Set<BroadcastNotification>().Add(broadcastNotification);
         await _context.SaveChangesAsync(cancellationToken);
 
-        var sendTasks = notifications.Select(n =>
-        _notificationSender.SendToUserAsync(n.UserId, MapToDto(n), cancellationToken));
+        var sendTasks = broadcastNotification.Recipients.Select(r =>
+            _notificationSender.SendToUserAsync(r.UserId, MapToDto(broadcastNotification, r), cancellationToken));
         await Task.WhenAll(sendTasks);
 
         if (sendEmail && _emailService is not null)
@@ -133,6 +142,17 @@ public class NotificationService : INotificationService
                 .Select(u => u.UserId)
                 .ToListAsync(cancellationToken),
             _ => new List<Guid>()
+        };
+    }
+
+    private static int? ResolveTargetRole(NotificationTarget target)
+    {
+        return target switch
+        {
+            NotificationTarget.Clients => (int)UserRole.Client,
+            NotificationTarget.Freelancers => (int)UserRole.Freelancer,
+            NotificationTarget.Admins => (int)UserRole.Admin,
+            _ => null
         };
     }
 
@@ -172,6 +192,9 @@ public class NotificationService : INotificationService
         return new NotificationDto
         {
             Id = notification.NotificationsId,
+            Source = "Personal",
+            NotificationId = notification.NotificationsId,
+            ReadTargetId = notification.NotificationsId,
             Type = (NotificationType)notification.Type,
             Title = notification.Title,
             Content = notification.Content,
@@ -180,6 +203,28 @@ public class NotificationService : INotificationService
             IsRead = notification.IsRead ?? false,
             ReadAt = notification.ReadAt,
             CreatedAt = notification.CreatedAt
+        };
+    }
+
+    private static NotificationDto MapToDto(
+        BroadcastNotification notification,
+        BroadcastNotificationRecipient recipient)
+    {
+        return new NotificationDto
+        {
+            Id = notification.BroadcastNotificationId,
+            Source = "Broadcast",
+            BroadcastNotificationId = notification.BroadcastNotificationId,
+            BroadcastRecipientId = recipient.BroadcastNotificationRecipientId,
+            ReadTargetId = recipient.BroadcastNotificationRecipientId,
+            Type = (NotificationType)notification.Type,
+            Title = notification.Title,
+            Content = notification.Content,
+            ReferenceId = notification.ReferenceId,
+            ReferenceType = notification.ReferenceType,
+            IsRead = recipient.IsRead ?? false,
+            ReadAt = recipient.ReadAt,
+            CreatedAt = recipient.CreatedAt
         };
     }
 }

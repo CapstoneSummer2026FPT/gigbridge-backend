@@ -46,7 +46,7 @@ public class SubmitProposalCommandHandler : IRequestHandler<SubmitProposalComman
             JobPostsId = command.Request.JobPostsId,
             FreelancerProfilesId = freelancerProfile.FreelancerProfilesId,
             CoverLetter = command.Request.CoverLetter?.Trim(),
-            ProposedRate = command.Request.ProposedRate,
+            ProposedBudget = command.Request.ProposedBudget,
             ProposedDuration = command.Request.ProposedDuration,
             Status = 0,
             SubmittedAt = _dateTimeService.UtcNow
