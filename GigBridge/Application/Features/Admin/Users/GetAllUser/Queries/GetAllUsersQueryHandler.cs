@@ -3,6 +3,7 @@ using Application.Features.Admin.Users.GetAllUser.DTOs;
 using Application.Features.Admin.Users.Shared.DTOs;
 using AutoMapper;
 using Domain.Entities;
+using Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -32,13 +33,41 @@ public class GetAllUsersQueryHandler : IRequestHandler<GetAllUsersQuery, GetAllU
             .Take(pageSize)
             .ToListAsync(cancellationToken);
 
+        var items = _mapper.Map<IReadOnlyList<AdminUserDto>>(users);
+        await AddOpenReportCountsAsync(items, cancellationToken);
+
         return new GetAllUsersResponse
         {
-            Items = _mapper.Map<IReadOnlyList<AdminUserDto>>(users),
+            Items = items,
             Page = page,
             PageSize = pageSize,
             TotalItems = total
         };
+    }
+
+    private async Task AddOpenReportCountsAsync(IReadOnlyList<AdminUserDto> users, CancellationToken cancellationToken)
+    {
+        if (users.Count == 0)
+        {
+            return;
+        }
+
+        var userIds = users.Select(user => user.UserId).ToArray();
+        var openReportCounts = await _context.Set<Report>()
+            .AsNoTracking()
+            .Where(report =>
+                report.ReportedEntityType.ToLower() == ReportedEntityTypes.User.ToLower() &&
+                userIds.Contains(report.ReportedEntityId) &&
+                (report.Status == (int)ReportStatus.Pending || report.Status == (int)ReportStatus.Reviewing))
+            .GroupBy(report => report.ReportedEntityId)
+            .Select(group => new { UserId = group.Key, Count = group.Count() })
+            .ToDictionaryAsync(item => item.UserId, item => item.Count, cancellationToken);
+
+        foreach (var user in users)
+        {
+            user.OpenReportCount = openReportCounts.TryGetValue(user.UserId, out var count) ? count : 0;
+            user.IsCurrentlyReported = user.OpenReportCount > 0;
+        }
     }
 
     private static IQueryable<User> ApplyFilters(IQueryable<User> query, string? search, int? status)

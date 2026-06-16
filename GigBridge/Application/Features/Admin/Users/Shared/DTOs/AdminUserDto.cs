@@ -12,6 +12,8 @@ public class AdminUserDto
     public bool IsActive { get; init; }
     public string? PreferredLanguage { get; init; }
     public string? Provider { get; init; }
+    public int OpenReportCount { get; set; }
+    public bool IsCurrentlyReported { get; set; }
     public DateTime CreatedAt { get; init; }
     public DateTime? UpdatedAt { get; init; }
 }

@@ -46,13 +46,21 @@ public class GetReportsQueryHandler : IRequestHandler<GetReportsQuery, ReportsRe
 
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
-            var keyword = $"%{request.Search.Trim()}%";
+            var trimmedSearch = request.Search.Trim();
+            var keyword = $"%{trimmedSearch}%";
+            var isGuidSearch = Guid.TryParse(trimmedSearch, out var searchedEntityId);
 
             query = query.Where(report =>
                 EF.Functions.Like(report.Reason, keyword) ||
                 (report.AdminNote != null && EF.Functions.Like(report.AdminNote, keyword)) ||
                 EF.Functions.Like(report.Reporter.FullName, keyword) ||
-                EF.Functions.Like(report.Reporter.Email, keyword));
+                EF.Functions.Like(report.Reporter.Email, keyword) ||
+                (isGuidSearch && report.ReportedEntityId == searchedEntityId) ||
+                (report.ReportedEntityType == ReportedEntityTypes.User &&
+                    _context.Set<User>().Any(user =>
+                        user.UserId == report.ReportedEntityId &&
+                        (EF.Functions.Like(user.FullName, keyword) ||
+                         EF.Functions.Like(user.Email, keyword)))));
         }
 
         var total = await query.CountAsync(cancellationToken);

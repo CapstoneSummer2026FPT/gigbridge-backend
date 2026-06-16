@@ -7,5 +7,6 @@ public class ReportTargetSummaryDto
     public string? Title { get; set; }
     public string? Description { get; set; }
     public string? Email { get; set; }
+    public int? Role { get; set; }
     public int? Rating { get; set; }
 }

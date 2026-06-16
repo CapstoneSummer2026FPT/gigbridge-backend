@@ -26,7 +26,8 @@ public static class ReportProjection
                 {
                     Id = report.Reporter.UserId,
                     FullName = report.Reporter.FullName,
-                    Email = report.Reporter.Email
+                    Email = report.Reporter.Email,
+                    Role = report.Reporter.Role
                 },
                 ReportedEntityId = report.ReportedEntityId,
                 ReportedEntityType = report.ReportedEntityType,
@@ -40,7 +41,8 @@ public static class ReportProjection
                     {
                         Id = report.ResolvedByAdmin.UserId,
                         FullName = report.ResolvedByAdmin.FullName,
-                        Email = report.ResolvedByAdmin.Email
+                        Email = report.ResolvedByAdmin.Email,
+                        Role = report.ResolvedByAdmin.Role
                     },
                 TargetSummary = targetSummary,
                 CreatedAt = report.CreatedAt,
@@ -77,7 +79,8 @@ public static class ReportProjection
                     Id = user.UserId,
                     EntityType = ReportedEntityTypes.User,
                     Title = user.FullName,
-                    Email = user.Email
+                    Email = user.Email,
+                    Role = user.Role
                 })
                 .ToListAsync(cancellationToken);
 
