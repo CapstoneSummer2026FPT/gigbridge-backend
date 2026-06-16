@@ -145,9 +145,7 @@ public class AuthController : BaseApiController
     [Authorize]
     public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordProfileRequest request)
     {
-        if (request == null)
-            return BadRequest(ApiResponse<object>.BadRequest("Request body cannot be null"));
-
+       
         if (string.IsNullOrWhiteSpace(request.CurrentPassword) || string.IsNullOrWhiteSpace(request.NewPassword))
             return BadRequest(ApiResponse<object>.BadRequest("Current password and new password are required"));
 

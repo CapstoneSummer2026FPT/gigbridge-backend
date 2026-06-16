@@ -59,7 +59,7 @@ public class AuthControllerTests
         return (controller, mediator, httpContext);
     }
 
-    //[MethodName]_[Scenario]_[ExpectedResult]
+    //[MethodName]_[ExpectedResult]_[Senerios]
 
     [Fact]
     public async Task Register_ReturnsBadRequest_WhenRequestIsNull()

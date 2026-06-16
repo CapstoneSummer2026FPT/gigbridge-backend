@@ -38,7 +38,7 @@ public class ChangePasswordCommandHandler : IRequestHandler<ChangePasswordComman
 
         if (user == null)
         {
-            throw new NotFoundException(nameof(User), currentUserId);
+            throw new NotFoundException("User not found.");
         }
 
         if (!_passwordHasher.VerifyPassword(request.Request.CurrentPassword, user.Password ?? string.Empty))
