@@ -37,6 +37,8 @@ public class GetMyConversationsQueryHandler
             .Where(conversation =>
                 conversationIds.Contains(conversation.ConversationsId) &&
                 conversation.DeletedAt == null)
+            .Include(conversation => conversation.JobPosts)
+                .ThenInclude(jobPost => jobPost!.Category)
             .OrderByDescending(conversation => conversation.LastMessageAt ?? conversation.CreatedAt)
             .ToListAsync(cancellationToken);
 
@@ -54,23 +56,68 @@ public class GetMyConversationsQueryHandler
             participant => participant.ConversationsId,
             participant => participant.UnreadCount);
 
+        var allParticipants = await _context.Set<ConversationParticipant>()
+            .AsNoTracking()
+            .Where(p => conversationIds.Contains(p.ConversationsId) && p.DeletedAt == null)
+            .Include(p => p.User)
+                .ThenInclude(u => u.FreelancerProfile)
+            .Include(p => p.User)
+                .ThenInclude(u => u.ClientProfile)
+            .ToListAsync(cancellationToken);
+
+        var otherParticipantsLookup = allParticipants
+            .Where(p => p.UserId != request.UserId)
+            .GroupBy(p => p.ConversationsId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.First()
+            );
+
+        var latestOffers = await _context.Set<NegotiationOffer>()
+            .AsNoTracking()
+            .Where(offer => conversationIds.Contains(offer.ConversationsId))
+            .OrderByDescending(offer => offer.CreatedAt)
+            .ToListAsync(cancellationToken);
+
+        var latestOffersLookup = latestOffers
+            .GroupBy(offer => offer.ConversationsId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.First()
+            );
+
         return conversations
-            .Select(conversation => new ConversationSummaryResponse(
-                conversation.ConversationsId,
-                conversation.ConversationType,
-                conversation.Title,
-                conversation.JobPostsId,
-                conversation.ProposalsId,
-                conversation.ContractsId,
-                conversation.DisputesId,
-                conversation.Status,
-                unreadByConversation.GetValueOrDefault(conversation.ConversationsId),
-                conversation.CreatedAt,
-                conversation.LastMessageAt,
-                conversation.LastMessageId.HasValue &&
-                    lastMessages.TryGetValue(conversation.LastMessageId.Value, out var message)
-                    ? ToMessageResponse(message)
-                    : null))
+            .Select(conversation => {
+                otherParticipantsLookup.TryGetValue(conversation.ConversationsId, out var otherParticipant);
+                latestOffersLookup.TryGetValue(conversation.ConversationsId, out var latestOffer);
+
+                return new ConversationSummaryResponse(
+                    conversation.ConversationsId,
+                    conversation.ConversationType,
+                    conversation.Title ?? conversation.JobPosts?.Title,
+                    conversation.JobPostsId,
+                    conversation.ProposalsId,
+                    conversation.ContractsId,
+                    conversation.DisputesId,
+                    conversation.Status,
+                    unreadByConversation.GetValueOrDefault(conversation.ConversationsId),
+                    conversation.CreatedAt,
+                    conversation.LastMessageAt,
+                    conversation.LastMessageId.HasValue &&
+                        lastMessages.TryGetValue(conversation.LastMessageId.Value, out var message)
+                        ? ToMessageResponse(message)
+                        : null,
+                    otherParticipant?.UserId,
+                    otherParticipant?.User?.FullName,
+                    otherParticipant?.User?.Avatar,
+                    otherParticipant?.User?.Role,
+                    otherParticipant?.User?.ClientProfile?.CompanyName,
+                    otherParticipant?.User?.FreelancerProfile?.Title,
+                    latestOffer?.NegotiationOfferId,
+                    latestOffer?.FinalPrice,
+                    latestOffer?.Status
+                );
+            })
             .ToList();
     }
 
