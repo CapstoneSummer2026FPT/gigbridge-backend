@@ -10,8 +10,6 @@ public sealed class PayOsOptions
 
     public string? ChecksumKey { get; set; }
 
-    public bool UseMock { get; set; }
-
     public string? ReturnUrl { get; set; }
 
     public string? CancelUrl { get; set; }

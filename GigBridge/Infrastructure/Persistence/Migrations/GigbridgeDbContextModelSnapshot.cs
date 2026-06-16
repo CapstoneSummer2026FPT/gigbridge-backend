@@ -290,9 +290,6 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnName("ContractsId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
-                    b.Property<string>("CancellationTerms")
-                        .HasColumnType("text");
-
                     b.Property<Guid>("ClientProfilesId")
                         .HasColumnType("uuid")
                         .HasColumnName("ClientProfilesId");
@@ -300,18 +297,12 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("CompletedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("ConfidentialityTerms")
-                        .HasColumnType("text");
-
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
                         .HasDefaultValueSql("now()");
 
                     b.Property<string>("Description")
-                        .HasColumnType("text");
-
-                    b.Property<string>("DisputeTerms")
                         .HasColumnType("text");
 
                     b.Property<DateOnly?>("EndDate")
@@ -326,22 +317,13 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("FreelancerProfilesId");
 
-                    b.Property<string>("IntellectualPropertyTerms")
-                        .HasColumnType("text");
-
                     b.Property<Guid>("JobPostsId")
                         .HasColumnType("uuid")
                         .HasColumnName("JobPostsId");
 
-                    b.Property<string>("PaymentTerms")
-                        .HasColumnType("text");
-
                     b.Property<Guid?>("ProposalsId")
                         .HasColumnType("uuid")
                         .HasColumnName("ProposalsId");
-
-                    b.Property<string>("ScopeOfWork")
-                        .HasColumnType("text");
 
                     b.Property<DateOnly?>("StartDate")
                         .HasColumnType("date");
@@ -1346,6 +1328,52 @@ namespace Infrastructure.Persistence.Migrations
                     b.ToTable("JobPostAttachments");
                 });
 
+            modelBuilder.Entity("Domain.Entities.JobPostQuestion", b =>
+                {
+                    b.Property<Guid>("JobPostQuestionsId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("JobPostQuestionsId")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<bool>("IsRequired")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<Guid>("JobPostsId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("JobPostsId");
+
+                    b.Property<int>("OrderIndex")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("QuestionText")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("JobPostQuestionsId")
+                        .HasName("JobPostQuestions_pkey");
+
+                    b.HasIndex(new[] { "JobPostsId" }, "IX_JobPostQuestions_JobPostsId");
+
+                    b.HasIndex(new[] { "JobPostsId", "OrderIndex" }, "IX_JobPostQuestions_JobPostsId_OrderIndex")
+                        .IsUnique();
+
+                    b.ToTable("JobPostQuestions");
+                });
+
             modelBuilder.Entity("Domain.Entities.JobPostSkill", b =>
                 {
                     b.Property<Guid>("JobPostSkillsId")
@@ -1959,6 +1987,48 @@ namespace Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("Proposals");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ProposalAnswer", b =>
+                {
+                    b.Property<Guid>("ProposalAnswersId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("ProposalAnswersId")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<string>("AnswerText")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid>("JobPostQuestionsId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("JobPostQuestionsId");
+
+                    b.Property<Guid>("ProposalsId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("ProposalsId");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("ProposalAnswersId")
+                        .HasName("ProposalAnswers_pkey");
+
+                    b.HasIndex(new[] { "JobPostQuestionsId" }, "IX_ProposalAnswers_JobPostQuestionsId");
+
+                    b.HasIndex(new[] { "ProposalsId" }, "IX_ProposalAnswers_ProposalsId");
+
+                    b.HasIndex(new[] { "ProposalsId", "JobPostQuestionsId" }, "ProposalAnswers_propo_ProposalsId_jpq_JobPostQuestionsId_key")
+                        .IsUnique();
+
+                    b.ToTable("ProposalAnswers");
                 });
 
             modelBuilder.Entity("Domain.Entities.ProposalAttachment", b =>
@@ -3196,6 +3266,17 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("JobPosts");
                 });
 
+            modelBuilder.Entity("Domain.Entities.JobPostQuestion", b =>
+                {
+                    b.HasOne("Domain.Entities.JobPost", "JobPosts")
+                        .WithMany("JobPostQuestions")
+                        .HasForeignKey("JobPostsId")
+                        .IsRequired()
+                        .HasConstraintName("JobPostQuestions_jp_JobPostsId_fkey");
+
+                    b.Navigation("JobPosts");
+                });
+
             modelBuilder.Entity("Domain.Entities.JobPostSkill", b =>
                 {
                     b.HasOne("Domain.Entities.JobPost", "JobPosts")
@@ -3402,6 +3483,25 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("FreelancerProfiles");
 
                     b.Navigation("JobPosts");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ProposalAnswer", b =>
+                {
+                    b.HasOne("Domain.Entities.JobPostQuestion", "JobPostQuestions")
+                        .WithMany("ProposalAnswers")
+                        .HasForeignKey("JobPostQuestionsId")
+                        .IsRequired()
+                        .HasConstraintName("ProposalAnswers_jpq_JobPostQuestionsId_fkey");
+
+                    b.HasOne("Domain.Entities.Proposal", "Proposals")
+                        .WithMany("ProposalAnswers")
+                        .HasForeignKey("ProposalsId")
+                        .IsRequired()
+                        .HasConstraintName("ProposalAnswers_propo_ProposalsId_fkey");
+
+                    b.Navigation("JobPostQuestions");
+
+                    b.Navigation("Proposals");
                 });
 
             modelBuilder.Entity("Domain.Entities.ProposalAttachment", b =>
@@ -3730,6 +3830,8 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.Navigation("JobPostAttachments");
 
+                    b.Navigation("JobPostQuestions");
+
                     b.Navigation("JobPostSkills");
 
                     b.Navigation("NegotiationOffers");
@@ -3737,6 +3839,11 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("Proposals");
 
                     b.Navigation("SavedJobs");
+                });
+
+            modelBuilder.Entity("Domain.Entities.JobPostQuestion", b =>
+                {
+                    b.Navigation("ProposalAnswers");
                 });
 
             modelBuilder.Entity("Domain.Entities.Message", b =>
@@ -3768,6 +3875,8 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("Conversations");
 
                     b.Navigation("NegotiationOffers");
+
+                    b.Navigation("ProposalAnswers");
 
                     b.Navigation("ProposalAttachments");
                 });

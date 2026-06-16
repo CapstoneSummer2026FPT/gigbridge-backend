@@ -1,14 +1,13 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Features.JobPosts.Common;
-using Application.Features.JobPosts.Public.GetAvailableJobPosts.DTOs;
+using Application.Features.JobPosts.Client.GetMyJobPosts.DTOs;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.JobPosts.Client.GetMyJobPosts.Queries;
 
-public class GetMyJobPostsQueryHandler : IRequestHandler<GetMyJobPostsQuery, IEnumerable<JobPostSummaryDto>>
+public class GetMyJobPostsQueryHandler : IRequestHandler<GetMyJobPostsQuery, IEnumerable<GetMyJobPostDto>>
 {
     private readonly IApplicationDbContext _context;
 
@@ -17,7 +16,7 @@ public class GetMyJobPostsQueryHandler : IRequestHandler<GetMyJobPostsQuery, IEn
         _context = context;
     }
 
-    public async Task<IEnumerable<JobPostSummaryDto>> Handle(GetMyJobPostsQuery request, CancellationToken cancellationToken)
+    public async Task<IEnumerable<GetMyJobPostDto>> Handle(GetMyJobPostsQuery request, CancellationToken cancellationToken)
     {
         var clientProfile = await _context.Set<ClientProfile>()
             .AsNoTracking()
@@ -28,17 +27,35 @@ public class GetMyJobPostsQueryHandler : IRequestHandler<GetMyJobPostsQuery, IEn
             throw new NotFoundException("Client profile does not exist.");
         }
 
-        var jobPosts = await _context.Set<JobPost>()
+        return await _context.Set<JobPost>()
             .AsNoTracking()
-            .Include(jobPost => jobPost.JobPostSkills)
-                .ThenInclude(jobPostSkill => jobPostSkill.Skills)
             .Where(jobPost => jobPost.ClientProfilesId == clientProfile.ClientProfilesId)
             .OrderByDescending(jobPost => jobPost.CreatedAt)
             .Skip((NormalizePageIndex(request.PageIndex) - 1) * NormalizePageSize(request.PageSize))
             .Take(NormalizePageSize(request.PageSize))
+            .Select(jobPost => new GetMyJobPostDto
+            {
+                JobPostsId = jobPost.JobPostsId,
+                ClientProfilesId = jobPost.ClientProfilesId,
+                Title = jobPost.Title,
+                Description = jobPost.Description,
+                CategoryId = jobPost.CategoryId,
+                CategoryName = jobPost.Category != null ? jobPost.Category.Name : null,
+                BudgetMin = jobPost.BudgetMin,
+                BudgetMax = jobPost.BudgetMax,
+                Currency = jobPost.Currency,
+                EstimatedDuration = jobPost.EstimatedDuration,
+                MaxHires = jobPost.MaxHires,
+                Location = jobPost.Location,
+                Status = jobPost.Status,
+                Visibility = jobPost.Visibility,
+                EndDate = jobPost.EndDate,
+                IsAigenerated = jobPost.IsAigenerated,
+                CreatedAt = jobPost.CreatedAt,
+                UpdatedAt = jobPost.UpdatedAt,
+                ProposalCount = jobPost.Proposals.Count(proposal => proposal.Status != 0)
+            })
             .ToListAsync(cancellationToken);
-
-        return JobPostProjection.ToSummaryDtos(jobPosts);
     }
 
     private static int NormalizePageIndex(int pageIndex)

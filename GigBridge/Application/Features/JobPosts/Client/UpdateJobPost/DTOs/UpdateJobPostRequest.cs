@@ -20,6 +20,8 @@ public class UpdateJobPostRequest
 
     public string? Location { get; set; }
 
+    public int? Visibility { get; set; }
+
     public DateTime? EndDate { get; set; }
 
     public List<Guid> SkillIds { get; set; } = new();

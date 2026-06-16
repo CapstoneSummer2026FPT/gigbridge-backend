@@ -47,7 +47,6 @@ public sealed class SubmitContractDetailsCommandHandler :
             .Where(milestone => milestone.ContractsId == contract.ContractsId)
             .ToListAsync(cancellationToken);
 
-        ContractDetailsValidator.ValidateTerms(contract);
         ContractDetailsValidator.ValidateMilestones(contract, milestones);
 
         var now = _dateTimeService.UtcNow;

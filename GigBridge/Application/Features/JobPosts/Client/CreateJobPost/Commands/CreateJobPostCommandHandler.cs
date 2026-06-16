@@ -55,7 +55,7 @@ public class CreateJobPostCommandHandler : IRequestHandler<CreateJobPostCommand,
             Location = request.Location,
             Visibility = request.Visibility ?? 0,
             EndDate = request.EndDate,
-            Status = 1,
+            Status = 0,
             CreatedAt = _dateTimeService.UtcNow
         };
 
