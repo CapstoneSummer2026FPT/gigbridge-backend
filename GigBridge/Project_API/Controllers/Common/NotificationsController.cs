@@ -1,6 +1,8 @@
 using System.ComponentModel.DataAnnotations;
 using Application.Common.Models;
 using Application.Features.Notifications.Common.DTOs;
+using Application.Features.Notifications.Public.DeleteBroadcastNotification.Command;
+using Application.Features.Notifications.Public.DeleteNotification.Command;
 using Application.Features.Notifications.Public.MarkBroadcastAsRead.Command;
 using Application.Features.Notifications.Public.MarkAllAsRead.Command;
 using Application.Features.Notifications.Public.MarkAsRead.Command;
@@ -97,5 +99,41 @@ public class NotificationsController : BaseApiController
         var command = new MarkAllAsReadCommand { UserId = userId };
         await Mediator.Send(command);
         return Ok(ApiResponse<object>.Ok(null!, "All notifications marked as read."));
+    }
+
+    [HttpDelete("{notificationId:guid}")]
+    public async Task<IActionResult> DeleteNotification(Guid notificationId)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return InvalidTokenResponse();
+        }
+
+        var command = new DeleteNotificationCommand
+        {
+            NotificationId = notificationId,
+            UserId = userId
+        };
+
+        await Mediator.Send(command);
+        return Ok(ApiResponse<object>.Ok(null!, "Notification deleted."));
+    }
+
+    [HttpDelete("broadcast-recipients/{recipientId:guid}")]
+    public async Task<IActionResult> DeleteBroadcastNotification(Guid recipientId)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return InvalidTokenResponse();
+        }
+
+        var command = new DeleteBroadcastNotificationCommand
+        {
+            BroadcastRecipientId = recipientId,
+            UserId = userId
+        };
+
+        await Mediator.Send(command);
+        return Ok(ApiResponse<object>.Ok(null!, "Broadcast notification deleted."));
     }
 }
