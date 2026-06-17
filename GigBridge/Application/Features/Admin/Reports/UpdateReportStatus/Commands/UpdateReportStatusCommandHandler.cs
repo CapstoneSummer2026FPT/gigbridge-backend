@@ -41,11 +41,29 @@ public class UpdateReportStatusCommandHandler : IRequestHandler<UpdateReportStat
             throw new BadRequestException("Resolved or dismissed reports cannot be dismissed again.");
         }
 
+        if (command.Request.Status == ReportStatus.Dismissed)
+        {
+            var adminExists = await _context.Set<User>()
+                .AnyAsync(user => user.UserId == command.AdminId && user.Role == (int)UserRole.Admin, cancellationToken);
+
+            if (!adminExists)
+            {
+                throw new NotFoundException("Admin user does not exist.");
+            }
+        }
+
+        var now = _dateTimeService.UtcNow;
         report.Status = (int)command.Request.Status;
         report.AdminNote = string.IsNullOrWhiteSpace(command.Request.AdminNote)
             ? report.AdminNote
             : command.Request.AdminNote.Trim();
-        report.UpdatedAt = _dateTimeService.UtcNow;
+        report.UpdatedAt = now;
+
+        if (command.Request.Status == ReportStatus.Dismissed)
+        {
+            report.ResolvedByAdminId = command.AdminId;
+            report.ResolvedAt = now;
+        }
 
         await _context.SaveChangesAsync(cancellationToken);
     }

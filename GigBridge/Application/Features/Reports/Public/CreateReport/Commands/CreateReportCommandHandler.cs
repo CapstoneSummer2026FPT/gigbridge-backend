@@ -87,7 +87,11 @@ public class CreateReportCommandHandler : IRequestHandler<CreateReportCommand, G
 
             case ReportedEntityTypes.JobPost:
                 var jobPostExists = await _context.Set<JobPost>()
-                    .AnyAsync(jobPost => jobPost.JobPostsId == entityId, cancellationToken);
+                    .AnyAsync(jobPost =>
+                        jobPost.JobPostsId == entityId &&
+                        ((jobPost.Status == 1 && (jobPost.Visibility == null || jobPost.Visibility == 0)) ||
+                         jobPost.ClientProfiles.UserId == reporterId),
+                        cancellationToken);
                 if (!jobPostExists)
                 {
                     throw new NotFoundException("Reported job post does not exist.");

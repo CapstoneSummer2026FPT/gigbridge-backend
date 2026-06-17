@@ -2,6 +2,8 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces.IService;
 using Application.Features.Admin.Reports.ResolveReport.Commands;
 using Application.Features.Admin.Reports.ResolveReport.DTOs;
+using Application.Features.Admin.Reports.UpdateReportStatus.Commands;
+using Application.Features.Admin.Reports.UpdateReportStatus.DTOs;
 using Application.Features.Reports.Public.CreateReport.Commands;
 using Application.Features.Reports.Public.CreateReport.DTOs;
 using Application.Features.Reports.Public.GetReportDetail.Queries;
@@ -80,6 +82,69 @@ public class ReportHandlerTests
     }
 
     [Fact]
+    public async Task CreateReport_CreatesReportForPublicOpenJobPost()
+    {
+        await using var context = CreateContext();
+        var reporter = AddUser(context, UserRole.Freelancer);
+        var owner = AddUser(context, UserRole.Client);
+        var jobPost = AddJobPost(context, owner.UserId);
+        await context.SaveChangesAsync();
+
+        var handler = new CreateReportCommandHandler(context, new FixedDateTimeService());
+        var reportId = await handler.Handle(
+            new CreateReportCommand(
+                new CreateReportRequest(jobPost.JobPostsId, ReportedEntityTypes.JobPost, ReportType.Fraud, "Suspicious job."),
+                reporter.UserId),
+            CancellationToken.None);
+
+        var report = await context.Reports.SingleAsync(report => report.ReportsId == reportId);
+        Assert.Equal(jobPost.JobPostsId, report.ReportedEntityId);
+        Assert.Equal(ReportedEntityTypes.JobPost, report.ReportedEntityType);
+    }
+
+    [Theory]
+    [InlineData(0, 0)]
+    [InlineData(1, 1)]
+    [InlineData(1, 2)]
+    [InlineData(2, 0)]
+    [InlineData(3, 0)]
+    public async Task CreateReport_RejectsJobPostHiddenFromReporter(int status, int? visibility)
+    {
+        await using var context = CreateContext();
+        var reporter = AddUser(context, UserRole.Freelancer);
+        var owner = AddUser(context, UserRole.Client);
+        var jobPost = AddJobPost(context, owner.UserId, status, visibility);
+        await context.SaveChangesAsync();
+
+        var handler = new CreateReportCommandHandler(context, new FixedDateTimeService());
+
+        await Assert.ThrowsAsync<NotFoundException>(() => handler.Handle(
+            new CreateReportCommand(
+                new CreateReportRequest(jobPost.JobPostsId, ReportedEntityTypes.JobPost, ReportType.Fraud, "Hidden job."),
+                reporter.UserId),
+            CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task CreateReport_AllowsOwningClientToReportOwnHiddenJobPost()
+    {
+        await using var context = CreateContext();
+        var owner = AddUser(context, UserRole.Client);
+        var jobPost = AddJobPost(context, owner.UserId, status: 0, visibility: 1);
+        await context.SaveChangesAsync();
+
+        var handler = new CreateReportCommandHandler(context, new FixedDateTimeService());
+        var reportId = await handler.Handle(
+            new CreateReportCommand(
+                new CreateReportRequest(jobPost.JobPostsId, ReportedEntityTypes.JobPost, ReportType.Other, "Own draft issue."),
+                owner.UserId),
+            CancellationToken.None);
+
+        var report = await context.Reports.SingleAsync(report => report.ReportsId == reportId);
+        Assert.Equal(jobPost.JobPostsId, report.ReportedEntityId);
+    }
+
+    [Fact]
     public async Task GetReportDetail_RejectsOtherReporter()
     {
         await using var context = CreateContext();
@@ -115,6 +180,96 @@ public class ReportHandlerTests
         Assert.Equal(admin.UserId, resolvedReport.ResolvedByAdminId);
         Assert.Equal("Handled.", resolvedReport.AdminNote);
         Assert.NotNull(resolvedReport.ResolvedAt);
+    }
+
+    [Fact]
+    public async Task UpdateReportStatus_DismissedRecordsAdminAndClosureMetadata()
+    {
+        await using var context = CreateContext();
+        var reporter = AddUser(context, UserRole.Client);
+        var admin = AddUser(context, UserRole.Admin);
+        var reportedUser = AddUser(context, UserRole.Freelancer);
+        var report = AddReport(context, reporter.UserId, reportedUser.UserId, ReportedEntityTypes.User);
+        await context.SaveChangesAsync();
+
+        var handler = new UpdateReportStatusCommandHandler(context, new FixedDateTimeService());
+        await handler.Handle(
+            new UpdateReportStatusCommand(
+                report.ReportsId,
+                admin.UserId,
+                new UpdateReportStatusRequest(ReportStatus.Dismissed, " Not actionable. ")),
+            CancellationToken.None);
+
+        var dismissedReport = await context.Reports.SingleAsync(item => item.ReportsId == report.ReportsId);
+        Assert.Equal((int)ReportStatus.Dismissed, dismissedReport.Status);
+        Assert.Equal(admin.UserId, dismissedReport.ResolvedByAdminId);
+        Assert.Equal(new DateTime(2026, 6, 9, 0, 0, 0, DateTimeKind.Utc), dismissedReport.ResolvedAt);
+        Assert.Equal(new DateTime(2026, 6, 9, 0, 0, 0, DateTimeKind.Utc), dismissedReport.UpdatedAt);
+        Assert.Equal("Not actionable.", dismissedReport.AdminNote);
+    }
+
+    [Fact]
+    public async Task UpdateReportStatus_DismissedRejectsNonAdmin()
+    {
+        await using var context = CreateContext();
+        var reporter = AddUser(context, UserRole.Client);
+        var nonAdmin = AddUser(context, UserRole.Freelancer);
+        var reportedUser = AddUser(context, UserRole.Freelancer);
+        var report = AddReport(context, reporter.UserId, reportedUser.UserId, ReportedEntityTypes.User);
+        await context.SaveChangesAsync();
+
+        var handler = new UpdateReportStatusCommandHandler(context, new FixedDateTimeService());
+
+        await Assert.ThrowsAsync<NotFoundException>(() => handler.Handle(
+            new UpdateReportStatusCommand(
+                report.ReportsId,
+                nonAdmin.UserId,
+                new UpdateReportStatusRequest(ReportStatus.Dismissed, null)),
+            CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task UpdateReportStatus_DismissedRejectsMissingAdmin()
+    {
+        await using var context = CreateContext();
+        var reporter = AddUser(context, UserRole.Client);
+        var reportedUser = AddUser(context, UserRole.Freelancer);
+        var report = AddReport(context, reporter.UserId, reportedUser.UserId, ReportedEntityTypes.User);
+        await context.SaveChangesAsync();
+
+        var handler = new UpdateReportStatusCommandHandler(context, new FixedDateTimeService());
+
+        await Assert.ThrowsAsync<NotFoundException>(() => handler.Handle(
+            new UpdateReportStatusCommand(
+                report.ReportsId,
+                Guid.NewGuid(),
+                new UpdateReportStatusRequest(ReportStatus.Dismissed, null)),
+            CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task UpdateReportStatus_ReviewingDoesNotSetClosureMetadata()
+    {
+        await using var context = CreateContext();
+        var reporter = AddUser(context, UserRole.Client);
+        var admin = AddUser(context, UserRole.Admin);
+        var reportedUser = AddUser(context, UserRole.Freelancer);
+        var report = AddReport(context, reporter.UserId, reportedUser.UserId, ReportedEntityTypes.User);
+        await context.SaveChangesAsync();
+
+        var handler = new UpdateReportStatusCommandHandler(context, new FixedDateTimeService());
+        await handler.Handle(
+            new UpdateReportStatusCommand(
+                report.ReportsId,
+                admin.UserId,
+                new UpdateReportStatusRequest(ReportStatus.Reviewing, "Looking into it.")),
+            CancellationToken.None);
+
+        var reviewingReport = await context.Reports.SingleAsync(item => item.ReportsId == report.ReportsId);
+        Assert.Equal((int)ReportStatus.Reviewing, reviewingReport.Status);
+        Assert.Null(reviewingReport.ResolvedByAdminId);
+        Assert.Null(reviewingReport.ResolvedAt);
+        Assert.NotNull(reviewingReport.UpdatedAt);
     }
 
     [Fact]
@@ -218,19 +373,31 @@ public class ReportHandlerTests
         return report;
     }
 
-    private static JobPost AddJobPost(GigbridgeDbContext context)
+    private static JobPost AddJobPost(
+        GigbridgeDbContext context,
+        Guid? ownerUserId = null,
+        int status = 1,
+        int? visibility = 0)
     {
-        var jobPost = new JobPost
+        var clientProfile = new ClientProfile
         {
-            JobPostsId = Guid.NewGuid(),
             ClientProfilesId = Guid.NewGuid(),
-            Title = "Suspicious job",
-            Description = "Suspicious description.",
-            BudgetType = 0,
-            Status = 1,
+            UserId = ownerUserId ?? Guid.NewGuid(),
             CreatedAt = DateTime.UtcNow
         };
 
+        var jobPost = new JobPost
+        {
+            JobPostsId = Guid.NewGuid(),
+            ClientProfilesId = clientProfile.ClientProfilesId,
+            Title = "Suspicious job",
+            Description = "Suspicious description.",
+            Status = status,
+            Visibility = visibility,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        context.ClientProfiles.Add(clientProfile);
         context.JobPosts.Add(jobPost);
         return jobPost;
     }

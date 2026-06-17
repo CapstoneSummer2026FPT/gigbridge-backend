@@ -44,7 +44,7 @@ public class AdminReportsController : BaseApiController
         {
             return InvalidTokenResponse();
         }
-        await Mediator.Send(new UpdateReportStatusCommand(reportId, request));
+        await Mediator.Send(new UpdateReportStatusCommand(reportId, adminId, request));
         return Ok(ApiResponse<object>.Ok(null!, "Report status updated successfully."));
     }
 
