@@ -37,6 +37,8 @@ public partial class JobPost
     /// </summary>
     public int? Visibility { get; set; }
 
+    public string[] CustomSkillNames { get; set; } = [];
+
     public DateTime? EndDate { get; set; }
 
     public bool? IsAigenerated { get; set; }
