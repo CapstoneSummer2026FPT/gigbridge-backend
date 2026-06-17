@@ -1,12 +1,18 @@
-﻿namespace Application.Features.JobPosts.Client.UpdateJobPost.DTOs;
+namespace Application.Features.JobPosts.Client.GetMyJobPosts.DTOs;
 
-public class UpdateJobPostRequest
+public sealed class GetMyJobPostDto
 {
+    public Guid JobPostsId { get; set; }
+
+    public Guid ClientProfilesId { get; set; }
+
     public string Title { get; set; } = string.Empty;
 
     public string Description { get; set; } = string.Empty;
 
     public Guid? CategoryId { get; set; }
+
+    public string? CategoryName { get; set; }
 
     public decimal? BudgetMin { get; set; }
 
@@ -20,9 +26,17 @@ public class UpdateJobPostRequest
 
     public string? Location { get; set; }
 
+    public int Status { get; set; }
+
     public int? Visibility { get; set; }
 
     public DateTime? EndDate { get; set; }
 
-    public List<Guid> SkillIds { get; set; } = new();
+    public bool? IsAigenerated { get; set; }
+
+    public DateTime CreatedAt { get; set; }
+
+    public DateTime? UpdatedAt { get; set; }
+
+    public int ProposalCount { get; set; }
 }

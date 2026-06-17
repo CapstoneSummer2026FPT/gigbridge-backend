@@ -106,15 +106,24 @@ public class UpdateProposalStatusCommandHandler
 
 
     private static void UpdateStatusByFreelancer(
-        Proposal proposal,
-        int requestedStatus)
+    Proposal proposal,
+    int requestedStatus)
     {
-        if (requestedStatus != 5)
+        // Draft -> Pending: Freelancer submit draft proposal
+        if (proposal.Status == 0 && requestedStatus == 1)
         {
-            throw new UnauthorizedAccessException(
-                "Freelancer can only withdraw their own proposal.");
+            proposal.Status = 1;
+            return;
         }
 
-        proposal.Status = 5;
+        // Pending/Shortlisted -> Withdrawn: Freelancer withdraw proposal
+        if ((proposal.Status == 1 || proposal.Status == 2) && requestedStatus == 5)
+        {
+            proposal.Status = 5;
+            return;
+        }
+
+        throw new UnauthorizedAccessException(
+            "Freelancer can only submit a draft proposal or withdraw a pending/shortlisted proposal.");
     }
 }
