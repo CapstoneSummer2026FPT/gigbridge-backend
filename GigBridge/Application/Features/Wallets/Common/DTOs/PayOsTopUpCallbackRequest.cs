@@ -30,24 +30,36 @@ public sealed record PayOsTopUpCallbackData(
 {
     public IReadOnlyDictionary<string, string?> ToSignatureData()
     {
-        return new Dictionary<string, string?>
+        var data = new Dictionary<string, string?>();
+
+        AddIfNotNull(data, "orderCode", OrderCode?.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        AddIfNotNull(data, "amount", Amount?.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture));
+        AddIfNotNull(data, "description", Description);
+        AddIfNotNull(data, "accountNumber", AccountNumber);
+        AddIfNotNull(data, "reference", Reference);
+        AddIfNotNull(data, "transactionDateTime", TransactionDateTime);
+        AddIfNotNull(data, "currency", Currency);
+        AddIfNotNull(data, "paymentLinkId", PaymentLinkId);
+        AddIfNotNull(data, "code", Code);
+        AddIfNotNull(data, "desc", Desc);
+        AddIfNotNull(data, "counterAccountBankId", CounterAccountBankId);
+        AddIfNotNull(data, "counterAccountBankName", CounterAccountBankName);
+        AddIfNotNull(data, "counterAccountName", CounterAccountName);
+        AddIfNotNull(data, "counterAccountNumber", CounterAccountNumber);
+        AddIfNotNull(data, "virtualAccountName", VirtualAccountName);
+        AddIfNotNull(data, "virtualAccountNumber", VirtualAccountNumber);
+
+        return data;
+    }
+
+    private static void AddIfNotNull(
+        IDictionary<string, string?> data,
+        string key,
+        string? value)
+    {
+        if (value is not null)
         {
-            ["orderCode"] = OrderCode?.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            ["amount"] = Amount?.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture),
-            ["description"] = Description,
-            ["accountNumber"] = AccountNumber,
-            ["reference"] = Reference,
-            ["transactionDateTime"] = TransactionDateTime,
-            ["currency"] = Currency,
-            ["paymentLinkId"] = PaymentLinkId,
-            ["code"] = Code,
-            ["desc"] = Desc,
-            ["counterAccountBankId"] = CounterAccountBankId,
-            ["counterAccountBankName"] = CounterAccountBankName,
-            ["counterAccountName"] = CounterAccountName,
-            ["counterAccountNumber"] = CounterAccountNumber,
-            ["virtualAccountName"] = VirtualAccountName,
-            ["virtualAccountNumber"] = VirtualAccountNumber
-        };
+            data[key] = value;
+        }
     }
 }

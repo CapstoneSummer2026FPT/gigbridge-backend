@@ -7,16 +7,16 @@ using Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
-namespace Application.Features.Wallets.Common.TopUps.Confirm.Commands;
+namespace Application.Features.Wallets.Common.TopUps.Sync.Commands;
 
-public sealed class ConfirmWalletTopUpCommandHandler :
-    IRequestHandler<ConfirmWalletTopUpCommand, WalletTransactionResponse>
+public sealed class SyncWalletTopUpCommandHandler :
+    IRequestHandler<SyncWalletTopUpCommand, WalletTransactionResponse>
 {
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
     private readonly IWalletTopUpPaymentService _paymentService;
 
-    public ConfirmWalletTopUpCommandHandler(
+    public SyncWalletTopUpCommandHandler(
         IApplicationDbContext context,
         IDateTimeService dateTimeService,
         IWalletTopUpPaymentService paymentService)
@@ -27,34 +27,19 @@ public sealed class ConfirmWalletTopUpCommandHandler :
     }
 
     public async Task<WalletTransactionResponse> Handle(
-        ConfirmWalletTopUpCommand command,
+        SyncWalletTopUpCommand command,
         CancellationToken cancellationToken)
     {
-        var callback = command.Request;
-        var payload = new WalletTopUpCallbackPayload(
-            callback.Data?.OrderCode ?? callback.OrderCode,
-            IsSucceeded(callback),
-            callback.Data?.Reference ?? callback.Data?.PaymentLinkId ?? callback.GatewayTransactionCode,
-            callback.Data?.Amount ?? callback.AmountVnd,
-            callback.Data?.Desc ?? callback.Desc,
-            callback.Signature,
-            callback.Data?.ToSignatureData() ?? new Dictionary<string, string?>());
-
-        var verified = await _paymentService.VerifyCallbackAsync(payload, cancellationToken);
-        if (!verified.IsVerified)
+        if (command.Request.OrderCode <= 0)
         {
-            throw new BadRequestException("PayOS callback signature is invalid.");
+            throw new BadRequestException("PayOS order code is invalid.");
         }
 
-        if (!verified.OrderCode.HasValue)
-        {
-            throw new BadRequestException("PayOS callback is missing order code.");
-        }
-
-        var orderCode = verified.OrderCode.Value.ToString();
+        var orderCode = command.Request.OrderCode.ToString(System.Globalization.CultureInfo.InvariantCulture);
         var transaction = await _context.Set<WalletTransaction>()
             .FirstOrDefaultAsync(
                 transaction =>
+                    transaction.UserId == command.UserId &&
                     transaction.Type == (int)WalletTransactionType.TopUp &&
                     transaction.GatewayOrderCode == orderCode,
                 cancellationToken);
@@ -64,29 +49,43 @@ public sealed class ConfirmWalletTopUpCommandHandler :
             throw new NotFoundException("Wallet top-up transaction does not exist.");
         }
 
-        if (transaction.Status == (int)WalletTransactionStatus.Succeeded)
-        {
-            return WalletTransactionResponse.FromEntity(transaction);
-        }
-
-        if (transaction.Status == (int)WalletTransactionStatus.Failed ||
+        if (transaction.Status == (int)WalletTransactionStatus.Succeeded ||
+            transaction.Status == (int)WalletTransactionStatus.Failed ||
             transaction.Status == (int)WalletTransactionStatus.Cancelled)
         {
             return WalletTransactionResponse.FromEntity(transaction);
         }
 
-        if (!verified.IsSucceeded)
+        var paymentStatus = await _paymentService.GetPaymentStatusAsync(
+            command.Request.OrderCode,
+            cancellationToken);
+
+        if (paymentStatus.OrderCode.HasValue &&
+            paymentStatus.OrderCode.Value != command.Request.OrderCode)
         {
-            transaction.Status = (int)WalletTransactionStatus.Failed;
-            transaction.Note = verified.FailureReason;
+            throw new BadRequestException("PayOS payment status does not match the pending top-up.");
+        }
+
+        if (paymentStatus.AmountVnd.HasValue &&
+            paymentStatus.AmountVnd.Value != transaction.VndAmount)
+        {
+            throw new BadRequestException("PayOS payment amount does not match the pending top-up.");
+        }
+
+        if (paymentStatus.IsCancelled || paymentStatus.IsFailed)
+        {
+            transaction.Status = paymentStatus.IsCancelled
+                ? (int)WalletTransactionStatus.Cancelled
+                : (int)WalletTransactionStatus.Failed;
+            transaction.Note = paymentStatus.FailureReason;
             transaction.CompletedAt = _dateTimeService.UtcNow;
             await _context.SaveChangesAsync(cancellationToken);
             return WalletTransactionResponse.FromEntity(transaction);
         }
 
-        if (verified.AmountVnd.HasValue && verified.AmountVnd.Value != transaction.VndAmount)
+        if (!paymentStatus.IsSucceeded)
         {
-            throw new BadRequestException("PayOS callback amount does not match the pending top-up.");
+            return WalletTransactionResponse.FromEntity(transaction);
         }
 
         var wallet = await _context.Set<UserWallet>()
@@ -102,21 +101,12 @@ public sealed class ConfirmWalletTopUpCommandHandler :
         wallet.UpdatedAt = now;
 
         transaction.Status = (int)WalletTransactionStatus.Succeeded;
-        transaction.GatewayTransactionCode = verified.GatewayTransactionCode ?? transaction.GatewayTransactionCode;
+        transaction.GatewayTransactionCode =
+            paymentStatus.GatewayTransactionCode ?? transaction.GatewayTransactionCode;
         transaction.CompletedAt = now;
 
         await _context.SaveChangesAsync(cancellationToken);
 
         return WalletTransactionResponse.FromEntity(transaction);
-    }
-
-    private static bool IsSucceeded(PayOsTopUpCallbackRequest callback)
-    {
-        if (callback.Success.HasValue)
-        {
-            return callback.Success.Value;
-        }
-
-        return string.Equals(callback.Data?.Code ?? callback.Code, "00", StringComparison.Ordinal);
     }
 }
