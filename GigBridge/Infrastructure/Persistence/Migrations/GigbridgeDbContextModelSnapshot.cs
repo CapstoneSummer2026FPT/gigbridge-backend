@@ -197,13 +197,14 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(true);
 
+                    b.Property<Guid>("MajorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("MajorId");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
-
-                    b.Property<Guid?>("ParentCategoryCategoriesId")
-                        .HasColumnType("uuid");
 
                     b.Property<string>("Slug")
                         .IsRequired()
@@ -218,14 +219,48 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasKey("CategoriesId")
                         .HasName("Categories_pkey");
 
-                    b.HasIndex("ParentCategoryCategoriesId");
-
                     b.HasIndex(new[] { "IsActive" }, "IX_Categories_IsActive");
+
+                    b.HasIndex(new[] { "MajorId" }, "IX_Categories_MajorId");
 
                     b.HasIndex(new[] { "Slug" }, "IX_Categories_Slug")
                         .IsUnique();
 
                     b.ToTable("Categories");
+                });
+
+            modelBuilder.Entity("Domain.Entities.CategorySkill", b =>
+                {
+                    b.Property<Guid>("CategorySkillsId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("CategorySkillsId")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<Guid>("CategoryId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("CategoryId");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid>("SkillId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("SkillId");
+
+                    b.HasKey("CategorySkillsId")
+                        .HasName("CategorySkills_pkey");
+
+                    b.HasIndex(new[] { "CategoryId", "SkillId" }, "CategorySkills_CategoryId_SkillId_key")
+                        .IsUnique();
+
+                    b.HasIndex(new[] { "CategoryId" }, "IX_CategorySkills_CategoryId");
+
+                    b.HasIndex(new[] { "SkillId" }, "IX_CategorySkills_SkillId");
+
+                    b.ToTable("CategorySkills");
                 });
 
             modelBuilder.Entity("Domain.Entities.ClientProfile", b =>
@@ -1228,6 +1263,12 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(5)")
                         .HasDefaultValueSql("'VND'::character varying");
 
+                    b.Property<string[]>("CustomSkillNames")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasDefaultValueSql("ARRAY[]::text[]");
+
                     b.Property<string>("Description")
                         .IsRequired()
                         .HasColumnType("text");
@@ -1406,6 +1447,53 @@ namespace Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("JobPostSkills");
+                });
+
+            modelBuilder.Entity("Domain.Entities.Major", b =>
+                {
+                    b.Property<Guid>("MajorsId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("MajorsId")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int?>("SortOrder")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.HasKey("MajorsId")
+                        .HasName("Majors_pkey");
+
+                    b.HasIndex(new[] { "IsActive" }, "IX_Majors_IsActive");
+
+                    b.HasIndex(new[] { "Slug" }, "IX_Majors_Slug")
+                        .IsUnique();
+
+                    b.ToTable("Majors");
                 });
 
             modelBuilder.Entity("Domain.Entities.Message", b =>
@@ -2322,10 +2410,6 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnName("SkillsId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
-                    b.Property<Guid>("CategoriesId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("CategoriesId");
-
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
@@ -2343,8 +2427,6 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasKey("SkillsId")
                         .HasName("Skills_pkey");
-
-                    b.HasIndex(new[] { "CategoriesId" }, "IX_Skills_CategoriesId");
 
                     b.HasIndex(new[] { "IsActive" }, "IX_Skills_IsActive");
 
@@ -2917,11 +2999,35 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.Category", b =>
                 {
-                    b.HasOne("Domain.Entities.Category", "ParentCategory")
-                        .WithMany("InverseParentCategory")
-                        .HasForeignKey("ParentCategoryCategoriesId");
+                    b.HasOne("Domain.Entities.Major", "Major")
+                        .WithMany("Categories")
+                        .HasForeignKey("MajorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_Categories_Majors_MajorId");
 
-                    b.Navigation("ParentCategory");
+                    b.Navigation("Major");
+                });
+
+            modelBuilder.Entity("Domain.Entities.CategorySkill", b =>
+                {
+                    b.HasOne("Domain.Entities.Category", "Category")
+                        .WithMany("CategorySkills")
+                        .HasForeignKey("CategoryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("CategorySkills_cat_CategoryId_fkey");
+
+                    b.HasOne("Domain.Entities.Skill", "Skill")
+                        .WithMany("CategorySkills")
+                        .HasForeignKey("SkillId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("CategorySkills_sk_SkillId_fkey");
+
+                    b.Navigation("Category");
+
+                    b.Navigation("Skill");
                 });
 
             modelBuilder.Entity("Domain.Entities.ClientProfile", b =>
@@ -3609,17 +3715,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("Domain.Entities.Skill", b =>
-                {
-                    b.HasOne("Domain.Entities.Category", "Categories")
-                        .WithMany("Skills")
-                        .HasForeignKey("CategoriesId")
-                        .IsRequired()
-                        .HasConstraintName("Skills_cate_CategoriesId_fkey");
-
-                    b.Navigation("Categories");
-                });
-
             modelBuilder.Entity("Domain.Entities.Subscription", b =>
                 {
                     b.HasOne("Domain.Entities.SubscriptionPlan", "SubscriptionPlans")
@@ -3730,13 +3825,11 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.Category", b =>
                 {
-                    b.Navigation("InverseParentCategory");
+                    b.Navigation("CategorySkills");
 
                     b.Navigation("JobPosts");
 
                     b.Navigation("PortfolioItems");
-
-                    b.Navigation("Skills");
                 });
 
             modelBuilder.Entity("Domain.Entities.ClientProfile", b =>
@@ -3846,6 +3939,11 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("ProposalAnswers");
                 });
 
+            modelBuilder.Entity("Domain.Entities.Major", b =>
+                {
+                    b.Navigation("Categories");
+                });
+
             modelBuilder.Entity("Domain.Entities.Message", b =>
                 {
                     b.Navigation("LastMessageForConversations");
@@ -3883,6 +3981,8 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.Skill", b =>
                 {
+                    b.Navigation("CategorySkills");
+
                     b.Navigation("FreelancerSkills");
 
                     b.Navigation("JobPostSkills");

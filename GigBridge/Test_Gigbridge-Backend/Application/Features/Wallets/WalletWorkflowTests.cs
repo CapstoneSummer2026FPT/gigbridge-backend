@@ -5,6 +5,7 @@ using Application.Features.Admin.AdminCredit.DTOs;
 using Application.Features.Wallets.Common.DTOs;
 using Application.Features.Wallets.Common.TopUps.Confirm.Commands;
 using Application.Features.Wallets.Common.TopUps.Create.Commands;
+using Application.Features.Wallets.Common.TopUps.Sync.Commands;
 using Domain.Entities;
 using Domain.Enums;
 using Test_Gigbridge_Backend.TestSupport;
@@ -214,6 +215,44 @@ public class WalletWorkflowTests
     }
 
     [Fact]
+    public async Task PayOsTopUp_CallbackSuccessFalseWithCode00DoesNotCreditWallet()
+    {
+        var fixture = new WalletFixture();
+        var paymentService = new FakeWalletTopUpPaymentService();
+        var createHandler = new CreateWalletTopUpCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            paymentService);
+
+        var topUp = await createHandler.Handle(
+            new CreateWalletTopUpCommand(
+                fixture.ClientUserId,
+                new CreateWalletTopUpRequest(10m, "https://return", "https://cancel", "topup-code-00-false")),
+            CancellationToken.None);
+
+        var confirmHandler = new ConfirmWalletTopUpCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now.AddMinutes(5)),
+            paymentService);
+
+        var callback = new PayOsTopUpCallbackRequest(
+            long.Parse(topUp.GatewayOrderCode),
+            false,
+            "00",
+            "cancelled",
+            null,
+            topUp.AmountVnd,
+            "valid-signature",
+            null);
+
+        var result = await confirmHandler.Handle(new ConfirmWalletTopUpCommand(callback), CancellationToken.None);
+
+        var wallet = Assert.Single(fixture.Wallets.Entities);
+        Assert.Equal(0m, wallet.AvailableTokens);
+        Assert.Equal((int)WalletTransactionStatus.Failed, result.Status);
+    }
+
+    [Fact]
     public async Task PayOsTopUp_CreateWithDuplicateIdempotencyKeyReturnsExistingTransaction()
     {
         var fixture = new WalletFixture();
@@ -253,6 +292,97 @@ public class WalletWorkflowTests
                 CancellationToken.None));
     }
 
+    [Fact]
+    public async Task PayOsTopUp_SyncPaidStatusCreditsWalletOnce()
+    {
+        var fixture = new WalletFixture();
+        var paymentService = new FakeWalletTopUpPaymentService();
+        var createHandler = new CreateWalletTopUpCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            paymentService);
+
+        var topUp = await createHandler.Handle(
+            new CreateWalletTopUpCommand(
+                fixture.ClientUserId,
+                new CreateWalletTopUpRequest(30m, "https://return", "https://cancel", "topup-sync-paid")),
+            CancellationToken.None);
+
+        paymentService.StatusResult = new WalletTopUpStatusResult(
+            long.Parse(topUp.GatewayOrderCode),
+            "PAID",
+            true,
+            false,
+            false,
+            "payos-ref-sync",
+            topUp.AmountVnd,
+            null);
+
+        var syncHandler = new SyncWalletTopUpCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now.AddMinutes(5)),
+            paymentService);
+
+        await syncHandler.Handle(
+            new SyncWalletTopUpCommand(
+                fixture.ClientUserId,
+                new SyncPayOsTopUpRequest(long.Parse(topUp.GatewayOrderCode))),
+            CancellationToken.None);
+
+        var duplicate = await syncHandler.Handle(
+            new SyncWalletTopUpCommand(
+                fixture.ClientUserId,
+                new SyncPayOsTopUpRequest(long.Parse(topUp.GatewayOrderCode))),
+            CancellationToken.None);
+
+        var wallet = Assert.Single(fixture.Wallets.Entities);
+        Assert.Equal(30m, wallet.AvailableTokens);
+        Assert.Equal((int)WalletTransactionStatus.Succeeded, duplicate.Status);
+        Assert.Equal("payos-ref-sync", fixture.Transactions.Entities[0].GatewayTransactionCode);
+    }
+
+    [Fact]
+    public async Task PayOsTopUp_SyncCancelledStatusDoesNotCreditWallet()
+    {
+        var fixture = new WalletFixture();
+        var paymentService = new FakeWalletTopUpPaymentService();
+        var createHandler = new CreateWalletTopUpCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            paymentService);
+
+        var topUp = await createHandler.Handle(
+            new CreateWalletTopUpCommand(
+                fixture.ClientUserId,
+                new CreateWalletTopUpRequest(20m, "https://return", "https://cancel", "topup-sync-cancelled")),
+            CancellationToken.None);
+
+        paymentService.StatusResult = new WalletTopUpStatusResult(
+            long.Parse(topUp.GatewayOrderCode),
+            "CANCELLED",
+            false,
+            true,
+            false,
+            null,
+            topUp.AmountVnd,
+            "CANCELLED");
+
+        var syncHandler = new SyncWalletTopUpCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now.AddMinutes(5)),
+            paymentService);
+
+        var result = await syncHandler.Handle(
+            new SyncWalletTopUpCommand(
+                fixture.ClientUserId,
+                new SyncPayOsTopUpRequest(long.Parse(topUp.GatewayOrderCode))),
+            CancellationToken.None);
+
+        var wallet = Assert.Single(fixture.Wallets.Entities);
+        Assert.Equal(0m, wallet.AvailableTokens);
+        Assert.Equal((int)WalletTransactionStatus.Cancelled, result.Status);
+    }
+
     private sealed class WalletFixture
     {
         public WalletFixture()
@@ -287,6 +417,8 @@ public class WalletWorkflowTests
 
     private sealed class FakeWalletTopUpPaymentService : IWalletTopUpPaymentService
     {
+        public WalletTopUpStatusResult? StatusResult { get; set; }
+
         public Task<WalletTopUpPaymentResult> CreatePaymentAsync(
             WalletTopUpPaymentRequest request,
             CancellationToken cancellationToken)
@@ -309,6 +441,23 @@ public class WalletWorkflowTests
                 payload.GatewayTransactionCode,
                 payload.AmountVnd,
                 payload.FailureReason));
+        }
+
+        public Task<WalletTopUpStatusResult> GetPaymentStatusAsync(
+            long orderCode,
+            CancellationToken cancellationToken)
+        {
+            return Task.FromResult(
+                StatusResult ??
+                new WalletTopUpStatusResult(
+                    orderCode,
+                    "PENDING",
+                    false,
+                    false,
+                    false,
+                    null,
+                    null,
+                    null));
         }
     }
 

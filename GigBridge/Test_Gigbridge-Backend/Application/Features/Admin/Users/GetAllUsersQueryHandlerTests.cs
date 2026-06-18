@@ -1,0 +1,115 @@
+using Application.Common.Mappings;
+using Application.Features.Admin.Users.GetAllUser.Queries;
+using AutoMapper;
+using Domain.Entities;
+using Domain.Enums;
+using Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
+
+namespace Test_Gigbridge_Backend.Application.Features.Admin.Users;
+
+public class GetAllUsersQueryHandlerTests
+{
+    [Fact]
+    public async Task Handle_AddsOpenReportCountsForPendingAndReviewingUserReports()
+    {
+        await using var context = CreateContext();
+        var reporter = AddUser(context, "Reporter", UserRole.Client);
+        var reportedUser = AddUser(context, "Reported User", UserRole.Freelancer);
+        var cleanUser = AddUser(context, "Clean User", UserRole.Client);
+
+        AddReport(context, reporter.UserId, reportedUser.UserId, ReportStatus.Pending);
+        AddReport(context, reporter.UserId, reportedUser.UserId, ReportStatus.Reviewing);
+        AddReport(context, reporter.UserId, cleanUser.UserId, ReportStatus.Resolved);
+        AddReport(context, reporter.UserId, cleanUser.UserId, ReportStatus.Dismissed);
+        await context.SaveChangesAsync();
+
+        var handler = new GetAllUsersQueryHandler(context, CreateMapper());
+        var result = await handler.Handle(new GetAllUsersQuery(PageSize: 10), CancellationToken.None);
+
+        var reported = result.Items.Single(user => user.UserId == reportedUser.UserId);
+        var clean = result.Items.Single(user => user.UserId == cleanUser.UserId);
+
+        Assert.Equal(2, reported.OpenReportCount);
+        Assert.True(reported.IsCurrentlyReported);
+        Assert.Equal(0, clean.OpenReportCount);
+        Assert.False(clean.IsCurrentlyReported);
+    }
+
+    [Fact]
+    public async Task Handle_IgnoresOpenReportsForNonUserTargets()
+    {
+        await using var context = CreateContext();
+        var reporter = AddUser(context, "Reporter", UserRole.Client);
+        var user = AddUser(context, "User", UserRole.Freelancer);
+
+        context.Reports.Add(new Report
+        {
+            ReportsId = Guid.NewGuid(),
+            ReporterId = reporter.UserId,
+            ReportedEntityId = user.UserId,
+            ReportedEntityType = ReportedEntityTypes.JobPost,
+            Type = (int)ReportType.Other,
+            Reason = "Wrong target type.",
+            Status = (int)ReportStatus.Pending,
+            CreatedAt = DateTime.UtcNow
+        });
+        await context.SaveChangesAsync();
+
+        var handler = new GetAllUsersQueryHandler(context, CreateMapper());
+        var result = await handler.Handle(new GetAllUsersQuery(PageSize: 10), CancellationToken.None);
+
+        var item = result.Items.Single(resultUser => resultUser.UserId == user.UserId);
+        Assert.Equal(0, item.OpenReportCount);
+        Assert.False(item.IsCurrentlyReported);
+    }
+
+    private static GigbridgeDbContext CreateContext()
+    {
+        var options = new DbContextOptionsBuilder<GigbridgeDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+
+        return new GigbridgeDbContext(options);
+    }
+
+    private static IMapper CreateMapper()
+    {
+        return new MapperConfiguration(
+            config => config.AddProfile<MappingProfile>(),
+            NullLoggerFactory.Instance).CreateMapper();
+    }
+
+    private static User AddUser(GigbridgeDbContext context, string fullName, UserRole role)
+    {
+        var user = new User
+        {
+            UserId = Guid.NewGuid(),
+            FullName = fullName,
+            Email = $"{Guid.NewGuid():N}@example.com",
+            Role = (int)role,
+            IsActive = true,
+            IsEmailVerified = true,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        context.Users.Add(user);
+        return user;
+    }
+
+    private static void AddReport(GigbridgeDbContext context, Guid reporterId, Guid targetId, ReportStatus status)
+    {
+        context.Reports.Add(new Report
+        {
+            ReportsId = Guid.NewGuid(),
+            ReporterId = reporterId,
+            ReportedEntityId = targetId,
+            ReportedEntityType = ReportedEntityTypes.User,
+            Type = (int)ReportType.Other,
+            Reason = "Needs admin review.",
+            Status = (int)status,
+            CreatedAt = DateTime.UtcNow
+        });
+    }
+}

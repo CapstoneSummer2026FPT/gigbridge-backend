@@ -17,6 +17,7 @@ public record JobPostDetailDto(
     string? Location,
     DateTime? EndDate,
     DateTime CreatedAt,
+    int EloPoints,
     List<JobPostSkillDto> Skills,
     List<AttachmentDto> Attachments
 );

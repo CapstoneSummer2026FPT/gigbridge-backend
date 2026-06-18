@@ -1,11 +1,10 @@
-﻿using System;
-using System.Collections.Generic;
-
-namespace Domain.Entities;
+﻿namespace Domain.Entities;
 
 public partial class Category
 {
     public Guid CategoriesId { get; set; }
+
+    public Guid MajorId { get; set; }
 
     public string Name { get; set; } = null!;
 
@@ -19,13 +18,11 @@ public partial class Category
 
     public DateTime CreatedAt { get; set; }
 
-    public virtual ICollection<Category> InverseParentCategory { get; set; } = new List<Category>();
+    public virtual Major Major { get; set; } = null!;
 
     public virtual ICollection<JobPost> JobPosts { get; set; } = new List<JobPost>();
 
-    public virtual Category? ParentCategory { get; set; }
+    public virtual ICollection<CategorySkill> CategorySkills { get; set; } = new List<CategorySkill>();
 
     public virtual ICollection<PortfolioItem> PortfolioItems { get; set; } = new List<PortfolioItem>();
-
-    public virtual ICollection<Skill> Skills { get; set; } = new List<Skill>();
 }

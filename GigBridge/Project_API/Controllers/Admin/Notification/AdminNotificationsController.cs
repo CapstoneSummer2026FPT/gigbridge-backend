@@ -1,6 +1,7 @@
 using Application.Common.Models;
 using Application.Features.Admin.Notifications.Broadcast;
 using Application.Features.Admin.Notifications.Common.DTOs;
+using Application.Features.Admin.Notifications.Delete;
 using Domain.Enums;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
@@ -39,5 +40,17 @@ public class AdminNotificationsController : BaseApiController
 
         await Mediator.Send(command);
         return Ok(ApiResponse<object>.Ok(null!, "Broadcast notification sent successfully."));
+    }
+
+    [HttpDelete("{notificationId:guid}")]
+    public async Task<IActionResult> Delete(Guid notificationId)
+    {
+        var command = new DeleteAdminNotificationCommand
+        {
+            NotificationId = notificationId
+        };
+
+        await Mediator.Send(command);
+        return Ok(ApiResponse<object>.Ok(null!, "Notification deleted successfully."));
     }
 }
