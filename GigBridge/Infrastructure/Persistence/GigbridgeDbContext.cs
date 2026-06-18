@@ -154,6 +154,9 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.CategoriesId)
                 .HasDefaultValueSql("gen_random_uuid()")
                 .HasColumnName("CategoriesId");
+            entity.Ignore(e => e.ParentCategory);
+            entity.Ignore(e => e.InverseParentCategory);
+            entity.Ignore(e => e.Skills);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.IsActive).HasDefaultValue(true);
             entity.Property(e => e.Name).HasMaxLength(200);
@@ -737,6 +740,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.Currency)
                 .HasMaxLength(5)
                 .HasDefaultValueSql("'VND'::character varying");
+            entity.Property(e => e.CategoryId)
+                .HasColumnName("MajorCategoryId");
             entity.Property(e => e.EstimatedDuration).HasMaxLength(100);
             entity.Property(e => e.IsAigenerated)
                 .HasDefaultValue(false)
@@ -1417,8 +1422,6 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
         {
             entity.HasKey(e => e.SkillsId).HasName("Skills_pkey");
 
-            entity.HasIndex(e => e.CategoriesId, "IX_Skills_CategoriesId");
-
             entity.HasIndex(e => e.IsActive, "IX_Skills_IsActive");
 
             entity.HasIndex(e => e.Name, "IX_Skills_Name");
@@ -1426,15 +1429,11 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.SkillsId)
                 .HasDefaultValueSql("gen_random_uuid()")
                 .HasColumnName("SkillsId");
-            entity.Property(e => e.CategoriesId).HasColumnName("CategoriesId");
+            entity.Ignore(e => e.CategoriesId);
+            entity.Ignore(e => e.Categories);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.IsActive).HasDefaultValue(true);
             entity.Property(e => e.Name).HasMaxLength(200);
-
-            entity.HasOne(d => d.Categories).WithMany(p => p.Skills)
-                .HasForeignKey(d => d.CategoriesId)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("Skills_cate_CategoriesId_fkey");
         });
 
         modelBuilder.Entity<Subscription>(entity =>
