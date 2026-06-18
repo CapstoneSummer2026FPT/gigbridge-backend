@@ -197,10 +197,6 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(true);
 
-                    b.Property<Guid>("MajorId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("MajorId");
-
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -220,8 +216,6 @@ namespace Infrastructure.Persistence.Migrations
                         .HasName("Categories_pkey");
 
                     b.HasIndex(new[] { "IsActive" }, "IX_Categories_IsActive");
-
-                    b.HasIndex(new[] { "MajorId" }, "IX_Categories_MajorId");
 
                     b.HasIndex(new[] { "Slug" }, "IX_Categories_Slug")
                         .IsUnique();
@@ -1245,9 +1239,6 @@ namespace Infrastructure.Persistence.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
 
-                    b.Property<Guid?>("CategoryId")
-                        .HasColumnType("uuid");
-
                     b.Property<Guid>("ClientProfilesId")
                         .HasColumnType("uuid")
                         .HasColumnName("ClientProfilesId");
@@ -1289,6 +1280,10 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<string>("Location")
                         .HasColumnType("text");
 
+                    b.Property<Guid?>("MajorCategoryId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("MajorCategoryId");
+
                     b.Property<int?>("MaxHires")
                         .HasColumnType("integer");
 
@@ -1313,14 +1308,14 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasKey("JobPostsId")
                         .HasName("JobPosts_pkey");
 
-                    b.HasIndex(new[] { "CategoryId" }, "IX_JobPosts_CategoryId");
-
                     b.HasIndex(new[] { "ClientProfilesId" }, "IX_JobPosts_ClientProfilesId");
 
                     b.HasIndex(new[] { "CreatedAt" }, "IX_JobPosts_CreatedAt")
                         .IsDescending();
 
                     b.HasIndex(new[] { "EndDate" }, "IX_JobPosts_EndDate");
+
+                    b.HasIndex(new[] { "MajorCategoryId" }, "IX_JobPosts_MajorCategoryId");
 
                     b.HasIndex(new[] { "Status" }, "IX_JobPosts_Status");
 
@@ -1496,6 +1491,40 @@ namespace Infrastructure.Persistence.Migrations
                     b.ToTable("Majors");
                 });
 
+            modelBuilder.Entity("Domain.Entities.MajorCategory", b =>
+                {
+                    b.Property<Guid>("MajorCategoriesId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("MajorCategoriesId")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<Guid>("CategoryId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("CategoryId");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid>("MajorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("MajorId");
+
+                    b.HasKey("MajorCategoriesId")
+                        .HasName("MajorCategories_pkey");
+
+                    b.HasIndex(new[] { "CategoryId" }, "IX_MajorCategories_CategoryId");
+
+                    b.HasIndex(new[] { "MajorId" }, "IX_MajorCategories_MajorId");
+
+                    b.HasIndex(new[] { "MajorId", "CategoryId" }, "MajorCategories_MajorId_CategoryId_key")
+                        .IsUnique();
+
+                    b.ToTable("MajorCategories");
+                });
+
             modelBuilder.Entity("Domain.Entities.Message", b =>
                 {
                     b.Property<Guid>("MessagesId")
@@ -1668,6 +1697,10 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("integer")
                         .HasComment("Enum MilestoneStatus: 0=Pending, 1=InProgress, 2=Submitted, 3=Approved, 4=PaymentProofUploaded, 5=PaymentConfirmed, 6=Disputed");
+
+                    b.Property<string>("SubmissionDescription")
+                        .HasMaxLength(5000)
+                        .HasColumnType("character varying(5000)");
 
                     b.Property<DateTime?>("SubmittedAt")
                         .HasColumnType("timestamp with time zone");
@@ -2997,18 +3030,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("Domain.Entities.Category", b =>
-                {
-                    b.HasOne("Domain.Entities.Major", "Major")
-                        .WithMany("Categories")
-                        .HasForeignKey("MajorId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("FK_Categories_Majors_MajorId");
-
-                    b.Navigation("Major");
-                });
-
             modelBuilder.Entity("Domain.Entities.CategorySkill", b =>
                 {
                     b.HasOne("Domain.Entities.Category", "Category")
@@ -3345,20 +3366,21 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.JobPost", b =>
                 {
-                    b.HasOne("Domain.Entities.Category", "Category")
-                        .WithMany("JobPosts")
-                        .HasForeignKey("CategoryId")
-                        .HasConstraintName("JobPosts_CategoryId_fkey");
-
                     b.HasOne("Domain.Entities.ClientProfile", "ClientProfiles")
                         .WithMany("JobPosts")
                         .HasForeignKey("ClientProfilesId")
                         .IsRequired()
                         .HasConstraintName("JobPosts_clPro_ClientProfilesId_fkey");
 
-                    b.Navigation("Category");
+                    b.HasOne("Domain.Entities.MajorCategory", "MajorCategory")
+                        .WithMany("JobPosts")
+                        .HasForeignKey("MajorCategoryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("JobPosts_MajorCategoryId_fkey");
 
                     b.Navigation("ClientProfiles");
+
+                    b.Navigation("MajorCategory");
                 });
 
             modelBuilder.Entity("Domain.Entities.JobPostAttachment", b =>
@@ -3400,6 +3422,27 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("JobPosts");
 
                     b.Navigation("Skills");
+                });
+
+            modelBuilder.Entity("Domain.Entities.MajorCategory", b =>
+                {
+                    b.HasOne("Domain.Entities.Category", "Category")
+                        .WithMany("MajorCategories")
+                        .HasForeignKey("CategoryId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("MajorCategories_cat_CategoryId_fkey");
+
+                    b.HasOne("Domain.Entities.Major", "Major")
+                        .WithMany("MajorCategories")
+                        .HasForeignKey("MajorId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("MajorCategories_major_MajorId_fkey");
+
+                    b.Navigation("Category");
+
+                    b.Navigation("Major");
                 });
 
             modelBuilder.Entity("Domain.Entities.Message", b =>
@@ -3827,7 +3870,7 @@ namespace Infrastructure.Persistence.Migrations
                 {
                     b.Navigation("CategorySkills");
 
-                    b.Navigation("JobPosts");
+                    b.Navigation("MajorCategories");
 
                     b.Navigation("PortfolioItems");
                 });
@@ -3941,7 +3984,12 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.Major", b =>
                 {
-                    b.Navigation("Categories");
+                    b.Navigation("MajorCategories");
+                });
+
+            modelBuilder.Entity("Domain.Entities.MajorCategory", b =>
+                {
+                    b.Navigation("JobPosts");
                 });
 
             modelBuilder.Entity("Domain.Entities.Message", b =>

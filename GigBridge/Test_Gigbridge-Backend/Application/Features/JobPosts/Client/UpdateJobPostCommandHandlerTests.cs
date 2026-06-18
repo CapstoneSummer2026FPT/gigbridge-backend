@@ -30,21 +30,20 @@ public class UpdateJobPostCommandHandlerTests
         });
         context.AddSet<JobPostSkill>();
 
-        var request = new UpdateJobPostRequest
-        {
-            Title = "Updated title",
-            Description = "Updated description",
-            CategoryId = null,
-            BudgetMin = 100m,
-            BudgetMax = 200m,
-            Currency = "VND",
-            EstimatedDuration = "1 week",
-            MaxHires = 1,
-            Location = "Remote",
-            Visibility = 2,
-            EndDate = now.AddDays(7),
-            SkillIds = new List<Guid>()
-        };
+        var request = new UpdateJobPostRequest(
+            Title: "Updated title",
+            Description: "Updated description",
+            MajorCategoryId: null,
+            BudgetMin: 100m,
+            BudgetMax: 200m,
+            Currency: "VND",
+            EstimatedDuration: "1 week",
+            MaxHires: 1,
+            Location: "Remote",
+            Visibility: 2,
+            EndDate: now.AddDays(7),
+            SkillIds: new List<Guid>(),
+            CustomSkillNames: new List<string>());
 
         var handler = new UpdateJobPostCommandHandler(context, new FixedDateTimeService(now));
 

@@ -25,7 +25,7 @@ public class CreateJobPostCommandHandlerTests
         var request = new CreateJobPostRequest(
             Title: " Build contract draft ",
             Description: " Prepare escrow workflow ",
-            CategoryId: null,
+            MajorCategoryId: null,
             BudgetMin: 700m,
             BudgetMax: 1200m,
             Currency: "VND",
@@ -34,7 +34,8 @@ public class CreateJobPostCommandHandlerTests
             Location: "Remote",
             Visibility: 0,
             EndDate: endDate,
-            SkillIds: new List<Guid>());
+            SkillIds: new List<Guid>(),
+            CustomSkillNames: new List<string>());
 
         var handler = new CreateJobPostCommandHandler(context, new FixedDateTimeService(now));
         var jobPostId = await handler.Handle(new CreateJobPostCommand(request, userId), CancellationToken.None);
@@ -69,7 +70,7 @@ public class CreateJobPostCommandHandlerTests
         var request = new CreateJobPostRequest(
             Title: "Build contract draft",
             Description: "Prepare escrow workflow",
-            CategoryId: null,
+            MajorCategoryId: null,
             BudgetMin: null,
             BudgetMax: 1200m,
             Currency: "VND",
@@ -78,7 +79,8 @@ public class CreateJobPostCommandHandlerTests
             Location: null,
             Visibility: null,
             EndDate: null,
-            SkillIds: new List<Guid>());
+            SkillIds: new List<Guid>(),
+            CustomSkillNames: new List<string>());
 
         var handler = new CreateJobPostCommandHandler(context, new FixedDateTimeService(now));
         await handler.Handle(new CreateJobPostCommand(request, userId), CancellationToken.None);

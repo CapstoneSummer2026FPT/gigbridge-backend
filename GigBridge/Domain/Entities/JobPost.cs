@@ -13,7 +13,7 @@ public partial class JobPost
 
     public string Description { get; set; } = null!;
 
-    public Guid? CategoryId { get; set; }
+    public Guid? MajorCategoryId { get; set; }
 
     public decimal? BudgetMin { get; set; }
 
@@ -47,7 +47,7 @@ public partial class JobPost
 
     public DateTime? UpdatedAt { get; set; }
 
-    public virtual Category? Category { get; set; }
+    public virtual MajorCategory? MajorCategory { get; set; }
 
     public virtual ClientProfile ClientProfiles { get; set; } = null!;
 

@@ -38,7 +38,7 @@ public class GetMyConversationsQueryHandler
                 conversationIds.Contains(conversation.ConversationsId) &&
                 conversation.DeletedAt == null)
             .Include(conversation => conversation.JobPosts)
-                .ThenInclude(jobPost => jobPost!.Category)
+                .ThenInclude(jobPost => jobPost!.MajorCategory)
             .OrderByDescending(conversation => conversation.LastMessageAt ?? conversation.CreatedAt)
             .ToListAsync(cancellationToken);
 

@@ -16,5 +16,5 @@ public partial class Major
 
     public DateTime CreatedAt { get; set; }
 
-    public virtual ICollection<Category> Categories { get; set; } = new List<Category>();
+    public virtual ICollection<MajorCategory> MajorCategories { get; set; } = new List<MajorCategory>();
 }

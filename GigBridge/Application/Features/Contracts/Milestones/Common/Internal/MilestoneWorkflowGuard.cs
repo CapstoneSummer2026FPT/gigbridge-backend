@@ -131,6 +131,17 @@ internal static class MilestoneWorkflowGuard
 
     public static ContractMilestoneResponse ToResponse(Milestone milestone)
     {
+        var attachments = milestone.MilestoneAttachments != null
+            ? System.Linq.Enumerable.ToList(System.Linq.Enumerable.Select(milestone.MilestoneAttachments, a => new MilestoneAttachmentResponse(
+                a.MilestoneAttachmentsId,
+                a.MilestonesId,
+                a.FileName,
+                a.FileUrl,
+                a.FileSize,
+                a.UploadedByUserId,
+                a.CreatedAt)))
+            : new System.Collections.Generic.List<MilestoneAttachmentResponse>();
+
         return new ContractMilestoneResponse(
             milestone.MilestonesId,
             milestone.ContractsId,
@@ -143,6 +154,8 @@ internal static class MilestoneWorkflowGuard
             milestone.SubmittedAt,
             milestone.ApprovedAt,
             milestone.ReleasedAmount,
-            milestone.LastReleasedAt);
+            milestone.LastReleasedAt,
+            milestone.SubmissionDescription,
+            attachments);
     }
 }

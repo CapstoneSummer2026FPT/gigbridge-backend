@@ -63,6 +63,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
 
     public virtual DbSet<Major> Majors { get; set; }
 
+    public virtual DbSet<MajorCategory> MajorCategories { get; set; }
+
     public virtual DbSet<Message> Messages { get; set; }
 
     public virtual DbSet<MessageAttachment> MessageAttachments { get; set; }
@@ -156,14 +158,9 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.HasIndex(e => e.Slug, "IX_Categories_Slug")
                 .IsUnique();
 
-            entity.HasIndex(e => e.MajorId, "IX_Categories_MajorId");
-
             entity.Property(e => e.CategoriesId)
                 .HasDefaultValueSql("gen_random_uuid()")
                 .HasColumnName("CategoriesId");
-
-            entity.Property(e => e.MajorId)
-                .HasColumnName("MajorId");
 
             entity.Property(e => e.CreatedAt)
                 .HasDefaultValueSql("now()");
@@ -184,11 +181,6 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.SortOrder)
                 .HasDefaultValue(0);
 
-            entity.HasOne(e => e.Major)
-                .WithMany(e => e.Categories)
-                .HasForeignKey(e => e.MajorId)
-                .OnDelete(DeleteBehavior.Restrict)
-                .HasConstraintName("FK_Categories_Majors_MajorId");
         });
         modelBuilder.Entity<CategorySkill>(entity =>
         {
@@ -781,45 +773,72 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
 
             entity.HasIndex(e => e.EndDate, "IX_JobPosts_EndDate");
 
-            entity.HasIndex(e => e.CategoryId, "IX_JobPosts_CategoryId");
+            entity.HasIndex(e => e.MajorCategoryId, "IX_JobPosts_MajorCategoryId");
 
             entity.HasIndex(e => e.ClientProfilesId, "IX_JobPosts_ClientProfilesId");
 
-            entity.HasIndex(e => e.CreatedAt, "IX_JobPosts_CreatedAt").IsDescending();
+            entity.HasIndex(e => e.CreatedAt, "IX_JobPosts_CreatedAt")
+                .IsDescending();
 
             entity.HasIndex(e => e.Status, "IX_JobPosts_Status");
 
             entity.HasIndex(e => new { e.Status, e.Visibility }, "IX_JobPosts_Status_Visibility");
 
-            entity.HasIndex(e => new { e.Status, e.Visibility, e.CreatedAt }, "IX_JobPosts_Status_Visibility_CreatedAt").IsDescending(false, false, true);
+            entity.HasIndex(e => new { e.Status, e.Visibility, e.CreatedAt }, "IX_JobPosts_Status_Visibility_CreatedAt")
+                .IsDescending(false, false, true);
 
             entity.Property(e => e.JobPostsId)
                 .HasDefaultValueSql("gen_random_uuid()")
                 .HasColumnName("JobPostsId");
-            entity.Property(e => e.BudgetMax).HasPrecision(18, 2);
-            entity.Property(e => e.BudgetMin).HasPrecision(18, 2);
-            entity.Property(e => e.ClientProfilesId).HasColumnName("ClientProfilesId");
-            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+
+            entity.Property(e => e.MajorCategoryId)
+                .HasColumnName("MajorCategoryId");
+
+            entity.Property(e => e.BudgetMax)
+                .HasPrecision(18, 2);
+
+            entity.Property(e => e.BudgetMin)
+                .HasPrecision(18, 2);
+
+            entity.Property(e => e.ClientProfilesId)
+                .HasColumnName("ClientProfilesId");
+
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("now()");
+
             entity.Property(e => e.Currency)
                 .HasMaxLength(5)
                 .HasDefaultValueSql("'VND'::character varying");
-            entity.Property(e => e.EstimatedDuration).HasMaxLength(100);
+
+            entity.Property(e => e.EstimatedDuration)
+                .HasMaxLength(100);
+
             entity.Property(e => e.IsAigenerated)
                 .HasDefaultValue(false)
                 .HasColumnName("IsAIGenerated");
-            entity.Property(e => e.Status).HasComment("Enum JobPostStatus: 0=Draft, 1=Open, 2=InProgress, 3=Closed, 4=Cancelled");
-            entity.Property(e => e.Title).HasMaxLength(500);
+
+            entity.Property(e => e.Status)
+                .HasComment("Enum JobPostStatus: 0=Draft, 1=Open, 2=InProgress, 3=Closed, 4=Cancelled");
+
+            entity.Property(e => e.Title)
+                .HasMaxLength(500);
+
             entity.Property(e => e.Visibility)
                 .HasDefaultValue(0)
                 .HasComment("Enum JobPostVisibility: 0=Public, 1=Private, 2=InviteOnly");
+
             entity.Property(e => e.CustomSkillNames)
                 .HasColumnType("text[]")
                 .HasDefaultValueSql("ARRAY[]::text[]");
-            entity.HasOne(d => d.Category).WithMany(p => p.JobPosts)
-                .HasForeignKey(d => d.CategoryId)
-                .HasConstraintName("JobPosts_CategoryId_fkey");
 
-            entity.HasOne(d => d.ClientProfiles).WithMany(p => p.JobPosts)
+            entity.HasOne(e => e.MajorCategory)
+                .WithMany(e => e.JobPosts)
+                .HasForeignKey(e => e.MajorCategoryId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("JobPosts_MajorCategoryId_fkey");
+
+            entity.HasOne(d => d.ClientProfiles)
+                .WithMany(p => p.JobPosts)
                 .HasForeignKey(d => d.ClientProfilesId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("JobPosts_clPro_ClientProfilesId_fkey");
@@ -938,6 +957,43 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
 
             entity.Property(e => e.CreatedAt)
                 .HasDefaultValueSql("now()");
+        });
+
+        modelBuilder.Entity<MajorCategory>(entity =>
+        {
+            entity.HasKey(e => e.MajorCategoriesId).HasName("MajorCategories_pkey");
+
+            entity.HasIndex(e => e.MajorId, "IX_MajorCategories_MajorId");
+
+            entity.HasIndex(e => e.CategoryId, "IX_MajorCategories_CategoryId");
+
+            entity.HasIndex(e => new { e.MajorId, e.CategoryId }, "MajorCategories_MajorId_CategoryId_key")
+                .IsUnique();
+
+            entity.Property(e => e.MajorCategoriesId)
+                .HasDefaultValueSql("gen_random_uuid()")
+                .HasColumnName("MajorCategoriesId");
+
+            entity.Property(e => e.MajorId)
+                .HasColumnName("MajorId");
+
+            entity.Property(e => e.CategoryId)
+                .HasColumnName("CategoryId");
+
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("now()");
+
+            entity.HasOne(e => e.Major)
+                .WithMany(e => e.MajorCategories)
+                .HasForeignKey(e => e.MajorId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("MajorCategories_major_MajorId_fkey");
+
+            entity.HasOne(e => e.Category)
+                .WithMany(e => e.MajorCategories)
+                .HasForeignKey(e => e.CategoryId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("MajorCategories_cat_CategoryId_fkey");
         });
 
         modelBuilder.Entity<Message>(entity =>
@@ -1085,6 +1141,7 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.SortOrder).HasDefaultValue(0);
             entity.Property(e => e.Status).HasComment("Enum MilestoneStatus: 0=Pending, 1=InProgress, 2=Submitted, 3=Approved, 4=PaymentProofUploaded, 5=PaymentConfirmed, 6=Disputed");
             entity.Property(e => e.Title).HasMaxLength(500);
+            entity.Property(e => e.SubmissionDescription).HasMaxLength(5000);
 
             entity.HasOne(d => d.Contracts).WithMany(p => p.Milestones)
                 .HasForeignKey(d => d.ContractsId)
