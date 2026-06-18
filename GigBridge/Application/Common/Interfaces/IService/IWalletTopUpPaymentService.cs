@@ -9,6 +9,10 @@ public interface IWalletTopUpPaymentService
     Task<WalletTopUpCallbackResult> VerifyCallbackAsync(
         WalletTopUpCallbackPayload payload,
         CancellationToken cancellationToken);
+
+    Task<WalletTopUpStatusResult> GetPaymentStatusAsync(
+        long orderCode,
+        CancellationToken cancellationToken);
 }
 
 public sealed record WalletTopUpPaymentRequest(
@@ -40,6 +44,16 @@ public sealed record WalletTopUpCallbackResult(
     bool IsVerified,
     long? OrderCode,
     bool IsSucceeded,
+    string? GatewayTransactionCode,
+    decimal? AmountVnd,
+    string? FailureReason);
+
+public sealed record WalletTopUpStatusResult(
+    long? OrderCode,
+    string? Status,
+    bool IsSucceeded,
+    bool IsCancelled,
+    bool IsFailed,
     string? GatewayTransactionCode,
     decimal? AmountVnd,
     string? FailureReason);

@@ -82,6 +82,7 @@ public class GoogleLoginCommandHandler : IRequestHandler<GoogleLoginCommand, (Lo
         return _context.Set<User>()
             .Include(u => u.ClientProfile)
             .Include(u => u.FreelancerProfile)
+            .Include(u => u.UserEloScore)
             .FirstOrDefaultAsync(u => u.Email.ToLower() == normalizedEmail, cancellationToken);
     }
 

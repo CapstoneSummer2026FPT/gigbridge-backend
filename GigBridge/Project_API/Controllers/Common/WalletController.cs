@@ -4,6 +4,7 @@ using Application.Features.Wallets.Common.GetMine.Queries;
 using Application.Features.Wallets.Common.GetTransactions.Queries;
 using Application.Features.Wallets.Common.TopUps.Confirm.Commands;
 using Application.Features.Wallets.Common.TopUps.Create.Commands;
+using Application.Features.Wallets.Common.TopUps.Sync.Commands;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -51,6 +52,19 @@ public sealed class WalletController : BaseApiController
         var result = await Mediator.Send(new CreateWalletTopUpCommand(userId, request));
 
         return Ok(ApiResponse<CreateWalletTopUpResponse>.Ok(result, "Wallet top-up request created"));
+    }
+
+    [HttpPost("top-ups/payos/sync")]
+    public async Task<IActionResult> SyncPayOsTopUp([FromBody] SyncPayOsTopUpRequest request)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return InvalidTokenResponse();
+        }
+
+        var result = await Mediator.Send(new SyncWalletTopUpCommand(userId, request));
+
+        return Ok(ApiResponse<WalletTransactionResponse>.Ok(result, "Wallet top-up status synced"));
     }
 
     [HttpPost("top-ups/payos/callback")]

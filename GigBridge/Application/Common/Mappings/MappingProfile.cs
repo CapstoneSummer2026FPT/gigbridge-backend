@@ -7,6 +7,7 @@ using Application.Features.FAQCategories.Shared.DTOs;
 using Application.Features.FAQs.Shared.DTOs;
 using Application.Features.Profiles.FreelancerProfile.CreateFreelancerProfile.DTOs;
 using Application.Features.Profiles.ClientProfile.CreateClientProfile.DTOs;
+using Domain.Services;
 
 namespace Application.Common.Mappings;
 
@@ -14,7 +15,12 @@ public class MappingProfile : Profile
 {
     public MappingProfile()
     {
-        CreateMap<User, UserDTO>();
+        CreateMap<User, UserDTO>()
+            .ForMember(
+                dest => dest.EloPoints,
+                opt => opt.MapFrom(src => src.UserEloScore != null
+                    ? src.UserEloScore.CurrentPoints
+                    : UserEloCalculator.DefaultPoints));
         CreateMap<User, AdminUserDto>();
 
         // FAQCategory mappings
