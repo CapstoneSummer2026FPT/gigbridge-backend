@@ -36,9 +36,33 @@ public class GetMySavedJobsQueryHandler : IRequestHandler<GetMySavedJobsQuery, I
                 Title = x.JobPosts.Title,
                 Description = x.JobPosts.Description,
 
-                CategoryName = x.JobPosts.Category != null
-                    ? x.JobPosts.Category.Name
+                MajorCategoryId = x.JobPosts.MajorCategoryId,
+
+                MajorId = x.JobPosts.MajorCategory != null
+                    ? x.JobPosts.MajorCategory.MajorId
                     : null,
+
+                MajorName = x.JobPosts.MajorCategory != null
+                    ? x.JobPosts.MajorCategory.Major.Name
+                    : null,
+
+                CategoryId = x.JobPosts.MajorCategory != null
+                    ? x.JobPosts.MajorCategory.CategoryId
+                    : null,
+
+                CategoryName = x.JobPosts.MajorCategory != null
+                    ? x.JobPosts.MajorCategory.Category.Name
+                    : null,
+
+                Skills = x.JobPosts.JobPostSkills
+                    .Select(jobPostSkill => new SavedJobSkillDto
+                    {
+                        SkillId = jobPostSkill.SkillsId,
+                        Name = jobPostSkill.Skills.Name
+                    })
+                    .ToList(),
+
+                CustomSkillNames = x.JobPosts.CustomSkillNames.ToList(),
 
                 BudgetMin = x.JobPosts.BudgetMin,
                 BudgetMax = x.JobPosts.BudgetMax,
