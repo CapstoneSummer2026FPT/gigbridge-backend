@@ -1141,6 +1141,7 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.SortOrder).HasDefaultValue(0);
             entity.Property(e => e.Status).HasComment("Enum MilestoneStatus: 0=Pending, 1=InProgress, 2=Submitted, 3=Approved, 4=PaymentProofUploaded, 5=PaymentConfirmed, 6=Disputed");
             entity.Property(e => e.Title).HasMaxLength(500);
+            entity.Property(e => e.SubmissionDescription).HasMaxLength(5000);
 
             entity.HasOne(d => d.Contracts).WithMany(p => p.Milestones)
                 .HasForeignKey(d => d.ContractsId)

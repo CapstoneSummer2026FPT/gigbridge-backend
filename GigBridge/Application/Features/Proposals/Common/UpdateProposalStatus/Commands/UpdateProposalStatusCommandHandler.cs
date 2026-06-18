@@ -1,4 +1,4 @@
-﻿using Application.Common.Exceptions;
+using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Domain.Entities;
@@ -78,7 +78,7 @@ public class UpdateProposalStatusCommandHandler
         return true;
     }
 
-    private async Task UpdateStatusByClient(
+    private void UpdateStatusByClient(
     Proposal proposal,
     int requestedStatus)
     {

@@ -13,13 +13,24 @@ public class GetMyJobPostDetailQueryHandlerTests
         var context = new InMemoryApplicationDbContext();
         var userId = Guid.NewGuid();
         var clientProfileId = Guid.NewGuid();
+        var majorId = Guid.NewGuid();
         var categoryId = Guid.NewGuid();
+        var majorCategoryId = Guid.NewGuid();
         var jobPostId = Guid.NewGuid();
         var skillId = Guid.NewGuid();
         var attachmentId = Guid.NewGuid();
         var createdAt = new DateTime(2026, 6, 14, 9, 0, 0, DateTimeKind.Utc);
         var updatedAt = createdAt.AddHours(3);
         var endDate = createdAt.AddDays(14);
+
+        var major = new Major
+        {
+            MajorsId = majorId,
+            Name = "Creative",
+            Slug = "creative",
+            IsActive = true,
+            CreatedAt = createdAt
+        };
 
         var category = new Category
         {
@@ -30,10 +41,19 @@ public class GetMyJobPostDetailQueryHandlerTests
             CreatedAt = createdAt
         };
 
+        var majorCategory = new MajorCategory
+        {
+            MajorCategoriesId = majorCategoryId,
+            MajorId = majorId,
+            Major = major,
+            CategoryId = categoryId,
+            Category = category,
+            CreatedAt = createdAt
+        };
+
         var skill = new Skill
         {
             SkillsId = skillId,
-            CategoriesId = categoryId,
             Name = "Figma",
             IsActive = true,
             CreatedAt = createdAt
@@ -42,8 +62,8 @@ public class GetMyJobPostDetailQueryHandlerTests
         var jobPost = CreateJobPost(clientProfileId, "Product redesign", createdAt);
         jobPost.JobPostsId = jobPostId;
         jobPost.Description = "Redesign a SaaS dashboard.";
-        jobPost.CategoryId = categoryId;
-        jobPost.Category = category;
+        jobPost.MajorCategoryId = majorCategoryId;
+        jobPost.MajorCategory = majorCategory;
         jobPost.BudgetMin = 1000m;
         jobPost.BudgetMax = 2500m;
         jobPost.Currency = "USD";
@@ -54,6 +74,7 @@ public class GetMyJobPostDetailQueryHandlerTests
         jobPost.Visibility = 2;
         jobPost.EndDate = endDate;
         jobPost.UpdatedAt = updatedAt;
+        jobPost.CustomSkillNames = new[] { "Design systems" };
         jobPost.JobPostSkills.Add(new JobPostSkill
         {
             JobPostSkillsId = Guid.NewGuid(),
@@ -86,6 +107,9 @@ public class GetMyJobPostDetailQueryHandlerTests
         Assert.Equal(clientProfileId, dto.ClientProfilesId);
         Assert.Equal("Product redesign", dto.Title);
         Assert.Equal("Redesign a SaaS dashboard.", dto.Description);
+        Assert.Equal(majorCategoryId, dto.MajorCategoryId);
+        Assert.Equal(majorId, dto.MajorId);
+        Assert.Equal("Creative", dto.MajorName);
         Assert.Equal(categoryId, dto.CategoryId);
         Assert.Equal("Design", dto.CategoryName);
         Assert.Equal(1000m, dto.BudgetMin);
@@ -100,6 +124,7 @@ public class GetMyJobPostDetailQueryHandlerTests
         Assert.Equal(createdAt, dto.CreatedAt);
         Assert.Equal(updatedAt, dto.UpdatedAt);
         Assert.Equal(2, dto.ProposalCount);
+        Assert.Equal(new[] { "Design systems" }, dto.CustomSkillNames);
 
         var returnedSkill = Assert.Single(dto.Skills);
         Assert.Equal(skillId, returnedSkill.SkillsId);
