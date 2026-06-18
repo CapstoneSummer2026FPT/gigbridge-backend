@@ -1,6 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Application.Common.Services;
 using Application.Features.Contracts.Common.DTOs;
 using Application.Features.Contracts.Common.Internal;
 using Domain.Entities;
@@ -16,26 +17,24 @@ public sealed class SignContractCommandHandler :
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
     private readonly IChatRealtimeNotifier _chatRealtimeNotifier;
+    private readonly IMediaService _mediaService;
 
     public SignContractCommandHandler(
         IApplicationDbContext context,
         IDateTimeService dateTimeService,
-        IChatRealtimeNotifier chatRealtimeNotifier)
+        IChatRealtimeNotifier chatRealtimeNotifier,
+        IMediaService mediaService)
     {
         _context = context;
         _dateTimeService = dateTimeService;
         _chatRealtimeNotifier = chatRealtimeNotifier;
+        _mediaService = mediaService;
     }
 
     public async Task<ContractWorkflowResponse> Handle(
         SignContractCommand command,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(command.Request.SignatureImageUrl))
-        {
-            throw new BadRequestException("Signature image URL is required.");
-        }
-
         var contract = await _context.Set<Contract>()
             .FirstOrDefaultAsync(contract => contract.ContractsId == command.ContractId, cancellationToken);
 
@@ -79,7 +78,12 @@ public sealed class SignContractCommandHandler :
             _context.Set<EsignSignature>().Add(existingSignature);
         }
 
-        existingSignature.SignatureImageUrl = command.Request.SignatureImageUrl;
+        existingSignature.SignatureImageUrl = await SignatureImageStorage.UploadSignatureImageAsync(
+            _mediaService,
+            command.Request.SignatureImageUrl,
+            document.EsignDocumentsId,
+            command.UserId,
+            cancellationToken);
         existingSignature.SignatureWidth = command.Request.SignatureWidth;
         existingSignature.SignatureHeight = command.Request.SignatureHeight;
         existingSignature.Status = (int)ESignSignatureStatus.Signed;

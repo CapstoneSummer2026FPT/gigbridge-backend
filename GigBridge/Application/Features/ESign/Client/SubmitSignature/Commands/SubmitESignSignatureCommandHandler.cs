@@ -1,6 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Application.Common.Services;
 using Application.Features.ESign.Common.DTOs;
 using Application.Features.ESign.Common.Internal;
 using Domain.Entities;
@@ -17,13 +18,16 @@ public sealed class SubmitESignSignatureCommandHandler
 
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
+    private readonly IMediaService _mediaService;
 
     public SubmitESignSignatureCommandHandler(
         IApplicationDbContext context,
-        IDateTimeService dateTimeService)
+        IDateTimeService dateTimeService,
+        IMediaService mediaService)
     {
         _context = context;
         _dateTimeService = dateTimeService;
+        _mediaService = mediaService;
     }
 
     public async Task<ESignSignatureResponse> Handle(
@@ -31,7 +35,6 @@ public sealed class SubmitESignSignatureCommandHandler
         CancellationToken cancellationToken)
     {
         var request = command.Request;
-        var signatureImageUrl = NormalizeSignatureImageUrl(request.SignatureImageUrl);
         var document = await ESignAccessGuard.GetDocumentAsync(
             _context,
             request.DocumentId,
@@ -72,6 +75,13 @@ public sealed class SubmitESignSignatureCommandHandler
         }
 
         var now = _dateTimeService.UtcNow;
+        var signatureImageUrl = await SignatureImageStorage.UploadSignatureImageAsync(
+            _mediaService,
+            request.SignatureImageUrl,
+            document.EsignDocumentsId,
+            command.UserId,
+            cancellationToken);
+
         var signature = existingSignature ?? new EsignSignature
         {
             EsignSignaturesId = Guid.NewGuid(),
@@ -105,27 +115,5 @@ public sealed class SubmitESignSignatureCommandHandler
         await _context.SaveChangesAsync(cancellationToken);
 
         return ESignDocumentProjection.ToSignatureResponse(signature);
-    }
-
-    private static string NormalizeSignatureImageUrl(string? signatureImageUrl)
-    {
-        if (string.IsNullOrWhiteSpace(signatureImageUrl))
-        {
-            throw new BadRequestException("Signature image is required.");
-        }
-
-        var normalized = signatureImageUrl.Trim();
-        if (normalized.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase))
-        {
-            return normalized;
-        }
-
-        if (Uri.TryCreate(normalized, UriKind.Absolute, out var uri) &&
-            (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
-        {
-            return normalized;
-        }
-
-        throw new BadRequestException("Signature image must be a data URI or HTTP(S) URL.");
     }
 }

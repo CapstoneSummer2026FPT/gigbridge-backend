@@ -24,6 +24,9 @@ public sealed class SubmitESignSignatureCommandValidator
             RuleFor(command => command.Request.SignatureImageUrl)
                 .NotEmpty()
                 .WithMessage("Signature image is required.")
+                .Must(value => !string.IsNullOrWhiteSpace(value) &&
+                    value.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase))
+                .WithMessage("Signature image must be an image data URI.")
                 .MaximumLength(1_000_000)
                 .WithMessage("Signature image is too large.");
 

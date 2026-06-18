@@ -12,6 +12,8 @@ namespace Test_Gigbridge_Backend.Application.Features.ESign;
 
 public class ESignJobPostWorkflowTests
 {
+    private const string SignatureDataUri = "data:image/png;base64,aGVsbG8=";
+
     [Fact]
     public async Task CreateFromJob_CreatesPendingDocumentForOwningClient()
     {
@@ -74,14 +76,15 @@ public class ESignJobPostWorkflowTests
         var document = fixture.AddPendingDocument();
         var handler = new SubmitESignSignatureCommandHandler(
             fixture.Context,
-            new FixedDateTimeService(fixture.Now));
+            new FixedDateTimeService(fixture.Now),
+            fixture.MediaService);
 
         var result = await handler.Handle(
             new SubmitESignSignatureCommand(
                 fixture.ClientUserId,
                 new SubmitESignSignatureRequest(
                     document.EsignDocumentsId,
-                    "data:image/png;base64,aGVsbG8=",
+                    SignatureDataUri,
                     360,
                     120),
                 "127.0.0.1",
@@ -92,7 +95,11 @@ public class ESignJobPostWorkflowTests
         Assert.Equal(signature.EsignSignaturesId, result.SignatureId);
         Assert.Equal((int)ESignerRole.Client, signature.SignerRole);
         Assert.Equal((int)ESignSignatureStatus.Signed, signature.Status);
-        Assert.Equal("data:image/png;base64,aGVsbG8=", signature.SignatureImageUrl);
+        Assert.Equal(fixture.CloudinarySignatureUrl, signature.SignatureImageUrl);
+        var upload = Assert.Single(fixture.MediaService.Uploads);
+        Assert.Equal("image/png", upload.ContentType);
+        Assert.Equal("esign/signatures", upload.Folder);
+        Assert.Equal(Convert.FromBase64String("aGVsbG8="), upload.Bytes);
         Assert.Equal(fixture.Now, signature.SignedAt);
         Assert.Equal("127.0.0.1", signature.IpAddress);
         Assert.Equal("unit-test", signature.UserAgent);
@@ -121,7 +128,8 @@ public class ESignJobPostWorkflowTests
 
         var handler = new SubmitESignSignatureCommandHandler(
             fixture.Context,
-            new FixedDateTimeService(fixture.Now));
+            new FixedDateTimeService(fixture.Now),
+            fixture.MediaService);
 
         await Assert.ThrowsAsync<ConflictException>(() =>
             handler.Handle(
@@ -129,12 +137,38 @@ public class ESignJobPostWorkflowTests
                     fixture.ClientUserId,
                     new SubmitESignSignatureRequest(
                         document.EsignDocumentsId,
-                        "data:image/png;base64,new",
+                        SignatureDataUri,
                         null,
                         null),
                     null,
                     null),
                 CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task SubmitSignature_RejectsInvalidSignatureDataUri()
+    {
+        var fixture = new ESignJobPostFixture();
+        var document = fixture.AddPendingDocument();
+        var handler = new SubmitESignSignatureCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            fixture.MediaService);
+
+        await Assert.ThrowsAsync<BadRequestException>(() =>
+            handler.Handle(
+                new SubmitESignSignatureCommand(
+                    fixture.ClientUserId,
+                    new SubmitESignSignatureRequest(
+                        document.EsignDocumentsId,
+                        "https://sig/client.png",
+                        null,
+                        null),
+                    null,
+                    null),
+                CancellationToken.None));
+
+        Assert.Empty(fixture.MediaService.Uploads);
     }
 
     [Fact]
@@ -215,6 +249,10 @@ public class ESignJobPostWorkflowTests
         public InMemoryApplicationDbContext Context { get; } = new();
 
         public DateTime Now { get; } = new(2026, 6, 18, 8, 30, 0, DateTimeKind.Utc);
+
+        public string CloudinarySignatureUrl { get; } = "https://res.cloudinary.com/gigbridge/esign/signatures/client.png";
+
+        public FakeMediaService MediaService { get; } = new("https://res.cloudinary.com/gigbridge/esign/signatures/client.png");
 
         public Guid ClientUserId { get; } = Guid.NewGuid();
 
