@@ -1,6 +1,6 @@
 using FluentValidation;
 
-namespace Application.Features.ESign.Documents.GetById.Queries;
+namespace Application.Features.ESign.Common.GetDocument.Queries;
 
 public sealed class GetESignDocumentQueryValidator
     : AbstractValidator<GetESignDocumentQuery>

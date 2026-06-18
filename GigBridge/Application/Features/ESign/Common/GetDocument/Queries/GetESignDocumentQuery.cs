@@ -1,7 +1,7 @@
 using Application.Features.ESign.Common.DTOs;
 using MediatR;
 
-namespace Application.Features.ESign.Documents.GetById.Queries;
+namespace Application.Features.ESign.Common.GetDocument.Queries;
 
 public sealed record GetESignDocumentQuery(
     Guid DocumentId,

@@ -1,4 +1,4 @@
-namespace Application.Features.ESign.Signatures.Submit.DTOs;
+namespace Application.Features.ESign.Client.SubmitSignature.DTOs;
 
 public sealed record SubmitESignSignatureRequest(
     Guid DocumentId,

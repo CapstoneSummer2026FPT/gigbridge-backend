@@ -1,6 +1,6 @@
 using FluentValidation;
 
-namespace Application.Features.ESign.Signatures.Submit.Commands;
+namespace Application.Features.ESign.Client.SubmitSignature.Commands;
 
 public sealed class SubmitESignSignatureCommandValidator
     : AbstractValidator<SubmitESignSignatureCommand>

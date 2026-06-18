@@ -1,9 +1,9 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces.IService;
-using Application.Features.ESign.Documents.CreateFromJob.Commands;
-using Application.Features.ESign.Documents.GetByJob.Queries;
-using Application.Features.ESign.Signatures.Submit.Commands;
-using Application.Features.ESign.Signatures.Submit.DTOs;
+using Application.Features.ESign.Client.CreateDocumentFromJobPost.Commands;
+using Application.Features.ESign.Client.GetDocumentByJobPost.Queries;
+using Application.Features.ESign.Client.SubmitSignature.Commands;
+using Application.Features.ESign.Client.SubmitSignature.DTOs;
 using Domain.Entities;
 using Domain.Enums;
 using Test_Gigbridge_Backend.TestSupport;

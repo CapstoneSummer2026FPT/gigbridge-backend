@@ -6,7 +6,7 @@ using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
-namespace Application.Features.ESign.Documents.GetByJob.Queries;
+namespace Application.Features.ESign.Client.GetDocumentByJobPost.Queries;
 
 public sealed class GetESignDocumentByJobPostQueryHandler
     : IRequestHandler<GetESignDocumentByJobPostQuery, ESignDocumentResponse>

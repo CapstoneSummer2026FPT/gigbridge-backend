@@ -4,7 +4,7 @@ using Application.Features.ESign.Common.DTOs;
 using Application.Features.ESign.Common.Internal;
 using MediatR;
 
-namespace Application.Features.ESign.Documents.CreateFromJob.Commands;
+namespace Application.Features.ESign.Client.CreateDocumentFromJobPost.Commands;
 
 public sealed class CreateESignDocumentFromJobPostCommandHandler
     : IRequestHandler<CreateESignDocumentFromJobPostCommand, ESignDocumentResponse>

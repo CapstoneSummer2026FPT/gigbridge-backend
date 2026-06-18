@@ -1,10 +1,10 @@
 using Application.Common.Models;
 using Application.Features.ESign.Common.DTOs;
-using Application.Features.ESign.Documents.CreateFromJob.Commands;
-using Application.Features.ESign.Documents.GetById.Queries;
-using Application.Features.ESign.Documents.GetByJob.Queries;
-using Application.Features.ESign.Signatures.Submit.Commands;
-using Application.Features.ESign.Signatures.Submit.DTOs;
+using Application.Features.ESign.Client.CreateDocumentFromJobPost.Commands;
+using Application.Features.ESign.Client.GetDocumentByJobPost.Queries;
+using Application.Features.ESign.Client.SubmitSignature.Commands;
+using Application.Features.ESign.Client.SubmitSignature.DTOs;
+using Application.Features.ESign.Common.GetDocument.Queries;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 

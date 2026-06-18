@@ -1,6 +1,6 @@
 using FluentValidation;
 
-namespace Application.Features.ESign.Documents.CreateFromJob.Commands;
+namespace Application.Features.ESign.Client.CreateDocumentFromJobPost.Commands;
 
 public sealed class CreateESignDocumentFromJobPostCommandValidator
     : AbstractValidator<CreateESignDocumentFromJobPostCommand>

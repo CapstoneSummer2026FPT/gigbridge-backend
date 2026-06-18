@@ -1,6 +1,6 @@
 using FluentValidation;
 
-namespace Application.Features.ESign.Documents.GetByJob.Queries;
+namespace Application.Features.ESign.Client.GetDocumentByJobPost.Queries;
 
 public sealed class GetESignDocumentByJobPostQueryValidator
     : AbstractValidator<GetESignDocumentByJobPostQuery>

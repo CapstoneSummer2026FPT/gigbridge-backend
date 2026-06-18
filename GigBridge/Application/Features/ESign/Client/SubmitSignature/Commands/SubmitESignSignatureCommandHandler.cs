@@ -8,7 +8,7 @@ using Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
-namespace Application.Features.ESign.Signatures.Submit.Commands;
+namespace Application.Features.ESign.Client.SubmitSignature.Commands;
 
 public sealed class SubmitESignSignatureCommandHandler
     : IRequestHandler<SubmitESignSignatureCommand, ESignSignatureResponse>
