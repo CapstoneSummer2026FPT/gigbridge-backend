@@ -33,7 +33,6 @@ public class GetMyJobPostDetailQueryHandlerTests
         var skill = new Skill
         {
             SkillsId = skillId,
-            CategoriesId = categoryId,
             Name = "Figma",
             IsActive = true,
             CreatedAt = createdAt

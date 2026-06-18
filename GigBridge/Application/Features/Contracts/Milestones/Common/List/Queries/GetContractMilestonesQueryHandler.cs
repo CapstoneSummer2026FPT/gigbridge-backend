@@ -32,12 +32,16 @@ public sealed class GetContractMilestonesQueryHandler :
             query.UserId,
             cancellationToken);
 
-        return await _context.Set<Milestone>()
+        var milestones = await _context.Set<Milestone>()
+            .Include(milestone => milestone.MilestoneAttachments)
             .AsNoTracking()
             .Where(milestone => milestone.ContractsId == query.ContractId)
             .OrderBy(milestone => milestone.SortOrder)
             .ThenBy(milestone => milestone.CreatedAt)
-            .Select(milestone => MilestoneWorkflowGuard.ToResponse(milestone))
             .ToListAsync(cancellationToken);
+
+        return milestones
+            .Select(milestone => MilestoneWorkflowGuard.ToResponse(milestone))
+            .ToList();
     }
 }

@@ -1,0 +1,112 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using Application.Common.Exceptions;
+using Application.Common.Interfaces;
+using Application.Features.Contracts.Common.GetContractByJobPost.DTOs;
+using Domain.Entities;
+using Domain.Enums;
+using MediatR;
+using Microsoft.EntityFrameworkCore;
+
+namespace Application.Features.Contracts.Common.GetContractById.Queries;
+
+public class GetContractByIdQueryHandler : IRequestHandler<GetContractByIdQuery, ContractDetailResponse>
+{
+    private readonly IApplicationDbContext _context;
+
+    public GetContractByIdQueryHandler(IApplicationDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<ContractDetailResponse> Handle(GetContractByIdQuery request, CancellationToken cancellationToken)
+    {
+        var contract = await _context.Set<Contract>()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.ContractsId == request.ContractId, cancellationToken);
+
+        if (contract is null)
+        {
+            throw new NotFoundException("Contract does not exist.");
+        }
+
+        await EnsureCanViewContract(contract, request.UserId, cancellationToken);
+
+        var escrow = await _context.Set<ContractEscrow>()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(e => e.ContractsId == contract.ContractsId, cancellationToken);
+
+        return ToResponse(contract, escrow);
+    }
+
+    private async Task EnsureCanViewContract(Contract contract, Guid userId, CancellationToken cancellationToken)
+    {
+        var user = await _context.Set<User>()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(u => u.UserId == userId, cancellationToken);
+
+        if (user is null)
+        {
+            throw new ForbiddenAccessException("You do not have permission to view this contract.");
+        }
+
+        if (user.Role == (int)UserRole.Admin)
+        {
+            return;
+        }
+
+        var isOwnerClient = await _context.Set<ClientProfile>()
+            .AsNoTracking()
+            .AnyAsync(cp => cp.UserId == userId && cp.ClientProfilesId == contract.ClientProfilesId, cancellationToken);
+
+        if (isOwnerClient)
+        {
+            return;
+        }
+
+        var isAttachedFreelancer = contract.FreelancerProfilesId.HasValue &&
+            await _context.Set<FreelancerProfile>()
+                .AsNoTracking()
+                .AnyAsync(fp => fp.UserId == userId && fp.FreelancerProfilesId == contract.FreelancerProfilesId.Value, cancellationToken);
+
+        if (isAttachedFreelancer)
+        {
+            return;
+        }
+
+        throw new ForbiddenAccessException("You do not have permission to view this contract.");
+    }
+
+    private static ContractDetailResponse ToResponse(Contract contract, ContractEscrow? escrow)
+    {
+        return new ContractDetailResponse
+        {
+            ContractId = contract.ContractsId,
+            JobPostId = contract.JobPostsId,
+            ClientProfileId = contract.ClientProfilesId,
+            FreelancerProfileId = contract.FreelancerProfilesId,
+            ProposalId = contract.ProposalsId,
+            Title = contract.Title,
+            Description = contract.Description,
+            TotalBudget = contract.TotalBudget,
+            Status = contract.Status,
+            StartDate = contract.StartDate,
+            EndDate = contract.EndDate,
+            CreatedAt = contract.CreatedAt,
+            UpdatedAt = contract.UpdatedAt,
+            Escrow = escrow is null ? null : new ContractEscrowResponse
+            {
+                ContractEscrowId = escrow.ContractEscrowId,
+                RequiredAmount = escrow.RequiredAmount,
+                FundedAmount = escrow.FundedAmount,
+                ReleasedAmount = escrow.ReleasedAmount,
+                RequiredPercentage = escrow.RequiredPercentage,
+                Currency = escrow.Currency,
+                Status = escrow.Status,
+                CreatedAt = escrow.CreatedAt,
+                FundedAt = escrow.FundedAt
+            }
+        };
+    }
+}
