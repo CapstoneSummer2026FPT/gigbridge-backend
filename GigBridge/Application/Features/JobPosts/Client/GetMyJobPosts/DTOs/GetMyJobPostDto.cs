@@ -10,9 +10,19 @@ public sealed class GetMyJobPostDto
 
     public string Description { get; set; } = string.Empty;
 
+    public Guid? MajorCategoryId { get; set; }
+
+    public Guid? MajorId { get; set; }
+
+    public string? MajorName { get; set; }
+
     public Guid? CategoryId { get; set; }
 
     public string? CategoryName { get; set; }
+
+    public List<GetMyJobPostSkillDto> Skills { get; set; } = new();
+
+    public List<string> CustomSkillNames { get; set; } = new();
 
     public decimal? BudgetMin { get; set; }
 

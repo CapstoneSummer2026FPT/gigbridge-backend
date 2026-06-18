@@ -1,28 +1,17 @@
 ﻿namespace Application.Features.JobPosts.Client.UpdateJobPost.DTOs;
 
-public class UpdateJobPostRequest
-{
-    public string Title { get; set; } = string.Empty;
-
-    public string Description { get; set; } = string.Empty;
-
-    public Guid? CategoryId { get; set; }
-
-    public decimal? BudgetMin { get; set; }
-
-    public decimal? BudgetMax { get; set; }
-
-    public string? Currency { get; set; }
-
-    public string? EstimatedDuration { get; set; }
-
-    public int? MaxHires { get; set; }
-
-    public string? Location { get; set; }
-
-    public int? Visibility { get; set; }
-
-    public DateTime? EndDate { get; set; }
-
-    public List<Guid> SkillIds { get; set; } = new();
-}
+public record UpdateJobPostRequest(
+    string Title,
+    string Description,
+    Guid? MajorCategoryId,
+    decimal? BudgetMin,
+    decimal? BudgetMax,
+    string? Currency,
+    string? EstimatedDuration,
+    int? MaxHires,
+    string? Location,
+    int? Visibility,
+    DateTime? EndDate,
+    List<Guid>? SkillIds,
+    List<string>? CustomSkillNames
+);
