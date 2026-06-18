@@ -60,7 +60,9 @@ public class UpdateJobPostCommandHandler : IRequestHandler<UpdateJobPostCommand,
 
         jobPost.Title = request.Title.Trim();
         jobPost.Description = request.Description.Trim();
-        jobPost.CategoryId = request.CategoryId;
+
+        jobPost.MajorCategoryId = request.MajorCategoryId;
+
         jobPost.BudgetMin = request.BudgetMin;
         jobPost.BudgetMax = request.BudgetMax;
         jobPost.Currency = string.IsNullOrWhiteSpace(request.Currency)
@@ -72,6 +74,13 @@ public class UpdateJobPostCommandHandler : IRequestHandler<UpdateJobPostCommand,
         jobPost.Location = request.Location;
         jobPost.Visibility = request.Visibility!.Value;
         jobPost.EndDate = request.EndDate;
+
+        jobPost.CustomSkillNames = (request.CustomSkillNames ?? new List<string>())
+            .Where(skillName => !string.IsNullOrWhiteSpace(skillName))
+            .Select(skillName => skillName.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
         jobPost.UpdatedAt = _dateTimeService.UtcNow;
     }
 
