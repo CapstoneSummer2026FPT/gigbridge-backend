@@ -141,7 +141,7 @@ public class CreateFinalOfferCommandHandler : IRequestHandler<CreateFinalOfferCo
             conversation,
             command.UserId,
             MessageType.FinalOffer,
-            "Final offer sent.",
+            offer.FinalPrice.ToString("F0"),
             JsonSerializer.Serialize(new { negotiationOfferId = offer.NegotiationOfferId }),
             now);
 

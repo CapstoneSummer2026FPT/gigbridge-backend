@@ -33,7 +33,7 @@ public sealed class ConfirmWalletTopUpCommandHandler :
         var callback = command.Request;
         var payload = new WalletTopUpCallbackPayload(
             callback.Data?.OrderCode ?? callback.OrderCode,
-            callback.Success == true || callback.Code == "00",
+            IsSucceeded(callback),
             callback.Data?.Reference ?? callback.Data?.PaymentLinkId ?? callback.GatewayTransactionCode,
             callback.Data?.Amount ?? callback.AmountVnd,
             callback.Data?.Desc ?? callback.Desc,
@@ -108,5 +108,15 @@ public sealed class ConfirmWalletTopUpCommandHandler :
         await _context.SaveChangesAsync(cancellationToken);
 
         return WalletTransactionResponse.FromEntity(transaction);
+    }
+
+    private static bool IsSucceeded(PayOsTopUpCallbackRequest callback)
+    {
+        if (callback.Success.HasValue)
+        {
+            return callback.Success.Value;
+        }
+
+        return string.Equals(callback.Data?.Code ?? callback.Code, "00", StringComparison.Ordinal);
     }
 }

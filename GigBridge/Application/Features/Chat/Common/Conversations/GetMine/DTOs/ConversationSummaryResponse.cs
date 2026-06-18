@@ -14,4 +14,14 @@ public record ConversationSummaryResponse(
     int UnreadCount,
     DateTime CreatedAt,
     DateTime? LastMessageAt,
-    MessageResponse? LastMessage);
+    MessageResponse? LastMessage,
+    Guid? OtherParticipantId,
+    string? OtherParticipantName,
+    string? OtherParticipantAvatar,
+    int? OtherParticipantRole,
+    string? OtherParticipantCompany,
+    string? OtherParticipantRoleTitle,
+    Guid? LastOfferId,
+    decimal? LastOfferPrice,
+    int? LastOfferStatus);
+

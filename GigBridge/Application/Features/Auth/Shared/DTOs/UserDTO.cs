@@ -19,6 +19,7 @@ namespace Application.Features.Auth.Shared.DTOs
         public bool IsSetup { get; set; }
         public string? PreferredLanguage { get; set; }
         public string? Provider { get; set; }
+        public int EloPoints { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime? UpdatedAt { get; set; }
     }

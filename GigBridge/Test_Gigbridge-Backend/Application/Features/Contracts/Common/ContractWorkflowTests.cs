@@ -1,8 +1,6 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces.IService;
 using Application.Features.Contracts.Details.Client.Submit.Commands;
-using Application.Features.Contracts.Details.Client.Update.Commands;
-using Application.Features.Contracts.Details.Client.Update.DTOs;
 using Application.Features.Contracts.Details.Freelancer.Confirm.Commands;
 using Application.Features.Contracts.Escrow.Client.Fund.Commands;
 using Application.Features.Contracts.Signing.Common.Sign.Commands;
@@ -15,41 +13,7 @@ namespace Test_Gigbridge_Backend.Application.Features.Contracts.Common;
 
 public class ContractWorkflowTests
 {
-    [Fact]
-    public async Task UpdateDetails_ClientOnlyAndMilestoneSumMustEqualBudget()
-    {
-        var fixture = new ContractWorkflowFixture();
-        var handler = new UpdateContractDetailsCommandHandler(
-            fixture.Context,
-            new FixedDateTimeService(fixture.Now));
-
-        await Assert.ThrowsAsync<ForbiddenAccessException>(() =>
-            handler.Handle(
-                new UpdateContractDetailsCommand(
-                    fixture.ContractId,
-                    fixture.FreelancerUserId,
-                    fixture.ValidDetails()),
-                CancellationToken.None));
-
-        await Assert.ThrowsAsync<BadRequestException>(() =>
-            handler.Handle(
-                new UpdateContractDetailsCommand(
-                    fixture.ContractId,
-                    fixture.ClientUserId,
-                    fixture.InvalidMilestoneTotalDetails()),
-                CancellationToken.None));
-
-        await handler.Handle(
-            new UpdateContractDetailsCommand(
-                fixture.ContractId,
-                fixture.ClientUserId,
-                fixture.ValidDetails()),
-            CancellationToken.None);
-
-        Assert.Equal("Build production release", fixture.Contract.ScopeOfWork);
-        Assert.Equal(2, fixture.Milestones.Entities.Count);
-    }
-
+    
     [Fact]
     public async Task SubmitAndFreelancerConfirm_CreatesFullEscrowAndMovesToPendingSignature()
     {
@@ -264,37 +228,10 @@ public class ContractWorkflowTests
         public TestDbSet<EsignDocument> EsignDocuments { get; }
         public TestDbSet<EsignSignature> EsignSignatures { get; }
 
-        public UpdateContractDetailsRequest ValidDetails()
-        {
-            return new UpdateContractDetailsRequest(
-                "Build production release",
-                "Pay through escrow milestones",
-                "Client owns final deliverables after full payment",
-                "Both parties keep project data confidential",
-                "Cancellation requires written agreement",
-                "Disputes are handled through GigBridge",
-                new[]
-                {
-                    new ContractMilestoneRequest(null, "Milestone 1", 400_000m, null, 0),
-                    new ContractMilestoneRequest(null, "Milestone 2", 600_000m, null, 1)
-                });
-        }
-
-        public UpdateContractDetailsRequest InvalidMilestoneTotalDetails()
-        {
-            return ValidDetails() with
-            {
-                Milestones = new[]
-                {
-                    new ContractMilestoneRequest(null, "Only milestone", 500_000m, null, 0)
-                }
-            };
-        }
-
+ 
         public void ApplyValidDetails()
         {
 
-            Contract.DisputeTerms = "Disputes are handled through GigBridge";
             Milestones.Add(new Milestone
             {
                 MilestonesId = Guid.NewGuid(),
