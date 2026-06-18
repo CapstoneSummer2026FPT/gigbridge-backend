@@ -29,18 +29,8 @@ public class CreateJobPostCommandHandler : IRequestHandler<CreateJobPostCommand,
             throw new NotFoundException("Client profile does not exist.");
         }
 
-        if (command.Request.MajorCategoryId.HasValue)
-        {
-            var majorCategoryExists = await _context.Set<MajorCategory>()
-                .AnyAsync(
-                    majorCategory => majorCategory.MajorCategoriesId == command.Request.MajorCategoryId.Value,
-                    cancellationToken);
-
-            if (!majorCategoryExists)
-            {
-                throw new NotFoundException("Major category does not exist.");
-            }
-        }
+        await ValidateMajorCategory(command.Request.MajorCategoryId, cancellationToken);
+        await ValidateSkillIds(command.Request.SkillIds, cancellationToken);
 
         var jobPost = CreateJobPost(command, clientProfile.ClientProfilesId);
 
@@ -50,6 +40,44 @@ public class CreateJobPostCommandHandler : IRequestHandler<CreateJobPostCommand,
         await _context.SaveChangesAsync(cancellationToken);
 
         return jobPost.JobPostsId;
+    }
+
+    private async Task ValidateMajorCategory(Guid? majorCategoryId, CancellationToken cancellationToken)
+    {
+        if (!majorCategoryId.HasValue)
+        {
+            return;
+        }
+
+        var majorCategoryExists = await _context.Set<MajorCategory>()
+            .AnyAsync(
+                majorCategory => majorCategory.MajorCategoriesId == majorCategoryId.Value,
+                cancellationToken);
+
+        if (!majorCategoryExists)
+        {
+            throw new NotFoundException("Major category does not exist.");
+        }
+    }
+
+    private async Task ValidateSkillIds(List<Guid>? skillIds, CancellationToken cancellationToken)
+    {
+        var distinctSkillIds = (skillIds ?? new List<Guid>())
+            .Distinct()
+            .ToList();
+
+        if (distinctSkillIds.Count == 0)
+        {
+            return;
+        }
+
+        var existingSkillCount = await _context.Set<Skill>()
+            .CountAsync(skill => distinctSkillIds.Contains(skill.SkillsId), cancellationToken);
+
+        if (existingSkillCount != distinctSkillIds.Count)
+        {
+            throw new NotFoundException("One or more skills do not exist.");
+        }
     }
 
     private JobPost CreateJobPost(CreateJobPostCommand command, Guid clientProfileId)

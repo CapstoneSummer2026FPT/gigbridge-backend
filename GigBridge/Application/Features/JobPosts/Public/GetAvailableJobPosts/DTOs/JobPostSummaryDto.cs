@@ -1,3 +1,4 @@
+using Application.Features.JobPosts.Common.DTOs;
 using System;
 using System.Collections.Generic;
 
@@ -7,9 +8,16 @@ public record JobPostSummaryDto(
     Guid JobPostsId,
     string Title,
     string DescriptionPreview,
+    Guid? MajorCategoryId,
+    Guid? MajorId,
+    string? MajorName,
+    Guid? CategoryId,
+    string? CategoryName,
     decimal? BudgetMin,
     decimal? BudgetMax,
     DateTime CreatedAt,
     int EloPoints,
+    List<JobPostSkillDto> Skills,
+    List<string> CustomSkillNames,
     List<string> SkillNames
 );

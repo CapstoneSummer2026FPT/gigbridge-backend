@@ -62,6 +62,14 @@ public class GetMyJobPostsQueryHandler : IRequestHandler<GetMyJobPostsQuery, IEn
                     ? jobPost.MajorCategory.Category.Name
                     : null,
 
+                Skills = jobPost.JobPostSkills
+                    .Select(jobPostSkill => new GetMyJobPostSkillDto
+                    {
+                        SkillId = jobPostSkill.SkillsId,
+                        Name = jobPostSkill.Skills.Name
+                    })
+                    .ToList(),
+
                 BudgetMin = jobPost.BudgetMin,
                 BudgetMax = jobPost.BudgetMax,
                 Currency = jobPost.Currency,
