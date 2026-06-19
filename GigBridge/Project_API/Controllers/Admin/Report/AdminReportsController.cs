@@ -1,6 +1,7 @@
 using Application.Common.Models;
 using Application.Features.Admin.Reports.GetReportDetail.Queries;
 using Application.Features.Admin.Reports.GetReports.Queries;
+using Application.Features.Admin.Reports.GetReportSummary.Queries;
 using Application.Features.Admin.Reports.ResolveReport.Commands;
 using Application.Features.Admin.Reports.ResolveReport.DTOs;
 using Application.Features.Admin.Reports.UpdateReportStatus.Commands;
@@ -24,10 +25,18 @@ public class AdminReportsController : BaseApiController
         [FromQuery] ReportStatus? status = null,
         [FromQuery] ReportType? type = null,
         [FromQuery] string? reportedEntityType = null,
+        [FromQuery] Guid? reportedEntityId = null,
         [FromQuery] string? search = null)
     {
-        var result = await Mediator.Send(new GetReportsQuery(page, pageSize, status, type, reportedEntityType, search));
+        var result = await Mediator.Send(new GetReportsQuery(page, pageSize, status, type, reportedEntityType, reportedEntityId, search));
         return Ok(ApiResponse<ReportsResponse>.Ok(result, "Reports retrieved successfully."));
+    }
+
+    [HttpGet("summary")]
+    public async Task<IActionResult> GetReportSummary()
+    {
+        var result = await Mediator.Send(new GetReportSummaryQuery());
+        return Ok(ApiResponse<ReportSummaryDto>.Ok(result, "Report summary retrieved successfully."));
     }
 
     [HttpGet("{reportId:guid}")]
