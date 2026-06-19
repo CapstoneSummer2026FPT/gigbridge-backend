@@ -59,7 +59,7 @@ public class CreateNewUserCommandHandler : IRequestHandler<CreateNewUserCommand,
             Password = _passwordHasher.HashPassword(request.Password),
             Role = request.Role,
             PhoneNumber = request.PhoneNumber,
-            IsEmailVerified = false,
+            IsEmailVerified = request.IsEmailVerified,
             IsActive = true,
             CreatedAt = now
         };

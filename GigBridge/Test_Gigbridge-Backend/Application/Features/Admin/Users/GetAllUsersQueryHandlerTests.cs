@@ -33,6 +33,7 @@ public class GetAllUsersQueryHandlerTests
 
         Assert.Equal(2, reported.OpenReportCount);
         Assert.True(reported.IsCurrentlyReported);
+        Assert.Equal(1, result.ReportedUserCount);
         Assert.Equal(0, clean.OpenReportCount);
         Assert.False(clean.IsCurrentlyReported);
     }
