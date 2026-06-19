@@ -2,29 +2,40 @@ using System;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using Application.Common.Exceptions;
 using Application.Common.Interfaces.IService;
-using Microsoft.Extensions.Configuration;
 using CloudinaryDotNet;
 using CloudinaryDotNet.Actions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Services.Media;
 
 public class MediaService : IMediaService
 {
+    private const string UploadFailureMessage = "Media upload failed. Verify Cloudinary configuration and try again.";
+
     private readonly Cloudinary _cloudinary;
+    private readonly ILogger<MediaService> _logger;
 
-    public MediaService(IConfiguration configuration)
+    public MediaService(
+        IOptions<CloudinaryOptions> options,
+        ILogger<MediaService> logger)
     {
-        var cloudName = configuration["Cloudinary:CloudName"];
-        var apiKey = configuration["Cloudinary:ApiKey"];
-        var apiSecret = configuration["Cloudinary:ApiSecret"];
+        var cloudinaryOptions = options.Value;
+        _logger = logger;
 
-        if (string.IsNullOrEmpty(cloudName) || string.IsNullOrEmpty(apiKey) || string.IsNullOrEmpty(apiSecret))
+        if (string.IsNullOrWhiteSpace(cloudinaryOptions.CloudName) ||
+            string.IsNullOrWhiteSpace(cloudinaryOptions.ApiKey) ||
+            string.IsNullOrWhiteSpace(cloudinaryOptions.ApiSecret))
         {
-            throw new InvalidOperationException("Cloudinary configuration is incomplete or missing in appsettings.");
+            throw new InvalidOperationException("Cloudinary configuration is incomplete or missing.");
         }
 
-        var account = new Account(cloudName, apiKey, apiSecret);
+        var account = new Account(
+            cloudinaryOptions.CloudName,
+            cloudinaryOptions.ApiKey,
+            cloudinaryOptions.ApiSecret);
         _cloudinary = new Cloudinary(account);
     }
 
@@ -50,56 +61,76 @@ public class MediaService : IMediaService
 
         var publicId = $"{Guid.NewGuid()}_{Path.GetFileNameWithoutExtension(fileName)}";
 
-        if (resourceType == "image")
+        try
         {
-            var imageParams = new ImageUploadParams
+            if (resourceType == "image")
             {
-                File = new FileDescription(fileName, fileStream),
-                Folder = $"gigbridge/{folder}",
-                PublicId = publicId
-            };
+                var imageParams = new ImageUploadParams
+                {
+                    File = new FileDescription(fileName, fileStream),
+                    Folder = $"gigbridge/{folder}",
+                    PublicId = publicId
+                };
 
-            var uploadResult = await _cloudinary.UploadAsync(imageParams, cancellationToken);
-            if (uploadResult.Error != null)
-            {
-                throw new Exception($"Cloudinary upload failed: {uploadResult.Error.Message}");
+                var uploadResult = await _cloudinary.UploadAsync(imageParams, cancellationToken);
+                return GetSecureUrl(uploadResult, resourceType);
             }
+            else if (resourceType == "video")
+            {
+                var videoParams = new VideoUploadParams
+                {
+                    File = new FileDescription(fileName, fileStream),
+                    Folder = $"gigbridge/{folder}",
+                    PublicId = publicId
+                };
 
-            return uploadResult.SecureUrl.ToString();
+                var uploadResult = await _cloudinary.UploadAsync(videoParams, cancellationToken);
+                return GetSecureUrl(uploadResult, resourceType);
+            }
+            else
+            {
+                var uploadParams = new RawUploadParams
+                {
+                    File = new FileDescription(fileName, fileStream),
+                    Folder = $"gigbridge/{folder}",
+                    PublicId = publicId
+                };
+
+                var uploadResult = await Task.Run(() => _cloudinary.Upload(uploadParams), cancellationToken);
+                return GetSecureUrl(uploadResult, resourceType);
+            }
         }
-        else if (resourceType == "video")
+        catch (Exception exception) when (exception is not ExternalServiceException &&
+                                         exception is not OperationCanceledException)
         {
-            var videoParams = new VideoUploadParams
-            {
-                File = new FileDescription(fileName, fileStream),
-                Folder = $"gigbridge/{folder}",
-                PublicId = publicId
-            };
-
-            var uploadResult = await _cloudinary.UploadAsync(videoParams, cancellationToken);
-            if (uploadResult.Error != null)
-            {
-                throw new Exception($"Cloudinary upload failed: {uploadResult.Error.Message}");
-            }
-
-            return uploadResult.SecureUrl.ToString();
+            _logger.LogWarning(
+                exception,
+                "Cloudinary {ResourceType} upload failed before a response was returned.",
+                resourceType);
+            throw new ExternalServiceException(UploadFailureMessage, exception);
         }
-        else
+    }
+
+    private string GetSecureUrl(UploadResult uploadResult, string resourceType)
+    {
+        if (uploadResult.Error is not null)
         {
-            var uploadParams = new RawUploadParams
-            {
-                File = new FileDescription(fileName, fileStream),
-                Folder = $"gigbridge/{folder}",
-                PublicId = publicId
-            };
-
-            var uploadResult = await Task.Run(() => _cloudinary.Upload(uploadParams), cancellationToken);
-            if (uploadResult.Error != null)
-            {
-                throw new Exception($"Cloudinary upload failed: {uploadResult.Error.Message}");
-            }
-
-            return uploadResult.SecureUrl.ToString();
+            _logger.LogWarning(
+                "Cloudinary {ResourceType} upload failed: {ErrorMessage}",
+                resourceType,
+                uploadResult.Error.Message);
+            throw new ExternalServiceException(UploadFailureMessage);
         }
+
+        var secureUrl = uploadResult.SecureUrl?.ToString();
+        if (string.IsNullOrWhiteSpace(secureUrl))
+        {
+            _logger.LogWarning(
+                "Cloudinary {ResourceType} upload completed without a secure URL.",
+                resourceType);
+            throw new ExternalServiceException(UploadFailureMessage);
+        }
+
+        return secureUrl;
     }
 }

@@ -37,6 +37,11 @@ public class CreateJobPostQuestionCommandHandler
             cancellationToken);
 
         JobPostQuestionCommandHelper.EnsureDraft(jobPost);
+        await JobPostQuestionCommandHelper.EnsureOrderIndexesAvailableAsync(
+            _context,
+            command.JobPostsId,
+            new[] { command.Request.OrderIndex },
+            cancellationToken);
 
         var now = _dateTimeService.UtcNow;
         var question = new JobPostQuestion
