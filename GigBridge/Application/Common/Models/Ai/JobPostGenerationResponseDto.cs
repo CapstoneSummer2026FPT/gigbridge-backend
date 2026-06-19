@@ -4,6 +4,21 @@ namespace Application.Common.Models.Ai;
 
 public class JobPostGenerationResponseDto
 {
+    [JsonPropertyName("title")]
+    public string Title { get; set; } = null!;
+
+    [JsonPropertyName("major_id")]
+    public string MajorId { get; set; } = null!;
+
+    [JsonPropertyName("category_id")]
+    public string CategoryId { get; set; } = null!;
+
+    [JsonPropertyName("system_skill_ids")]
+    public List<string> SystemSkillIds { get; set; } = new();
+
+    [JsonPropertyName("custom_skills")]
+    public List<string> CustomSkills { get; set; } = new();
+
     [JsonPropertyName("description")]
     public string Description { get; set; } = null!;
 

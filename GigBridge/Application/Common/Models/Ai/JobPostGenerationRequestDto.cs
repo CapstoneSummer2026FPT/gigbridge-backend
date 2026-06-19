@@ -2,26 +2,53 @@ using System.Text.Json.Serialization;
 
 namespace Application.Common.Models.Ai;
 
-public class QuestionAnswerPairDto
+public class ClientQuestionDto
 {
     [JsonPropertyName("question")]
     public string Question { get; set; } = null!;
+}
 
-    [JsonPropertyName("answer")]
-    public string Answer { get; set; } = null!;
+public class MajorOptionDto
+{
+    [JsonPropertyName("major_id")]
+    public string MajorId { get; set; } = null!;
+
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = null!;
+}
+
+public class CategoryOptionDto
+{
+    [JsonPropertyName("category_id")]
+    public string CategoryId { get; set; } = null!;
+
+    [JsonPropertyName("major_id")]
+    public string MajorId { get; set; } = null!;
+
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = null!;
+}
+
+public class SkillOptionDto
+{
+    [JsonPropertyName("skill_id")]
+    public string SkillId { get; set; } = null!;
+
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = null!;
 }
 
 public class JobPostGenerationRequestDto
 {
-    [JsonPropertyName("title")]
-    public string Title { get; set; } = null!;
+    [JsonPropertyName("client_questions")]
+    public List<ClientQuestionDto> ClientQuestions { get; set; } = new();
 
-    [JsonPropertyName("category")]
-    public string Category { get; set; } = null!;
+    [JsonPropertyName("allowed_majors")]
+    public List<MajorOptionDto> AllowedMajors { get; set; } = new();
 
-    [JsonPropertyName("skills")]
-    public List<string> Skills { get; set; } = new();
+    [JsonPropertyName("allowed_categories")]
+    public List<CategoryOptionDto> AllowedCategories { get; set; } = new();
 
-    [JsonPropertyName("client_questions_and_freelancer_answers")]
-    public List<QuestionAnswerPairDto> ClientQuestionsAndFreelancerAnswers { get; set; } = new();
+    [JsonPropertyName("available_skills")]
+    public List<SkillOptionDto> AvailableSkills { get; set; } = new();
 }
