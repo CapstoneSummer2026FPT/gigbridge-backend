@@ -73,6 +73,33 @@ public class NegotiationFlowCommandHandlerTests
     }
 
     [Fact]
+    public async Task StartNegotiationFromProposal_CreatesDraftContractWhenJobPostHasNoContract()
+    {
+        var fixture = new NegotiationFixture(includeContract: false);
+        fixture.JobPost.BudgetMin = null;
+        fixture.JobPost.BudgetMax = 1800m;
+        var handler = new StartNegotiationFromProposalCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now));
+
+        var conversationId = await handler.Handle(
+            new StartNegotiationFromProposalCommand(fixture.ProposalId, fixture.ClientUserId),
+            CancellationToken.None);
+
+        var contract = Assert.Single(fixture.Contracts.Entities);
+        Assert.Equal(fixture.JobPostId, contract.JobPostsId);
+        Assert.Equal(fixture.ClientProfileId, contract.ClientProfilesId);
+        Assert.Equal(fixture.JobPost.Title, contract.Title);
+        Assert.Equal(fixture.JobPost.Description, contract.Description);
+        Assert.Equal(1800m, contract.TotalBudget);
+        Assert.Equal((int)ContractStatus.InNegotiation, contract.Status);
+
+        var conversation = Assert.Single(fixture.Conversations.Entities);
+        Assert.Equal(conversation.ConversationsId, conversationId);
+        Assert.Equal(contract.ContractsId, conversation.ContractsId);
+    }
+
+    [Fact]
     public async Task CreateFinalOffer_ClientParticipantCreatesOfferAndFinalOfferMessage()
     {
         var fixture = new NegotiationFixture();
@@ -175,7 +202,7 @@ public class NegotiationFlowCommandHandlerTests
 
     private sealed class NegotiationFixture
     {
-        public NegotiationFixture()
+        public NegotiationFixture(bool includeContract = true)
         {
             JobPost = new JobPost
             {
@@ -213,7 +240,9 @@ public class NegotiationFlowCommandHandlerTests
             Context.AddSet(new FreelancerProfile { FreelancerProfilesId = FreelancerProfileId, UserId = FreelancerUserId });
             Context.AddSet(JobPost);
             Context.AddSet(Proposal);
-            Context.AddSet(Contract);
+            Contracts = includeContract
+                ? Context.AddSet(Contract)
+                : Context.AddSet<Contract>();
             Conversations = Context.AddSet<Conversation>();
             Participants = Context.AddSet<ConversationParticipant>();
             Messages = Context.AddSet<Message>();
@@ -232,6 +261,7 @@ public class NegotiationFlowCommandHandlerTests
         public Guid ContractId { get; } = Guid.NewGuid();
         public Guid ConversationId { get; } = Guid.NewGuid();
         public Guid OfferId { get; } = Guid.NewGuid();
+        public TestDbSet<Contract> Contracts { get; }
         public TestDbSet<Conversation> Conversations { get; }
         public TestDbSet<ConversationParticipant> Participants { get; }
         public TestDbSet<Message> Messages { get; }
