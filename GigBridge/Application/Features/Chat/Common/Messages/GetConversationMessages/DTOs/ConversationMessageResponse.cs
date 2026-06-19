@@ -8,6 +8,7 @@ public record ConversationMessageResponse(
     string? Content,
     Guid? ReplyToMessageId,
     string? Metadata,
+    string? ClientMessageId,
     DateTime SentAt,
     DateTime? EditedAt,
     bool IsDeleted,

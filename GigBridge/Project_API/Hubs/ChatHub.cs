@@ -22,6 +22,18 @@ public class ChatHub : Hub
         return $"conversation:{conversationId}";
     }
 
+    public static string GetUserGroupName(Guid userId)
+    {
+        return $"user:{userId}";
+    }
+
+    public override async Task OnConnectedAsync()
+    {
+        var userId = GetCurrentUserId();
+        await Groups.AddToGroupAsync(Context.ConnectionId, GetUserGroupName(userId));
+        await base.OnConnectedAsync();
+    }
+
     public async Task JoinConversation(Guid conversationId)
     {
         var userId = GetCurrentUserId();

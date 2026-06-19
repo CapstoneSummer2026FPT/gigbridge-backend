@@ -19,7 +19,8 @@ public class NegotiationFlowCommandHandlerTests
         var fixture = new NegotiationFixture();
         var handler = new StartNegotiationFromProposalCommandHandler(
             fixture.Context,
-            new FixedDateTimeService(fixture.Now));
+            new FixedDateTimeService(fixture.Now),
+            new NoopChatRealtimeNotifier());
 
         var conversationId = await handler.Handle(
             new StartNegotiationFromProposalCommand(fixture.ProposalId, fixture.ClientUserId),
@@ -62,7 +63,8 @@ public class NegotiationFlowCommandHandlerTests
 
         var handler = new StartNegotiationFromProposalCommandHandler(
             fixture.Context,
-            new FixedDateTimeService(fixture.Now));
+            new FixedDateTimeService(fixture.Now),
+            new NoopChatRealtimeNotifier());
 
         var conversationId = await handler.Handle(
             new StartNegotiationFromProposalCommand(fixture.ProposalId, fixture.ClientUserId),
@@ -80,7 +82,8 @@ public class NegotiationFlowCommandHandlerTests
         fixture.JobPost.BudgetMax = 1800m;
         var handler = new StartNegotiationFromProposalCommandHandler(
             fixture.Context,
-            new FixedDateTimeService(fixture.Now));
+            new FixedDateTimeService(fixture.Now),
+            new NoopChatRealtimeNotifier());
 
         var conversationId = await handler.Handle(
             new StartNegotiationFromProposalCommand(fixture.ProposalId, fixture.ClientUserId),
