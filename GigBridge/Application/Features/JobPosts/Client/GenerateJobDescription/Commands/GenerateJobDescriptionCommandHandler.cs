@@ -91,13 +91,34 @@ public class GenerateJobDescriptionCommandHandler
         // 5. Invoke AI service client
         var aiResponse = await _aiServiceClient.GenerateJobDescriptionAsync(aiRequest, cancellationToken);
 
-        // 6. Map and register skills (system + custom)
+        // 6. Map skills (system + custom)
         var finalSkills = new List<GeneratedSkillDto>();
         Guid? selectedCategoryId = null;
+        Guid? selectedMajorId = null;
+        Guid? selectedMajorCategoryId = null;
 
         if (Guid.TryParse(aiResponse.CategoryId, out var categoryId))
         {
             selectedCategoryId = categoryId;
+        }
+
+        if (Guid.TryParse(aiResponse.MajorId, out var majorId))
+        {
+            selectedMajorId = majorId;
+        }
+
+        if (selectedCategoryId.HasValue && selectedMajorId.HasValue)
+        {
+            var majorCategory = await _context.Set<MajorCategory>()
+                .AsNoTracking()
+                .FirstOrDefaultAsync(
+                    mc => mc.MajorId == selectedMajorId.Value && mc.CategoryId == selectedCategoryId.Value,
+                    cancellationToken);
+
+            if (majorCategory != null)
+            {
+                selectedMajorCategoryId = majorCategory.MajorCategoriesId;
+            }
         }
 
         // Add matching system skills
@@ -106,7 +127,7 @@ public class GenerateJobDescriptionCommandHandler
             if (Guid.TryParse(sysSkillIdStr, out var sysSkillId))
             {
                 var skill = dbSkills.FirstOrDefault(s => s.SkillsId == sysSkillId);
-                if (skill != null)
+                if (skill != null && finalSkills.All(s => s.SkillsId != skill.SkillsId))
                 {
                     finalSkills.Add(new GeneratedSkillDto
                     {
@@ -117,8 +138,10 @@ public class GenerateJobDescriptionCommandHandler
             }
         }
 
-        // Process and register custom skills dynamically
-        if (selectedCategoryId.HasValue && aiResponse.CustomSkills != null && aiResponse.CustomSkills.Any())
+        // Process custom skills without persisting to database
+        var finalCustomSkills = new List<string>();
+
+        if (aiResponse.CustomSkills != null)
         {
             var customSkillNames = aiResponse.CustomSkills
                 .Where(name => !string.IsNullOrWhiteSpace(name))
@@ -129,26 +152,11 @@ public class GenerateJobDescriptionCommandHandler
             foreach (var name in customSkillNames)
             {
                 var existingSkill = await _context.Set<Skill>()
+                    .AsNoTracking()
                     .FirstOrDefaultAsync(s => s.Name.ToLower() == name.ToLower(), cancellationToken);
 
                 if (existingSkill != null)
                 {
-                    // Ensure CategorySkill mapping exists
-                    var linkExists = await _context.Set<CategorySkill>()
-                        .AnyAsync(cs => cs.CategoryId == selectedCategoryId.Value && cs.SkillId == existingSkill.SkillsId, cancellationToken);
-
-                    if (!linkExists)
-                    {
-                        var categorySkill = new CategorySkill
-                        {
-                            CategorySkillsId = Guid.NewGuid(),
-                            CategoryId = selectedCategoryId.Value,
-                            SkillId = existingSkill.SkillsId,
-                            CreatedAt = _dateTimeService.UtcNow
-                        };
-                        _context.Set<CategorySkill>().Add(categorySkill);
-                    }
-
                     if (finalSkills.All(s => s.SkillsId != existingSkill.SkillsId))
                     {
                         finalSkills.Add(new GeneratedSkillDto
@@ -160,42 +168,19 @@ public class GenerateJobDescriptionCommandHandler
                 }
                 else
                 {
-                    // Create new system skill
-                    var newSkill = new Skill
-                    {
-                        SkillsId = Guid.NewGuid(),
-                        Name = name,
-                        IsActive = true,
-                        CreatedAt = _dateTimeService.UtcNow
-                    };
-                    _context.Set<Skill>().Add(newSkill);
-
-                    // Add mapping to current category
-                    var categorySkill = new CategorySkill
-                    {
-                        CategorySkillsId = Guid.NewGuid(),
-                        CategoryId = selectedCategoryId.Value,
-                        SkillId = newSkill.SkillsId,
-                        CreatedAt = _dateTimeService.UtcNow
-                    };
-                    _context.Set<CategorySkill>().Add(categorySkill);
-
-                    finalSkills.Add(new GeneratedSkillDto
-                    {
-                        SkillsId = newSkill.SkillsId,
-                        Name = newSkill.Name
-                    });
+                    finalCustomSkills.Add(name);
                 }
             }
-
-            await _context.SaveChangesAsync(cancellationToken);
         }
 
         return new GenerateJobDescriptionResponse
         {
             Title = aiResponse.Title,
+            MajorId = selectedMajorId,
             CategoryId = selectedCategoryId,
+            MajorCategoryId = selectedMajorCategoryId,
             Skills = finalSkills,
+            CustomSkills = finalCustomSkills,
             Description = aiResponse.Description
         };
     }
