@@ -44,6 +44,11 @@ public class GetReportsQueryHandler : IRequestHandler<GetReportsQuery, ReportsRe
             query = query.Where(report => report.ReportedEntityType == entityType);
         }
 
+        if (request.ReportedEntityId.HasValue)
+        {
+            query = query.Where(report => report.ReportedEntityId == request.ReportedEntityId.Value);
+        }
+
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
             var trimmedSearch = request.Search.Trim();
