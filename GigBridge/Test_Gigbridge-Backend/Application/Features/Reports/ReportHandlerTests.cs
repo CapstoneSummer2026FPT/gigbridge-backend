@@ -2,6 +2,8 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces.IService;
 using Application.Features.Admin.Reports.ResolveReport.Commands;
 using Application.Features.Admin.Reports.ResolveReport.DTOs;
+using Application.Features.Admin.Reports.GetReports.Queries;
+using Application.Features.Admin.Reports.GetReportSummary.Queries;
 using Application.Features.Admin.Reports.UpdateReportStatus.Commands;
 using Application.Features.Admin.Reports.UpdateReportStatus.DTOs;
 using Application.Features.Reports.Public.CreateReport.Commands;
@@ -16,6 +18,51 @@ namespace Test_Gigbridge_Backend.Application.Features.Reports;
 
 public class ReportHandlerTests
 {
+    [Fact]
+    public async Task GetReports_FiltersByExactReportedEntityId()
+    {
+        await using var context = CreateContext();
+        var reporter = AddUser(context, UserRole.Client);
+        var matchingUser = AddUser(context, UserRole.Freelancer);
+        var otherUser = AddUser(context, UserRole.Freelancer);
+        AddReport(context, reporter.UserId, matchingUser.UserId, ReportedEntityTypes.User);
+        AddReport(context, reporter.UserId, otherUser.UserId, ReportedEntityTypes.User);
+        await context.SaveChangesAsync();
+
+        var handler = new GetReportsQueryHandler(context);
+        var result = await handler.Handle(
+            new GetReportsQuery(ReportedEntityType: ReportedEntityTypes.User, ReportedEntityId: matchingUser.UserId),
+            CancellationToken.None);
+
+        var report = Assert.Single(result.Items);
+        Assert.Equal(matchingUser.UserId, report.ReportedEntityId);
+    }
+
+    [Fact]
+    public async Task GetReportSummary_CountsEveryStatusAndOpenReports()
+    {
+        await using var context = CreateContext();
+        var reporter = AddUser(context, UserRole.Client);
+        var target = AddUser(context, UserRole.Freelancer);
+
+        foreach (var status in Enum.GetValues<ReportStatus>())
+        {
+            var report = AddReport(context, reporter.UserId, target.UserId, ReportedEntityTypes.User);
+            report.Status = (int)status;
+        }
+        await context.SaveChangesAsync();
+
+        var handler = new GetReportSummaryQueryHandler(context);
+        var result = await handler.Handle(new GetReportSummaryQuery(), CancellationToken.None);
+
+        Assert.Equal(4, result.Total);
+        Assert.Equal(1, result.Pending);
+        Assert.Equal(1, result.Reviewing);
+        Assert.Equal(1, result.Resolved);
+        Assert.Equal(1, result.Dismissed);
+        Assert.Equal(2, result.Open);
+    }
+
     [Fact]
     public async Task CreateReport_CreatesReportForExistingUserTarget()
     {
