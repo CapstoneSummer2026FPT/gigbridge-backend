@@ -173,11 +173,21 @@ public class GenerateJobDescriptionCommandHandler
             }
         }
 
+        var selectedMajorName = selectedMajorId.HasValue
+            ? dbMajors.FirstOrDefault(m => m.MajorsId == selectedMajorId.Value)?.Name
+            : null;
+
+        var selectedCategoryName = selectedCategoryId.HasValue
+            ? dbCategories.FirstOrDefault(c => c.CategoriesId == selectedCategoryId.Value)?.Name
+            : null;
+
         return new GenerateJobDescriptionResponse
         {
             Title = aiResponse.Title,
             MajorId = selectedMajorId,
+            MajorName = selectedMajorName,
             CategoryId = selectedCategoryId,
+            CategoryName = selectedCategoryName,
             MajorCategoryId = selectedMajorCategoryId,
             Skills = finalSkills,
             CustomSkills = finalCustomSkills,

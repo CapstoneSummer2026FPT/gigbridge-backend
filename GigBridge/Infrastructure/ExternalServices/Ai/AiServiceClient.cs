@@ -31,7 +31,9 @@ public class AiServiceClient : IAiServiceClient
     {
         var response = await _httpClient.PostAsJsonAsync("api/ai/job-posts/generate", request, cancellationToken);
         response.EnsureSuccessStatusCode();
-
+        // take response from Ai server then prase it to json 
+        // if not success throw HttpRequestException
+        
         var apiResponse = await response.Content.ReadFromJsonAsync<ApiResponse<JobPostGenerationResponseDto>>(
             cancellationToken: cancellationToken);
 
@@ -42,7 +44,7 @@ public class AiServiceClient : IAiServiceClient
             {
                 errorMessage += " Errors: " + apiResponse.Errors.ToString();
             }
-            throw new Exception(errorMessage);
+            throw new HttpRequestException(errorMessage);
         }
 
         return apiResponse.Data;

@@ -13,7 +13,9 @@ public class GenerateJobDescriptionResponse
 {
     public string Title { get; set; } = null!;
     public Guid? MajorId { get; set; }
+    public string? MajorName { get; set; }
     public Guid? CategoryId { get; set; }
+    public string? CategoryName { get; set; }
     public Guid? MajorCategoryId { get; set; }
     public List<GeneratedSkillDto> Skills { get; set; } = new();
     public List<string> CustomSkills { get; set; } = new();
