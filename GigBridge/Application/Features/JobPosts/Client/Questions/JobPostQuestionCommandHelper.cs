@@ -50,6 +50,31 @@ internal static class JobPostQuestionCommandHelper
         }
     }
 
+    public static async Task EnsureOrderIndexesAvailableAsync(
+        IApplicationDbContext context,
+        Guid jobPostId,
+        IReadOnlyCollection<int> orderIndexes,
+        CancellationToken cancellationToken)
+    {
+        if (orderIndexes.Count == 0)
+        {
+            return;
+        }
+
+        var existingOrderIndexes = await context.Set<JobPostQuestion>()
+            .AsNoTracking()
+            .Where(question =>
+                question.JobPostsId == jobPostId &&
+                orderIndexes.Contains(question.OrderIndex))
+            .Select(question => question.OrderIndex)
+            .ToListAsync(cancellationToken);
+
+        if (existingOrderIndexes.Count > 0)
+        {
+            throw new ConflictException("One or more question order indexes already exist for this job post.");
+        }
+    }
+
     public static JobPostQuestionDto ToDto(JobPostQuestion question)
     {
         return new JobPostQuestionDto(

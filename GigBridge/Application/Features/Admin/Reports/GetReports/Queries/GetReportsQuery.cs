@@ -10,4 +10,5 @@ public record GetReportsQuery(
     ReportStatus? Status = null,
     ReportType? Type = null,
     string? ReportedEntityType = null,
+    Guid? ReportedEntityId = null,
     string? Search = null) : IRequest<ReportsResponse>;
