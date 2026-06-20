@@ -121,33 +121,31 @@ public class AuthController : BaseApiController
         return Ok(ApiResponse<LoginResponse>.Ok(loginData, "Token refreshed successfully"));
     }
 
-    [HttpGet("verify-email")]
-    public async Task<IActionResult> EmailVerify([FromQuery] VerifyEmailRequest request)
-    {
-        if (string.IsNullOrWhiteSpace(request.Token))
-            return BadRequest(ApiResponse<object>.BadRequest("Token is required"));
+    //[HttpGet("verify-email")]
+    //public async Task<IActionResult> EmailVerify([FromQuery] VerifyEmailRequest request)
+    //{
+    //    if (string.IsNullOrWhiteSpace(request.Token))
+    //        return BadRequest(ApiResponse<object>.BadRequest("Token is required"));
 
-        await Mediator.Send(new VerifyEmailCommand(request));
-        return Ok(ApiResponse<object>.NoContent("Email verified successfully"));
-    }
+    //    await Mediator.Send(new VerifyEmailCommand(request));
+    //    return Ok(ApiResponse<object>.NoContent("Email verified successfully"));
+    //}
 
-    [HttpPost("resend-email")]
-    public async Task<IActionResult> ResendEmailConfirmation([FromBody] EmailResendConfirmationRequest request)
-    {
-        if (string.IsNullOrWhiteSpace(request.Email))
-            return BadRequest(ApiResponse<object>.BadRequest("Email is required"));
+    //[HttpPost("resend-email")]
+    //public async Task<IActionResult> ResendEmailConfirmation([FromBody] EmailResendConfirmationRequest request)
+    //{
+    //    if (string.IsNullOrWhiteSpace(request.Email))
+    //        return BadRequest(ApiResponse<object>.BadRequest("Email is required"));
 
-        await Mediator.Send(new ResendEmailConfirmationCommand(request));
-        return Ok(ApiResponse<object>.NoContent("Email sent successfully"));
-    }
+    //    await Mediator.Send(new ResendEmailConfirmationCommand(request));
+    //    return Ok(ApiResponse<object>.NoContent("Email sent successfully"));
+    //}
 
     [HttpPost("change-password")]
     [Authorize]
     public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordProfileRequest request)
     {
-        if (request == null)
-            return BadRequest(ApiResponse<object>.BadRequest("Request body cannot be null"));
-
+       
         if (string.IsNullOrWhiteSpace(request.CurrentPassword) || string.IsNullOrWhiteSpace(request.NewPassword))
             return BadRequest(ApiResponse<object>.BadRequest("Current password and new password are required"));
 
@@ -190,14 +188,6 @@ public class AuthController : BaseApiController
             return BadRequest(ApiResponse<object>.BadRequest("TOKEN_EXPIRED"));
 
         return Ok(ApiResponse<object>.NoContent("valid"));
-    }
-
-    [HttpGet("test-auth")]
-    [Authorize]
-    public IActionResult TestAuth()
-    {
-        var data = new { message = "You are authorized!", user = User.Identity?.Name };
-        return Ok(ApiResponse<object>.Ok(data, "Authorization verified"));
     }
 
     private void SetRefreshTokenCookie(string refreshToken, DateTime expires)

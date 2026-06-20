@@ -17,6 +17,8 @@ using Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Project_API.Controllers.Common;
+using Application.Features.JobPosts.Client.GenerateJobDescription.Commands;
+using Application.Features.JobPosts.Client.GenerateJobDescription.DTOs;
 
 namespace Project_API.Controllers.Client;
 
@@ -51,6 +53,19 @@ public class ClientJobPostsController : BaseApiController
         var result = await Mediator.Send(command);
 
         return Ok(ApiResponse<Guid>.Ok(result, "Job post created successfully"));
+    }
+
+    [HttpPost("ai/generate")]
+    public async Task<IActionResult> GenerateJobDescription([FromBody] GenerateJobDescriptionCommand command)
+    {
+        if (!TryGetCurrentUserId(out _))
+        {
+            return InvalidTokenResponse();
+        }
+
+        var result = await Mediator.Send(command);
+
+        return Ok(ApiResponse<GenerateJobDescriptionResponse>.Ok(result, "Job description generated successfully"));
     }
 
     [HttpGet("my-jobs")]

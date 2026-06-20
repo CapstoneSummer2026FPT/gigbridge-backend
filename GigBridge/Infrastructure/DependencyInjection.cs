@@ -1,6 +1,7 @@
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Common.Models;
+using Infrastructure.ExternalServices.Ai;
 using Infrastructure.ExternalServices.Payments;
 using Infrastructure.Persistence;
 using Infrastructure.Services.Auth;
@@ -58,6 +59,18 @@ public static class DependencyInjection
             .ValidateOnStart();
 
         services
+            .AddOptions<AiServiceOptions>()
+            .Bind(configuration.GetSection(AiServiceOptions.SectionName))
+            .PostConfigure(options =>
+            {
+                if (string.IsNullOrWhiteSpace(options.BaseUrl))
+                {
+                    options.BaseUrl = Environment.GetEnvironmentVariable("AI_SERVICE_BASE_URL");
+                }
+
+                if (string.IsNullOrWhiteSpace(options.ApiKey))
+                {
+                    options.ApiKey = Environment.GetEnvironmentVariable("AI_SERVICE_API_KEY");
             .AddOptions<CloudinaryOptions>()
             .Bind(configuration.GetSection(CloudinaryOptions.SectionName))
             .PostConfigure(options =>
@@ -82,6 +95,9 @@ public static class DependencyInjection
             })
             .Validate(
                 options =>
+                    !string.IsNullOrWhiteSpace(options.BaseUrl) &&
+                    !string.IsNullOrWhiteSpace(options.ApiKey),
+                "AI Service configuration is missing. Set AI_SERVICE_BASE_URL and AI_SERVICE_API_KEY.")
                     !string.IsNullOrWhiteSpace(options.CloudName) &&
                     !string.IsNullOrWhiteSpace(options.ApiKey) &&
                     !string.IsNullOrWhiteSpace(options.ApiSecret),
@@ -101,6 +117,8 @@ public static class DependencyInjection
         services.AddScoped<IPayOsPaymentLinkClient>(provider =>
             new PayOsPaymentLinkClient(provider.GetRequiredKeyedService<PayOSClient>("OrderClient")));
 
+        // AI Service Client
+        services.AddHttpClient<IAiServiceClient, AiServiceClient>();
 
         // External payment service
         services.AddKeyedSingleton("OrderClient", (sp, key) =>
