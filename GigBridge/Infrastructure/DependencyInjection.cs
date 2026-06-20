@@ -71,6 +71,16 @@ public static class DependencyInjection
                 if (string.IsNullOrWhiteSpace(options.ApiKey))
                 {
                     options.ApiKey = Environment.GetEnvironmentVariable("AI_SERVICE_API_KEY");
+                }
+            })
+            .Validate(
+                options =>
+                    !string.IsNullOrWhiteSpace(options.BaseUrl) &&
+                    !string.IsNullOrWhiteSpace(options.ApiKey),
+                "AI Service configuration is missing. Set AI_SERVICE_BASE_URL and AI_SERVICE_API_KEY.")
+            .ValidateOnStart();
+
+        services
             .AddOptions<CloudinaryOptions>()
             .Bind(configuration.GetSection(CloudinaryOptions.SectionName))
             .PostConfigure(options =>
@@ -95,9 +105,6 @@ public static class DependencyInjection
             })
             .Validate(
                 options =>
-                    !string.IsNullOrWhiteSpace(options.BaseUrl) &&
-                    !string.IsNullOrWhiteSpace(options.ApiKey),
-                "AI Service configuration is missing. Set AI_SERVICE_BASE_URL and AI_SERVICE_API_KEY.")
                     !string.IsNullOrWhiteSpace(options.CloudName) &&
                     !string.IsNullOrWhiteSpace(options.ApiKey) &&
                     !string.IsNullOrWhiteSpace(options.ApiSecret),
