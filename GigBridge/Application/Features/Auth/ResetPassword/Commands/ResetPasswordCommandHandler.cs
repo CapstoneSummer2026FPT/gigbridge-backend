@@ -1,3 +1,4 @@
+using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Domain.Entities;
@@ -31,7 +32,7 @@ public class ResetPasswordCommandHandler : IRequestHandler<ResetPasswordCommand>
 
         if (user is null)
         {
-            throw new InvalidOperationException("Email does not exist");
+            throw new NotFoundException("Email does not exist");
         }
 
         await EnsureOtpIsValidAsync(email, resetRequest.Otp, cancellationToken);
@@ -52,7 +53,7 @@ public class ResetPasswordCommandHandler : IRequestHandler<ResetPasswordCommand>
 
         if (string.IsNullOrEmpty(cachedOtp) || cachedOtp != otp)
         {
-            throw new InvalidOperationException("Invalid or expired OTP verification code.");
+            throw new BadRequestException("Invalid or expired OTP verification code.");
         }
     }
 }

@@ -38,12 +38,17 @@ public class ChangePasswordCommandHandler : IRequestHandler<ChangePasswordComman
 
         if (user == null)
         {
-            throw new NotFoundException(nameof(User), currentUserId);
+            throw new NotFoundException("User not found.");
         }
 
         if (!_passwordHasher.VerifyPassword(request.Request.CurrentPassword, user.Password ?? string.Empty))
         {
             throw new BadRequestException("Current password is incorrect.");
+        }
+
+        if (request.Request.CurrentPassword == request.Request.NewPassword)
+        {
+            throw new BadRequestException("New password cannot be the same as current password.");
         }
 
         user.Password = _passwordHasher.HashPassword(request.Request.NewPassword);
