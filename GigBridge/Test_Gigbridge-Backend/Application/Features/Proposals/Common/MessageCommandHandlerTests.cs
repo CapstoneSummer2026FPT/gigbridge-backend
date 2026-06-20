@@ -100,6 +100,27 @@ public class MessageCommandHandlerTests
     }
 
     [Fact]
+    public async Task SendMessage_TextOnlyMessageAllowsMissingAttachments()
+    {
+        var fixture = new MessageFixture();
+        var handler = new SendMessageCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopChatRealtimeNotifier());
+
+        var response = await handler.Handle(
+            new SendMessageCommand(
+                fixture.ClientUserId,
+                new SendMessageRequest(fixture.ConversationId, "mobile-no-attachments", "hello", null)),
+            CancellationToken.None);
+
+        var message = Assert.Single(fixture.Messages.Entities);
+        Assert.Equal(response.MessageId, message.MessagesId);
+        Assert.Equal("hello", message.Content);
+        Assert.Empty(response.Attachments);
+    }
+
+    [Fact]
     public async Task SendMessage_ReturnsAttachmentPayloadAndBroadcastsToParticipantUsers()
     {
         var fixture = new MessageFixture();
