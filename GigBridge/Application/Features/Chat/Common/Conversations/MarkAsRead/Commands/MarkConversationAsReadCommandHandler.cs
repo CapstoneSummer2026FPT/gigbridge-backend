@@ -1,6 +1,8 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Application.Features.Chat.Common.Messages.GetConversationMessages.DTOs;
+using Application.Features.Chat.Common.Messages.Send.DTOs;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -59,12 +61,102 @@ public class MarkConversationAsReadCommandHandler
 
         await _context.SaveChangesAsync(cancellationToken);
 
+        var conversation = await _context.Set<Conversation>()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                conversation => conversation.ConversationsId == request.ConversationId,
+                cancellationToken);
+
+        var lastMessage = await GetLastMessageResponse(conversation, cancellationToken);
+
         await _chatRealtimeNotifier.SendConversationEventAsync(
             request.ConversationId,
             "ConversationRead",
-            new { userId = request.UserId, messageId = request.MessageId },
+            new
+            {
+                conversationId = request.ConversationId,
+                userId = request.UserId,
+                messageId = request.MessageId
+            },
+            cancellationToken);
+
+        await _chatRealtimeNotifier.SendUserEventAsync(
+            request.UserId,
+            "ConversationUpdated",
+            new
+            {
+                conversationId = request.ConversationId,
+                lastMessage,
+                lastMessageAt = conversation?.LastMessageAt,
+                unreadCount = 0
+            },
             cancellationToken);
 
         return true;
+    }
+
+    private async Task<MessageResponse?> GetLastMessageResponse(
+        Conversation? conversation,
+        CancellationToken cancellationToken)
+    {
+        if (conversation?.LastMessageId is null)
+        {
+            return null;
+        }
+
+        var message = await _context.Set<Message>()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                message => message.MessagesId == conversation.LastMessageId.Value,
+                cancellationToken);
+
+        if (message is null)
+        {
+            return null;
+        }
+
+        var attachments = await _context.Set<MessageAttachment>()
+            .AsNoTracking()
+            .Where(attachment => attachment.MessagesId == message.MessagesId)
+            .ToListAsync(cancellationToken);
+
+        return ToMessageResponse(message, attachments);
+    }
+
+    private static MessageResponse ToMessageResponse(
+        Message message,
+        IReadOnlyList<MessageAttachment> attachments)
+    {
+        var isDeleted = message.DeletedForEveryoneAt.HasValue;
+
+        return new MessageResponse(
+            message.MessagesId,
+            message.ConversationsId,
+            message.SenderUserId,
+            message.MessageType,
+            isDeleted ? null : message.Content,
+            message.ReplyToMessageId,
+            isDeleted ? null : message.Metadata,
+            message.ClientMessageId,
+            message.SentAt,
+            isDeleted ? null : message.EditedAt,
+            isDeleted,
+            isDeleted
+                ? []
+                : attachments.Select(ToAttachmentResponse).ToList());
+    }
+
+    private static MessageAttachmentResponse ToAttachmentResponse(MessageAttachment attachment)
+    {
+        return new MessageAttachmentResponse(
+            attachment.MessageAttachmentsId,
+            attachment.FileName,
+            attachment.FileUrl,
+            attachment.StorageProvider,
+            attachment.StorageObjectKey,
+            attachment.MimeType,
+            attachment.FileExtension,
+            attachment.FileSizeBytes,
+            attachment.CreatedAt);
     }
 }

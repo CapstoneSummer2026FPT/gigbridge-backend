@@ -59,6 +59,11 @@ public class GetConversationMessagesQueryHandler
             .Take(pageSize)
             .ToListAsync(cancellationToken);
 
+        messages = messages
+            .OrderBy(message => message.SentAt)
+            .ThenBy(message => message.MessagesId)
+            .ToList();
+
         var messageIds = messages.Select(message => message.MessagesId).ToHashSet();
         var attachments = await _context.Set<MessageAttachment>()
             .AsNoTracking()
@@ -90,6 +95,7 @@ public class GetConversationMessagesQueryHandler
             isDeleted ? null : message.Content,
             message.ReplyToMessageId,
             isDeleted ? null : message.Metadata,
+            message.ClientMessageId,
             message.SentAt,
             isDeleted ? null : message.EditedAt,
             isDeleted,

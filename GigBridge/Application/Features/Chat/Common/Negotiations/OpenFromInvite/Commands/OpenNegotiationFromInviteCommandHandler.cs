@@ -13,13 +13,16 @@ public class OpenNegotiationFromInviteCommandHandler
 {
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
+    private readonly IChatRealtimeNotifier _chatRealtimeNotifier;
 
     public OpenNegotiationFromInviteCommandHandler(
         IApplicationDbContext context,
-        IDateTimeService dateTimeService)
+        IDateTimeService dateTimeService,
+        IChatRealtimeNotifier chatRealtimeNotifier)
     {
         _context = context;
         _dateTimeService = dateTimeService;
+        _chatRealtimeNotifier = chatRealtimeNotifier;
     }
 
     public async Task<Guid> Handle(
@@ -88,6 +91,11 @@ public class OpenNegotiationFromInviteCommandHandler
 
         if (existingConversation is not null)
         {
+            await NotifyConversationUpdated(
+                existingConversation.ConversationsId,
+                existingConversation.LastMessageAt,
+                cancellationToken);
+
             return existingConversation.ConversationsId;
         }
 
@@ -125,7 +133,42 @@ public class OpenNegotiationFromInviteCommandHandler
         contract.UpdatedAt = now;
 
         await _context.SaveChangesAsync(cancellationToken);
+        await NotifyConversationUpdated(
+            conversation.ConversationsId,
+            conversation.LastMessageAt,
+            cancellationToken);
 
         return conversation.ConversationsId;
+    }
+
+    private async Task NotifyConversationUpdated(
+        Guid conversationId,
+        DateTime? lastMessageAt,
+        CancellationToken cancellationToken)
+    {
+        var participants = await _context.Set<ConversationParticipant>()
+            .AsNoTracking()
+            .Where(participant =>
+                participant.ConversationsId == conversationId &&
+                participant.LeftAt == null &&
+                participant.DeletedAt == null)
+            .ToListAsync(cancellationToken);
+
+        foreach (var participant in participants
+            .GroupBy(participant => participant.UserId)
+            .Select(group => group.First()))
+        {
+            await _chatRealtimeNotifier.SendUserEventAsync(
+                participant.UserId,
+                "ConversationUpdated",
+                new
+                {
+                    conversationId,
+                    lastMessage = (object?)null,
+                    lastMessageAt,
+                    unreadCount = participant.UnreadCount
+                },
+                cancellationToken);
+        }
     }
 }
