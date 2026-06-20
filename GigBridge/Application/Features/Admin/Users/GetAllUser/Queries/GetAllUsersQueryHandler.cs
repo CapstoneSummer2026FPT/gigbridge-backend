@@ -35,14 +35,12 @@ public class GetAllUsersQueryHandler : IRequestHandler<GetAllUsersQuery, GetAllU
 
         var items = _mapper.Map<IReadOnlyList<AdminUserDto>>(users);
         await AddOpenReportCountsAsync(items, cancellationToken);
-        var reportedUserCount = await _context.Set<Report>()
-            .AsNoTracking()
-            .Where(report =>
+        var reportedUserCount = await query.CountAsync(user =>
+            _context.Set<Report>().Any(report =>
+                report.ReportedEntityId == user.UserId &&
                 report.ReportedEntityType.ToLower() == ReportedEntityTypes.User.ToLower() &&
-                (report.Status == (int)ReportStatus.Pending || report.Status == (int)ReportStatus.Reviewing))
-            .Select(report => report.ReportedEntityId)
-            .Distinct()
-            .CountAsync(cancellationToken);
+                (report.Status == (int)ReportStatus.Pending || report.Status == (int)ReportStatus.Reviewing)),
+            cancellationToken);
 
         return new GetAllUsersResponse
         {
