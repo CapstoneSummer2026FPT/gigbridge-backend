@@ -1,6 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Application.Features.Chat.Common.Messages.GetConversationMessages.DTOs;
 using Application.Features.Chat.Common.Messages.Send.DTOs;
 using Domain.Entities;
 using Domain.Enums;
@@ -42,6 +43,7 @@ public class SendMessageCommandHandler : IRequestHandler<SendMessageCommand, Mes
         var request = command.Request;
         ValidateRequest(request);
         var attachments = request.Attachments ?? Array.Empty<SendMessageAttachmentRequest>();
+        var clientMessageId = request.ClientMessageId.Trim();
 
         var conversation = await _context.Set<Conversation>()
             .FirstOrDefaultAsync(
@@ -71,20 +73,33 @@ public class SendMessageCommandHandler : IRequestHandler<SendMessageCommand, Mes
             throw new ForbiddenAccessException("You are not a participant in this conversation.");
         }
 
+        await EnsureReplyTargetBelongsToConversation(request, cancellationToken);
+
         var existingMessage = await _context.Set<Message>()
             .FirstOrDefaultAsync(
                 message =>
                     message.ConversationsId == request.ConversationId &&
                     message.SenderUserId == command.UserId &&
-                    message.ClientMessageId == request.ClientMessageId,
+                    message.ClientMessageId == clientMessageId,
                 cancellationToken);
 
         if (existingMessage is not null)
         {
-            return ToResponse(existingMessage);
+            var existingAttachments = await GetMessageAttachments(
+                existingMessage.MessagesId,
+                cancellationToken);
+
+            return ToResponse(existingMessage, existingAttachments);
         }
 
         var now = _dateTimeService.UtcNow;
+        var activeParticipants = await _context.Set<ConversationParticipant>()
+            .Where(participant =>
+                participant.ConversationsId == request.ConversationId &&
+                participant.LeftAt == null &&
+                participant.DeletedAt == null)
+            .ToListAsync(cancellationToken);
+
         var message = new Message
         {
             MessagesId = Guid.NewGuid(),
@@ -97,15 +112,17 @@ public class SendMessageCommandHandler : IRequestHandler<SendMessageCommand, Mes
                 ? null
                 : request.Content.Trim(),
             ReplyToMessageId = request.ReplyToMessageId,
-            ClientMessageId = request.ClientMessageId.Trim(),
+            ClientMessageId = clientMessageId,
             SentAt = now
         };
 
         _context.Set<Message>().Add(message);
 
+        var messageAttachments = new List<MessageAttachment>();
+
         foreach (var attachment in attachments)
         {
-            _context.Set<MessageAttachment>().Add(new MessageAttachment
+            var messageAttachment = new MessageAttachment
             {
                 MessageAttachmentsId = Guid.NewGuid(),
                 MessagesId = message.MessagesId,
@@ -117,21 +134,35 @@ public class SendMessageCommandHandler : IRequestHandler<SendMessageCommand, Mes
                 FileExtension = attachment.FileExtension,
                 FileSizeBytes = attachment.FileSizeBytes,
                 CreatedAt = now
-            });
+            };
+
+            _context.Set<MessageAttachment>().Add(messageAttachment);
+            messageAttachments.Add(messageAttachment);
         }
 
         conversation.LastMessageId = message.MessagesId;
         conversation.LastMessageAt = now;
         conversation.UpdatedAt = now;
-        IncrementUnreadCounts(request.ConversationId, command.UserId);
+        IncrementUnreadCounts(activeParticipants, command.UserId);
 
         await _context.SaveChangesAsync(cancellationToken);
 
-        var response = ToResponse(message);
-        await _chatRealtimeNotifier.SendConversationEventAsync(
-            request.ConversationId,
+        var response = ToResponse(message, messageAttachments);
+        var participantUserIds = activeParticipants
+            .Select(participant => participant.UserId)
+            .Distinct()
+            .ToArray();
+
+        await _chatRealtimeNotifier.SendUsersEventAsync(
+            participantUserIds,
             "ReceiveMessage",
             response,
+            cancellationToken);
+
+        await SendConversationUpdatedEvents(
+            activeParticipants,
+            response,
+            response.SentAt,
             cancellationToken);
 
         return response;
@@ -171,13 +202,43 @@ public class SendMessageCommandHandler : IRequestHandler<SendMessageCommand, Mes
         }
     }
 
-    private void IncrementUnreadCounts(Guid conversationId, Guid senderUserId)
+    private async Task EnsureReplyTargetBelongsToConversation(
+        SendMessageRequest request,
+        CancellationToken cancellationToken)
     {
-        var participants = _context.Set<ConversationParticipant>()
-            .Where(participant =>
-                participant.ConversationsId == conversationId &&
-                participant.LeftAt == null);
+        if (!request.ReplyToMessageId.HasValue)
+        {
+            return;
+        }
 
+        var replyExists = await _context.Set<Message>()
+            .AsNoTracking()
+            .AnyAsync(
+                message =>
+                    message.MessagesId == request.ReplyToMessageId.Value &&
+                    message.ConversationsId == request.ConversationId,
+                cancellationToken);
+
+        if (!replyExists)
+        {
+            throw new BadRequestException("ReplyToMessageId must belong to the same conversation.");
+        }
+    }
+
+    private Task<List<MessageAttachment>> GetMessageAttachments(
+        Guid messageId,
+        CancellationToken cancellationToken)
+    {
+        return _context.Set<MessageAttachment>()
+            .AsNoTracking()
+            .Where(attachment => attachment.MessagesId == messageId)
+            .ToListAsync(cancellationToken);
+    }
+
+    private static void IncrementUnreadCounts(
+        IReadOnlyCollection<ConversationParticipant> participants,
+        Guid senderUserId)
+    {
         foreach (var participant in participants)
         {
             if (participant.UserId != senderUserId)
@@ -187,7 +248,33 @@ public class SendMessageCommandHandler : IRequestHandler<SendMessageCommand, Mes
         }
     }
 
-    private static MessageResponse ToResponse(Message message)
+    private async Task SendConversationUpdatedEvents(
+        IReadOnlyCollection<ConversationParticipant> participants,
+        MessageResponse lastMessage,
+        DateTime lastMessageAt,
+        CancellationToken cancellationToken)
+    {
+        foreach (var participant in participants
+            .GroupBy(participant => participant.UserId)
+            .Select(group => group.First()))
+        {
+            await _chatRealtimeNotifier.SendUserEventAsync(
+                participant.UserId,
+                "ConversationUpdated",
+                new
+                {
+                    conversationId = lastMessage.ConversationId,
+                    lastMessage,
+                    lastMessageAt,
+                    unreadCount = participant.UnreadCount
+                },
+                cancellationToken);
+        }
+    }
+
+    private static MessageResponse ToResponse(
+        Message message,
+        IReadOnlyList<MessageAttachment> attachments)
     {
         var isDeleted = message.DeletedForEveryoneAt.HasValue;
 
@@ -197,8 +284,28 @@ public class SendMessageCommandHandler : IRequestHandler<SendMessageCommand, Mes
             message.SenderUserId,
             message.MessageType,
             isDeleted ? null : message.Content,
+            message.ReplyToMessageId,
             isDeleted ? null : message.Metadata,
+            message.ClientMessageId,
             message.SentAt,
-            isDeleted);
+            isDeleted ? null : message.EditedAt,
+            isDeleted,
+            isDeleted
+                ? []
+                : attachments.Select(ToAttachmentResponse).ToList());
+    }
+
+    private static MessageAttachmentResponse ToAttachmentResponse(MessageAttachment attachment)
+    {
+        return new MessageAttachmentResponse(
+            attachment.MessageAttachmentsId,
+            attachment.FileName,
+            attachment.FileUrl,
+            attachment.StorageProvider,
+            attachment.StorageObjectKey,
+            attachment.MimeType,
+            attachment.FileExtension,
+            attachment.FileSizeBytes,
+            attachment.CreatedAt);
     }
 }

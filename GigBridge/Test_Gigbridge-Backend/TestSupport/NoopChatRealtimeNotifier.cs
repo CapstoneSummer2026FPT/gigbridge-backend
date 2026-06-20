@@ -12,4 +12,22 @@ internal sealed class NoopChatRealtimeNotifier : IChatRealtimeNotifier
     {
         return Task.CompletedTask;
     }
+
+    public Task SendUserEventAsync(
+        Guid userId,
+        string eventName,
+        object payload,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
+
+    public Task SendUsersEventAsync(
+        IReadOnlyCollection<Guid> userIds,
+        string eventName,
+        object payload,
+        CancellationToken cancellationToken = default)
+    {
+        return Task.CompletedTask;
+    }
 }

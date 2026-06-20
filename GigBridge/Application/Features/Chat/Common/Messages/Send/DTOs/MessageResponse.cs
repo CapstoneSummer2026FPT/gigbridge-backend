@@ -1,3 +1,5 @@
+using Application.Features.Chat.Common.Messages.GetConversationMessages.DTOs;
+
 namespace Application.Features.Chat.Common.Messages.Send.DTOs;
 
 public record MessageResponse(
@@ -6,6 +8,10 @@ public record MessageResponse(
     Guid? SenderUserId,
     int MessageType,
     string? Content,
+    Guid? ReplyToMessageId,
     string? Metadata,
+    string? ClientMessageId,
     DateTime SentAt,
-    bool IsDeleted);
+    DateTime? EditedAt,
+    bool IsDeleted,
+    IReadOnlyList<MessageAttachmentResponse> Attachments);

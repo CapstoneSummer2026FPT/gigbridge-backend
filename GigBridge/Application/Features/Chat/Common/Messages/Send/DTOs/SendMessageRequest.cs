@@ -5,4 +5,4 @@ public record SendMessageRequest(
     string ClientMessageId,
     string? Content,
     Guid? ReplyToMessageId,
-    IReadOnlyCollection<SendMessageAttachmentRequest> Attachments);
+    IReadOnlyCollection<SendMessageAttachmentRequest>? Attachments = null);

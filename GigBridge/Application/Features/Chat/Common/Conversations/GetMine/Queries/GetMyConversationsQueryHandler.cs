@@ -1,5 +1,6 @@
 using Application.Common.Interfaces;
 using Application.Features.Chat.Common.Conversations.GetMine.DTOs;
+using Application.Features.Chat.Common.Messages.GetConversationMessages.DTOs;
 using Application.Features.Chat.Common.Messages.Send.DTOs;
 using Domain.Entities;
 using MediatR;
@@ -51,6 +52,17 @@ public class GetMyConversationsQueryHandler
             .AsNoTracking()
             .Where(message => lastMessageIds.Contains(message.MessagesId))
             .ToDictionaryAsync(message => message.MessagesId, cancellationToken);
+
+        var lastMessageAttachments = await _context.Set<MessageAttachment>()
+            .AsNoTracking()
+            .Where(attachment => lastMessageIds.Contains(attachment.MessagesId))
+            .ToListAsync(cancellationToken);
+
+        var attachmentsByMessage = lastMessageAttachments
+            .GroupBy(attachment => attachment.MessagesId)
+            .ToDictionary(
+                group => group.Key,
+                group => group.Select(ToAttachmentResponse).ToList());
 
         var unreadByConversation = participants.ToDictionary(
             participant => participant.ConversationsId,
@@ -105,7 +117,9 @@ public class GetMyConversationsQueryHandler
                     conversation.LastMessageAt,
                     conversation.LastMessageId.HasValue &&
                         lastMessages.TryGetValue(conversation.LastMessageId.Value, out var message)
-                        ? ToMessageResponse(message)
+                        ? ToMessageResponse(
+                            message,
+                            attachmentsByMessage.GetValueOrDefault(message.MessagesId) ?? [])
                         : null,
                     otherParticipant?.UserId,
                     otherParticipant?.User?.FullName,
@@ -121,7 +135,9 @@ public class GetMyConversationsQueryHandler
             .ToList();
     }
 
-    private static MessageResponse ToMessageResponse(Message message)
+    private static MessageResponse ToMessageResponse(
+        Message message,
+        IReadOnlyList<MessageAttachmentResponse> attachments)
     {
         var isDeleted = message.DeletedForEveryoneAt.HasValue;
 
@@ -131,8 +147,26 @@ public class GetMyConversationsQueryHandler
             message.SenderUserId,
             message.MessageType,
             isDeleted ? null : message.Content,
+            message.ReplyToMessageId,
             isDeleted ? null : message.Metadata,
+            message.ClientMessageId,
             message.SentAt,
-            isDeleted);
+            isDeleted ? null : message.EditedAt,
+            isDeleted,
+            isDeleted ? [] : attachments);
+    }
+
+    private static MessageAttachmentResponse ToAttachmentResponse(MessageAttachment attachment)
+    {
+        return new MessageAttachmentResponse(
+            attachment.MessageAttachmentsId,
+            attachment.FileName,
+            attachment.FileUrl,
+            attachment.StorageProvider,
+            attachment.StorageObjectKey,
+            attachment.MimeType,
+            attachment.FileExtension,
+            attachment.FileSizeBytes,
+            attachment.CreatedAt);
     }
 }
