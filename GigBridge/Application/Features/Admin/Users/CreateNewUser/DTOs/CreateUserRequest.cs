@@ -7,4 +7,5 @@ public class CreateUserRequest
     public string Password { get; set; } = string.Empty;
     public int Role { get; set; }
     public string? PhoneNumber { get; set; }
+    public bool IsEmailVerified { get; set; }
 }
