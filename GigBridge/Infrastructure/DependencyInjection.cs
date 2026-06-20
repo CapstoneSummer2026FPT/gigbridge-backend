@@ -1,6 +1,7 @@
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Common.Models;
+using Infrastructure.ExternalServices.Ai;
 using Infrastructure.ExternalServices.Payments;
 using Infrastructure.Persistence;
 using Infrastructure.Services.Auth;
@@ -57,6 +58,52 @@ public static class DependencyInjection
                 "PayOS configuration is missing. Set PAYOS_CLIENT_ID, PAYOS_API_KEY, and PAYOS_CHECKSUM_KEY.")
             .ValidateOnStart();
 
+        services
+            .AddOptions<AiServiceOptions>()
+            .Bind(configuration.GetSection(AiServiceOptions.SectionName))
+            .PostConfigure(options =>
+            {
+                if (string.IsNullOrWhiteSpace(options.BaseUrl))
+                {
+                    options.BaseUrl = Environment.GetEnvironmentVariable("AI_SERVICE_BASE_URL");
+                }
+
+                if (string.IsNullOrWhiteSpace(options.ApiKey))
+                {
+                    options.ApiKey = Environment.GetEnvironmentVariable("AI_SERVICE_API_KEY");
+            .AddOptions<CloudinaryOptions>()
+            .Bind(configuration.GetSection(CloudinaryOptions.SectionName))
+            .PostConfigure(options =>
+            {
+                var cloudName = Environment.GetEnvironmentVariable("CLOUDINARY_CLOUD_NAME");
+                if (!string.IsNullOrWhiteSpace(cloudName))
+                {
+                    options.CloudName = cloudName;
+                }
+
+                var apiKey = Environment.GetEnvironmentVariable("CLOUDINARY_API_KEY");
+                if (!string.IsNullOrWhiteSpace(apiKey))
+                {
+                    options.ApiKey = apiKey;
+                }
+
+                var apiSecret = Environment.GetEnvironmentVariable("CLOUDINARY_API_SECRET");
+                if (!string.IsNullOrWhiteSpace(apiSecret))
+                {
+                    options.ApiSecret = apiSecret;
+                }
+            })
+            .Validate(
+                options =>
+                    !string.IsNullOrWhiteSpace(options.BaseUrl) &&
+                    !string.IsNullOrWhiteSpace(options.ApiKey),
+                "AI Service configuration is missing. Set AI_SERVICE_BASE_URL and AI_SERVICE_API_KEY.")
+                    !string.IsNullOrWhiteSpace(options.CloudName) &&
+                    !string.IsNullOrWhiteSpace(options.ApiKey) &&
+                    !string.IsNullOrWhiteSpace(options.ApiSecret),
+                "Cloudinary configuration is missing. Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET.")
+            .ValidateOnStart();
+
         // Services
         services.AddScoped<IPasswordHasher, BCryptPasswordHasher>();
         services.AddScoped<IJwtService, JwtService>();
@@ -70,6 +117,8 @@ public static class DependencyInjection
         services.AddScoped<IPayOsPaymentLinkClient>(provider =>
             new PayOsPaymentLinkClient(provider.GetRequiredKeyedService<PayOSClient>("OrderClient")));
 
+        // AI Service Client
+        services.AddHttpClient<IAiServiceClient, AiServiceClient>();
 
         // External payment service
         services.AddKeyedSingleton("OrderClient", (sp, key) =>

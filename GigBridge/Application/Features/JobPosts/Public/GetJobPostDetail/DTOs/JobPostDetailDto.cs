@@ -9,6 +9,11 @@ public record JobPostDetailDto(
     Guid ClientProfilesId,
     string Title,
     string Description,
+    Guid? MajorCategoryId,
+    Guid? MajorId,
+    string? MajorName,
+    Guid? CategoryId,
+    string? CategoryName,
     decimal? BudgetMin,
     decimal? BudgetMax,
     string? Currency,
@@ -19,5 +24,6 @@ public record JobPostDetailDto(
     DateTime CreatedAt,
     int EloPoints,
     List<JobPostSkillDto> Skills,
+    List<string> CustomSkillNames,
     List<AttachmentDto> Attachments
 );

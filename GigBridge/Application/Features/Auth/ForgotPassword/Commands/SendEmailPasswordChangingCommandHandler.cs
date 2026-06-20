@@ -1,3 +1,4 @@
+using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Domain.Entities;
@@ -31,7 +32,7 @@ public class SendEmailPasswordChangingCommandHandler : IRequestHandler<SendEmail
 
         if (user is null)
         {
-            throw new InvalidOperationException("Email does not exist");
+            throw new NotFoundException("Email does not exist");
         }
 
         var cacheKey = $"otp:{email}";

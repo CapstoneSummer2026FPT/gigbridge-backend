@@ -37,6 +37,14 @@ public class CreateBulkJobPostQuestionsCommandHandler
             cancellationToken);
 
         JobPostQuestionCommandHelper.EnsureDraft(jobPost);
+        await JobPostQuestionCommandHelper.EnsureOrderIndexesAvailableAsync(
+            _context,
+            command.JobPostsId,
+            command.Request.Questions!
+                .Select(question => question.OrderIndex)
+                .Distinct()
+                .ToList(),
+            cancellationToken);
 
         var now = _dateTimeService.UtcNow;
         var questions = command.Request.Questions!

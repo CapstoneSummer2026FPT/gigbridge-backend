@@ -40,10 +40,28 @@ public class GetMyJobPostDetailQueryHandler
             {
                 JobPostsId = jobPost.JobPostsId,
                 ClientProfilesId = jobPost.ClientProfilesId,
+
                 Title = jobPost.Title,
                 Description = jobPost.Description,
-                CategoryId = jobPost.CategoryId,
-                CategoryName = jobPost.Category != null ? jobPost.Category.Name : null,
+
+                MajorCategoryId = jobPost.MajorCategoryId,
+
+                MajorId = jobPost.MajorCategory != null
+                    ? jobPost.MajorCategory.MajorId
+                    : null,
+
+                MajorName = jobPost.MajorCategory != null
+                    ? jobPost.MajorCategory.Major.Name
+                    : null,
+
+                CategoryId = jobPost.MajorCategory != null
+                    ? jobPost.MajorCategory.CategoryId
+                    : null,
+
+                CategoryName = jobPost.MajorCategory != null
+                    ? jobPost.MajorCategory.Category.Name
+                    : null,
+
                 BudgetMin = jobPost.BudgetMin,
                 BudgetMax = jobPost.BudgetMax,
                 Currency = jobPost.Currency,
@@ -55,18 +73,22 @@ public class GetMyJobPostDetailQueryHandler
                 EndDate = jobPost.EndDate,
                 CreatedAt = jobPost.CreatedAt,
                 UpdatedAt = jobPost.UpdatedAt,
+
                 Skills = jobPost.JobPostSkills
-                    .Where(jobPostSkill => jobPostSkill.Skills != null)
                     .Select(jobPostSkill => new JobPostSkillDto(
                         jobPostSkill.SkillsId,
                         jobPostSkill.Skills.Name))
                     .ToList(),
+
+                CustomSkillNames = jobPost.CustomSkillNames.ToList(),
+
                 Attachments = jobPost.JobPostAttachments
                     .Select(attachment => new AttachmentDto(
                         attachment.JobPostAttachmentsId,
                         attachment.FileUrl,
                         attachment.FileName))
                     .ToList(),
+
                 ProposalCount = jobPost.Proposals.Count(proposal => proposal.Status != 0)
             })
             .FirstOrDefaultAsync(cancellationToken);

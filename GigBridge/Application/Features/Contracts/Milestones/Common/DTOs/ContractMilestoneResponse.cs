@@ -1,4 +1,16 @@
+using System;
+using System.Collections.Generic;
+
 namespace Application.Features.Contracts.Milestones.Common.DTOs;
+
+public sealed record MilestoneAttachmentResponse(
+    Guid MilestoneAttachmentsId,
+    Guid MilestonesId,
+    string FileName,
+    string FileUrl,
+    long? FileSize,
+    Guid? UploadedByUserId,
+    DateTime CreatedAt);
 
 public sealed record ContractMilestoneResponse(
     Guid MilestoneId,
@@ -12,4 +24,6 @@ public sealed record ContractMilestoneResponse(
     DateTime? SubmittedAt,
     DateTime? ApprovedAt,
     decimal ReleasedAmount,
-    DateTime? LastReleasedAt);
+    DateTime? LastReleasedAt,
+    string? SubmissionDescription,
+    IReadOnlyList<MilestoneAttachmentResponse> Attachments);

@@ -31,6 +31,7 @@ public class ExceptionHandlingMiddleware
                 ex is not BadRequestException &&
                 ex is not UnauthorizedAccessException &&
                 ex is not NotFoundException &&
+                ex is not ExternalServiceException &&
                 ex is not ForbiddenAccessException)
             {
                 _logger.LogError(ex, "An unhandled exception occurred.");
@@ -55,6 +56,7 @@ public class ExceptionHandlingMiddleware
             UnauthorizedAccessException => HttpStatusCode.Unauthorized,
             ForbiddenAccessException => HttpStatusCode.Forbidden,
             NotFoundException => HttpStatusCode.NotFound,
+            ExternalServiceException => HttpStatusCode.ServiceUnavailable,
             _ => HttpStatusCode.InternalServerError
         };
 

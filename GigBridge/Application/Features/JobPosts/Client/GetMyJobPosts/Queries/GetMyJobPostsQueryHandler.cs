@@ -27,32 +27,66 @@ public class GetMyJobPostsQueryHandler : IRequestHandler<GetMyJobPostsQuery, IEn
             throw new NotFoundException("Client profile does not exist.");
         }
 
+        var pageIndex = NormalizePageIndex(request.PageIndex);
+        var pageSize = NormalizePageSize(request.PageSize);
+
         return await _context.Set<JobPost>()
             .AsNoTracking()
             .Where(jobPost => jobPost.ClientProfilesId == clientProfile.ClientProfilesId)
             .OrderByDescending(jobPost => jobPost.CreatedAt)
-            .Skip((NormalizePageIndex(request.PageIndex) - 1) * NormalizePageSize(request.PageSize))
-            .Take(NormalizePageSize(request.PageSize))
+            .Skip((pageIndex - 1) * pageSize)
+            .Take(pageSize)
             .Select(jobPost => new GetMyJobPostDto
             {
                 JobPostsId = jobPost.JobPostsId,
                 ClientProfilesId = jobPost.ClientProfilesId,
+
                 Title = jobPost.Title,
                 Description = jobPost.Description,
-                CategoryId = jobPost.CategoryId,
-                CategoryName = jobPost.Category != null ? jobPost.Category.Name : null,
+
+                MajorCategoryId = jobPost.MajorCategoryId,
+
+                MajorId = jobPost.MajorCategory != null
+                    ? jobPost.MajorCategory.MajorId
+                    : null,
+
+                MajorName = jobPost.MajorCategory != null
+                    ? jobPost.MajorCategory.Major.Name
+                    : null,
+
+                CategoryId = jobPost.MajorCategory != null
+                    ? jobPost.MajorCategory.CategoryId
+                    : null,
+
+                CategoryName = jobPost.MajorCategory != null
+                    ? jobPost.MajorCategory.Category.Name
+                    : null,
+
+                Skills = jobPost.JobPostSkills
+                    .Select(jobPostSkill => new GetMyJobPostSkillDto
+                    {
+                        SkillId = jobPostSkill.SkillsId,
+                        Name = jobPostSkill.Skills.Name
+                    })
+                    .ToList(),
+
                 BudgetMin = jobPost.BudgetMin,
                 BudgetMax = jobPost.BudgetMax,
                 Currency = jobPost.Currency,
                 EstimatedDuration = jobPost.EstimatedDuration,
                 MaxHires = jobPost.MaxHires,
                 Location = jobPost.Location,
+
                 Status = jobPost.Status,
                 Visibility = jobPost.Visibility,
                 EndDate = jobPost.EndDate,
                 IsAigenerated = jobPost.IsAigenerated,
+
+                CustomSkillNames = jobPost.CustomSkillNames.ToList(),
+
                 CreatedAt = jobPost.CreatedAt,
                 UpdatedAt = jobPost.UpdatedAt,
+
                 ProposalCount = jobPost.Proposals.Count(proposal => proposal.Status != 0)
             })
             .ToListAsync(cancellationToken);

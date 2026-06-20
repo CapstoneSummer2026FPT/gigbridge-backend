@@ -77,7 +77,7 @@ public class CreateJobPostValidatorTests
         return new CreateJobPostRequest(
             Title: "Build a booking module",
             Description: "Create booking workflow and notification logic.",
-            CategoryId: Guid.NewGuid(),
+            MajorCategoryId: Guid.NewGuid(),
             BudgetMin: 500m,
             BudgetMax: 1000m,
             Currency: "VND",
@@ -86,6 +86,7 @@ public class CreateJobPostValidatorTests
             Location: "Remote",
             Visibility: 1,
             EndDate: DateTime.UtcNow.AddDays(7),
-            SkillIds: new List<Guid> { Guid.NewGuid() });
+            SkillIds: new List<Guid> { Guid.NewGuid() },
+            CustomSkillNames: new List<string> { "API" });
     }
 }

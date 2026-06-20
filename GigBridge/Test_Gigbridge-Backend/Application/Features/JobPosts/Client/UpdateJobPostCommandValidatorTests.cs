@@ -13,8 +13,7 @@ public class UpdateJobPostCommandValidatorTests
     [InlineData(2)]
     public void Validate_ReturnsNoErrorsForValidVisibility(int visibility)
     {
-        var request = CreateValidRequest();
-        request.Visibility = visibility;
+        var request = CreateValidRequest() with { Visibility = visibility };
 
         var result = _validator.Validate(new UpdateJobPostCommand(Guid.NewGuid(), Guid.NewGuid(), request));
 
@@ -24,8 +23,7 @@ public class UpdateJobPostCommandValidatorTests
     [Fact]
     public void Validate_ReturnsErrorWhenVisibilityIsMissing()
     {
-        var request = CreateValidRequest();
-        request.Visibility = null;
+        var request = CreateValidRequest() with { Visibility = null };
 
         var result = _validator.Validate(new UpdateJobPostCommand(Guid.NewGuid(), Guid.NewGuid(), request));
 
@@ -37,8 +35,7 @@ public class UpdateJobPostCommandValidatorTests
     [InlineData(3)]
     public void Validate_ReturnsErrorWhenVisibilityIsOutOfRange(int visibility)
     {
-        var request = CreateValidRequest();
-        request.Visibility = visibility;
+        var request = CreateValidRequest() with { Visibility = visibility };
 
         var result = _validator.Validate(new UpdateJobPostCommand(Guid.NewGuid(), Guid.NewGuid(), request));
 
@@ -48,9 +45,7 @@ public class UpdateJobPostCommandValidatorTests
     [Fact]
     public void Validate_StillReturnsErrorWhenBudgetMinIsGreaterThanBudgetMax()
     {
-        var request = CreateValidRequest();
-        request.BudgetMin = 200m;
-        request.BudgetMax = 100m;
+        var request = CreateValidRequest() with { BudgetMin = 200m, BudgetMax = 100m };
 
         var result = _validator.Validate(new UpdateJobPostCommand(Guid.NewGuid(), Guid.NewGuid(), request));
 
@@ -59,20 +54,19 @@ public class UpdateJobPostCommandValidatorTests
 
     private static UpdateJobPostRequest CreateValidRequest()
     {
-        return new UpdateJobPostRequest
-        {
-            Title = "Build a booking module",
-            Description = "Create booking workflow and notification logic.",
-            CategoryId = Guid.NewGuid(),
-            BudgetMin = 500m,
-            BudgetMax = 1000m,
-            Currency = "VND",
-            EstimatedDuration = "2 weeks",
-            MaxHires = 1,
-            Location = "Remote",
-            Visibility = 1,
-            EndDate = DateTime.UtcNow.AddDays(7),
-            SkillIds = new List<Guid> { Guid.NewGuid() }
-        };
+        return new UpdateJobPostRequest(
+            Title: "Build a booking module",
+            Description: "Create booking workflow and notification logic.",
+            MajorCategoryId: Guid.NewGuid(),
+            BudgetMin: 500m,
+            BudgetMax: 1000m,
+            Currency: "VND",
+            EstimatedDuration: "2 weeks",
+            MaxHires: 1,
+            Location: "Remote",
+            Visibility: 1,
+            EndDate: DateTime.UtcNow.AddDays(7),
+            SkillIds: new List<Guid> { Guid.NewGuid() },
+            CustomSkillNames: new List<string> { "API" });
     }
 }
