@@ -1,5 +1,6 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
+using Application.Features.Chat.Common.Messages;
 using Application.Features.Chat.Common.Messages.GetConversationMessages.DTOs;
 using Domain.Entities;
 using MediatR;
@@ -99,7 +100,8 @@ public class GetConversationMessagesQueryHandler
             message.SentAt,
             isDeleted ? null : message.EditedAt,
             isDeleted,
-            isDeleted ? [] : attachments);
+            isDeleted ? [] : attachments,
+            isDeleted ? null : MessageHelpers.ParseScheduleMetadata(message));
     }
 
     private static MessageAttachmentResponse ToAttachmentResponse(MessageAttachment attachment)

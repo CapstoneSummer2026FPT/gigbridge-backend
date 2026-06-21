@@ -3,6 +3,7 @@ using System;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(GigbridgeDbContext))]
-    partial class GigbridgeDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260621124655_AddChatSchedules")]
+    partial class AddChatSchedules
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -665,10 +668,6 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex("DeliveryKey")
                         .IsUnique();
-
-                    b.HasIndex("RecipientUserId");
-
-                    b.HasIndex("ScheduleId");
 
                     b.HasIndex("Status", "NextAttemptAt");
 
@@ -2570,7 +2569,7 @@ namespace Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
-                        .HasDefaultValue("Asia/Ho_Chi_Minh");
+                        .HasDefaultValue("Asia/Bangkok");
 
                     b.Property<string>("Title")
                         .IsRequired()
@@ -3340,21 +3339,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("LastReadMessage");
 
                     b.Navigation("User");
-                });
-
-            modelBuilder.Entity("Domain.Entities.DeliveryOutbox", b =>
-                {
-                    b.HasOne("Domain.Entities.User", null)
-                        .WithMany()
-                        .HasForeignKey("RecipientUserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Domain.Entities.Schedule", null)
-                        .WithMany()
-                        .HasForeignKey("ScheduleId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
                 });
 
             modelBuilder.Entity("Domain.Entities.Dispute", b =>

@@ -59,4 +59,6 @@ public partial class Conversation
     public virtual ICollection<ConversationParticipant> Participants { get; set; } = new List<ConversationParticipant>();
 
     public virtual Proposal? Proposals { get; set; }
+
+    public virtual ICollection<Schedule> Schedules { get; set; } = new List<Schedule>();
 }

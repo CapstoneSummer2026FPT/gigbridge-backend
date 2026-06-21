@@ -143,10 +143,10 @@ public class AuthController : BaseApiController
 
     [HttpPost("change-password")]
     [Authorize]
-    public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordProfileRequest request)
+    public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordProfileRequest? request)
     {
-       
-        if (string.IsNullOrWhiteSpace(request.CurrentPassword) || string.IsNullOrWhiteSpace(request.NewPassword))
+
+        if (request is null || string.IsNullOrWhiteSpace(request.CurrentPassword) || string.IsNullOrWhiteSpace(request.NewPassword))
             return BadRequest(ApiResponse<object>.BadRequest("Current password and new password are required"));
 
         await Mediator.Send(new ChangePasswordCommand(request));

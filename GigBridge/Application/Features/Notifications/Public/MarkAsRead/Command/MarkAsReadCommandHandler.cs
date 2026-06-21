@@ -36,6 +36,12 @@ public class MarkAsReadCommandHandler : IRequestHandler<MarkAsReadCommand>
             return;
         }
 
+        if (request.ExpectedRevision.HasValue && notification.Revision.HasValue &&
+            request.ExpectedRevision.Value != notification.Revision.Value)
+        {
+            throw new ConflictException("A newer schedule notification replaced this entry.");
+        }
+
         notification.IsRead = true;
         notification.ReadAt = DateTime.UtcNow;
 

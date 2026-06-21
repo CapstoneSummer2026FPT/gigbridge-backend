@@ -38,6 +38,10 @@ public class EmailService : IEmailService
         };
 
         message.To.Add(emailRequestDTO.To);
+        if (!string.IsNullOrWhiteSpace(emailRequestDTO.MessageId))
+        {
+            message.Headers.Add("Message-ID", emailRequestDTO.MessageId);
+        }
         AddAttachments(message, emailRequestDTO.Attachments);
 
         await client.SendMailAsync(message, cancellationToken);

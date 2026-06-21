@@ -1,6 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
 
+using Domain.Enums;
+
 namespace Domain.Entities;
 
 public partial class Message
@@ -24,6 +26,12 @@ public partial class Message
 
     public string? ClientMessageId { get; set; }
 
+    public Guid? ScheduleId { get; set; }
+
+    public ScheduleEventType? ScheduleEventType { get; set; }
+
+    public int? ScheduleEventSequence { get; set; }
+
     public DateTime SentAt { get; set; }
 
     public DateTime? EditedAt { get; set; }
@@ -45,4 +53,6 @@ public partial class Message
     public virtual Message? ReplyToMessage { get; set; }
 
     public virtual User? SenderUser { get; set; }
+
+    public virtual Schedule? Schedule { get; set; }
 }

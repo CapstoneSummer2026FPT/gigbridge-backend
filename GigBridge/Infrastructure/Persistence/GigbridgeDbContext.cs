@@ -1,5 +1,6 @@
 using Application.Common.Interfaces;
 using Domain.Entities;
+using Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 
 namespace Infrastructure.Persistence;
@@ -30,6 +31,10 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
     public virtual DbSet<Conversation> Conversations { get; set; }
 
     public virtual DbSet<ConversationParticipant> ConversationParticipants { get; set; }
+
+    public virtual DbSet<Schedule> Schedules { get; set; }
+
+    public virtual DbSet<DeliveryOutbox> DeliveryOutboxes { get; set; }
 
     public virtual DbSet<Dispute> Disputes { get; set; }
 
@@ -1004,6 +1009,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
 
             entity.HasIndex(e => e.SenderUserId, "IX_Messages_SenderUserId");
 
+            entity.HasIndex(e => new { e.ScheduleId, e.ScheduleEventSequence }, "IX_Messages_ScheduleId_EventSequence");
+
             entity.HasIndex(e => new { e.ConversationsId, e.SenderUserId, e.ClientMessageId }, "Messages_conv_sender_client_key").IsUnique();
 
             entity.Property(e => e.MessagesId)
@@ -1019,6 +1026,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.SenderUserId).HasColumnName("SenderUserId");
             entity.Property(e => e.SentAt).HasDefaultValueSql("now()");
 
+            entity.Property(e => e.ScheduleId).HasColumnName("ScheduleId");
+
             entity.HasOne(d => d.Conversations).WithMany(p => p.Messages)
                 .HasForeignKey(d => d.ConversationsId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
@@ -1031,6 +1040,11 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.HasOne(d => d.SenderUser).WithMany(p => p.Messages)
                 .HasForeignKey(d => d.SenderUserId)
                 .HasConstraintName("Messages_usr_SenderUserId_fkey");
+
+            entity.HasOne(d => d.Schedule).WithMany(p => p.Messages)
+                .HasForeignKey(d => d.ScheduleId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("Messages_sch_ScheduleId_fkey");
         });
 
         modelBuilder.Entity<MessageAttachment>(entity =>
@@ -1237,11 +1251,17 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
                 .IsDescending(false, true)
                 .HasFilter("\"IsRead\" IS NOT TRUE");
 
+            entity.HasIndex(e => new { e.UserId, e.ReferenceId }, "UX_Notifications_UnreadSchedule_User_Reference")
+                .IsUnique()
+                .HasFilter("\"Type\" = 13 AND \"ReferenceId\" IS NOT NULL AND \"IsRead\" IS NOT TRUE");
+
             entity.Property(e => e.NotificationsId)
                 .HasDefaultValueSql("gen_random_uuid()")
                 .HasColumnName("NotificationsId");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.IsRead).HasDefaultValue(false);
+
+            entity.Property(e => e.Metadata).HasColumnType("jsonb");
             entity.Property(e => e.ReferenceType).HasMaxLength(50);
             entity.Property(e => e.Title).HasMaxLength(300);
             entity.Property(e => e.Type).HasComment("Enum NotificationType: 0=NewJob, 1=ProposalReceived, 2=ProposalStatusChanged, 3=ContractStarted, 4=MilestoneUpdated, 5=PaymentProofUploaded, 6=PaymentConfirmed, 7=ChatMessage, 8=DisputeUpdate, 9=ReviewReceived, 10=SystemAlert, 11=AIInterviewInvite, 12=SubscriptionExpiring");
@@ -1251,6 +1271,46 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
                 .HasForeignKey(d => d.UserId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("Notifications_usr_UserId_fkey");
+        });
+
+        modelBuilder.Entity<Schedule>(entity =>
+        {
+            entity.HasKey(e => e.ScheduleId);
+            entity.HasIndex(e => new { e.ConversationId, e.ScheduledAtUtc });
+            entity.HasIndex(e => new { e.Status, e.ScheduledAtUtc });
+            entity.Property(e => e.ScheduleId).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.Title).HasMaxLength(200).IsRequired();
+            entity.Property(e => e.Details).HasMaxLength(4000);
+            entity.Property(e => e.TimeZoneId).HasMaxLength(64).HasDefaultValue("Asia/Ho_Chi_Minh");
+            entity.Property(e => e.CancellationReason).HasMaxLength(1000);
+            entity.Property(e => e.Status).HasDefaultValue(ScheduleStatus.Scheduled);
+            entity.Property(e => e.EditCount).HasDefaultValue(0);
+            entity.Property(e => e.Version).HasDefaultValue(1).IsConcurrencyToken();
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+
+            entity.HasOne(e => e.Conversation).WithMany(e => e.Schedules)
+                .HasForeignKey(e => e.ConversationId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.CreatedByUser).WithMany(e => e.CreatedSchedules)
+                .HasForeignKey(e => e.CreatedByUserId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.CancelledByUser).WithMany(e => e.CancelledSchedules)
+                .HasForeignKey(e => e.CancelledByUserId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<DeliveryOutbox>(entity =>
+        {
+            entity.HasKey(e => e.DeliveryOutboxId);
+            entity.HasIndex(e => e.DeliveryKey).IsUnique();
+            entity.HasIndex(e => new { e.Status, e.NextAttemptAt });
+            entity.Property(e => e.DeliveryOutboxId).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.DeliveryKey).HasMaxLength(250).IsRequired();
+            entity.Property(e => e.Payload).HasColumnType("jsonb");
+            entity.Property(e => e.LastError).HasMaxLength(2000);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+
+            entity.HasOne<Schedule>().WithMany()
+                .HasForeignKey(e => e.ScheduleId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<User>().WithMany()
+                .HasForeignKey(e => e.RecipientUserId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<PaymentProof>(entity =>
