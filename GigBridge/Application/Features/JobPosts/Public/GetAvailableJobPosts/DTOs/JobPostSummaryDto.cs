@@ -16,6 +16,8 @@ public record JobPostSummaryDto(
     decimal? BudgetMin,
     decimal? BudgetMax,
     DateTime CreatedAt,
+    int Status,
+    int? Visibility,
     int EloPoints,
     List<JobPostSkillDto> Skills,
     List<string> CustomSkillNames,

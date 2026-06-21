@@ -23,6 +23,10 @@ public class GetAllJobPostsQueryHandler : IRequestHandler<GetAllJobPostsQuery, I
             .AsNoTracking()
             .Include(jobPost => jobPost.JobPostSkills)
                 .ThenInclude(jobPostSkill => jobPostSkill.Skills)
+            .Include(jobPost => jobPost.MajorCategory)
+                .ThenInclude(majorCategory => majorCategory!.Major)
+            .Include(jobPost => jobPost.MajorCategory)
+                .ThenInclude(majorCategory => majorCategory!.Category)
             .AsQueryable();
 
         query = ApplyFilters(query, request);

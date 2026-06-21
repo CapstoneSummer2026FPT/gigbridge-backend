@@ -31,6 +31,8 @@ internal static class JobPostProjection
             BudgetMin: jobPost.BudgetMin,
             BudgetMax: jobPost.BudgetMax,
             CreatedAt: jobPost.CreatedAt,
+            Status: jobPost.Status,
+            Visibility: jobPost.Visibility,
             EloPoints: jobPost.ClientProfiles?.User?.UserEloScore?.CurrentPoints ?? UserEloCalculator.DefaultPoints,
             Skills: officialSkills,
             CustomSkillNames: jobPost.CustomSkillNames.ToList(),
