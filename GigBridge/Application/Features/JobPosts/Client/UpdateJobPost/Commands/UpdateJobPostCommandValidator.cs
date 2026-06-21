@@ -1,4 +1,4 @@
-﻿using FluentValidation;
+using FluentValidation;
 
 namespace Application.Features.JobPosts.Client.UpdateJobPost.Commands;
 
@@ -60,5 +60,11 @@ public class UpdateJobPostCommandValidator : AbstractValidator<UpdateJobPostComm
             .GreaterThan(DateTime.UtcNow)
             .When(x => x.Request.EndDate.HasValue)
             .WithMessage("EndDate must be in the future.");
+
+        RuleFor(x => (x.Request.SkillIds != null ? x.Request.SkillIds.Count : 0) + 
+                     (x.Request.CustomSkillNames != null ? x.Request.CustomSkillNames.Count : 0))
+            .LessThanOrEqualTo(10)
+            .When(x => x.Request != null)
+            .WithMessage("You can select up to 10 skills in total (including custom skills).");
     }
 }

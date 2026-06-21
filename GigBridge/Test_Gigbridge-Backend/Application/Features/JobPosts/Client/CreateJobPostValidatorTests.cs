@@ -72,6 +72,37 @@ public class CreateJobPostValidatorTests
         Assert.Contains(result.Errors, error => error.PropertyName == "Request.EndDate");
     }
 
+    [Fact]
+    public void Validate_ReturnsError_WhenTotalSkillsExceedTen()
+    {
+        var request = CreateValidRequest() with
+        {
+            SkillIds = new List<Guid> { Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid() },
+            CustomSkillNames = new List<string> { "Skill1", "Skill2", "Skill3", "Skill4", "Skill5" } // Total = 11
+        };
+        var command = new CreateJobPostCommand(request, Guid.NewGuid());
+
+        var result = _validator.Validate(command);
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, error => error.ErrorMessage.Contains("up to 10 skills"));
+    }
+
+    [Fact]
+    public void Validate_ReturnsNoErrors_WhenTotalSkillsEqualsTen()
+    {
+        var request = CreateValidRequest() with
+        {
+            SkillIds = new List<Guid> { Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid() },
+            CustomSkillNames = new List<string> { "Skill1", "Skill2", "Skill3", "Skill4", "Skill5" } // Total = 10
+        };
+        var command = new CreateJobPostCommand(request, Guid.NewGuid());
+
+        var result = _validator.Validate(command);
+
+        Assert.True(result.IsValid);
+    }
+
     private static CreateJobPostRequest CreateValidRequest()
     {
         return new CreateJobPostRequest(
