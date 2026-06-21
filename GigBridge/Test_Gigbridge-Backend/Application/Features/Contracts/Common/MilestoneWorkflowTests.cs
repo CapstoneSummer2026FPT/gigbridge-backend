@@ -264,4 +264,56 @@ public class MilestoneWorkflowTests
 
         public DateTime UtcNow { get; }
     }
+
+    private sealed class TestMediaService : IMediaService
+    {
+        public Task<string> UploadFileAsync(
+            Stream fileStream,
+            string fileName,
+            string contentType,
+            string folder,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromResult($"https://test-storage.com/{folder}/{fileName}");
+        }
+    }
+
+    [Fact]
+    public async Task SubmitMilestone_WithDescriptionAndFiles_SavesAttachmentsAndDescription()
+    {
+        var fixture = new MilestoneWorkflowFixture();
+        var mediaService = new TestMediaService();
+        var submitHandler = new SubmitMilestoneCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            mediaService);
+
+        fixture.FirstMilestone.Status = (int)MilestoneStatus.InProgress;
+
+        var commandFiles = new List<SubmitMilestoneFile>
+        {
+            new SubmitMilestoneFile(new MemoryStream(new byte[] { 1, 2, 3 }), "testfile.pdf", "application/pdf", 3)
+        };
+
+        var command = new SubmitMilestoneCommand(
+            fixture.ContractId,
+            fixture.FirstMilestoneId,
+            fixture.FreelancerUserId,
+            "Completed the deliverable.",
+            commandFiles);
+
+        var response = await submitHandler.Handle(command, CancellationToken.None);
+
+        Assert.Equal((int)MilestoneStatus.Submitted, response.Status);
+        Assert.Equal("Completed the deliverable.", fixture.FirstMilestone.SubmissionDescription);
+
+        var attachments = fixture.Context.Set<MilestoneAttachment>()
+            .Where(a => a.MilestonesId == fixture.FirstMilestoneId)
+            .ToList();
+
+        Assert.Single(attachments);
+        Assert.Equal("testfile.pdf", attachments[0].FileName);
+        Assert.Equal("https://test-storage.com/milestones/testfile.pdf", attachments[0].FileUrl);
+        Assert.Equal(3, attachments[0].FileSize);
+    }
 }

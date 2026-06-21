@@ -13,6 +13,7 @@ namespace Test_Gigbridge_Backend.Application.Features.Contracts.Common;
 
 public class ContractWorkflowTests
 {
+    private const string SignatureDataUri = "data:image/png;base64,aGVsbG8=";
     
     [Fact]
     public async Task SubmitAndFreelancerConfirm_CreatesFullEscrowAndMovesToPendingSignature()
@@ -111,26 +112,30 @@ public class ContractWorkflowTests
         var handler = new SignContractCommandHandler(
             fixture.Context,
             new FixedDateTimeService(fixture.Now),
-            new NoopChatRealtimeNotifier());
+            new NoopChatRealtimeNotifier(),
+            fixture.MediaService);
 
         await handler.Handle(
             new SignContractCommand(
                 fixture.ContractId,
                 fixture.ClientUserId,
-                new SignContractRequest("https://sig/client.png", 300, 100),
+                new SignContractRequest(SignatureDataUri, 300, 100),
                 "127.0.0.1",
                 "test"),
             CancellationToken.None);
 
         Assert.Equal((int)ContractStatus.PendingSignature, fixture.Contract.Status);
         Assert.Equal((int)ESignDocumentStatus.PartiallySigned, fixture.EsignDocuments.Entities[0].Status);
+        Assert.Equal(fixture.ClientSignatureUrl, fixture.EsignSignatures.Entities[0].SignatureImageUrl);
+        Assert.Equal("esign/signatures", fixture.MediaService.Uploads[0].Folder);
+        Assert.Equal("image/png", fixture.MediaService.Uploads[0].ContentType);
 
         await Assert.ThrowsAsync<ConflictException>(() =>
             handler.Handle(
                 new SignContractCommand(
                     fixture.ContractId,
                     fixture.ClientUserId,
-                    new SignContractRequest("https://sig/client.png", null, null),
+                    new SignContractRequest(SignatureDataUri, null, null),
                     null,
                     null),
                 CancellationToken.None));
@@ -139,7 +144,7 @@ public class ContractWorkflowTests
             new SignContractCommand(
                 fixture.ContractId,
                 fixture.FreelancerUserId,
-                new SignContractRequest("https://sig/freelancer.png", 300, 100),
+                new SignContractRequest(SignatureDataUri, 300, 100),
                 "127.0.0.1",
                 "test"),
             CancellationToken.None);
@@ -148,6 +153,33 @@ public class ContractWorkflowTests
         Assert.Equal((int)ESignDocumentStatus.FullySigned, fixture.EsignDocuments.Entities[0].Status);
         Assert.Equal((int)ConversationType.ContractWorkroom, fixture.Conversation.ConversationType);
         Assert.Equal(2, fixture.EsignSignatures.Entities.Count);
+        Assert.Equal(fixture.FreelancerSignatureUrl, fixture.EsignSignatures.Entities[1].SignatureImageUrl);
+        Assert.Equal(2, fixture.MediaService.Uploads.Count);
+    }
+
+    [Fact]
+    public async Task SignContract_RejectsInvalidSignatureDataUri()
+    {
+        var fixture = new ContractWorkflowFixture();
+        fixture.MoveToPendingSignatureWithDocument();
+
+        var handler = new SignContractCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopChatRealtimeNotifier(),
+            fixture.MediaService);
+
+        await Assert.ThrowsAsync<BadRequestException>(() =>
+            handler.Handle(
+                new SignContractCommand(
+                    fixture.ContractId,
+                    fixture.ClientUserId,
+                    new SignContractRequest("not-base64", null, null),
+                    null,
+                    null),
+                CancellationToken.None));
+
+        Assert.Empty(fixture.MediaService.Uploads);
     }
 
     private sealed class ContractWorkflowFixture
@@ -217,6 +249,11 @@ public class ContractWorkflowTests
         public Guid ContractId { get; } = Guid.NewGuid();
         public Guid ConversationId { get; } = Guid.NewGuid();
         public Guid WalletId { get; } = Guid.NewGuid();
+        public string ClientSignatureUrl { get; } = "https://res.cloudinary.com/gigbridge/esign/signatures/client.png";
+        public string FreelancerSignatureUrl { get; } = "https://res.cloudinary.com/gigbridge/esign/signatures/freelancer.png";
+        public FakeMediaService MediaService { get; } = new(
+            "https://res.cloudinary.com/gigbridge/esign/signatures/client.png",
+            "https://res.cloudinary.com/gigbridge/esign/signatures/freelancer.png");
         public Contract Contract { get; }
         public Conversation Conversation { get; }
         public TestDbSet<Milestone> Milestones { get; }

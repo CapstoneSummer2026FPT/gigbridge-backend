@@ -13,13 +13,16 @@ public class StartNegotiationFromProposalCommandHandler
 {
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
+    private readonly IChatRealtimeNotifier _chatRealtimeNotifier;
 
     public StartNegotiationFromProposalCommandHandler(
         IApplicationDbContext context,
-        IDateTimeService dateTimeService)
+        IDateTimeService dateTimeService,
+        IChatRealtimeNotifier chatRealtimeNotifier)
     {
         _context = context;
         _dateTimeService = dateTimeService;
+        _chatRealtimeNotifier = chatRealtimeNotifier;
     }
 
     public async Task<Guid> Handle(
@@ -50,6 +53,7 @@ public class StartNegotiationFromProposalCommandHandler
             throw new ForbiddenAccessException("You do not own this job post.");
         }
 
+        var now = _dateTimeService.UtcNow;
         var contract = await _context.Set<Contract>()
             .FirstOrDefaultAsync(
                 contract => contract.JobPostsId == proposal.JobPostsId,
@@ -57,7 +61,8 @@ public class StartNegotiationFromProposalCommandHandler
 
         if (contract is null)
         {
-            throw new NotFoundException("Contract draft does not exist for this job post.");
+            contract = CreateDraftContract(proposal, now);
+            _context.Set<Contract>().Add(contract);
         }
 
         var freelancerProfile = await _context.Set<FreelancerProfile>()
@@ -87,19 +92,28 @@ public class StartNegotiationFromProposalCommandHandler
                 freelancerProfile.UserId,
                 cancellationToken);
 
+            if (existingConversation.ContractsId is null)
+            {
+                existingConversation.ContractsId = contract.ContractsId;
+                existingConversation.UpdatedAt = now;
+            }
+
             if (contract.Status == (int)ContractStatus.PendingFreelancerSelection ||
                 contract.Status == (int)ContractStatus.Draft)
             {
                 contract.Status = (int)ContractStatus.InNegotiation;
-                contract.UpdatedAt = _dateTimeService.UtcNow;
+                contract.UpdatedAt = now;
             }
 
             await _context.SaveChangesAsync(cancellationToken);
+            await NotifyConversationUpdated(
+                existingConversation.ConversationsId,
+                existingConversation.LastMessageAt,
+                cancellationToken);
 
             return existingConversation.ConversationsId;
         }
 
-        var now = _dateTimeService.UtcNow;
         var conversation = new Conversation
         {
             ConversationsId = Guid.NewGuid(),
@@ -120,8 +134,34 @@ public class StartNegotiationFromProposalCommandHandler
         contract.UpdatedAt = now;
 
         await _context.SaveChangesAsync(cancellationToken);
+        await NotifyConversationUpdated(
+            conversation.ConversationsId,
+            conversation.LastMessageAt,
+            cancellationToken);
 
         return conversation.ConversationsId;
+    }
+
+    private static Contract CreateDraftContract(Proposal proposal, DateTime now)
+    {
+        var jobPost = proposal.JobPosts;
+
+        return new Contract
+        {
+            ContractsId = Guid.NewGuid(),
+            JobPostsId = proposal.JobPostsId,
+            ClientProfilesId = jobPost.ClientProfilesId,
+            FreelancerProfilesId = null,
+            ProposalsId = null,
+            Title = jobPost.Title,
+            Description = jobPost.Description,
+            TotalBudget = jobPost.BudgetMin ?? jobPost.BudgetMax ?? proposal.ProposedBudget ?? 0m,
+            Status = (int)ContractStatus.PendingFreelancerSelection,
+            EndDate = jobPost.EndDate.HasValue
+                ? DateOnly.FromDateTime(jobPost.EndDate.Value)
+                : null,
+            CreatedAt = now
+        };
     }
 
     private async Task EnsureParticipants(
@@ -160,5 +200,36 @@ public class StartNegotiationFromProposalCommandHandler
             ParticipantRole = (int)role,
             JoinedAt = now
         });
+    }
+
+    private async Task NotifyConversationUpdated(
+        Guid conversationId,
+        DateTime? lastMessageAt,
+        CancellationToken cancellationToken)
+    {
+        var participants = await _context.Set<ConversationParticipant>()
+            .AsNoTracking()
+            .Where(participant =>
+                participant.ConversationsId == conversationId &&
+                participant.LeftAt == null &&
+                participant.DeletedAt == null)
+            .ToListAsync(cancellationToken);
+
+        foreach (var participant in participants
+            .GroupBy(participant => participant.UserId)
+            .Select(group => group.First()))
+        {
+            await _chatRealtimeNotifier.SendUserEventAsync(
+                participant.UserId,
+                "ConversationUpdated",
+                new
+                {
+                    conversationId,
+                    lastMessage = (object?)null,
+                    lastMessageAt,
+                    unreadCount = participant.UnreadCount
+                },
+                cancellationToken);
+        }
     }
 }

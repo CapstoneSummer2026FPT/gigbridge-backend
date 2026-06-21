@@ -586,10 +586,11 @@ public static class DbSeeder
 
             new SeedTableData(
                 "ESignTemplates",
-                new[] { "ESignTemplatesId", "Name", "NameVi", "HtmlContent", "Version", "PlaceholderSchema", "Description", "IsActive", "CreatedBy", "CreatedAt" },
+                new[] { "ESignTemplatesId", "Name", "TemplateCode", "HtmlContent", "Version", "PlaceholderSchema", "Description", "IsActive", "CreatedBy", "CreatedAt" },
                 new object?[][]
                 {
-                new object?[] { "444ebc99-9c0b-4ef8-bb6d-6bb9bd380401", "Standard Freelance Agreement", "Hợp đồng lao động tự do chuẩn", "<html><body><h1>Hợp đồng dịch vụ</h1><p>Bên A: {client_name}</p><p>Bên B: {freelancer_name}</p><p>Công việc: {job_title}</p><p>Tổng ngân sách: {budget} VND</p></body></html>", 1, "{\"client_name\": \"string\", \"freelancer_name\": \"string\", \"budget\": \"number\", \"job_title\": \"string\"}", "Hợp đồng mặc định cho các công việc", true, "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11", now.AddDays(-29) }
+                new object?[] { "444ebc99-9c0b-4ef8-bb6d-6bb9bd380401", "Standard Freelance Agreement", "CONTRACT_FIXED_PRICE", "<html><body><h1>Hợp đồng dịch vụ</h1><h2>{{Contract.Title}}</h2><p>{{Contract.Description}}</p><p>Bên A: {{Client.Name}} - {{Client.Email}}</p><p>Bên B: {{Freelancer.Name}} - {{Freelancer.Email}}</p><p>Tổng ngân sách: {{Contract.TotalBudget}}</p><table>{{MilestonesHtml}}</table></body></html>", 1, "{\"Contract.Title\":\"string\",\"Contract.Description\":\"string\",\"Contract.TotalBudget\":\"string\",\"Client.Name\":\"string\",\"Client.Email\":\"string\",\"Freelancer.Name\":\"string\",\"Freelancer.Email\":\"string\",\"MilestonesHtml\":\"html\"}", "Hợp đồng mặc định cho các công việc", true, "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11", now.AddDays(-29) },
+                new object?[] { "444ebc99-9c0b-4ef8-bb6d-6bb9bd380402", "Job Post Client Commitment", "JOB_POST_CLIENT_COMMITMENT", "<section><h1>Job Post E-Sign Commitment</h1><h2>{{Job.Title}}</h2><p>{{Job.Description}}</p><dl><dt>Budget</dt><dd>{{Job.Budget}}</dd><dt>Estimated duration</dt><dd>{{Job.EstimatedDuration}}</dd><dt>Max hires</dt><dd>{{Job.MaxHires}}</dd><dt>Location</dt><dd>{{Job.Location}}</dd><dt>End date</dt><dd>{{Job.EndDate}}</dd></dl><p>By signing, the client confirms this job post is ready to be published.</p></section>", 1, "{\"Job.Title\":\"string\",\"Job.Description\":\"string\",\"Job.Budget\":\"string\",\"Job.EstimatedDuration\":\"string\",\"Job.MaxHires\":\"string\",\"Job.Location\":\"string\",\"Job.EndDate\":\"string\"}", "Client commitment template used before opening a job post", true, "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11", now.AddDays(-29) }
                 }),
 
             new SeedTableData(

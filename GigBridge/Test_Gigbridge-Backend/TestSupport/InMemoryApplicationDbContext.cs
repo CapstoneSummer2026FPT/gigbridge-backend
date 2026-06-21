@@ -62,6 +62,16 @@ internal sealed class TestDbSet<TEntity> : DbSet<TEntity>, IQueryable<TEntity>, 
         return null!;
     }
 
+    public override void AddRange(params TEntity[] entities)
+    {
+        _entities.AddRange(entities);
+    }
+
+    public override void AddRange(IEnumerable<TEntity> entities)
+    {
+        _entities.AddRange(entities);
+    }
+
     public override ValueTask<EntityEntry<TEntity>> AddAsync(
         TEntity entity,
         CancellationToken cancellationToken = default)

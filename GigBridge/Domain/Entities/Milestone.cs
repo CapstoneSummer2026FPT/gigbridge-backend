@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
 namespace Domain.Entities;
@@ -37,6 +37,8 @@ public partial class Milestone
     public DateTime CreatedAt { get; set; }
 
     public DateTime? UpdatedAt { get; set; }
+
+    public string? SubmissionDescription { get; set; }
 
     public virtual Contract Contracts { get; set; } = null!;
 

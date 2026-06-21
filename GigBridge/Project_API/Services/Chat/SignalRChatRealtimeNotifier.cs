@@ -38,4 +38,58 @@ public class SignalRChatRealtimeNotifier : IChatRealtimeNotifier
                 conversationId);
         }
     }
+
+    public async Task SendUserEventAsync(
+        Guid userId,
+        string eventName,
+        object payload,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await _hubContext.Clients
+                .Group(ChatHub.GetUserGroupName(userId))
+                .SendAsync(eventName, payload, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to send chat event {EventName} to user {UserId}.",
+                eventName,
+                userId);
+        }
+    }
+
+    public async Task SendUsersEventAsync(
+        IReadOnlyCollection<Guid> userIds,
+        string eventName,
+        object payload,
+        CancellationToken cancellationToken = default)
+    {
+        if (userIds.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            var groupNames = userIds
+                .Distinct()
+                .Select(ChatHub.GetUserGroupName)
+                .ToList();
+
+            await _hubContext.Clients
+                .Groups(groupNames)
+                .SendAsync(eventName, payload, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to send chat event {EventName} to {UserCount} users.",
+                eventName,
+                userIds.Count);
+        }
+    }
 }

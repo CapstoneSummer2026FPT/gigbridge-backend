@@ -2,6 +2,7 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Features.Chat.Common.FinalOffers.Respond.DTOs;
+using Application.Features.Chat.Common.Messages.Send.DTOs;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
@@ -100,8 +101,16 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
 
         await _context.SaveChangesAsync(cancellationToken);
 
-        await _chatRealtimeNotifier.SendConversationEventAsync(
+        var activeParticipants = await GetActiveParticipants(
             conversation.ConversationsId,
+            cancellationToken);
+        var participantUserIds = activeParticipants
+            .Select(participant => participant.UserId)
+            .Distinct()
+            .ToArray();
+
+        await _chatRealtimeNotifier.SendUsersEventAsync(
+            participantUserIds,
             "FinalOfferResponded",
             new
             {
@@ -111,16 +120,92 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
             },
             cancellationToken);
 
+        if (conversation.LastMessageId.HasValue)
+        {
+            var lastMessage = await _context.Set<Message>()
+                .AsNoTracking()
+                .FirstOrDefaultAsync(
+                    message => message.MessagesId == conversation.LastMessageId.Value,
+                    cancellationToken);
+
+            if (lastMessage is not null)
+            {
+                var messageResponse = ToMessageResponse(lastMessage);
+
+                await SendConversationUpdatedEvents(
+                    activeParticipants,
+                    messageResponse,
+                    messageResponse.SentAt,
+                    cancellationToken);
+            }
+        }
+
         if (eventName == "ContractDraftUpdated")
         {
-            await _chatRealtimeNotifier.SendConversationEventAsync(
-                conversation.ConversationsId,
+            await _chatRealtimeNotifier.SendUsersEventAsync(
+                participantUserIds,
                 eventName,
                 new { contractId = offer.ContractsId },
                 cancellationToken);
         }
 
         return true;
+    }
+
+    private Task<List<ConversationParticipant>> GetActiveParticipants(
+        Guid conversationId,
+        CancellationToken cancellationToken)
+    {
+        return _context.Set<ConversationParticipant>()
+            .AsNoTracking()
+            .Where(participant =>
+                participant.ConversationsId == conversationId &&
+                participant.LeftAt == null &&
+                participant.DeletedAt == null)
+            .ToListAsync(cancellationToken);
+    }
+
+    private async Task SendConversationUpdatedEvents(
+        IReadOnlyCollection<ConversationParticipant> participants,
+        MessageResponse lastMessage,
+        DateTime lastMessageAt,
+        CancellationToken cancellationToken)
+    {
+        foreach (var participant in participants
+            .GroupBy(participant => participant.UserId)
+            .Select(group => group.First()))
+        {
+            await _chatRealtimeNotifier.SendUserEventAsync(
+                participant.UserId,
+                "ConversationUpdated",
+                new
+                {
+                    conversationId = lastMessage.ConversationId,
+                    lastMessage,
+                    lastMessageAt,
+                    unreadCount = participant.UnreadCount
+                },
+                cancellationToken);
+        }
+    }
+
+    private static MessageResponse ToMessageResponse(Message message)
+    {
+        var isDeleted = message.DeletedForEveryoneAt.HasValue;
+
+        return new MessageResponse(
+            message.MessagesId,
+            message.ConversationsId,
+            message.SenderUserId,
+            message.MessageType,
+            isDeleted ? null : message.Content,
+            message.ReplyToMessageId,
+            isDeleted ? null : message.Metadata,
+            message.ClientMessageId,
+            message.SentAt,
+            isDeleted ? null : message.EditedAt,
+            isDeleted,
+            []);
     }
 
     private async Task<string> AcceptOffer(

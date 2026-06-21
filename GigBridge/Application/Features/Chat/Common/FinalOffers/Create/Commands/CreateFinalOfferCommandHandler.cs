@@ -2,6 +2,7 @@ using System.Text.Json;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Application.Features.Chat.Common.Messages.Send.DTOs;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
@@ -149,10 +150,25 @@ public class CreateFinalOfferCommandHandler : IRequestHandler<CreateFinalOfferCo
 
         await _context.SaveChangesAsync(cancellationToken);
 
-        await _chatRealtimeNotifier.SendConversationEventAsync(
+        var activeParticipants = await GetActiveParticipants(
             conversation.ConversationsId,
+            cancellationToken);
+        var participantUserIds = activeParticipants
+            .Select(participant => participant.UserId)
+            .Distinct()
+            .ToArray();
+        var messageResponse = ToMessageResponse(message);
+
+        await _chatRealtimeNotifier.SendUsersEventAsync(
+            participantUserIds,
             "FinalOfferCreated",
             new { offerId = offer.NegotiationOfferId, messageId = message.MessagesId },
+            cancellationToken);
+
+        await SendConversationUpdatedEvents(
+            activeParticipants,
+            messageResponse,
+            messageResponse.SentAt,
             cancellationToken);
 
         return offer.NegotiationOfferId;
@@ -216,6 +232,62 @@ public class CreateFinalOfferCommandHandler : IRequestHandler<CreateFinalOfferCo
         conversation.UpdatedAt = now;
 
         return message;
+    }
+
+    private Task<List<ConversationParticipant>> GetActiveParticipants(
+        Guid conversationId,
+        CancellationToken cancellationToken)
+    {
+        return _context.Set<ConversationParticipant>()
+            .AsNoTracking()
+            .Where(participant =>
+                participant.ConversationsId == conversationId &&
+                participant.LeftAt == null &&
+                participant.DeletedAt == null)
+            .ToListAsync(cancellationToken);
+    }
+
+    private async Task SendConversationUpdatedEvents(
+        IReadOnlyCollection<ConversationParticipant> participants,
+        MessageResponse lastMessage,
+        DateTime lastMessageAt,
+        CancellationToken cancellationToken)
+    {
+        foreach (var participant in participants
+            .GroupBy(participant => participant.UserId)
+            .Select(group => group.First()))
+        {
+            await _chatRealtimeNotifier.SendUserEventAsync(
+                participant.UserId,
+                "ConversationUpdated",
+                new
+                {
+                    conversationId = lastMessage.ConversationId,
+                    lastMessage,
+                    lastMessageAt,
+                    unreadCount = participant.UnreadCount
+                },
+                cancellationToken);
+        }
+    }
+
+    private static MessageResponse ToMessageResponse(Message message)
+    {
+        var isDeleted = message.DeletedForEveryoneAt.HasValue;
+
+        return new MessageResponse(
+            message.MessagesId,
+            message.ConversationsId,
+            message.SenderUserId,
+            message.MessageType,
+            isDeleted ? null : message.Content,
+            message.ReplyToMessageId,
+            isDeleted ? null : message.Metadata,
+            message.ClientMessageId,
+            message.SentAt,
+            isDeleted ? null : message.EditedAt,
+            isDeleted,
+            []);
     }
 
     private void IncrementUnreadCounts(Guid conversationId, Guid senderUserId)

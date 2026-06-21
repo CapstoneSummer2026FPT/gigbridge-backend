@@ -12,11 +12,23 @@ public class GetMyJobPostsQueryHandlerTests
         var context = new InMemoryApplicationDbContext();
         var userId = Guid.NewGuid();
         var clientProfileId = Guid.NewGuid();
+        var majorId = Guid.NewGuid();
         var categoryId = Guid.NewGuid();
+        var majorCategoryId = Guid.NewGuid();
         var jobPostId = Guid.NewGuid();
+        var skillId = Guid.NewGuid();
         var createdAt = new DateTime(2026, 6, 14, 9, 0, 0, DateTimeKind.Utc);
         var updatedAt = createdAt.AddHours(2);
         var endDate = createdAt.AddDays(10);
+
+        var major = new Major
+        {
+            MajorsId = majorId,
+            Name = "Software",
+            Slug = "software",
+            IsActive = true,
+            CreatedAt = createdAt
+        };
 
         var category = new Category
         {
@@ -27,14 +39,32 @@ public class GetMyJobPostsQueryHandlerTests
             CreatedAt = createdAt
         };
 
+        var majorCategory = new MajorCategory
+        {
+            MajorCategoriesId = majorCategoryId,
+            MajorId = majorId,
+            Major = major,
+            CategoryId = categoryId,
+            Category = category,
+            CreatedAt = createdAt
+        };
+
+        var skill = new Skill
+        {
+            SkillsId = skillId,
+            Name = "ASP.NET Core",
+            IsActive = true,
+            CreatedAt = createdAt
+        };
+
         var jobPost = new JobPost
         {
             JobPostsId = jobPostId,
             ClientProfilesId = clientProfileId,
             Title = "Build booking flow",
             Description = "Create booking workflow and notification logic.",
-            CategoryId = categoryId,
-            Category = category,
+            MajorCategoryId = majorCategoryId,
+            MajorCategory = majorCategory,
             BudgetMin = 500m,
             BudgetMax = 1000m,
             Currency = "VND",
@@ -45,10 +75,18 @@ public class GetMyJobPostsQueryHandlerTests
             Visibility = 2,
             EndDate = endDate,
             IsAigenerated = true,
+            CustomSkillNames = new[] { "SignalR" },
             CreatedAt = createdAt,
             UpdatedAt = updatedAt
         };
 
+        jobPost.JobPostSkills.Add(new JobPostSkill
+        {
+            JobPostSkillsId = Guid.NewGuid(),
+            JobPostsId = jobPostId,
+            SkillsId = skillId,
+            Skills = skill
+        });
         jobPost.Proposals.Add(new Proposal { ProposalsId = Guid.NewGuid(), JobPostsId = jobPostId, Status = 0 });
         jobPost.Proposals.Add(new Proposal { ProposalsId = Guid.NewGuid(), JobPostsId = jobPostId, Status = 1 });
         jobPost.Proposals.Add(new Proposal { ProposalsId = Guid.NewGuid(), JobPostsId = jobPostId, Status = 3 });
@@ -67,8 +105,15 @@ public class GetMyJobPostsQueryHandlerTests
         Assert.Equal(clientProfileId, dto.ClientProfilesId);
         Assert.Equal("Build booking flow", dto.Title);
         Assert.Equal("Create booking workflow and notification logic.", dto.Description);
+        Assert.Equal(majorCategoryId, dto.MajorCategoryId);
+        Assert.Equal(majorId, dto.MajorId);
+        Assert.Equal("Software", dto.MajorName);
         Assert.Equal(categoryId, dto.CategoryId);
         Assert.Equal("Web Development", dto.CategoryName);
+        var returnedSkill = Assert.Single(dto.Skills);
+        Assert.Equal(skillId, returnedSkill.SkillId);
+        Assert.Equal("ASP.NET Core", returnedSkill.Name);
+        Assert.Equal(new[] { "SignalR" }, dto.CustomSkillNames);
         Assert.Equal(500m, dto.BudgetMin);
         Assert.Equal(1000m, dto.BudgetMax);
         Assert.Equal("VND", dto.Currency);

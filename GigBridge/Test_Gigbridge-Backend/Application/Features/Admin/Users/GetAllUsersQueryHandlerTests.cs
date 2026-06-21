@@ -33,6 +33,7 @@ public class GetAllUsersQueryHandlerTests
 
         Assert.Equal(2, reported.OpenReportCount);
         Assert.True(reported.IsCurrentlyReported);
+        Assert.Equal(1, result.ReportedUserCount);
         Assert.Equal(0, clean.OpenReportCount);
         Assert.False(clean.IsCurrentlyReported);
     }
@@ -63,6 +64,49 @@ public class GetAllUsersQueryHandlerTests
         var item = result.Items.Single(resultUser => resultUser.UserId == user.UserId);
         Assert.Equal(0, item.OpenReportCount);
         Assert.False(item.IsCurrentlyReported);
+    }
+
+    [Fact]
+    public async Task Handle_ReportedUserCountRespectsSearchFilter()
+    {
+        await using var context = CreateContext();
+        var reporter = AddUser(context, "Reporter", UserRole.Client);
+        var matchingUser = AddUser(context, "Alice", UserRole.Freelancer);
+        var nonMatchingUser = AddUser(context, "Bob", UserRole.Freelancer);
+
+        AddReport(context, reporter.UserId, nonMatchingUser.UserId, ReportStatus.Pending);
+        await context.SaveChangesAsync();
+
+        var handler = new GetAllUsersQueryHandler(context, CreateMapper());
+        var result = await handler.Handle(
+            new GetAllUsersQuery(Search: matchingUser.FullName, PageSize: 10),
+            CancellationToken.None);
+
+        Assert.Single(result.Items);
+        Assert.Equal(matchingUser.UserId, result.Items[0].UserId);
+        Assert.Equal(0, result.ReportedUserCount);
+    }
+
+    [Fact]
+    public async Task Handle_ReportedUserCountRespectsStatusFilter()
+    {
+        await using var context = CreateContext();
+        var reporter = AddUser(context, "Reporter", UserRole.Client);
+        var activeUser = AddUser(context, "Active User", UserRole.Freelancer);
+        var inactiveUser = AddUser(context, "Inactive User", UserRole.Freelancer);
+        inactiveUser.IsActive = false;
+
+        AddReport(context, reporter.UserId, inactiveUser.UserId, ReportStatus.Reviewing);
+        await context.SaveChangesAsync();
+
+        var handler = new GetAllUsersQueryHandler(context, CreateMapper());
+        var result = await handler.Handle(
+            new GetAllUsersQuery(Status: 1, PageSize: 10),
+            CancellationToken.None);
+
+        Assert.Contains(result.Items, user => user.UserId == activeUser.UserId);
+        Assert.DoesNotContain(result.Items, user => user.UserId == inactiveUser.UserId);
+        Assert.Equal(0, result.ReportedUserCount);
     }
 
     private static GigbridgeDbContext CreateContext()
