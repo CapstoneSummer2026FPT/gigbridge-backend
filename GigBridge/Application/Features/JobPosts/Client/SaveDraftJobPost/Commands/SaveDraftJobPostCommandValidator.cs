@@ -70,6 +70,11 @@ public sealed class SaveDraftJobPostCommandValidator
                         .GreaterThanOrEqualTo(0)
                         .WithMessage("OrderIndex must be greater than or equal to 0.");
                 });
+
+            RuleFor(x => (x.Request.SkillIds != null ? x.Request.SkillIds.Count : 0) + 
+                         (x.Request.CustomSkillNames != null ? x.Request.CustomSkillNames.Count : 0))
+                .LessThanOrEqualTo(10)
+                .WithMessage("You can select up to 10 skills in total (including custom skills).");
         });
     }
 }
