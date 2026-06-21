@@ -1277,6 +1277,9 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
         {
             entity.HasKey(e => e.ScheduleId);
             entity.HasIndex(e => new { e.ConversationId, e.ScheduledAtUtc });
+            entity.HasIndex(e => e.ConversationId, "UX_Schedules_ConversationId_Scheduled")
+                .IsUnique()
+                .HasFilter("\"Status\" = 0");
             entity.HasIndex(e => new { e.Status, e.ScheduledAtUtc });
             entity.Property(e => e.ScheduleId).HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.Title).HasMaxLength(200).IsRequired();

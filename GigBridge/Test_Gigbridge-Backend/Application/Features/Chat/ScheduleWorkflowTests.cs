@@ -1,5 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces.IService;
+using Application.Features.Chat.Common.Messages;
+using Application.Features.Chat.Common.Messages.Send.DTOs;
 using Application.Features.Chat.Common.Schedules;
 using Domain.Entities;
 using Domain.Enums;
@@ -11,6 +13,46 @@ namespace Test_Gigbridge_Backend.Application.Features.Chat;
 
 public class ScheduleWorkflowTests
 {
+    [Fact]
+    public async Task Create_PersistsNeutralPermissionsAndPersonalizesRealtimePayloads()
+    {
+        var now = new DateTime(2026, 6, 21, 6, 0, 0, DateTimeKind.Utc);
+        await using var db = CreateContext();
+        var fixture = Seed(db, now);
+        var notifier = new CapturingChatRealtimeNotifier();
+        var handler = new ScheduleWorkflowHandlers(db, new FixedClock(now), notifier);
+
+        var created = await handler.Handle(new CreateScheduleCommand(fixture.ClientId,
+            new CreateScheduleRequest(fixture.ConversationId, "Review", null, new DateTimeOffset(now.AddHours(2)))), default);
+
+        var persistedMessage = await db.Messages.SingleAsync();
+        var persistedEvent = System.Text.Json.JsonSerializer.Deserialize<ScheduleEventResponse>(
+            persistedMessage.Metadata!, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+        Assert.NotNull(persistedEvent);
+        Assert.False(persistedEvent.CanEdit);
+        Assert.False(persistedEvent.CanCancel);
+
+        var creatorMessage = Assert.IsType<MessageResponse>(notifier.UserEvents.Single(x =>
+            x.UserId == fixture.ClientId && x.EventName == "ReceiveMessage").Payload);
+        var freelancerMessage = Assert.IsType<MessageResponse>(notifier.UserEvents.Single(x =>
+            x.UserId == fixture.FreelancerId && x.EventName == "ReceiveMessage").Payload);
+        Assert.True(creatorMessage.Schedule!.CanEdit);
+        Assert.False(freelancerMessage.Schedule!.CanEdit);
+        Assert.False(creatorMessage.Schedule.CanCancel);
+        Assert.False(freelancerMessage.Schedule.CanCancel);
+
+        var creatorChanged = Assert.IsType<ScheduleEventResponse>(notifier.UserEvents.Single(x =>
+            x.UserId == fixture.ClientId && x.EventName == "ScheduleChanged").Payload);
+        var freelancerChanged = Assert.IsType<ScheduleEventResponse>(notifier.UserEvents.Single(x =>
+            x.UserId == fixture.FreelancerId && x.EventName == "ScheduleChanged").Payload);
+        Assert.True(creatorChanged.CanEdit);
+        Assert.False(freelancerChanged.CanEdit);
+        Assert.True(created.Message.Schedule!.CanEdit);
+
+        Assert.True(MessageHelpers.ParseScheduleMetadata(persistedMessage, fixture.ClientId, now)!.CanEdit);
+        Assert.False(MessageHelpers.ParseScheduleMetadata(persistedMessage, fixture.FreelancerId, now)!.CanEdit);
+    }
+
     [Fact]
     public async Task CreatorGrace_AllowsSameDayCancellation_WithoutConsumingEditQuota()
     {
@@ -74,6 +116,47 @@ public class ScheduleWorkflowTests
 
         await Assert.ThrowsAsync<ConflictException>(() => handler.Handle(new CreateScheduleCommand(fixture.FreelancerId,
             new CreateScheduleRequest(fixture.ConversationId, "Second", null, new DateTimeOffset(now.AddDays(2)))), default));
+    }
+
+    [Fact]
+    public async Task Create_CompletesElapsedScheduleBeforeCreatingNextSchedule()
+    {
+        var now = new DateTime(2026, 6, 21, 6, 0, 0, DateTimeKind.Utc);
+        await using var db = CreateContext();
+        var fixture = Seed(db, now);
+        db.Schedules.Add(new Schedule
+        {
+            ScheduleId = Guid.NewGuid(),
+            ConversationId = fixture.ConversationId,
+            CreatedByUserId = fixture.ClientId,
+            Title = "Elapsed",
+            ScheduledAtUtc = now.AddMinutes(-1),
+            Status = ScheduleStatus.Scheduled,
+            CreatedAt = now.AddDays(-1)
+        });
+        await db.SaveChangesAsync();
+        var handler = new ScheduleWorkflowHandlers(db, new FixedClock(now), new NoopChatRealtimeNotifier());
+
+        await handler.Handle(new CreateScheduleCommand(fixture.FreelancerId,
+            new CreateScheduleRequest(fixture.ConversationId, "Next", null, new DateTimeOffset(now.AddDays(1)))), default);
+
+        var schedules = await db.Schedules.OrderBy(x => x.ScheduledAtUtc).ToListAsync();
+        Assert.Equal(ScheduleStatus.Completed, schedules[0].Status);
+        Assert.Equal(ScheduleStatus.Scheduled, schedules[1].Status);
+    }
+
+    [Fact]
+    public void Model_HasUniqueScheduledScheduleIndexPerConversation()
+    {
+        using var db = CreateContext();
+
+        var index = db.Model.FindEntityType(typeof(Schedule))!.GetIndexes()
+            .Single(x => x.Name == "UX_Schedules_ConversationId_Scheduled");
+
+        Assert.True(index.IsUnique);
+        Assert.Equal("\"Status\" = 0", index.GetFilter());
+        Assert.Collection(index.Properties,
+            property => Assert.Equal(nameof(Schedule.ConversationId), property.Name));
     }
 
     private static GigbridgeDbContext CreateContext() => new(new DbContextOptionsBuilder<GigbridgeDbContext>()

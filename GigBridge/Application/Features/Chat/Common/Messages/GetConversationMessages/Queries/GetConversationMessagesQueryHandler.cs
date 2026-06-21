@@ -74,17 +74,22 @@ public class GetConversationMessagesQueryHandler
         var attachmentsByMessage = attachments
             .GroupBy(attachment => attachment.MessagesId)
             .ToDictionary(group => group.Key, group => group.Select(ToAttachmentResponse).ToList());
+        var now = DateTime.UtcNow;
 
         return messages
             .Select(message => ToMessageResponse(
                 message,
-                attachmentsByMessage.GetValueOrDefault(message.MessagesId) ?? []))
+                attachmentsByMessage.GetValueOrDefault(message.MessagesId) ?? [],
+                request.UserId,
+                now))
             .ToList();
     }
 
     private static ConversationMessageResponse ToMessageResponse(
         Message message,
-        IReadOnlyList<MessageAttachmentResponse> attachments)
+        IReadOnlyList<MessageAttachmentResponse> attachments,
+        Guid viewerUserId,
+        DateTime utcNow)
     {
         var isDeleted = message.DeletedForEveryoneAt.HasValue;
 
@@ -101,7 +106,7 @@ public class GetConversationMessagesQueryHandler
             isDeleted ? null : message.EditedAt,
             isDeleted,
             isDeleted ? [] : attachments,
-            isDeleted ? null : MessageHelpers.ParseScheduleMetadata(message));
+            isDeleted ? null : MessageHelpers.ParseScheduleMetadata(message, viewerUserId, utcNow));
     }
 
     private static MessageAttachmentResponse ToAttachmentResponse(MessageAttachment attachment)

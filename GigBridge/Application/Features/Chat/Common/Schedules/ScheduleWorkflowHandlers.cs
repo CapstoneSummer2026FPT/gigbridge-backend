@@ -55,11 +55,19 @@ public sealed class ScheduleWorkflowHandlers :
 
         var participants = await ActiveParticipants(conversation.ConversationsId, ct);
         EnsureClientFreelancerConversation(participants, command.UserId);
-        var hasOngoingSchedule = await _context.Set<Schedule>().AsNoTracking().AnyAsync(x =>
-            x.ConversationId == conversation.ConversationsId &&
-            x.Status == ScheduleStatus.Scheduled && x.ScheduledAtUtc > now, ct);
-        if (hasOngoingSchedule)
+        var scheduled = await _context.Set<Schedule>()
+            .Where(x => x.ConversationId == conversation.ConversationsId &&
+                x.Status == ScheduleStatus.Scheduled)
+            .ToListAsync(ct);
+        if (scheduled.Any(x => x.ScheduledAtUtc > now))
             throw new ConflictException("This conversation already has an ongoing schedule.");
+
+        foreach (var elapsed in scheduled)
+        {
+            elapsed.Status = ScheduleStatus.Completed;
+            elapsed.UpdatedAt = now;
+            elapsed.Version++;
+        }
         var actor = participants.Single(x => x.UserId == command.UserId).User;
 
         var schedule = new Schedule
@@ -155,7 +163,7 @@ public sealed class ScheduleWorkflowHandlers :
             ScheduleId = schedule.ScheduleId, ScheduleEventType = eventType,
             ScheduleEventSequence = schedule.Version, SentAt = now
         };
-        var eventDto = ToEvent(schedule, message.MessagesId, eventType, actor, reason, actor.UserId, now);
+        var eventDto = ToEvent(schedule, message.MessagesId, eventType, actor, reason);
         message.Metadata = JsonSerializer.Serialize(eventDto, JsonOptions);
         _context.Set<Message>().Add(message);
 
@@ -165,7 +173,7 @@ public sealed class ScheduleWorkflowHandlers :
 
         foreach (var participant in participants.GroupBy(x => x.UserId).Select(x => x.First()))
         {
-            var snapshot = eventDto with { CanEdit = CanEdit(schedule, participant.UserId, now), CanCancel = CanCancel(schedule, participant.UserId, now) };
+            var snapshot = PersonalizeEvent(eventDto, schedule, participant.UserId, now);
             var metadata = JsonSerializer.Serialize(snapshot, JsonOptions);
             var existing = await _context.Set<Notification>().FirstOrDefaultAsync(n =>
                 n.UserId == participant.UserId && n.Type == (int)NotificationType.Schedule &&
@@ -190,14 +198,31 @@ public sealed class ScheduleWorkflowHandlers :
         catch (DbUpdateConcurrencyException ex) { throw new ConflictException("The schedule was changed by the other participant.", ex); }
         catch (DbUpdateException ex) { throw new ConflictException("A concurrent schedule event was already persisted. Refresh and retry.", ex); }
 
-        var messageResponse = new MessageResponse(message.MessagesId, message.ConversationsId, message.SenderUserId,
-            message.MessageType, message.Content, null, message.Metadata, null, message.SentAt, null, false, [], eventDto);
-        var userIds = participants.Select(x => x.UserId).Distinct().ToArray();
-        await _chat.SendUsersEventAsync(userIds, "ReceiveMessage", messageResponse, ct);
-        await _chat.SendConversationEventAsync(schedule.ConversationId, "ScheduleChanged", eventDto, ct);
-        foreach (var p in participants.GroupBy(x => x.UserId).Select(x => x.First()))
-            await _chat.SendUserEventAsync(p.UserId, "ConversationUpdated", new { conversationId = schedule.ConversationId, lastMessage = messageResponse, lastMessageAt = now, unreadCount = p.UnreadCount }, ct);
-        return new ScheduleMutationResult(ToResponse(schedule, actor.UserId, now), messageResponse);
+        MessageResponse? actorMessageResponse = null;
+        foreach (var participant in participants.GroupBy(x => x.UserId).Select(x => x.First()))
+        {
+            var snapshot = PersonalizeEvent(eventDto, schedule, participant.UserId, now);
+            var metadata = JsonSerializer.Serialize(snapshot, JsonOptions);
+            var messageResponse = new MessageResponse(message.MessagesId, message.ConversationsId, message.SenderUserId,
+                message.MessageType, message.Content, null, metadata, null, message.SentAt, null, false, [], snapshot);
+
+            await _chat.SendUserEventAsync(participant.UserId, "ReceiveMessage", messageResponse, ct);
+            await _chat.SendUserEventAsync(participant.UserId, "ScheduleChanged", snapshot, ct);
+            await _chat.SendUserEventAsync(participant.UserId, "ConversationUpdated", new
+            {
+                conversationId = schedule.ConversationId,
+                lastMessage = messageResponse,
+                lastMessageAt = now,
+                unreadCount = participant.UnreadCount
+            }, ct);
+
+            if (participant.UserId == actor.UserId)
+                actorMessageResponse = messageResponse;
+        }
+
+        return new ScheduleMutationResult(
+            ToResponse(schedule, actor.UserId, now),
+            actorMessageResponse ?? throw new InvalidOperationException("The schedule actor is not an active participant."));
     }
 
     private void AddOutbox(Schedule schedule, Guid recipientId, Guid notificationId, ScheduleEventType type,
@@ -257,9 +282,12 @@ public sealed class ScheduleWorkflowHandlers :
         if (s.Status == ScheduleStatus.Cancelled) throw new BadRequestException("The schedule is already cancelled.");
         if (now >= s.ScheduledAtUtc) throw new BadRequestException("The scheduled time has passed.");
         if (isEdit && s.EditCount >= MaxEdits) throw new BadRequestException("This schedule has used both available edits.");
-        var normal = now < CutoffUtc(s.ScheduledAtUtc);
-        var grace = userId == s.CreatedByUserId && now < GraceExpiry(s) && now < s.ScheduledAtUtc;
-        if (!normal && !grace) throw new BadRequestException("The Vietnam-time edit and cancellation window has closed.");
+        var beforeCutoff = now < CutoffUtc(s.ScheduledAtUtc);
+        var editGrace = isEdit && userId == s.CreatedByUserId && now < GraceExpiry(s) && now < s.ScheduledAtUtc;
+        if (!beforeCutoff && !editGrace)
+            throw new BadRequestException(isEdit
+                ? "The schedule edit window has closed."
+                : "Schedules cannot be cancelled less than 24 hours before their start time.");
     }
 
     private static ScheduleResponse ToResponse(Schedule s, Guid userId, DateTime now) => new(
@@ -269,24 +297,30 @@ public sealed class ScheduleWorkflowHandlers :
         CanEdit(s, userId, now), CanCancel(s, userId, now));
 
     private static ScheduleEventResponse ToEvent(Schedule s, Guid messageId, ScheduleEventType type, User actor,
-        string? reason, Guid viewer, DateTime now) => new(1, s.ScheduleId, s.ConversationId, messageId, (int)type,
+        string? reason) => new(1, s.ScheduleId, s.ConversationId, messageId, (int)type,
         s.Version, (int)s.Status, s.Title, s.Details, s.ScheduledAtUtc, s.TimeZoneId, actor.UserId, actor.FullName, s.CreatedByUserId,
         s.EditCount, Math.Max(0, MaxEdits - s.EditCount), s.Version, reason, CutoffUtc(s.ScheduledAtUtc),
-        GraceExpiry(s), CanEdit(s, viewer, now), CanCancel(s, viewer, now));
+        GraceExpiry(s), false, false);
+
+    private static ScheduleEventResponse PersonalizeEvent(
+        ScheduleEventResponse scheduleEvent,
+        Schedule schedule,
+        Guid viewerUserId,
+        DateTime now) => scheduleEvent with
+    {
+        CanEdit = CanEdit(schedule, viewerUserId, now),
+        CanCancel = CanCancel(schedule, viewerUserId, now)
+    };
 
     private static bool CanEdit(Schedule s, Guid user, DateTime now) => s.Status == ScheduleStatus.Scheduled && s.EditCount < MaxEdits &&
         s.Conversation.Status == (int)ConversationStatus.Active && now < s.ScheduledAtUtc &&
         (now < CutoffUtc(s.ScheduledAtUtc) || user == s.CreatedByUserId && now < GraceExpiry(s));
     private static bool CanCancel(Schedule s, Guid user, DateTime now) => s.Status == ScheduleStatus.Scheduled && now < s.ScheduledAtUtc &&
-        (now < CutoffUtc(s.ScheduledAtUtc) || user == s.CreatedByUserId && now < GraceExpiry(s));
+        now < CutoffUtc(s.ScheduledAtUtc);
 
     private static DateTime GraceExpiry(Schedule s) => new[] { s.CreatedAt.AddMinutes(10), s.ScheduledAtUtc }.Min();
     private static DateTime CutoffUtc(DateTime utc)
-    {
-        var local = TimeZoneInfo.ConvertTimeFromUtc(Utc(utc), VietnamZone());
-        var midnight = DateTime.SpecifyKind(local.Date, DateTimeKind.Unspecified);
-        return TimeZoneInfo.ConvertTimeToUtc(midnight, VietnamZone());
-    }
+        => Utc(utc).AddHours(-24);
     private static TimeZoneInfo VietnamZone()
     { try { return TimeZoneInfo.FindSystemTimeZoneById("Asia/Ho_Chi_Minh"); } catch { return TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time"); } }
     private static string FormatVietnamTime(DateTime utc) => TimeZoneInfo.ConvertTimeFromUtc(Utc(utc), VietnamZone()).ToString("dd MMM yyyy, HH:mm 'ICT'", CultureInfo.InvariantCulture);

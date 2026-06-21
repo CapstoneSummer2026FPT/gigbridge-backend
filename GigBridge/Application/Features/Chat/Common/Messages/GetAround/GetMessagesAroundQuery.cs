@@ -34,11 +34,21 @@ public class GetMessagesAroundQueryHandler : IRequestHandler<GetMessagesAroundQu
         var messages = before.Append(anchor).Concat(after).OrderBy(x => x.SentAt).ThenBy(x => x.MessagesId).ToList();
         var ids = messages.Select(x => x.MessagesId).ToHashSet();
         var attachments = await _context.Set<MessageAttachment>().AsNoTracking().Where(x => ids.Contains(x.MessagesId)).ToListAsync(ct);
-        return messages.Select(m => new ConversationMessageResponse(m.MessagesId, m.ConversationsId, m.SenderUserId,
-            m.MessageType, m.DeletedForEveryoneAt.HasValue ? null : m.Content, m.ReplyToMessageId,
-            m.DeletedForEveryoneAt.HasValue ? null : m.Metadata, m.ClientMessageId, m.SentAt, m.EditedAt,
-            m.DeletedForEveryoneAt.HasValue, attachments.Where(a => a.MessagesId == m.MessagesId).Select(a => new MessageAttachmentResponse(
-                a.MessageAttachmentsId, a.FileName, a.FileUrl, a.StorageProvider, a.StorageObjectKey, a.MimeType,
-                a.FileExtension, a.FileSizeBytes, a.CreatedAt)).ToList(), MessageHelpers.ParseScheduleMetadata(m))).ToList();
+        var now = DateTime.UtcNow;
+        return messages.Select(m =>
+        {
+            var isDeleted = m.DeletedForEveryoneAt.HasValue;
+            IReadOnlyList<MessageAttachmentResponse> messageAttachments = isDeleted
+                ? []
+                : attachments.Where(a => a.MessagesId == m.MessagesId).Select(a => new MessageAttachmentResponse(
+                    a.MessageAttachmentsId, a.FileName, a.FileUrl, a.StorageProvider, a.StorageObjectKey, a.MimeType,
+                    a.FileExtension, a.FileSizeBytes, a.CreatedAt)).ToList();
+
+            return new ConversationMessageResponse(m.MessagesId, m.ConversationsId, m.SenderUserId,
+                m.MessageType, isDeleted ? null : m.Content, m.ReplyToMessageId,
+                isDeleted ? null : m.Metadata, m.ClientMessageId, m.SentAt, isDeleted ? null : m.EditedAt,
+                isDeleted, messageAttachments,
+                isDeleted ? null : MessageHelpers.ParseScheduleMetadata(m, request.UserId, now));
+        }).ToList();
     }
 }

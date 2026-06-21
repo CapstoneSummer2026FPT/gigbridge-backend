@@ -1,6 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces.IService;
 using Application.Features.Chat.Common.Conversations.MarkAsRead.Commands;
+using Application.Features.Chat.Common.Messages.GetAround;
 using Application.Features.Chat.Common.Messages.GetConversationMessages.Queries;
 using Application.Features.Chat.Common.Messages.Send.Commands;
 using Application.Features.Chat.Common.Messages.Send.DTOs;
@@ -249,6 +250,55 @@ public class MessageCommandHandlerTests
             messages,
             message => Assert.Equal(second.MessagesId, message.MessageId),
             message => Assert.Equal(third.MessagesId, message.MessageId));
+    }
+
+    [Fact]
+    public async Task GetMessagesAround_DeletedMessageSuppressesAttachmentsAndSchedulePayload()
+    {
+        var fixture = new MessageFixture();
+        var deletedMessage = new Message
+        {
+            MessagesId = Guid.NewGuid(),
+            ConversationsId = fixture.ConversationId,
+            SenderUserId = fixture.ClientUserId,
+            MessageType = (int)MessageType.Schedule,
+            Content = "Deleted schedule",
+            Metadata = "{}",
+            ClientMessageId = "deleted-schedule",
+            SentAt = fixture.Now.AddMinutes(1),
+            EditedAt = fixture.Now.AddMinutes(2),
+            DeletedForEveryoneAt = fixture.Now.AddMinutes(3)
+        };
+        fixture.Messages.Add(deletedMessage);
+        fixture.Attachments.Add(new MessageAttachment
+        {
+            MessageAttachmentsId = Guid.NewGuid(),
+            MessagesId = deletedMessage.MessagesId,
+            FileName = "private.pdf",
+            FileUrl = "https://files.example/private.pdf",
+            StorageProvider = "cloudinary",
+            MimeType = "application/pdf",
+            FileExtension = ".pdf",
+            FileSizeBytes = 256,
+            CreatedAt = fixture.Now
+        });
+
+        var handler = new GetMessagesAroundQueryHandler(fixture.Context);
+
+        var messages = await handler.Handle(
+            new GetMessagesAroundQuery(
+                fixture.ConversationId,
+                deletedMessage.MessagesId,
+                fixture.ClientUserId),
+            CancellationToken.None);
+
+        var response = Assert.Single(messages);
+        Assert.True(response.IsDeleted);
+        Assert.Null(response.Content);
+        Assert.Null(response.Metadata);
+        Assert.Null(response.EditedAt);
+        Assert.Empty(response.Attachments);
+        Assert.Null(response.Schedule);
     }
 
     [Fact]

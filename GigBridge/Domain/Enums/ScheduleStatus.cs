@@ -3,7 +3,8 @@ namespace Domain.Enums;
 public enum ScheduleStatus
 {
     Scheduled = 0,
-    Cancelled = 1
+    Cancelled = 1,
+    Completed = 2
 }
 
 public enum ScheduleEventType
