@@ -1,14 +1,13 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Features.JobPosts.Common;
-using Application.Features.JobPosts.Public.GetAvailableJobPosts.DTOs;
+using Application.Features.JobPosts.Client.GetMyJobPosts.DTOs;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.JobPosts.Client.GetMyJobPosts.Queries;
 
-public class GetMyJobPostsQueryHandler : IRequestHandler<GetMyJobPostsQuery, IEnumerable<JobPostSummaryDto>>
+public class GetMyJobPostsQueryHandler : IRequestHandler<GetMyJobPostsQuery, IEnumerable<GetMyJobPostDto>>
 {
     private readonly IApplicationDbContext _context;
 
@@ -17,7 +16,7 @@ public class GetMyJobPostsQueryHandler : IRequestHandler<GetMyJobPostsQuery, IEn
         _context = context;
     }
 
-    public async Task<IEnumerable<JobPostSummaryDto>> Handle(GetMyJobPostsQuery request, CancellationToken cancellationToken)
+    public async Task<IEnumerable<GetMyJobPostDto>> Handle(GetMyJobPostsQuery request, CancellationToken cancellationToken)
     {
         var clientProfile = await _context.Set<ClientProfile>()
             .AsNoTracking()
@@ -28,17 +27,69 @@ public class GetMyJobPostsQueryHandler : IRequestHandler<GetMyJobPostsQuery, IEn
             throw new NotFoundException("Client profile does not exist.");
         }
 
-        var jobPosts = await _context.Set<JobPost>()
+        var pageIndex = NormalizePageIndex(request.PageIndex);
+        var pageSize = NormalizePageSize(request.PageSize);
+
+        return await _context.Set<JobPost>()
             .AsNoTracking()
-            .Include(jobPost => jobPost.JobPostSkills)
-                .ThenInclude(jobPostSkill => jobPostSkill.Skills)
             .Where(jobPost => jobPost.ClientProfilesId == clientProfile.ClientProfilesId)
             .OrderByDescending(jobPost => jobPost.CreatedAt)
-            .Skip((NormalizePageIndex(request.PageIndex) - 1) * NormalizePageSize(request.PageSize))
-            .Take(NormalizePageSize(request.PageSize))
-            .ToListAsync(cancellationToken);
+            .Skip((pageIndex - 1) * pageSize)
+            .Take(pageSize)
+            .Select(jobPost => new GetMyJobPostDto
+            {
+                JobPostsId = jobPost.JobPostsId,
+                ClientProfilesId = jobPost.ClientProfilesId,
 
-        return JobPostProjection.ToSummaryDtos(jobPosts);
+                Title = jobPost.Title,
+                Description = jobPost.Description,
+
+                MajorCategoryId = jobPost.MajorCategoryId,
+
+                MajorId = jobPost.MajorCategory != null
+                    ? jobPost.MajorCategory.MajorId
+                    : null,
+
+                MajorName = jobPost.MajorCategory != null
+                    ? jobPost.MajorCategory.Major.Name
+                    : null,
+
+                CategoryId = jobPost.MajorCategory != null
+                    ? jobPost.MajorCategory.CategoryId
+                    : null,
+
+                CategoryName = jobPost.MajorCategory != null
+                    ? jobPost.MajorCategory.Category.Name
+                    : null,
+
+                Skills = jobPost.JobPostSkills
+                    .Select(jobPostSkill => new GetMyJobPostSkillDto
+                    {
+                        SkillId = jobPostSkill.SkillsId,
+                        Name = jobPostSkill.Skills.Name
+                    })
+                    .ToList(),
+
+                BudgetMin = jobPost.BudgetMin,
+                BudgetMax = jobPost.BudgetMax,
+                Currency = jobPost.Currency,
+                EstimatedDuration = jobPost.EstimatedDuration,
+                MaxHires = jobPost.MaxHires,
+                Location = jobPost.Location,
+
+                Status = jobPost.Status,
+                Visibility = jobPost.Visibility,
+                EndDate = jobPost.EndDate,
+                IsAigenerated = jobPost.IsAigenerated,
+
+                CustomSkillNames = jobPost.CustomSkillNames.ToList(),
+
+                CreatedAt = jobPost.CreatedAt,
+                UpdatedAt = jobPost.UpdatedAt,
+
+                ProposalCount = jobPost.Proposals.Count(proposal => proposal.Status != 0)
+            })
+            .ToListAsync(cancellationToken);
     }
 
     private static int NormalizePageIndex(int pageIndex)

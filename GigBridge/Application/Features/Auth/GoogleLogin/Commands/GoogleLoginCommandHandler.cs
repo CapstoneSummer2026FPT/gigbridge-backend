@@ -1,4 +1,3 @@
-using Application.Common.Domain;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
@@ -83,6 +82,7 @@ public class GoogleLoginCommandHandler : IRequestHandler<GoogleLoginCommand, (Lo
         return _context.Set<User>()
             .Include(u => u.ClientProfile)
             .Include(u => u.FreelancerProfile)
+            .Include(u => u.UserEloScore)
             .FirstOrDefaultAsync(u => u.Email.ToLower() == normalizedEmail, cancellationToken);
     }
 
@@ -104,7 +104,7 @@ public class GoogleLoginCommandHandler : IRequestHandler<GoogleLoginCommand, (Lo
             Avatar = googleUser.PictureUrl
         };
 
-        UserProfileFactory.AttachProfileForRole(user, now);
+        user.AttachProfileForRole(now);
         return user;
     }
 

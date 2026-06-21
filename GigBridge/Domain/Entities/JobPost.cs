@@ -13,7 +13,7 @@ public partial class JobPost
 
     public string Description { get; set; } = null!;
 
-    public Guid? CategoryId { get; set; }
+    public Guid? MajorCategoryId { get; set; }
 
     public decimal? BudgetMin { get; set; }
 
@@ -37,6 +37,8 @@ public partial class JobPost
     /// </summary>
     public int? Visibility { get; set; }
 
+    public string[] CustomSkillNames { get; set; } = [];
+
     public DateTime? EndDate { get; set; }
 
     public bool? IsAigenerated { get; set; }
@@ -45,17 +47,23 @@ public partial class JobPost
 
     public DateTime? UpdatedAt { get; set; }
 
-    public virtual Category? Category { get; set; }
+    public virtual MajorCategory? MajorCategory { get; set; }
 
     public virtual ClientProfile ClientProfiles { get; set; } = null!;
 
     public virtual ICollection<Contract> Contracts { get; set; } = new List<Contract>();
+
+    public virtual ICollection<Conversation> Conversations { get; set; } = new List<Conversation>();
 
     public virtual ICollection<EsignDocument> EsignDocuments { get; set; } = new List<EsignDocument>();
 
     public virtual ICollection<JobPostAttachment> JobPostAttachments { get; set; } = new List<JobPostAttachment>();
 
     public virtual ICollection<JobPostSkill> JobPostSkills { get; set; } = new List<JobPostSkill>();
+
+    public virtual ICollection<NegotiationOffer> NegotiationOffers { get; set; } = new List<NegotiationOffer>();
+
+    public virtual ICollection<JobPostQuestion> JobPostQuestions { get; set; } = new List<JobPostQuestion>();
 
     public virtual ICollection<Proposal> Proposals { get; set; } = new List<Proposal>();
 

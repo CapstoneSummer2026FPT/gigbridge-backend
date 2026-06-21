@@ -45,6 +45,9 @@ public class UpdateJobPostCommandHandler : IRequestHandler<UpdateJobPostCommand,
             throw new NotFoundException("Job post does not exist or you do not have permission to update it.");
         }
 
+        await ValidateMajorCategory(command.Request.MajorCategoryId, cancellationToken);
+        await ValidateSkillIds(command.Request.SkillIds, cancellationToken);
+
         UpdateJobPost(jobPost, command);
 
         await UpdateJobPostSkills(jobPost, command.Request.SkillIds, cancellationToken);
@@ -54,13 +57,53 @@ public class UpdateJobPostCommandHandler : IRequestHandler<UpdateJobPostCommand,
         return true;
     }
 
+    private async Task ValidateMajorCategory(Guid? majorCategoryId, CancellationToken cancellationToken)
+    {
+        if (!majorCategoryId.HasValue)
+        {
+            return;
+        }
+
+        var majorCategoryExists = await _context.Set<MajorCategory>()
+            .AnyAsync(
+                majorCategory => majorCategory.MajorCategoriesId == majorCategoryId.Value,
+                cancellationToken);
+
+        if (!majorCategoryExists)
+        {
+            throw new NotFoundException("Major category does not exist.");
+        }
+    }
+
+    private async Task ValidateSkillIds(List<Guid>? skillIds, CancellationToken cancellationToken)
+    {
+        var distinctSkillIds = (skillIds ?? new List<Guid>())
+            .Distinct()
+            .ToList();
+
+        if (distinctSkillIds.Count == 0)
+        {
+            return;
+        }
+
+        var existingSkillCount = await _context.Set<Skill>()
+            .CountAsync(skill => distinctSkillIds.Contains(skill.SkillsId), cancellationToken);
+
+        if (existingSkillCount != distinctSkillIds.Count)
+        {
+            throw new NotFoundException("One or more skills do not exist.");
+        }
+    }
+
     private void UpdateJobPost(JobPost jobPost, UpdateJobPostCommand command)
     {
         var request = command.Request;
 
         jobPost.Title = request.Title.Trim();
         jobPost.Description = request.Description.Trim();
-        jobPost.CategoryId = request.CategoryId;
+
+        jobPost.MajorCategoryId = request.MajorCategoryId;
+
         jobPost.BudgetMin = request.BudgetMin;
         jobPost.BudgetMax = request.BudgetMax;
         jobPost.Currency = string.IsNullOrWhiteSpace(request.Currency)
@@ -70,7 +113,15 @@ public class UpdateJobPostCommandHandler : IRequestHandler<UpdateJobPostCommand,
         jobPost.EstimatedDuration = request.EstimatedDuration;
         jobPost.MaxHires = request.MaxHires;
         jobPost.Location = request.Location;
+        jobPost.Visibility = request.Visibility!.Value;
         jobPost.EndDate = request.EndDate;
+
+        jobPost.CustomSkillNames = (request.CustomSkillNames ?? new List<string>())
+            .Where(skillName => !string.IsNullOrWhiteSpace(skillName))
+            .Select(skillName => skillName.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
         jobPost.UpdatedAt = _dateTimeService.UtcNow;
     }
 

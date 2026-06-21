@@ -30,8 +30,15 @@ public class GetMyAppliedJobPostsQueryHandler : IRequestHandler<GetMyAppliedJobP
 
         var jobPosts = await _context.Set<JobPost>()
             .AsNoTracking()
+            .Include(jobPost => jobPost.ClientProfiles)
+                .ThenInclude(clientProfile => clientProfile.User)
+                .ThenInclude(user => user.UserEloScore)
             .Include(jobPost => jobPost.JobPostSkills)
                 .ThenInclude(jobPostSkill => jobPostSkill.Skills)
+            .Include(jobPost => jobPost.MajorCategory)
+                .ThenInclude(majorCategory => majorCategory!.Major)
+            .Include(jobPost => jobPost.MajorCategory)
+                .ThenInclude(majorCategory => majorCategory!.Category)
             .Where(jobPost => jobPost.Proposals.Any(proposal =>
                 proposal.FreelancerProfilesId == freelancerProfile.FreelancerProfilesId))
             .OrderByDescending(jobPost => jobPost.CreatedAt)

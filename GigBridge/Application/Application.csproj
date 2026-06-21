@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
@@ -31,7 +31,6 @@
   <ItemGroup>
     <Folder Include="Features\Profiles\Freelancer\commands\" />
     <Folder Include="Features\Profiles\Freelancer\DTOs\" />
-    <Folder Include="Features\Proposals\Admin\" />
   </ItemGroup>
 
 </Project>

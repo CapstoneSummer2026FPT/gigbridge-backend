@@ -91,6 +91,34 @@ public class DeadlineWarningService : BackgroundService, IDeadlineWarningService
         var profileToUser = clientUsers.ToDictionary(cu => cu.ClientProfilesId, cu => cu.UserId);
 
         var notificationType = (int)NotificationType.SystemAlert;
+        var jobIds = approachingDeadlineJobs
+            .Select(j => j.JobPostsId)
+            .Distinct()
+            .ToList();
+
+        var clientUserIds = clientUsers
+            .Select(cu => cu.UserId)
+            .Distinct()
+            .ToList();
+
+        var existingWarnings = await context.Set<Notification>()
+            .AsNoTracking()
+            .Where(n =>
+                clientUserIds.Contains(n.UserId)
+                && n.ReferenceId != null
+                && jobIds.Contains(n.ReferenceId.Value)
+                && n.ReferenceType == "JobPost"
+                && n.Type == notificationType
+                && n.Title.StartsWith("[Deadline Warning]"))
+            .Select(n => new { n.UserId, n.ReferenceId })
+            .ToListAsync(cancellationToken);
+
+        var warnedJobUsers = existingWarnings
+            .Where(n => n.ReferenceId.HasValue)
+            .Select(n => (n.UserId, JobPostId: n.ReferenceId!.Value))
+            .ToHashSet();
+
+        var createdCount = 0;
 
         foreach (var job in approachingDeadlineJobs)
         {
@@ -99,18 +127,7 @@ public class DeadlineWarningService : BackgroundService, IDeadlineWarningService
                 continue;
             }
 
-            // Duplicate guard: check if a warning already exists for this job+user
-            var alreadyWarned = await context.Set<Notification>()
-                .AsNoTracking()
-                .AnyAsync(n =>
-                    n.UserId == clientUserId
-                    && n.ReferenceId == job.JobPostsId
-                    && n.ReferenceType == "JobPost"
-                    && n.Type == notificationType
-                    && n.Title.StartsWith("[Deadline Warning]"),
-                    cancellationToken);
-
-            if (alreadyWarned)
+            if (warnedJobUsers.Contains((clientUserId, job.JobPostsId)))
             {
                 continue;
             }
@@ -129,9 +146,16 @@ public class DeadlineWarningService : BackgroundService, IDeadlineWarningService
             };
 
             context.Set<Notification>().Add(notification);
+            createdCount++;
+        }
+
+        if (createdCount == 0)
+        {
+            _logger.LogDebug("No new deadline warning notifications were needed.");
+            return;
         }
 
         await context.SaveChangesAsync(cancellationToken);
-        _logger.LogInformation("Created {Count} deadline warning notifications.", approachingDeadlineJobs.Count);
+        _logger.LogInformation("Created {Count} deadline warning notification(s).", createdCount);
     }
 }

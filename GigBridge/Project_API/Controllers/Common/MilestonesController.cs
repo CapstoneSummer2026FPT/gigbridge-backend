@@ -1,0 +1,147 @@
+using System;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using Application.Common.Interfaces;
+using Application.Common.Models;
+using Application.Features.Contracts.Milestones.Client.Approve.Commands;
+using Application.Features.Contracts.Milestones.Client.RequestRevision.Commands;
+using Application.Features.Contracts.Milestones.Client.Start.Commands;
+using Application.Features.Contracts.Milestones.Common.DTOs;
+using Application.Features.Contracts.Milestones.Common.Get.Queries;
+using Application.Features.Contracts.Milestones.Common.List.Queries;
+using Application.Features.Contracts.Milestones.Freelancer.Submit.Commands;
+using Application.Features.Contracts.Milestones.Freelancer.Withdraw.Commands;
+using Domain.Entities;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+
+namespace Project_API.Controllers.Common;
+
+[ApiController]
+[Route("api/Milestones")]
+[Authorize]
+public sealed class MilestonesController : BaseApiController
+{
+    private readonly IApplicationDbContext _context;
+
+    public MilestonesController(IApplicationDbContext context)
+    {
+        _context = context;
+    }
+
+    [HttpGet("contract/{contractId:guid}")]
+    public async Task<IActionResult> GetMilestonesByContract(Guid contractId)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return InvalidTokenResponse();
+        }
+
+        var result = await Mediator.Send(new GetContractMilestonesQuery(contractId, userId));
+
+        return Ok(ApiResponse<IReadOnlyList<ContractMilestoneResponse>>.Ok(result, "Success"));
+    }
+
+    [HttpGet("{milestoneId:guid}")]
+    public async Task<IActionResult> GetMilestoneById(Guid milestoneId)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return InvalidTokenResponse();
+        }
+
+        var result = await Mediator.Send(new GetMilestoneByIdQuery(milestoneId, userId));
+
+        return Ok(ApiResponse<ContractMilestoneResponse>.Ok(result, "Success"));
+    }
+
+    [HttpGet("{milestoneId:guid}/attachments")]
+    public async Task<IActionResult> GetAttachments(Guid milestoneId)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return InvalidTokenResponse();
+        }
+
+        var result = await Mediator.Send(new GetMilestoneByIdQuery(milestoneId, userId));
+
+        return Ok(ApiResponse<IReadOnlyList<MilestoneAttachmentResponse>>.Ok(result.Attachments, "Success"));
+    }
+
+    [HttpPost("{milestoneId:guid}/submit-deliverables")]
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> SubmitDeliverables(Guid milestoneId, [FromForm] string description)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return InvalidTokenResponse();
+        }
+
+        var milestone = await Mediator.Send(new GetMilestoneByIdQuery(milestoneId, userId));
+        var contractId = milestone.ContractId;
+
+        var commandFiles = new List<SubmitMilestoneFile>();
+        foreach (var file in Request.Form.Files)
+        {
+            commandFiles.Add(new SubmitMilestoneFile(
+                file.OpenReadStream(),
+                file.FileName,
+                file.ContentType,
+                file.Length));
+        }
+
+        var result = await Mediator.Send(new SubmitMilestoneCommand(
+            contractId,
+            milestoneId,
+            userId,
+            description,
+            commandFiles));
+
+        return Ok(ApiResponse<ContractMilestoneResponse>.Ok(result, "Milestone deliverables submitted"));
+    }
+
+    public record UpdateMilestoneStatusRequest(int Status);
+
+    [HttpPut("{milestoneId:guid}/status")]
+    public async Task<IActionResult> UpdateStatus(Guid milestoneId, [FromBody] UpdateMilestoneStatusRequest request)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return InvalidTokenResponse();
+        }
+
+        var milestone = await Mediator.Send(new GetMilestoneByIdQuery(milestoneId, userId));
+        var contractId = milestone.ContractId;
+
+        // Map frontend statuses: InProgress = 4, Paid = 2 (Approve & Release), RevisionRequired = 6
+        if (request.Status == 4) // InProgress -> Start milestone
+        {
+            var result = await Mediator.Send(new StartMilestoneCommand(contractId, milestoneId, userId));
+            return Ok(ApiResponse<ContractMilestoneResponse>.Ok(result, "Milestone started"));
+        }
+        else if (request.Status == 2) // Paid -> Approve & Withdraw (Release Escrow)
+        {
+            var result = await Mediator.Send(new ApproveMilestoneCommand(contractId, milestoneId, userId));
+
+            var contract = await _context.Set<Contract>()
+                .Include(c => c.FreelancerProfiles)
+                .FirstOrDefaultAsync(c => c.ContractsId == contractId);
+
+            if (contract?.FreelancerProfiles != null)
+            {
+                await Mediator.Send(new WithdrawMilestoneCommand(contractId, milestoneId, contract.FreelancerProfiles.UserId));
+            }
+
+            return Ok(ApiResponse<ContractMilestoneResponse>.Ok(result, "Milestone approved and funds released"));
+        }
+        else if (request.Status == 6) // RevisionRequired -> Request Revision
+        {
+            var result = await Mediator.Send(new RequestMilestoneRevisionCommand(contractId, milestoneId, userId));
+            return Ok(ApiResponse<ContractMilestoneResponse>.Ok(result, "Revision requested"));
+        }
+
+        return BadRequest(ApiResponse<object>.BadRequest("Invalid milestone status transition."));
+    }
+}

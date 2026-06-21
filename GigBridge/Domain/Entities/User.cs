@@ -49,9 +49,9 @@ public partial class User
 
     public virtual ClientProfile? ClientProfile { get; set; }
 
-    public virtual ICollection<Conversation> ConversationUser1s { get; set; } = new List<Conversation>();
+    public virtual ICollection<Conversation> CreatedConversations { get; set; } = new List<Conversation>();
 
-    public virtual ICollection<Conversation> ConversationUser2s { get; set; } = new List<Conversation>();
+    public virtual ICollection<ConversationParticipant> ConversationParticipants { get; set; } = new List<ConversationParticipant>();
 
     public virtual ICollection<DisputeEvidence> DisputeEvidences { get; set; } = new List<DisputeEvidence>();
 
@@ -98,4 +98,8 @@ public partial class User
     public virtual UserEloScore? UserEloScore { get; set; }
 
     public virtual ICollection<UserEloPointTransaction> UserEloPointTransactions { get; set; } = new List<UserEloPointTransaction>();
+
+    public virtual UserWallet? UserWallet { get; set; }
+
+    public virtual ICollection<WalletTransaction> WalletTransactions { get; set; } = new List<WalletTransaction>();
 }

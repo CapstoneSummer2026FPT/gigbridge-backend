@@ -1,4 +1,3 @@
-using Application.Common.Domain;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Features.Admin.Users.CreateNewUser.DTOs;
@@ -60,12 +59,12 @@ public class CreateNewUserCommandHandler : IRequestHandler<CreateNewUserCommand,
             Password = _passwordHasher.HashPassword(request.Password),
             Role = request.Role,
             PhoneNumber = request.PhoneNumber,
-            IsEmailVerified = false,
+            IsEmailVerified = request.IsEmailVerified,
             IsActive = true,
             CreatedAt = now
         };
 
-        UserProfileFactory.AttachProfileForRole(user, now);
+        user.AttachProfileForRole(now);
         return user;
     }
 }

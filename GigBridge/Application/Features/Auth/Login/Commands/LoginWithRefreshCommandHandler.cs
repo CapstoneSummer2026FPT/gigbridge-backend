@@ -43,6 +43,7 @@ namespace Application.Features.Auth.Login.Commands
             var user = await _context.Set<User>()
                 .Include(u => u.ClientProfile)
                 .Include(u => u.FreelancerProfile)
+                .Include(u => u.UserEloScore)
                 .FirstOrDefaultAsync(u => u.Email == request.LoginRequest.Email, cancellationToken);
 
             if (user is null || string.IsNullOrEmpty(user.Password) || !_passwordHasher.VerifyPassword(request.LoginRequest.Password, user.Password))

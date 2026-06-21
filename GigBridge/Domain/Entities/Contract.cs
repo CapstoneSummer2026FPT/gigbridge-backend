@@ -1,6 +1,3 @@
-using System;
-using System.Collections.Generic;
-
 namespace Domain.Entities;
 
 public partial class Contract
@@ -11,7 +8,7 @@ public partial class Contract
 
     public Guid ClientProfilesId { get; set; }
 
-    public Guid FreelancerProfilesId { get; set; }
+    public Guid? FreelancerProfilesId { get; set; }
 
     public Guid? ProposalsId { get; set; }
 
@@ -22,7 +19,7 @@ public partial class Contract
     public decimal TotalBudget { get; set; }
 
     /// <summary>
-    /// Enum ContractStatus: 0=Active, 1=Completed, 2=Cancelled, 3=Disputed
+    /// Enum ContractStatus: 0=Draft, 1=PendingFreelancerSelection, 2=InNegotiation, 3=PendingContractDetails, 4=PendingContractConfirmation, 5=PendingEscrow, 6=PendingSignature, 7=Active, 8=Completed, 9=Cancelled, 10=Disputed
     /// </summary>
     public int Status { get; set; }
 
@@ -47,15 +44,21 @@ public partial class Contract
 
     public virtual ICollection<Dispute> Disputes { get; set; } = new List<Dispute>();
 
+    public virtual ContractEscrow? ContractEscrow { get; set; }
+
     public virtual EsignDocument? EsignDocument { get; set; }
 
-    public virtual FreelancerProfile FreelancerProfiles { get; set; } = null!;
+    public virtual FreelancerProfile? FreelancerProfiles { get; set; }
 
     public virtual JobPost JobPosts { get; set; } = null!;
 
     public virtual ICollection<Milestone> Milestones { get; set; } = new List<Milestone>();
 
+    public virtual ICollection<NegotiationOffer> NegotiationOffers { get; set; } = new List<NegotiationOffer>();
+
     public virtual Proposal? Proposals { get; set; }
 
     public virtual ICollection<Review> Reviews { get; set; } = new List<Review>();
+
+    public virtual ICollection<WalletTransaction> WalletTransactions { get; set; } = new List<WalletTransaction>();
 }

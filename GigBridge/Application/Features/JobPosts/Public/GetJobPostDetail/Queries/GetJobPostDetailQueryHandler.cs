@@ -3,6 +3,7 @@ using Application.Common.Interfaces;
 using Application.Features.JobPosts.Common.DTOs;
 using Application.Features.JobPosts.Public.GetJobPostDetail.DTOs;
 using Domain.Entities;
+using Domain.Services;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -21,8 +22,15 @@ public class GetJobPostDetailQueryHandler : IRequestHandler<GetJobPostDetailQuer
     {
         var jobPost = await _context.Set<JobPost>()
             .AsNoTracking()
+            .Include(jobPost => jobPost.ClientProfiles)
+                .ThenInclude(clientProfile => clientProfile.User)
+                .ThenInclude(user => user.UserEloScore)
             .Include(jobPost => jobPost.JobPostSkills)
                 .ThenInclude(jobPostSkill => jobPostSkill.Skills)
+            .Include(jobPost => jobPost.MajorCategory)
+                .ThenInclude(majorCategory => majorCategory!.Major)
+            .Include(jobPost => jobPost.MajorCategory)
+                .ThenInclude(majorCategory => majorCategory!.Category)
             .Include(jobPost => jobPost.JobPostAttachments)
             .FirstOrDefaultAsync(jobPost =>
                 jobPost.JobPostsId == request.JobPostsId &&
@@ -40,6 +48,11 @@ public class GetJobPostDetailQueryHandler : IRequestHandler<GetJobPostDetailQuer
             ClientProfilesId: jobPost.ClientProfilesId,
             Title: jobPost.Title,
             Description: jobPost.Description,
+            MajorCategoryId: jobPost.MajorCategoryId,
+            MajorId: jobPost.MajorCategory?.MajorId,
+            MajorName: jobPost.MajorCategory?.Major?.Name,
+            CategoryId: jobPost.MajorCategory?.CategoryId,
+            CategoryName: jobPost.MajorCategory?.Category?.Name,
             BudgetMin: jobPost.BudgetMin,
             BudgetMax: jobPost.BudgetMax,
             Currency: jobPost.Currency,
@@ -48,10 +61,12 @@ public class GetJobPostDetailQueryHandler : IRequestHandler<GetJobPostDetailQuer
             Location: jobPost.Location,
             EndDate: jobPost.EndDate,
             CreatedAt: jobPost.CreatedAt,
+            EloPoints: jobPost.ClientProfiles?.User?.UserEloScore?.CurrentPoints ?? UserEloCalculator.DefaultPoints,
             Skills: jobPost.JobPostSkills
                 .Where(jobPostSkill => jobPostSkill.Skills is not null)
                 .Select(jobPostSkill => new JobPostSkillDto(jobPostSkill.SkillsId, jobPostSkill.Skills.Name))
                 .ToList(),
+            CustomSkillNames: jobPost.CustomSkillNames.ToList(),
             Attachments: jobPost.JobPostAttachments
                 .Select(attachment => new AttachmentDto(attachment.JobPostAttachmentsId, attachment.FileUrl, attachment.FileName))
                 .ToList());

@@ -1,7 +1,8 @@
-﻿using Application.Common.Exceptions;
+using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Domain.Entities;
+using Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -27,7 +28,6 @@ public class UpdateProposalStatusCommandHandler
     {
         var proposal = await _context.Set<Proposal>()
             .Include(proposal => proposal.JobPosts)
-            .Include(proposal => proposal.Contract)
             .FirstOrDefaultAsync(
                 proposal => proposal.ProposalsId == command.ProposalId,
                 cancellationToken);
@@ -37,9 +37,9 @@ public class UpdateProposalStatusCommandHandler
             throw new NotFoundException("Proposal does not exist.");
         }
 
-        if (proposal.Status == 2 || proposal.Status == 3 || proposal.Status == 4)
+        if (proposal.Status == 3 || proposal.Status == 4 || proposal.Status == 5)
         {
-            throw new Exception("Only pending or shortlisted proposal can be updated.");
+            throw new Exception("Only draft, pending or shortlisted proposal can be updated.");
         }
 
         var requestedStatus = command.Request.Status;
@@ -60,7 +60,7 @@ public class UpdateProposalStatusCommandHandler
 
         if (isClientOwner)
         {
-            await UpdateStatusByClient(proposal, requestedStatus, cancellationToken);
+            UpdateStatusByClient(proposal, requestedStatus);
         }
         else if (isFreelancerOwner)
         {
@@ -78,12 +78,16 @@ public class UpdateProposalStatusCommandHandler
         return true;
     }
 
-    private async Task UpdateStatusByClient(
-        Proposal proposal,
-        int requestedStatus,
-        CancellationToken cancellationToken)
+    private void UpdateStatusByClient(
+    Proposal proposal,
+    int requestedStatus)
     {
-        if (requestedStatus != 1 && requestedStatus != 2 && requestedStatus != 3)
+        if (proposal.Status == 0)
+        {
+            throw new BadRequestException("Client cannot update draft proposal.");
+        }
+        // 2 = Shortlisted, 3 = Accepted, 4 = Rejected
+        if (requestedStatus != 2 && requestedStatus != 3 && requestedStatus != 4)
         {
             throw new UnauthorizedAccessException(
                 "Client can only update proposal status to Shortlisted, Accepted, or Rejected.");
@@ -91,71 +95,35 @@ public class UpdateProposalStatusCommandHandler
 
         proposal.Status = requestedStatus;
 
-        if (requestedStatus == 2)
+        // 3 = Accepted
+        if (requestedStatus == 3)
         {
-            var otherProposals = await _context.Set<Proposal>()
-                .Where(otherProposal =>
-                    otherProposal.JobPostsId == proposal.JobPostsId &&
-                    otherProposal.ProposalsId != proposal.ProposalsId &&
-                    (otherProposal.Status == 0 || otherProposal.Status == 1))
-                .ToListAsync(cancellationToken);
-
-            foreach (var otherProposal in otherProposals)
-            {
-                otherProposal.Status = 3;
-                otherProposal.UpdatedAt = _dateTimeService.UtcNow;
-            }
-
-            proposal.JobPosts.Status = 2;
+            proposal.JobPosts.Status = 3;
             proposal.JobPosts.UpdatedAt = _dateTimeService.UtcNow;
 
-            CreateContractIfMissing(proposal);
         }
     }
 
-    private void CreateContractIfMissing(Proposal proposal)
+
+    private static void UpdateStatusByFreelancer(
+    Proposal proposal,
+    int requestedStatus)
     {
-        if (proposal.Contract is not null)
+        // Draft -> Pending: Freelancer submit draft proposal
+        if (proposal.Status == 0 && requestedStatus == 1)
         {
+            proposal.Status = 1;
             return;
         }
 
-        if (!proposal.ProposedBudget.HasValue || proposal.ProposedBudget.Value <= 0)
+        // Pending/Shortlisted -> Withdrawn: Freelancer withdraw proposal
+        if ((proposal.Status == 1 || proposal.Status == 2) && requestedStatus == 5)
         {
-            throw new BadRequestException("Accepted proposals must include a proposed budget.");
+            proposal.Status = 5;
+            return;
         }
 
-        var now = _dateTimeService.UtcNow;
-
-        _context.Set<Contract>().Add(new Contract
-        {
-            ContractsId = Guid.NewGuid(),
-            JobPostsId = proposal.JobPostsId,
-            ClientProfilesId = proposal.JobPosts.ClientProfilesId,
-            FreelancerProfilesId = proposal.FreelancerProfilesId,
-            ProposalsId = proposal.ProposalsId,
-            Title = proposal.JobPosts.Title,
-            Description = proposal.JobPosts.Description,
-            TotalBudget = proposal.ProposedBudget.Value,
-            Status = 0,
-            StartDate = DateOnly.FromDateTime(now),
-            EndDate = proposal.JobPosts.EndDate.HasValue
-                ? DateOnly.FromDateTime(proposal.JobPosts.EndDate.Value)
-                : null,
-            CreatedAt = now
-        });
-    }
-
-    private static void UpdateStatusByFreelancer(
-        Proposal proposal,
-        int requestedStatus)
-    {
-        if (requestedStatus != 4)
-        {
-            throw new UnauthorizedAccessException(
-                "Freelancer can only withdraw their own proposal.");
-        }
-
-        proposal.Status = 4;
+        throw new UnauthorizedAccessException(
+            "Freelancer can only submit a draft proposal or withdraw a pending/shortlisted proposal.");
     }
 }

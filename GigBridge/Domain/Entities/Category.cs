@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-
-namespace Domain.Entities;
+﻿namespace Domain.Entities;
 
 public partial class Category
 {
@@ -19,13 +16,9 @@ public partial class Category
 
     public DateTime CreatedAt { get; set; }
 
-    public virtual ICollection<Category> InverseParentCategory { get; set; } = new List<Category>();
+    public virtual ICollection<MajorCategory> MajorCategories { get; set; } = new List<MajorCategory>();
 
-    public virtual ICollection<JobPost> JobPosts { get; set; } = new List<JobPost>();
-
-    public virtual Category? ParentCategory { get; set; }
+    public virtual ICollection<CategorySkill> CategorySkills { get; set; } = new List<CategorySkill>();
 
     public virtual ICollection<PortfolioItem> PortfolioItems { get; set; } = new List<PortfolioItem>();
-
-    public virtual ICollection<Skill> Skills { get; set; } = new List<Skill>();
 }
