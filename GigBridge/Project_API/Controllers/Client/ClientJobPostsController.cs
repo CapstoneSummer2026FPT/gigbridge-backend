@@ -3,10 +3,14 @@ using Application.Features.JobPosts.Client.CreateDraftJobPost.Commands;
 using Application.Features.JobPosts.Client.CreateDraftJobPost.DTOs;
 using Application.Features.JobPosts.Client.CreateJobPost.Commands;
 using Application.Features.JobPosts.Client.CreateJobPost.DTOs;
+using Application.Features.JobPosts.Client.DeleteEmptyDraftJobPost.Commands;
+using Application.Features.JobPosts.Client.GetMyDraftJobPosts.Queries;
 using Application.Features.JobPosts.Client.GetMyJobPostDetail.DTOs;
 using Application.Features.JobPosts.Client.GetMyJobPostDetail.Queries;
 using Application.Features.JobPosts.Client.GetMyJobPosts.DTOs;
 using Application.Features.JobPosts.Client.GetMyJobPosts.Queries;
+using Application.Features.JobPosts.Client.SaveDraftJobPost.Commands;
+using Application.Features.JobPosts.Client.SaveDraftJobPost.DTOs;
 using Application.Features.JobPosts.Client.UpdateJobPost.Commands;
 using Application.Features.JobPosts.Client.UpdateJobPost.DTOs;
 using Application.Features.JobPosts.Client.UpdateStatusJobPost.Commands;
@@ -90,6 +94,19 @@ public class ClientJobPostsController : BaseApiController
         return Ok(ApiResponse<IEnumerable<GetMyJobPostDto>>.Ok(result, "Success"));
     }
 
+    [HttpGet("my-drafts")]
+    public async Task<IActionResult> GetMyDraftJobPosts()
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return InvalidTokenResponse();
+        }
+
+        var result = await Mediator.Send(new GetMyDraftJobPostsQuery(userId));
+
+        return Ok(ApiResponse<IEnumerable<GetMyJobPostDto>>.Ok(result, "Success"));
+    }
+
     [HttpGet("my-jobs/{jobPostId}")]
     public async Task<IActionResult> GetMyJobPostDetail(Guid jobPostId)
     {
@@ -123,6 +140,39 @@ public class ClientJobPostsController : BaseApiController
         var result = await Mediator.Send(command);
 
         return Ok(ApiResponse<bool>.Ok(result, "Job post updated successfully"));
+    }
+
+    [HttpPut("{jobPostId}/draft")]
+    public async Task<IActionResult> SaveDraftJobPost(
+        Guid jobPostId,
+        [FromBody] SaveDraftJobPostRequest request)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return InvalidTokenResponse();
+        }
+
+        var command = new SaveDraftJobPostCommand(
+            jobPostId,
+            userId,
+            request);
+
+        var result = await Mediator.Send(command);
+
+        return Ok(ApiResponse<bool>.Ok(result, "Draft job post saved successfully"));
+    }
+
+    [HttpDelete("{jobPostId}/draft")]
+    public async Task<IActionResult> DeleteEmptyDraftJobPost(Guid jobPostId)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return InvalidTokenResponse();
+        }
+
+        var result = await Mediator.Send(new DeleteEmptyDraftJobPostCommand(jobPostId, userId));
+
+        return Ok(ApiResponse<bool>.Ok(result, "Empty draft job post deleted successfully"));
     }
 
     [HttpPatch("{jobPostId}/visibility")]

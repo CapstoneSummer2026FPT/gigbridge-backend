@@ -1,6 +1,7 @@
 ﻿using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Application.Features.JobPosts.Client.Common;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -45,57 +46,26 @@ public class UpdateJobPostCommandHandler : IRequestHandler<UpdateJobPostCommand,
             throw new NotFoundException("Job post does not exist or you do not have permission to update it.");
         }
 
-        await ValidateMajorCategory(command.Request.MajorCategoryId, cancellationToken);
-        await ValidateSkillIds(command.Request.SkillIds, cancellationToken);
+        var normalizedSkills = await JobPostSkillNormalizer.NormalizeAsync(
+            _context,
+            command.Request.MajorCategoryId,
+            command.Request.SkillIds,
+            command.Request.CustomSkillNames,
+            cancellationToken);
 
-        UpdateJobPost(jobPost, command);
+        UpdateJobPost(jobPost, command, normalizedSkills);
 
-        await UpdateJobPostSkills(jobPost, command.Request.SkillIds, cancellationToken);
+        await UpdateJobPostSkills(jobPost, normalizedSkills.SkillIds, cancellationToken);
 
         await _context.SaveChangesAsync(cancellationToken);
 
         return true;
     }
 
-    private async Task ValidateMajorCategory(Guid? majorCategoryId, CancellationToken cancellationToken)
-    {
-        if (!majorCategoryId.HasValue)
-        {
-            return;
-        }
-
-        var majorCategoryExists = await _context.Set<MajorCategory>()
-            .AnyAsync(
-                majorCategory => majorCategory.MajorCategoriesId == majorCategoryId.Value,
-                cancellationToken);
-
-        if (!majorCategoryExists)
-        {
-            throw new NotFoundException("Major category does not exist.");
-        }
-    }
-
-    private async Task ValidateSkillIds(List<Guid>? skillIds, CancellationToken cancellationToken)
-    {
-        var distinctSkillIds = (skillIds ?? new List<Guid>())
-            .Distinct()
-            .ToList();
-
-        if (distinctSkillIds.Count == 0)
-        {
-            return;
-        }
-
-        var existingSkillCount = await _context.Set<Skill>()
-            .CountAsync(skill => distinctSkillIds.Contains(skill.SkillsId), cancellationToken);
-
-        if (existingSkillCount != distinctSkillIds.Count)
-        {
-            throw new NotFoundException("One or more skills do not exist.");
-        }
-    }
-
-    private void UpdateJobPost(JobPost jobPost, UpdateJobPostCommand command)
+    private void UpdateJobPost(
+        JobPost jobPost,
+        UpdateJobPostCommand command,
+        NormalizedJobPostSkills normalizedSkills)
     {
         var request = command.Request;
 
@@ -116,18 +86,14 @@ public class UpdateJobPostCommandHandler : IRequestHandler<UpdateJobPostCommand,
         jobPost.Visibility = request.Visibility!.Value;
         jobPost.EndDate = request.EndDate;
 
-        jobPost.CustomSkillNames = (request.CustomSkillNames ?? new List<string>())
-            .Where(skillName => !string.IsNullOrWhiteSpace(skillName))
-            .Select(skillName => skillName.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        jobPost.CustomSkillNames = normalizedSkills.CustomSkillNames;
 
         jobPost.UpdatedAt = _dateTimeService.UtcNow;
     }
 
     private async Task UpdateJobPostSkills(
         JobPost jobPost,
-        List<Guid>? skillIds,
+        IReadOnlyList<Guid> skillIds,
         CancellationToken cancellationToken)
     {
         var oldSkills = await _context.Set<JobPostSkill>()
@@ -136,7 +102,7 @@ public class UpdateJobPostCommandHandler : IRequestHandler<UpdateJobPostCommand,
 
         _context.Set<JobPostSkill>().RemoveRange(oldSkills);
 
-        foreach (var skillId in (skillIds ?? []).Distinct())
+        foreach (var skillId in skillIds)
         {
             _context.Set<JobPostSkill>().Add(new JobPostSkill
             {
