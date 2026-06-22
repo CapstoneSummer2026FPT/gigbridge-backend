@@ -1,0 +1,12 @@
+{
+  "actor": {
+    "subject": "Schedule cancelled: {{TITLE}}", "badge": "Cancelled", "headline": "You cancelled the schedule",
+    "introduction": "The cancellation has been shared with every participant.",
+    "accent": "#b91c1c", "badgeBackground": "#fef2f2", "actorLabel": "Action by"
+  },
+  "recipient": {
+    "subject": "Schedule cancelled: {{TITLE}}", "badge": "Cancelled", "headline": "The schedule was cancelled",
+    "introduction": "{{ACTOR_NAME}} cancelled this schedule. See the reason and details below.",
+    "accent": "#b91c1c", "badgeBackground": "#fef2f2", "actorLabel": "Action by"
+  }
+}

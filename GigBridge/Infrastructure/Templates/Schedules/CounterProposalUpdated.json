@@ -1,0 +1,12 @@
+{
+  "actor": {
+    "subject": "Proposed time updated: {{TITLE}}", "badge": "Proposal updated", "headline": "Your proposed time was updated",
+    "introduction": "The client has received the latest meeting time.",
+    "accent": "#b45309", "badgeBackground": "#fffbeb", "actorLabel": "Action by"
+  },
+  "recipient": {
+    "subject": "Proposed time updated: {{TITLE}}", "badge": "Proposal updated", "headline": "The proposed time was updated",
+    "introduction": "{{ACTOR_NAME}} changed the counterproposal. Review the latest time below.",
+    "accent": "#b45309", "badgeBackground": "#fffbeb", "actorLabel": "Action by"
+  }
+}

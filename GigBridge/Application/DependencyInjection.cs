@@ -3,6 +3,7 @@ using Application.Common.Behaviours;
 using Application.Common.Interfaces.IService;
 using Application.Common.Mappings;
 using Application.Common.Services;
+using Application.Features.Chat.Common.Schedules;
 using FluentValidation;
 using MediatR;
 using Microsoft.Extensions.Configuration;
@@ -33,6 +34,7 @@ public static class DependencyInjection
         }, typeof(MappingProfile));
 
         services.AddScoped<IUserEloService, UserEloService>();
+        services.AddScoped<ScheduleWorkflowService>();
 
         services.AddSingleton<DeadlineWarningService>();
         services.AddSingleton<IDeadlineWarningService>(sp => sp.GetRequiredService<DeadlineWarningService>());

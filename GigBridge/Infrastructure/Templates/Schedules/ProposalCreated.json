@@ -1,0 +1,20 @@
+{
+  "actor": {
+    "subject": "Schedule proposal sent: {{TITLE}}",
+    "badge": "Proposal sent",
+    "headline": "Your schedule proposal was sent",
+    "introduction": "The other participant can now review and respond to your proposed time.",
+    "accent": "#0e7490",
+    "badgeBackground": "#ecfeff",
+    "actorLabel": "Action by"
+  },
+  "recipient": {
+    "subject": "New schedule needs your response: {{TITLE}}",
+    "badge": "Action required",
+    "headline": "A new schedule needs your response",
+    "introduction": "{{ACTOR_NAME}} proposed a meeting time. Review it in GigBridge and accept it or suggest another time.",
+    "accent": "#b45309",
+    "badgeBackground": "#fffbeb",
+    "actorLabel": "Action by"
+  }
+}

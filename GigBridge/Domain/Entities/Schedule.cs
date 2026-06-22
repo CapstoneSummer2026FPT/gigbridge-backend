@@ -35,6 +35,8 @@ public class Schedule
         }
     }
     public ScheduleStatus Status { get; set; }
+    public ScheduleAgreementStatus AgreementStatus { get; set; }
+    public DateTime? CounterProposalCreatedAtUtc { get; set; }
     public int EditCount { get; set; }
     public int Version { get; set; } = 1;
     public Guid? CancelledByUserId { get; set; }
@@ -43,8 +45,17 @@ public class Schedule
     public DateTime? UpdatedAt { get; set; }
     public DateTime? CancelledAt { get; set; }
 
+    public ScheduleMeetingProvider MeetingProvider { get; set; }
+    public MeetingProvisioningStatus MeetingStatus { get; set; }
+    public int MeetingAttempt { get; set; }
+    public string? MeetingSpaceName { get; set; }
+    public string? MeetingJoinUri { get; set; }
+    public string? MeetingFailureCode { get; set; }
+    public DateTime? MeetingLastAttemptAt { get; set; }
+
     public virtual Conversation Conversation { get; set; } = null!;
     public virtual User CreatedByUser { get; set; } = null!;
     public virtual User? CancelledByUser { get; set; }
     public virtual ICollection<Message> Messages { get; set; } = new List<Message>();
+    public virtual ICollection<GoogleMeetProvisioningJob> MeetProvisioningJobs { get; set; } = new List<GoogleMeetProvisioningJob>();
 }

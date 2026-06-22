@@ -1,12 +1,16 @@
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Common.Models;
+using Application.Features.Chat.Common.Schedules;
+using Infrastructure.BackgroundJobs;
 using Infrastructure.ExternalServices.Ai;
+using Infrastructure.ExternalServices.GoogleMeet;
 using Infrastructure.ExternalServices.Payments;
 using Infrastructure.Persistence;
 using Infrastructure.Services.Auth;
 using Infrastructure.Services.Common;
 using Infrastructure.Services.Email;
+using Infrastructure.Services.GoogleMeet;
 using Infrastructure.Services.Media;
 using Infrastructure.Services.Notification;
 using Microsoft.EntityFrameworkCore;
@@ -116,6 +120,7 @@ public static class DependencyInjection
         services.AddScoped<IJwtService, JwtService>();
         services.AddHttpClient<IGoogleAuthService, GoogleAuthService>();
         services.AddScoped<IEmailService, EmailService>();
+        services.AddSingleton<IScheduleEmailRenderer, ScheduleEmailRenderer>();
         services.AddScoped<IAuthEmailSender, AuthEmailSender>();
         services.AddScoped<IMediaService, MediaService>();
         services.AddScoped<INotificationService, NotificationService>();
@@ -139,6 +144,64 @@ public static class DependencyInjection
                 LogLevel = LogLevel.Debug,
             });
         });
+
+        // Google Meet Integration
+        services
+            .AddOptions<GoogleMeetOptions>()
+            .Bind(configuration.GetSection(GoogleMeetOptions.SectionName))
+            .PostConfigure(options =>
+            {
+                if (string.IsNullOrWhiteSpace(options.ClientId))
+                    options.ClientId = Environment.GetEnvironmentVariable("GOOGLE_MEET_CLIENT_ID")
+                        ?? configuration["Authentication:Google:ClientId"]
+                        ?? string.Empty;
+
+                if (string.IsNullOrWhiteSpace(options.ClientSecret))
+                    options.ClientSecret = Environment.GetEnvironmentVariable("GOOGLE_MEET_CLIENT_SECRET")
+                        ?? configuration["Authentication:Google:ClientSecret"]
+                        ?? string.Empty;
+
+                if (string.IsNullOrWhiteSpace(options.BackendCallbackUri))
+                    options.BackendCallbackUri = Environment.GetEnvironmentVariable("GOOGLE_MEET_BACKEND_CALLBACK_URI")
+                        ?? (string.Equals(configuration["ASPNETCORE_ENVIRONMENT"], "Development", StringComparison.OrdinalIgnoreCase)
+                            ? "http://localhost:5222/api/integrations/google-meet/callback"
+                            : string.Empty);
+
+                if (string.IsNullOrWhiteSpace(options.FrontendCallbackUri))
+                    options.FrontendCallbackUri = Environment.GetEnvironmentVariable("GOOGLE_MEET_FRONTEND_CALLBACK_URI")
+                        ?? (string.Equals(configuration["ASPNETCORE_ENVIRONMENT"], "Development", StringComparison.OrdinalIgnoreCase)
+                            ? $"{configuration["FrontendBaseUrl"]?.TrimEnd('/')}/integrations/google-meet/callback"
+                            : string.Empty);
+
+                if (string.IsNullOrWhiteSpace(options.DataProtectionKeysPath))
+                    options.DataProtectionKeysPath = Environment.GetEnvironmentVariable("DATA_PROTECTION_KEYS_PATH") ?? string.Empty;
+
+                if (string.IsNullOrWhiteSpace(options.MeetApiBaseUrl))
+                    options.MeetApiBaseUrl = "https://meet.googleapis.com";
+            })
+            .Validate(options =>
+                !string.IsNullOrWhiteSpace(options.ClientId) &&
+                !string.IsNullOrWhiteSpace(options.ClientSecret) &&
+                !string.IsNullOrWhiteSpace(options.BackendCallbackUri),
+                "Google Meet configuration is missing. Set GOOGLE_MEET_CLIENT_ID, GOOGLE_MEET_CLIENT_SECRET, and GOOGLE_MEET_BACKEND_CALLBACK_URI.")
+            .ValidateOnStart();
+
+        services.AddHttpClient("GoogleMeetOAuth")
+            .ConfigureHttpClient(client =>
+            {
+                client.Timeout = TimeSpan.FromSeconds(15);
+            });
+
+        services.AddHttpClient<IGoogleMeetApiClient, GoogleMeetApiClient>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(15);
+        });
+
+        services.AddScoped<IGoogleMeetOAuthService, GoogleMeetOAuthService>();
+        services.AddHostedService<GoogleMeetProvisioningWorker>();
+
+        // Data Protection for encrypted tokens
+        services.AddDataProtection();
 
         // Health checks
         services.AddHealthChecks()

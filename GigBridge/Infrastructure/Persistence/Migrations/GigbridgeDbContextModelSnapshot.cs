@@ -1286,6 +1286,192 @@ namespace Infrastructure.Persistence.Migrations
                     b.ToTable("FreelancerSkills");
                 });
 
+            modelBuilder.Entity("Domain.Entities.GoogleMeetConnection", b =>
+                {
+                    b.Property<Guid>("GoogleMeetConnectionId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateTime>("ConnectedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime?>("DisconnectedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("EncryptedRefreshToken")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("GoogleEmail")
+                        .IsRequired()
+                        .HasMaxLength(320)
+                        .HasColumnType("character varying(320)");
+
+                    b.Property<string>("GoogleSubject")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("GrantedScopes")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("LastFailureCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("LastRefreshedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Status")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1);
+
+                    b.HasKey("GoogleMeetConnectionId");
+
+                    b.HasIndex("UserId", "ConnectedAt")
+                        .IsDescending(false, true);
+
+                    b.HasIndex("UserId", "DisconnectedAt")
+                        .IsUnique()
+                        .HasFilter("\"DisconnectedAt\" IS NULL");
+
+                    b.ToTable("GoogleMeetConnections");
+                });
+
+            modelBuilder.Entity("Domain.Entities.GoogleMeetOAuthState", b =>
+                {
+                    b.Property<Guid>("GoogleMeetOAuthStateId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateTime?>("ConsumedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("FlowId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("FrontendReturnPath")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("NonceHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ProtectedCodeVerifier")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("StateHash")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("GoogleMeetOAuthStateId");
+
+                    b.HasIndex("FlowId")
+                        .IsUnique();
+
+                    b.HasIndex("StateHash")
+                        .IsUnique();
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("GoogleMeetOAuthStates");
+                });
+
+            modelBuilder.Entity("Domain.Entities.GoogleMeetProvisioningJob", b =>
+                {
+                    b.Property<Guid>("GoogleMeetProvisioningJobId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<int>("Attempt")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("FailureCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("LeaseExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("OrganizerUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ReturnedJoinUri")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("ReturnedSpaceName")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<Guid>("ScheduleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.HasKey("GoogleMeetProvisioningJobId");
+
+                    b.HasIndex("OrganizerUserId");
+
+                    b.HasIndex("ScheduleId", "Attempt")
+                        .IsUnique();
+
+                    b.HasIndex("ScheduleId", "Status")
+                        .IsUnique()
+                        .HasFilter("\"Status\" IN (0, 1)");
+
+                    b.HasIndex("Status", "CreatedAt");
+
+                    b.ToTable("GoogleMeetProvisioningJobs");
+                });
+
             modelBuilder.Entity("Domain.Entities.JobPost", b =>
                 {
                     b.Property<Guid>("JobPostsId")
@@ -2527,6 +2713,11 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasDefaultValueSql("gen_random_uuid()");
 
+                    b.Property<int>("AgreementStatus")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
                     b.Property<string>("CancellationReason")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
@@ -2539,6 +2730,9 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.Property<Guid>("ConversationId")
                         .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("CounterProposalCreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
@@ -2553,6 +2747,36 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(4000)");
 
                     b.Property<int>("EditCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("MeetingAttempt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("MeetingFailureCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("MeetingJoinUri")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime?>("MeetingLastAttemptAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("MeetingProvider")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("MeetingSpaceName")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<int>("MeetingStatus")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
                         .HasDefaultValue(0);
@@ -3547,6 +3771,47 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("Skills");
                 });
 
+            modelBuilder.Entity("Domain.Entities.GoogleMeetConnection", b =>
+                {
+                    b.HasOne("Domain.Entities.User", "User")
+                        .WithMany("GoogleMeetConnections")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Domain.Entities.GoogleMeetOAuthState", b =>
+                {
+                    b.HasOne("Domain.Entities.User", "User")
+                        .WithMany("GoogleMeetOAuthStates")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Domain.Entities.GoogleMeetProvisioningJob", b =>
+                {
+                    b.HasOne("Domain.Entities.User", "OrganizerUser")
+                        .WithMany()
+                        .HasForeignKey("OrganizerUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Domain.Entities.Schedule", "Schedule")
+                        .WithMany("MeetProvisioningJobs")
+                        .HasForeignKey("ScheduleId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("OrganizerUser");
+
+                    b.Navigation("Schedule");
+                });
+
             modelBuilder.Entity("Domain.Entities.JobPost", b =>
                 {
                     b.HasOne("Domain.Entities.ClientProfile", "ClientProfiles")
@@ -4248,6 +4513,8 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.Schedule", b =>
                 {
+                    b.Navigation("MeetProvisioningJobs");
+
                     b.Navigation("Messages");
                 });
 
@@ -4294,6 +4561,10 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("EsignTemplates");
 
                     b.Navigation("FreelancerProfile");
+
+                    b.Navigation("GoogleMeetConnections");
+
+                    b.Navigation("GoogleMeetOAuthStates");
 
                     b.Navigation("Messages");
 
