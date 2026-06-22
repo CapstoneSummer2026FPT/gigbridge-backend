@@ -182,8 +182,9 @@ public static class DependencyInjection
             .Validate(options =>
                 !string.IsNullOrWhiteSpace(options.ClientId) &&
                 !string.IsNullOrWhiteSpace(options.ClientSecret) &&
-                !string.IsNullOrWhiteSpace(options.BackendCallbackUri),
-                "Google Meet configuration is missing. Set GOOGLE_MEET_CLIENT_ID, GOOGLE_MEET_CLIENT_SECRET, and GOOGLE_MEET_BACKEND_CALLBACK_URI.")
+                Uri.TryCreate(options.BackendCallbackUri, UriKind.Absolute, out _) &&
+                Uri.TryCreate(options.FrontendCallbackUri, UriKind.Absolute, out _),
+                "Google Meet configuration is missing or invalid. Configure client credentials plus absolute backend and frontend callback URIs.")
             .ValidateOnStart();
 
         services.AddHttpClient("GoogleMeetOAuth")

@@ -1,11 +1,15 @@
+using System.Globalization;
+using System.Text.Json;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Application.Features.Chat.Common.Schedules;
 using Domain.Entities;
 using Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Configuration;
 
 namespace Infrastructure.BackgroundJobs;
 
@@ -17,13 +21,20 @@ public class GoogleMeetProvisioningWorker : BackgroundService
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<GoogleMeetProvisioningWorker> _logger;
+    private readonly IScheduleEmailRenderer _emailRenderer;
+    private readonly string _frontendBaseUrl;
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public GoogleMeetProvisioningWorker(
         IServiceScopeFactory scopeFactory,
-        ILogger<GoogleMeetProvisioningWorker> logger)
+        ILogger<GoogleMeetProvisioningWorker> logger,
+        IScheduleEmailRenderer emailRenderer,
+        IConfiguration configuration)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
+        _emailRenderer = emailRenderer;
+        _frontendBaseUrl = (configuration["FrontendBaseUrl"] ?? "http://localhost:5173").TrimEnd('/');
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -281,7 +292,12 @@ public class GoogleMeetProvisioningWorker : BackgroundService
             schedule.MeetingLastAttemptAt = now;
         }
 
-        try { await context.SaveChangesAsync(ct); }
+        var saved = false;
+        try
+        {
+            await context.SaveChangesAsync(ct);
+            saved = true;
+        }
         catch (DbUpdateConcurrencyException)
         {
             _logger.LogInformation("Schedule {Id} was modified; job result saved but schedule not updated", job.ScheduleId);
@@ -291,7 +307,55 @@ public class GoogleMeetProvisioningWorker : BackgroundService
             _logger.LogInformation("Schedule {Id} was modified; job result saved but schedule not updated", job.ScheduleId);
         }
 
+        if (saved && schedule is not null)
+            await RefreshPendingStartDeliveriesAsync(schedule, context, ct);
+
         await SendMeetingUpdateAsync(job.ScheduleId, context, chat, ct);
+    }
+
+    private async Task RefreshPendingStartDeliveriesAsync(
+        Schedule schedule,
+        DbContext context,
+        CancellationToken ct)
+    {
+        var deliveries = await context.Set<DeliveryOutbox>()
+            .Where(x => x.ScheduleId == schedule.ScheduleId &&
+                x.Status == (int)DeliveryOutboxStatus.Pending &&
+                x.DeliveryKey.Contains(":start:"))
+            .ToListAsync(ct);
+        if (deliveries.Count == 0) return;
+
+        var userIds = deliveries.Select(x => x.RecipientUserId).Distinct().ToArray();
+        var users = await context.Set<User>().AsNoTracking()
+            .Where(x => userIds.Contains(x.UserId))
+            .ToDictionaryAsync(x => x.UserId, ct);
+        var scheduleMessageId = await context.Set<Message>().AsNoTracking()
+            .Where(x => x.ScheduleId == schedule.ScheduleId)
+            .OrderByDescending(x => x.ScheduleEventSequence)
+            .Select(x => (Guid?)x.MessagesId)
+            .FirstOrDefaultAsync(ct);
+        var scheduleUrl = $"{_frontendBaseUrl}/messages?conversationId={schedule.ConversationId:D}" +
+            (scheduleMessageId.HasValue ? $"&messageId={scheduleMessageId.Value:D}" : "");
+
+        foreach (var delivery in deliveries)
+        {
+            if (!users.TryGetValue(delivery.RecipientUserId, out var user)) continue;
+            var payload = JsonSerializer.Deserialize<ScheduleDeliveryPayload>(delivery.Payload, JsonOptions);
+            if (payload is null) continue;
+
+            var email = _emailRenderer.Render(ScheduleNotificationType.MeetingStarting,
+                new ScheduleEmailModel(user.FullName, "GigBridge", false,
+                    schedule.Title, FormatVietnamTime(schedule.ScheduledAtUtc), schedule.Details, null,
+                    scheduleUrl, schedule.MeetingJoinUri));
+            delivery.Payload = JsonSerializer.Serialize(payload with
+            {
+                Subject = email.Subject,
+                HtmlBody = email.HtmlBody,
+                TextBody = email.TextBody
+            }, JsonOptions);
+        }
+
+        await context.SaveChangesAsync(ct);
     }
 
     private async Task SendMeetingUpdateAsync(
@@ -364,8 +428,16 @@ public class GoogleMeetProvisioningWorker : BackgroundService
         var context = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
 
         var now = DateTime.UtcNow;
-        var staleCount = await context.Set<GoogleMeetProvisioningJob>()
+        var candidateIds = await context.Set<GoogleMeetProvisioningJob>().AsNoTracking()
             .Where(j => j.Status == GoogleMeetProvisioningJobStatus.Processing &&
+                j.LeaseExpiresAt != null && j.LeaseExpiresAt < now)
+            .Select(j => j.GoogleMeetProvisioningJobId)
+            .ToListAsync(ct);
+        if (candidateIds.Count == 0) return;
+
+        var staleCount = await context.Set<GoogleMeetProvisioningJob>()
+            .Where(j => candidateIds.Contains(j.GoogleMeetProvisioningJobId) &&
+                j.Status == GoogleMeetProvisioningJobStatus.Processing &&
                 j.LeaseExpiresAt != null && j.LeaseExpiresAt < now)
             .ExecuteUpdateAsync(
                 setters => setters
@@ -376,8 +448,45 @@ public class GoogleMeetProvisioningWorker : BackgroundService
 
         if (staleCount > 0)
         {
+            var expiredJobs = await context.Set<GoogleMeetProvisioningJob>().AsNoTracking()
+                .Where(j => candidateIds.Contains(j.GoogleMeetProvisioningJobId) &&
+                    j.Status == GoogleMeetProvisioningJobStatus.Ambiguous &&
+                    j.FailureCode == "lease_expired")
+                .Select(j => new { j.ScheduleId, j.Attempt })
+                .ToListAsync(ct);
+            var scheduleIds = expiredJobs.Select(x => x.ScheduleId).Distinct().ToArray();
+            var schedules = await context.Set<Schedule>()
+                .Where(s => scheduleIds.Contains(s.ScheduleId) &&
+                    s.Status == ScheduleStatus.Scheduled &&
+                    s.MeetingStatus == MeetingProvisioningStatus.Pending)
+                .ToListAsync(ct);
+
+            foreach (var schedule in schedules)
+            {
+                if (!expiredJobs.Any(j => j.ScheduleId == schedule.ScheduleId &&
+                    j.Attempt == schedule.MeetingAttempt)) continue;
+                schedule.MeetingStatus = MeetingProvisioningStatus.Failed;
+                schedule.MeetingFailureCode = "lease_expired";
+                schedule.MeetingLastAttemptAt = now;
+            }
+
+            await context.SaveChangesAsync(ct);
+            var chat = scope.ServiceProvider.GetRequiredService<IChatRealtimeNotifier>();
+            foreach (var schedule in schedules.Where(s => s.MeetingStatus == MeetingProvisioningStatus.Failed))
+                await SendMeetingUpdateAsync(schedule.ScheduleId, (DbContext)context, chat, ct);
+
             _logger.LogWarning("Expired {Count} stale provisioning leases", staleCount);
         }
+    }
+
+    private static string FormatVietnamTime(DateTime utc)
+    {
+        TimeZoneInfo zone;
+        try { zone = TimeZoneInfo.FindSystemTimeZoneById("Asia/Ho_Chi_Minh"); }
+        catch { zone = TimeZoneInfo.FindSystemTimeZoneById("SE Asia Standard Time"); }
+        var value = utc.Kind == DateTimeKind.Utc ? utc : utc.ToUniversalTime();
+        return TimeZoneInfo.ConvertTimeFromUtc(value, zone)
+            .ToString("dd MMM yyyy, HH:mm 'ICT'", CultureInfo.InvariantCulture);
     }
 
     private static void AddIntParam(System.Data.Common.DbCommand cmd, string name, int value)

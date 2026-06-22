@@ -1,9 +1,11 @@
 using Application.Common.Interfaces.IService;
 using Application.Common.Models;
 using Application.Features.Chat.Common.Schedules;
+using Infrastructure.ExternalServices.GoogleMeet;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using Project_API.Controllers.Common;
 
 namespace Project_API.Controllers.Integrations;
@@ -13,10 +15,14 @@ namespace Project_API.Controllers.Integrations;
 public class GoogleMeetController : BaseApiController
 {
     private readonly IGoogleMeetOAuthService _meetOAuth;
+    private readonly string _frontendCallbackUri;
 
-    public GoogleMeetController(IGoogleMeetOAuthService meetOAuth)
+    public GoogleMeetController(
+        IGoogleMeetOAuthService meetOAuth,
+        IOptions<GoogleMeetOptions> options)
     {
         _meetOAuth = meetOAuth;
+        _frontendCallbackUri = options.Value.FrontendCallbackUri;
     }
 
     [HttpPost("authorization-url")]
@@ -103,8 +109,8 @@ public class GoogleMeetController : BaseApiController
         string? code = null,
         string? error = null)
     {
-        var baseUrl = $"{Request.Scheme}://{Request.Host}";
-        return $"{baseUrl}/integrations/google-meet/callback?result={Uri.EscapeDataString(result)}" +
+        var separator = _frontendCallbackUri.Contains('?') ? '&' : '?';
+        return $"{_frontendCallbackUri}{separator}result={Uri.EscapeDataString(result)}" +
                (string.IsNullOrEmpty(state) ? "" : $"&state={Uri.EscapeDataString(state)}") +
                (string.IsNullOrEmpty(code) ? "" : $"&code={Uri.EscapeDataString(code)}") +
                (string.IsNullOrEmpty(error) ? "" : $"&error={Uri.EscapeDataString(error)}");
