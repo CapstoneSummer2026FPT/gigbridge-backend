@@ -1,7 +1,6 @@
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Common.Models;
-using Application.Features.Chat.Common.Schedules;
 using Infrastructure.BackgroundJobs;
 using Infrastructure.ExternalServices.Ai;
 using Infrastructure.ExternalServices.GoogleMeet;
@@ -120,7 +119,6 @@ public static class DependencyInjection
         services.AddScoped<IJwtService, JwtService>();
         services.AddHttpClient<IGoogleAuthService, GoogleAuthService>();
         services.AddScoped<IEmailService, EmailService>();
-        services.AddSingleton<IScheduleEmailRenderer, ScheduleEmailRenderer>();
         services.AddScoped<IAuthEmailSender, AuthEmailSender>();
         services.AddScoped<IMediaService, MediaService>();
         services.AddScoped<INotificationService, NotificationService>();
@@ -145,7 +143,6 @@ public static class DependencyInjection
             });
         });
 
-        // Google Meet Integration
         services
             .AddOptions<GoogleMeetOptions>()
             .Bind(configuration.GetSection(GoogleMeetOptions.SectionName))
@@ -182,9 +179,8 @@ public static class DependencyInjection
             .Validate(options =>
                 !string.IsNullOrWhiteSpace(options.ClientId) &&
                 !string.IsNullOrWhiteSpace(options.ClientSecret) &&
-                Uri.TryCreate(options.BackendCallbackUri, UriKind.Absolute, out _) &&
-                Uri.TryCreate(options.FrontendCallbackUri, UriKind.Absolute, out _),
-                "Google Meet configuration is missing or invalid. Configure client credentials plus absolute backend and frontend callback URIs.")
+                !string.IsNullOrWhiteSpace(options.BackendCallbackUri),
+                "Google Meet configuration is missing. Set GOOGLE_MEET_CLIENT_ID, GOOGLE_MEET_CLIENT_SECRET, and GOOGLE_MEET_BACKEND_CALLBACK_URI.")
             .ValidateOnStart();
 
         services.AddHttpClient("GoogleMeetOAuth")

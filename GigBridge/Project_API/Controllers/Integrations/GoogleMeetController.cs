@@ -1,11 +1,9 @@
 using Application.Common.Interfaces.IService;
 using Application.Common.Models;
 using Application.Features.Chat.Common.Schedules;
-using Infrastructure.ExternalServices.GoogleMeet;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Options;
 using Project_API.Controllers.Common;
 
 namespace Project_API.Controllers.Integrations;
@@ -15,14 +13,10 @@ namespace Project_API.Controllers.Integrations;
 public class GoogleMeetController : BaseApiController
 {
     private readonly IGoogleMeetOAuthService _meetOAuth;
-    private readonly string _frontendCallbackUri;
 
-    public GoogleMeetController(
-        IGoogleMeetOAuthService meetOAuth,
-        IOptions<GoogleMeetOptions> options)
+    public GoogleMeetController(IGoogleMeetOAuthService meetOAuth)
     {
         _meetOAuth = meetOAuth;
-        _frontendCallbackUri = options.Value.FrontendCallbackUri;
     }
 
     [HttpPost("authorization-url")]
@@ -54,6 +48,7 @@ public class GoogleMeetController : BaseApiController
         if (string.IsNullOrEmpty(state))
             return Redirect(GetFrontendCallbackUrl("missing_state", null));
 
+        var stateHash = ConvertToSha256Hex(state);
         // We can't directly access the state from here without a service method.
         // For simplicity, redirect to frontend with the raw params and let the frontend
         // pass them through the API.
@@ -109,13 +104,19 @@ public class GoogleMeetController : BaseApiController
         string? code = null,
         string? error = null)
     {
-        var separator = _frontendCallbackUri.Contains('?') ? '&' : '?';
-        return $"{_frontendCallbackUri}{separator}result={Uri.EscapeDataString(result)}" +
+        var baseUrl = $"{Request.Scheme}://{Request.Host}";
+        return $"{baseUrl}/integrations/google-meet/callback?result={Uri.EscapeDataString(result)}" +
                (string.IsNullOrEmpty(state) ? "" : $"&state={Uri.EscapeDataString(state)}") +
                (string.IsNullOrEmpty(code) ? "" : $"&code={Uri.EscapeDataString(code)}") +
                (string.IsNullOrEmpty(error) ? "" : $"&error={Uri.EscapeDataString(error)}");
     }
 
+    private static string ConvertToSha256Hex(string input)
+    {
+        var bytes = System.Text.Encoding.UTF8.GetBytes(input);
+        var hash = System.Security.Cryptography.SHA256.HashData(bytes);
+        return Convert.ToHexString(hash);
+    }
 }
 
 public record GoogleMeetCallbackRequest(string State, string? Code, string? Error);
