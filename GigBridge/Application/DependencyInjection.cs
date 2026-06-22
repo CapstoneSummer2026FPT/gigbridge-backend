@@ -38,6 +38,9 @@ public static class DependencyInjection
         services.AddSingleton<IDeadlineWarningService>(sp => sp.GetRequiredService<DeadlineWarningService>());
         services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<DeadlineWarningService>());
 
+        services.AddSingleton<DeliveryOutboxService>();
+        services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<DeliveryOutboxService>());
+
         return services;
     }
 }

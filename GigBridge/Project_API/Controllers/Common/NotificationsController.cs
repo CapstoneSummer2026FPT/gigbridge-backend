@@ -53,7 +53,7 @@ public class NotificationsController : BaseApiController
     }
 
     [HttpPut("{notificationId:guid}/read")]
-    public async Task<IActionResult> MarkAsRead(Guid notificationId)
+    public async Task<IActionResult> MarkAsRead(Guid notificationId, [FromQuery] int? expectedRevision = null)
     {
         if (!TryGetCurrentUserId(out var userId))
         {
@@ -63,7 +63,8 @@ public class NotificationsController : BaseApiController
         var command = new MarkAsReadCommand
         {
             NotificationId = notificationId,
-            UserId = userId
+            UserId = userId,
+            ExpectedRevision = expectedRevision
         };
 
         await Mediator.Send(command);

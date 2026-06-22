@@ -3,6 +3,7 @@ using System;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(GigbridgeDbContext))]
-    partial class GigbridgeDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260621151025_UseVietnamScheduleTimeZone")]
+    partial class UseVietnamScheduleTimeZone
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -2595,10 +2598,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex("ConversationId", "ScheduledAtUtc");
 
                     b.HasIndex("Status", "ScheduledAtUtc");
-
-                    b.HasIndex(new[] { "ConversationId" }, "UX_Schedules_ConversationId_Scheduled")
-                        .IsUnique()
-                        .HasFilter("\"Status\" = 0");
 
                     b.ToTable("Schedules");
                 });

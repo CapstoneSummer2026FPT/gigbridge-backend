@@ -200,6 +200,8 @@ public class NotificationService : INotificationService
             Content = notification.Content,
             ReferenceId = notification.ReferenceId,
             ReferenceType = notification.ReferenceType,
+            Metadata = notification.Metadata,
+            Revision = notification.Revision,
             IsRead = notification.IsRead ?? false,
             ReadAt = notification.ReadAt,
             CreatedAt = notification.CreatedAt

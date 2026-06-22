@@ -14,5 +14,6 @@ public enum NotificationType
     ReviewReceived = 9,
     SystemAlert = 10,
     AIInterviewInvite = 11,
-    SubscriptionExpiring = 12
+    SubscriptionExpiring = 12,
+    Schedule = 13
 }

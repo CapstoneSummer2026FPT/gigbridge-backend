@@ -53,6 +53,8 @@ public class GetNotificationsQueryHandler : IRequestHandler<GetNotificationsQuer
                 Content = n.Content,
                 ReferenceId = n.ReferenceId,
                 ReferenceType = n.ReferenceType,
+                Metadata = n.Metadata,
+                Revision = n.Revision,
                 IsRead = n.IsRead ?? false,
                 ReadAt = n.ReadAt,
                 CreatedAt = n.CreatedAt
@@ -72,6 +74,8 @@ public class GetNotificationsQueryHandler : IRequestHandler<GetNotificationsQuer
                 Content = r.BroadcastNotification.Content,
                 ReferenceId = r.BroadcastNotification.ReferenceId,
                 ReferenceType = r.BroadcastNotification.ReferenceType,
+                Metadata = null,
+                Revision = null,
                 IsRead = r.IsRead ?? false,
                 ReadAt = r.ReadAt,
                 CreatedAt = r.CreatedAt

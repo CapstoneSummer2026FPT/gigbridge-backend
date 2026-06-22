@@ -3,6 +3,7 @@ using System;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(GigbridgeDbContext))]
-    partial class GigbridgeDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260621150228_EnforceScheduleOutboxRelationshipsAndUtcTimeZone")]
+    partial class EnforceScheduleOutboxRelationshipsAndUtcTimeZone
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -2570,7 +2573,7 @@ namespace Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
-                        .HasDefaultValue("Asia/Ho_Chi_Minh");
+                        .HasDefaultValue("UTC");
 
                     b.Property<string>("Title")
                         .IsRequired()
@@ -2595,10 +2598,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex("ConversationId", "ScheduledAtUtc");
 
                     b.HasIndex("Status", "ScheduledAtUtc");
-
-                    b.HasIndex(new[] { "ConversationId" }, "UX_Schedules_ConversationId_Scheduled")
-                        .IsUnique()
-                        .HasFilter("\"Status\" = 0");
 
                     b.ToTable("Schedules");
                 });
