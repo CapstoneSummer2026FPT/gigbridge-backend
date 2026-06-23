@@ -118,15 +118,11 @@ public sealed class SignContractCommandHandler :
 
             foreach (var conversation in conversations)
             {
-                if (conversation.ConversationType == (int)ConversationType.JobNegotiation)
-                {
-                    conversation.ConversationType = (int)ConversationType.ContractWorkroom;
-                    ContractConversationEvents.AddSystemMessage(
-                        _context,
-                        conversation,
-                        "Contract fully signed. Workroom is ready while escrow awaits funding.",
-                        now);
-                }
+                ContractConversationEvents.AddSystemMessage(
+                    _context,
+                    conversation,
+                    "Contract fully signed. Waiting for client escrow funding.",
+                    now);
             }
         }
         else

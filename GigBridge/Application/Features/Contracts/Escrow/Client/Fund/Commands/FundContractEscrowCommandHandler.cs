@@ -16,13 +16,19 @@ public sealed class FundContractEscrowCommandHandler :
 {
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
+    private readonly INotificationService _notificationService;
+    private readonly IChatRealtimeNotifier _chatRealtimeNotifier;
 
     public FundContractEscrowCommandHandler(
         IApplicationDbContext context,
-        IDateTimeService dateTimeService)
+        IDateTimeService dateTimeService,
+        INotificationService notificationService,
+        IChatRealtimeNotifier chatRealtimeNotifier)
     {
         _context = context;
         _dateTimeService = dateTimeService;
+        _notificationService = notificationService;
+        _chatRealtimeNotifier = chatRealtimeNotifier;
     }
 
     public async Task<FundContractEscrowResponse> Handle(
@@ -59,8 +65,8 @@ public sealed class FundContractEscrowCommandHandler :
         var fullySignedDocument = await _context.Set<EsignDocument>()
             .AnyAsync(
                 document =>
-                    document.ContractsId == contract.ContractsId &&
-                    document.Status == (int)ESignDocumentStatus.FullySigned,
+                     document.ContractsId == contract.ContractsId &&
+                     document.Status == (int)ESignDocumentStatus.FullySigned,
                 cancellationToken);
 
         if (!fullySignedDocument)
@@ -82,6 +88,21 @@ public sealed class FundContractEscrowCommandHandler :
                 escrow.Status);
         }
 
+        if (escrow.RequiredAmount != contract.TotalBudget)
+        {
+            throw new BadRequestException("Required escrow funding amount must match contract total budget.");
+        }
+
+        if (escrow.RequiredPercentage != 1.0m)
+        {
+            throw new BadRequestException("Required escrow percentage must be exactly 100%.");
+        }
+
+        if (escrow.FundedAmount > 0)
+        {
+            throw new BadRequestException("Escrow is already partially funded.");
+        }
+
         var wallet = await _context.Set<UserWallet>()
             .FirstOrDefaultAsync(wallet => wallet.UserId == command.UserId, cancellationToken);
 
@@ -90,7 +111,7 @@ public sealed class FundContractEscrowCommandHandler :
             throw new BadRequestException("Wallet balance is insufficient to fund escrow.");
         }
 
-        var requiredVnd = escrow.RequiredAmount - escrow.FundedAmount;
+        var requiredVnd = escrow.RequiredAmount;
         var requiredTokens = TokenWalletRules.ToTokensCeiling(requiredVnd);
         if (wallet.AvailableTokens < requiredTokens)
         {
@@ -141,14 +162,74 @@ public sealed class FundContractEscrowCommandHandler :
             CompletedAt = now
         });
 
+        // Transition conversation type from JobNegotiation to ContractWorkroom
+        var conversations = await _context.Set<Conversation>()
+            .Where(c => c.ContractsId == contract.ContractsId)
+            .ToListAsync(cancellationToken);
+
+        foreach (var conversation in conversations)
+        {
+            if (conversation.ConversationType == (int)ConversationType.JobNegotiation)
+            {
+                conversation.ConversationType = (int)ConversationType.ContractWorkroom;
+                conversation.UpdatedAt = now;
+            }
+        }
+
         await ContractConversationEvents.AddSystemMessageAsync(
             _context,
             contract.ContractsId,
-            "Escrow funded from wallet. Contract is now active.",
+            "Escrow funded. Workspace is now open.",
             now,
             cancellationToken);
 
+        // Fetch UserIds to create persistent notifications
+        var clientProfile = await _context.Set<ClientProfile>()
+            .FirstOrDefaultAsync(cp => cp.ClientProfilesId == contract.ClientProfilesId, cancellationToken);
+        var freelancerProfile = await _context.Set<FreelancerProfile>()
+            .FirstOrDefaultAsync(fp => fp.FreelancerProfilesId == contract.FreelancerProfilesId, cancellationToken);
+
+        if (clientProfile == null)
+        {
+            throw new BadRequestException("Client profile not found.");
+        }
+        if (freelancerProfile == null)
+        {
+            throw new BadRequestException("Freelancer profile not found.");
+        }
+
+        var clientUserId = clientProfile.UserId;
+        var freelancerUserId = freelancerProfile.UserId;
+
+        await _notificationService.CreateNotificationAsync(
+            clientUserId,
+            NotificationType.ContractStarted,
+            "Contract Started",
+            $"Contract '{contract.Title}' is now active and the workspace is open.",
+            contract.ContractsId,
+            "Contract",
+            cancellationToken);
+
+        await _notificationService.CreateNotificationAsync(
+            freelancerUserId,
+            NotificationType.ContractStarted,
+            "Contract Started",
+            $"Contract '{contract.Title}' is now active and the workspace is open.",
+            contract.ContractsId,
+            "Contract",
+            cancellationToken);
+
         await _context.SaveChangesAsync(cancellationToken);
+
+        var activeConversation = conversations.FirstOrDefault(c => c.ConversationType == (int)ConversationType.ContractWorkroom);
+        if (activeConversation != null)
+        {
+            await _chatRealtimeNotifier.SendConversationEventAsync(
+                activeConversation.ConversationsId,
+                "WorkspaceOpened",
+                new { contractId = contract.ContractsId, conversationId = activeConversation.ConversationsId },
+                cancellationToken);
+        }
 
         return new FundContractEscrowResponse(
             contract.ContractsId,

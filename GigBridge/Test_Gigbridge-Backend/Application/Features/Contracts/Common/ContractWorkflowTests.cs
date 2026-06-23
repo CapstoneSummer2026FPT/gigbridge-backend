@@ -23,7 +23,8 @@ public class ContractWorkflowTests
 
         var submitHandler = new SubmitContractDetailsCommandHandler(
             fixture.Context,
-            new FixedDateTimeService(fixture.Now));
+            new FixedDateTimeService(fixture.Now),
+            new NoopChatRealtimeNotifier());
         await submitHandler.Handle(
             new SubmitContractDetailsCommand(fixture.ContractId, fixture.ClientUserId),
             CancellationToken.None);
@@ -32,7 +33,8 @@ public class ContractWorkflowTests
 
         var confirmHandler = new ConfirmContractDetailsCommandHandler(
             fixture.Context,
-            new FixedDateTimeService(fixture.Now.AddMinutes(1)));
+            new FixedDateTimeService(fixture.Now.AddMinutes(1)),
+            new NoopChatRealtimeNotifier());
 
         await confirmHandler.Handle(
             new ConfirmContractDetailsCommand(fixture.ContractId, fixture.FreelancerUserId),
@@ -58,7 +60,9 @@ public class ContractWorkflowTests
 
         var handler = new FundContractEscrowCommandHandler(
             fixture.Context,
-            new FixedDateTimeService(fixture.Now));
+            new FixedDateTimeService(fixture.Now),
+            new NoopNotificationService(),
+            new NoopChatRealtimeNotifier());
 
         await Assert.ThrowsAsync<BadRequestException>(() =>
             handler.Handle(
@@ -151,7 +155,7 @@ public class ContractWorkflowTests
 
         Assert.Equal((int)ContractStatus.PendingEscrow, fixture.Contract.Status);
         Assert.Equal((int)ESignDocumentStatus.FullySigned, fixture.EsignDocuments.Entities[0].Status);
-        Assert.Equal((int)ConversationType.ContractWorkroom, fixture.Conversation.ConversationType);
+        Assert.Equal((int)ConversationType.JobNegotiation, fixture.Conversation.ConversationType);
         Assert.Equal(2, fixture.EsignSignatures.Entities.Count);
         Assert.Equal(fixture.FreelancerSignatureUrl, fixture.EsignSignatures.Entities[1].SignatureImageUrl);
         Assert.Equal(2, fixture.MediaService.Uploads.Count);

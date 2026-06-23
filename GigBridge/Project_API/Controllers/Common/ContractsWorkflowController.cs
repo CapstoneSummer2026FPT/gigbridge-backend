@@ -10,6 +10,7 @@ using Application.Features.Contracts.Escrow.Client.Fund.Commands;
 using Application.Features.Contracts.Escrow.Client.Fund.DTOs;
 using Application.Features.Contracts.Signing.Common.Sign.Commands;
 using Application.Features.Contracts.Signing.Common.Sign.DTOs;
+using Application.Features.Contracts.JobPostSetup.Complete.Commands;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -113,5 +114,19 @@ public sealed class ContractsWorkflowController : BaseApiController
                 Request.Headers.UserAgent.ToString()));
 
         return Ok(ApiResponse<ContractWorkflowResponse>.Ok(result, "Contract signed"));
+    }
+
+    [HttpPost("{contractId}/job-post-setup/complete")]
+    [Authorize(Roles = "Client")]
+    public async Task<IActionResult> CompleteJobPostSetup(Guid contractId)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return InvalidTokenResponse();
+        }
+
+        var result = await Mediator.Send(new CompleteJobPostContractSetupCommand(contractId, userId));
+
+        return Ok(ApiResponse<bool>.Ok(result, "Job post setup completed and published"));
     }
 }

@@ -282,6 +282,28 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
             pendingOffer.RespondedAt = now;
         }
 
+        // Reject other proposals for the same job post
+        var otherProposals = await _context.Set<Proposal>()
+            .Where(p => p.JobPostsId == offer.JobPostsId && p.ProposalsId != offer.ProposalsId)
+            .ToListAsync(cancellationToken);
+
+        foreach (var prop in otherProposals)
+        {
+            prop.Status = 4; // Rejected
+            prop.UpdatedAt = now;
+        }
+
+        // Decouple other conversations from the same JobPost by setting ContractsId to null
+        var otherConversations = await _context.Set<Conversation>()
+            .Where(c => c.JobPostsId == offer.JobPostsId && c.ConversationsId != conversation.ConversationsId)
+            .ToListAsync(cancellationToken);
+
+        foreach (var otherConv in otherConversations)
+        {
+            otherConv.ContractsId = null;
+            otherConv.UpdatedAt = now;
+        }
+
         AddSystemMessage(conversation, "Final offer accepted. Contract draft is ready for details.", now);
 
         return "ContractDraftUpdated";

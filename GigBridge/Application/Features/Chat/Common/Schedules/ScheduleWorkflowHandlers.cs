@@ -283,8 +283,8 @@ public sealed class ScheduleWorkflowHandlers :
         if (now >= s.ScheduledAtUtc) throw new BadRequestException("The scheduled time has passed.");
         if (isEdit && s.EditCount >= MaxEdits) throw new BadRequestException("This schedule has used both available edits.");
         var beforeCutoff = now < CutoffUtc(s.ScheduledAtUtc);
-        var editGrace = isEdit && userId == s.CreatedByUserId && now < GraceExpiry(s) && now < s.ScheduledAtUtc;
-        if (!beforeCutoff && !editGrace)
+        var grace = userId == s.CreatedByUserId && now < GraceExpiry(s) && now < s.ScheduledAtUtc;
+        if (!beforeCutoff && !grace)
             throw new BadRequestException(isEdit
                 ? "The schedule edit window has closed."
                 : "Schedules cannot be cancelled less than 24 hours before their start time.");
@@ -316,7 +316,7 @@ public sealed class ScheduleWorkflowHandlers :
         s.Conversation.Status == (int)ConversationStatus.Active && now < s.ScheduledAtUtc &&
         (now < CutoffUtc(s.ScheduledAtUtc) || user == s.CreatedByUserId && now < GraceExpiry(s));
     private static bool CanCancel(Schedule s, Guid user, DateTime now) => s.Status == ScheduleStatus.Scheduled && now < s.ScheduledAtUtc &&
-        now < CutoffUtc(s.ScheduledAtUtc);
+        (now < CutoffUtc(s.ScheduledAtUtc) || user == s.CreatedByUserId && now < GraceExpiry(s));
 
     private static DateTime GraceExpiry(Schedule s) => new[] { s.CreatedAt.AddMinutes(10), s.ScheduledAtUtc }.Min();
     private static DateTime CutoffUtc(DateTime utc)

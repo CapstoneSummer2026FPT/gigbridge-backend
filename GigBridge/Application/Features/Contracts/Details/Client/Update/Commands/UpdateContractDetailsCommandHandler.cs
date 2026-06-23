@@ -15,13 +15,16 @@ public sealed class UpdateContractDetailsCommandHandler :
 {
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
+    private readonly IChatRealtimeNotifier _chatRealtimeNotifier;
 
     public UpdateContractDetailsCommandHandler(
         IApplicationDbContext context,
-        IDateTimeService dateTimeService)
+        IDateTimeService dateTimeService,
+        IChatRealtimeNotifier chatRealtimeNotifier)
     {
         _context = context;
         _dateTimeService = dateTimeService;
+        _chatRealtimeNotifier = chatRealtimeNotifier;
     }
 
     public async Task<ContractWorkflowResponse> Handle(
@@ -36,9 +39,10 @@ public sealed class UpdateContractDetailsCommandHandler :
             throw new NotFoundException("Contract does not exist.");
         }
 
-        if (contract.Status != (int)ContractStatus.PendingContractDetails)
+        if (contract.Status != (int)ContractStatus.PendingContractDetails &&
+            contract.Status != (int)ContractStatus.PendingFreelancerSelection)
         {
-            throw new BadRequestException("Contract details can only be edited while pending details.");
+            throw new BadRequestException("Contract details can only be edited while in pending selection or pending details.");
         }
 
         await ContractParticipantGuard.EnsureClientAsync(_context, contract, command.UserId, cancellationToken);
@@ -60,7 +64,7 @@ public sealed class UpdateContractDetailsCommandHandler :
             })
             .ToList();
 
-        ContractDetailsValidator.ValidateMilestones(contract, newMilestones);
+        ContractDetailsValidator.ValidateMilestoneDraft(newMilestones);
 
         var existingMilestones = await _context.Set<Milestone>()
             .Where(milestone => milestone.ContractsId == contract.ContractsId)
@@ -73,6 +77,22 @@ public sealed class UpdateContractDetailsCommandHandler :
         }
 
         await _context.SaveChangesAsync(cancellationToken);
+
+        var participantUserIds = await _context.Set<ConversationParticipant>()
+            .AsNoTracking()
+            .Where(p => p.Conversations.ContractsId == contract.ContractsId && p.LeftAt == null && p.DeletedAt == null)
+            .Select(p => p.UserId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        if (participantUserIds.Any())
+        {
+            await _chatRealtimeNotifier.SendUsersEventAsync(
+                [.. participantUserIds],
+                "ContractDraftUpdated",
+                new { contractId = contract.ContractsId },
+                cancellationToken);
+        }
 
         return new ContractWorkflowResponse(contract.ContractsId, contract.Status, null, null);
     }

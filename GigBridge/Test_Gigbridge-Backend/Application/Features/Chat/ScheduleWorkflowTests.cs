@@ -38,7 +38,7 @@ public class ScheduleWorkflowTests
             x.UserId == fixture.FreelancerId && x.EventName == "ReceiveMessage").Payload);
         Assert.True(creatorMessage.Schedule!.CanEdit);
         Assert.False(freelancerMessage.Schedule!.CanEdit);
-        Assert.False(creatorMessage.Schedule.CanCancel);
+        Assert.True(creatorMessage.Schedule.CanCancel);
         Assert.False(freelancerMessage.Schedule.CanCancel);
 
         var creatorChanged = Assert.IsType<ScheduleEventResponse>(notifier.UserEvents.Single(x =>

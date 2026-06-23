@@ -57,6 +57,11 @@ public class GetMyContractsQueryHandler : IRequestHandler<GetMyContractsQuery, L
             query = query.Where(c => c.FreelancerProfilesId.HasValue && freelancerProfile != null && c.FreelancerProfilesId.Value == freelancerProfile.FreelancerProfilesId);
         }
 
+        if (request.Status.HasValue)
+        {
+            query = query.Where(c => c.Status == request.Status.Value);
+        }
+
         var contracts = await query
             .OrderByDescending(c => c.CreatedAt)
             .ToListAsync(cancellationToken);
