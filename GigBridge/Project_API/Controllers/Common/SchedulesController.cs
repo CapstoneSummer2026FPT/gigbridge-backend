@@ -49,4 +49,44 @@ public class SchedulesController : BaseApiController
         var result = await Mediator.Send(new CancelScheduleCommand(userId, scheduleId, request));
         return Ok(ApiResponse<ScheduleMutationResult>.Ok(result, "Schedule cancelled"));
     }
+
+    [HttpPost("{scheduleId:guid}/accept")]
+    public async Task<IActionResult> Accept(Guid scheduleId, ScheduleVersionRequest request)
+    {
+        if (!TryGetCurrentUserId(out var userId)) return InvalidTokenResponse();
+        var result = await Mediator.Send(new AcceptScheduleCommand(userId, scheduleId, request));
+        return Ok(ApiResponse<ScheduleMutationResult>.Ok(result, "Schedule accepted"));
+    }
+
+    [HttpPost("{scheduleId:guid}/reject")]
+    public async Task<IActionResult> Reject(Guid scheduleId, ScheduleVersionRequest request)
+    {
+        if (!TryGetCurrentUserId(out var userId)) return InvalidTokenResponse();
+        var result = await Mediator.Send(new RejectScheduleCommand(userId, scheduleId, request));
+        return Ok(ApiResponse<ScheduleMutationResult>.Ok(result, "Schedule rejected"));
+    }
+
+    [HttpPost("{scheduleId:guid}/counterproposal")]
+    public async Task<IActionResult> CreateCounterProposal(Guid scheduleId, CounterProposalRequest request)
+    {
+        if (!TryGetCurrentUserId(out var userId)) return InvalidTokenResponse();
+        var result = await Mediator.Send(new CreateCounterProposalCommand(userId, scheduleId, request));
+        return Ok(ApiResponse<ScheduleMutationResult>.Ok(result, "Counterproposal sent"));
+    }
+
+    [HttpPut("{scheduleId:guid}/counterproposal")]
+    public async Task<IActionResult> UpdateCounterProposal(Guid scheduleId, CounterProposalRequest request)
+    {
+        if (!TryGetCurrentUserId(out var userId)) return InvalidTokenResponse();
+        var result = await Mediator.Send(new UpdateCounterProposalCommand(userId, scheduleId, request));
+        return Ok(ApiResponse<ScheduleMutationResult>.Ok(result, "Counterproposal updated"));
+    }
+
+    [HttpPost("{scheduleId:guid}/meeting/retry")]
+    public async Task<IActionResult> RetryMeeting(Guid scheduleId)
+    {
+        if (!TryGetCurrentUserId(out var userId)) return InvalidTokenResponse();
+        var result = await Mediator.Send(new RetryScheduleMeetingCommand(userId, scheduleId));
+        return Ok(ApiResponse<ScheduleMutationResult>.Ok(result, "Meeting creation retried"));
+    }
 }

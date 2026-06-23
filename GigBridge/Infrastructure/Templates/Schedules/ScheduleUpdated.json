@@ -1,0 +1,12 @@
+{
+  "actor": {
+    "subject": "Schedule updated: {{TITLE}}", "badge": "Updated", "headline": "Your schedule changes were saved",
+    "introduction": "The latest schedule details have been shared with every participant.",
+    "accent": "#0e7490", "badgeBackground": "#ecfeff", "actorLabel": "Action by"
+  },
+  "recipient": {
+    "subject": "Schedule updated: {{TITLE}}", "badge": "Updated", "headline": "The schedule was updated",
+    "introduction": "{{ACTOR_NAME}} changed the schedule details. Review the latest time below.",
+    "accent": "#0e7490", "badgeBackground": "#ecfeff", "actorLabel": "Action by"
+  }
+}

@@ -34,6 +34,10 @@ public class GetMessagesAroundQueryHandler : IRequestHandler<GetMessagesAroundQu
         var messages = before.Append(anchor).Concat(after).OrderBy(x => x.SentAt).ThenBy(x => x.MessagesId).ToList();
         var ids = messages.Select(x => x.MessagesId).ToHashSet();
         var attachments = await _context.Set<MessageAttachment>().AsNoTracking().Where(x => ids.Contains(x.MessagesId)).ToListAsync(ct);
+        var scheduleIds = messages.Where(x => x.ScheduleId.HasValue).Select(x => x.ScheduleId!.Value).ToHashSet();
+        var schedulesById = await _context.Set<Schedule>().AsNoTracking()
+            .Where(x => scheduleIds.Contains(x.ScheduleId))
+            .ToDictionaryAsync(x => x.ScheduleId, ct);
         var now = DateTime.UtcNow;
         return messages.Select(m =>
         {
@@ -48,7 +52,11 @@ public class GetMessagesAroundQueryHandler : IRequestHandler<GetMessagesAroundQu
                 m.MessageType, isDeleted ? null : m.Content, m.ReplyToMessageId,
                 isDeleted ? null : m.Metadata, m.ClientMessageId, m.SentAt, isDeleted ? null : m.EditedAt,
                 isDeleted, messageAttachments,
-                isDeleted ? null : MessageHelpers.ParseScheduleMetadata(m, request.UserId, now));
+                isDeleted ? null : MessageHelpers.ParseScheduleMetadata(
+                    m,
+                    request.UserId,
+                    now,
+                    m.ScheduleId.HasValue ? schedulesById.GetValueOrDefault(m.ScheduleId.Value) : null));
         }).ToList();
     }
 }
