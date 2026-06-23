@@ -58,6 +58,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
 
     public virtual DbSet<FreelancerSkill> FreelancerSkills { get; set; }
 
+    public virtual DbSet<JobInvitation> JobInvitations { get; set; }
+
     public virtual DbSet<JobPost> JobPosts { get; set; }
 
     public virtual DbSet<JobPostAttachment> JobPostAttachments { get; set; }
@@ -770,6 +772,82 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
                 .HasForeignKey(d => d.SkillsId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FreelancerSkills_sk_SkillsId_fkey");
+        });
+
+        modelBuilder.Entity<JobInvitation>(entity =>
+        {
+            entity.HasKey(e => e.JobInvitationsId).HasName("JobInvitations_pkey");
+
+            entity.HasIndex(e => e.JobPostsId, "IX_JobInvitations_JobPostsId");
+
+            entity.HasIndex(e => e.ClientProfilesId, "IX_JobInvitations_ClientProfilesId");
+
+            entity.HasIndex(e => e.FreelancerProfilesId, "IX_JobInvitations_FreelancerProfilesId");
+
+            entity.HasIndex(e => e.ProposalsId, "IX_JobInvitations_ProposalsId")
+                .IsUnique();
+
+            entity.HasIndex(e => e.Status, "IX_JobInvitations_Status");
+
+            entity.HasIndex(e => new { e.JobPostsId, e.FreelancerProfilesId }, "JobInvitations_jp_JobPostsId_flPro_FreelancerProfilesId_key")
+                .IsUnique();
+
+            entity.HasIndex(e => new { e.ClientProfilesId, e.JobPostsId }, "IX_JobInvitations_ClientProfilesId_JobPostsId");
+
+            entity.HasIndex(e => new { e.FreelancerProfilesId, e.Status }, "IX_JobInvitations_FreelancerProfilesId_Status");
+
+            entity.Property(e => e.JobInvitationsId)
+                .HasDefaultValueSql("gen_random_uuid()")
+                .HasColumnName("JobInvitationsId");
+
+            entity.Property(e => e.JobPostsId)
+                .HasColumnName("JobPostsId");
+
+            entity.Property(e => e.ClientProfilesId)
+                .HasColumnName("ClientProfilesId");
+
+            entity.Property(e => e.FreelancerProfilesId)
+                .HasColumnName("FreelancerProfilesId");
+
+            entity.Property(e => e.ProposalsId)
+                .HasColumnName("ProposalsId");
+
+            entity.Property(e => e.Status)
+                .HasDefaultValue(0)
+                .HasComment("Enum JobInvitationStatus: 0=Pending, 1=Viewed, 2=Applied, 3=Declined, 4=Expired, 5=Cancelled");
+
+            entity.Property(e => e.Message)
+                .HasMaxLength(1000);
+
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("now()");
+
+            entity.Property(e => e.DeclineReason)
+                .HasMaxLength(500);
+
+            entity.HasOne(d => d.JobPosts)
+                .WithMany(p => p.JobInvitations)
+                .HasForeignKey(d => d.JobPostsId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("JobInvitations_jp_JobPostsId_fkey");
+
+            entity.HasOne(d => d.ClientProfiles)
+                .WithMany()
+                .HasForeignKey(d => d.ClientProfilesId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("JobInvitations_clPro_ClientProfilesId_fkey");
+
+            entity.HasOne(d => d.FreelancerProfiles)
+                .WithMany()
+                .HasForeignKey(d => d.FreelancerProfilesId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("JobInvitations_flPro_FreelancerProfilesId_fkey");
+
+            entity.HasOne(d => d.Proposals)
+                .WithOne()
+                .HasForeignKey<JobInvitation>(d => d.ProposalsId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("JobInvitations_propo_ProposalsId_fkey");
         });
 
         modelBuilder.Entity<JobPost>(entity =>
