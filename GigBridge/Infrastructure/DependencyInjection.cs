@@ -1,6 +1,7 @@
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Common.Models;
+using Application.Features.Chat.Common.Schedules;
 using Infrastructure.BackgroundJobs;
 using Infrastructure.ExternalServices.Ai;
 using Infrastructure.ExternalServices.GoogleMeet;
@@ -120,6 +121,7 @@ public static class DependencyInjection
         services.AddHttpClient<IGoogleAuthService, GoogleAuthService>();
         services.AddScoped<IEmailService, EmailService>();
         services.AddScoped<IAuthEmailSender, AuthEmailSender>();
+        services.AddSingleton<IScheduleEmailRenderer, ScheduleEmailRenderer>();
         services.AddScoped<IMediaService, MediaService>();
         services.AddScoped<INotificationService, NotificationService>();
         services.AddTransient<IDateTimeService, DateTimeService>();
