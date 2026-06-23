@@ -3,8 +3,11 @@ using Application.Common.Interfaces.IService;
 using Application.Features.Contracts.Details.Client.Submit.Commands;
 using Application.Features.Contracts.Details.Freelancer.Confirm.Commands;
 using Application.Features.Contracts.Escrow.Client.Fund.Commands;
+using Application.Features.Contracts.MilestoneReview.Freelancer.Accept.Commands;
+using Application.Features.Contracts.MilestoneReview.Freelancer.RequestChange.Commands;
 using Application.Features.Contracts.Signing.Common.Sign.Commands;
 using Application.Features.Contracts.Signing.Common.Sign.DTOs;
+using Application.Features.Contracts.Details.Freelancer.RequestChange.DTOs;
 using Domain.Entities;
 using Domain.Enums;
 using Test_Gigbridge_Backend.TestSupport;
@@ -108,7 +111,7 @@ public class ContractWorkflowTests
     }
 
     [Fact]
-    public async Task SignContract_ConvertsWorkroomButWaitsForEscrowFunding()
+    public async Task SignContract_FullySignedWaitsForMilestoneAcceptanceBeforeEscrow()
     {
         var fixture = new ContractWorkflowFixture();
         fixture.MoveToPendingSignatureWithDocument();
@@ -153,7 +156,7 @@ public class ContractWorkflowTests
                 "test"),
             CancellationToken.None);
 
-        Assert.Equal((int)ContractStatus.PendingEscrow, fixture.Contract.Status);
+        Assert.Equal((int)ContractStatus.PendingSignature, fixture.Contract.Status);
         Assert.Equal((int)ESignDocumentStatus.FullySigned, fixture.EsignDocuments.Entities[0].Status);
         Assert.Equal((int)ConversationType.JobNegotiation, fixture.Conversation.ConversationType);
         Assert.Equal(2, fixture.EsignSignatures.Entities.Count);
@@ -184,6 +187,54 @@ public class ContractWorkflowTests
                 CancellationToken.None));
 
         Assert.Empty(fixture.MediaService.Uploads);
+    }
+
+    [Fact]
+    public async Task AcceptContractMilestones_FullySignedContractMovesToPendingEscrow()
+    {
+        var fixture = new ContractWorkflowFixture();
+        fixture.MoveToPendingSignatureWithDocument();
+        fixture.MarkDocumentFullySigned();
+
+        var handler = new AcceptContractMilestonesCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopChatRealtimeNotifier());
+
+        var result = await handler.Handle(
+            new AcceptContractMilestonesCommand(fixture.ContractId, fixture.FreelancerUserId),
+            CancellationToken.None);
+
+        Assert.Equal((int)ContractStatus.PendingEscrow, fixture.Contract.Status);
+        Assert.Equal((int)ContractStatus.PendingEscrow, result.Status);
+        Assert.Equal(fixture.Escrows.Entities[0].ContractEscrowId, result.EscrowId);
+        Assert.Equal((int)ContractEscrowStatus.PendingFunding, fixture.Escrows.Entities[0].Status);
+    }
+
+    [Fact]
+    public async Task RequestContractMilestoneChange_VoidsSignedDocumentAndReturnsToDetails()
+    {
+        var fixture = new ContractWorkflowFixture();
+        fixture.MoveToPendingSignatureWithDocument();
+        fixture.MarkDocumentFullySigned();
+
+        var handler = new RequestContractMilestoneChangeCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopChatRealtimeNotifier());
+
+        var result = await handler.Handle(
+            new RequestContractMilestoneChangeCommand(
+                fixture.ContractId,
+                fixture.FreelancerUserId,
+                new RequestContractDetailsChangeRequest("Please adjust the second milestone.")),
+            CancellationToken.None);
+
+        Assert.Equal((int)ContractStatus.PendingContractDetails, fixture.Contract.Status);
+        Assert.Equal((int)ContractStatus.PendingContractDetails, result.Status);
+        Assert.Equal((int)ESignDocumentStatus.Voided, fixture.EsignDocuments.Entities[0].Status);
+        Assert.All(fixture.EsignSignatures.Entities, signature =>
+            Assert.Equal((int)ESignSignatureStatus.Declined, signature.Status));
     }
 
     private sealed class ContractWorkflowFixture
@@ -337,6 +388,11 @@ public class ContractWorkflowTests
             }
 
             Contract.Status = (int)ContractStatus.PendingEscrow;
+            MarkDocumentFullySigned();
+        }
+
+        public void MarkDocumentFullySigned()
+        {
             EsignDocuments.Entities[0].Status = (int)ESignDocumentStatus.FullySigned;
             EsignDocuments.Entities[0].FinalizedAt = Now;
             EsignSignatures.Add(new EsignSignature

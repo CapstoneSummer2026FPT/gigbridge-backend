@@ -10,7 +10,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.Chat.Common.FinalOffers.Respond.Commands;
 
-public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOfferCommand, bool>
+public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOfferCommand, RespondFinalOfferResponse>
 {
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
@@ -26,7 +26,7 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
         _chatRealtimeNotifier = chatRealtimeNotifier;
     }
 
-    public async Task<bool> Handle(
+    public async Task<RespondFinalOfferResponse> Handle(
         RespondFinalOfferCommand command,
         CancellationToken cancellationToken)
     {
@@ -79,23 +79,36 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
         }
 
         var now = _dateTimeService.UtcNow;
-        var eventName = command.Request.Response switch
+        string eventName;
+        RespondFinalOfferResponse response;
+
+        switch (command.Request.Response)
         {
-            FinalOfferResponse.Accept => await AcceptOffer(offer, conversation, now, cancellationToken),
-            FinalOfferResponse.RequestChange => ChangeOfferStatus(
-                offer,
-                conversation,
-                NegotiationOfferStatus.ChangeRequested,
-                "Final offer change requested.",
-                now),
-            FinalOfferResponse.Decline => ChangeOfferStatus(
-                offer,
-                conversation,
-                NegotiationOfferStatus.Rejected,
-                "Final offer declined.",
-                now),
-            _ => throw new BadRequestException("Unsupported final offer response.")
-        };
+            case FinalOfferResponse.Accept:
+                response = await AcceptOffer(offer, conversation, now, cancellationToken);
+                eventName = "ContractDraftUpdated";
+                break;
+            case FinalOfferResponse.RequestChange:
+                eventName = ChangeOfferStatus(
+                    offer,
+                    conversation,
+                    NegotiationOfferStatus.ChangeRequested,
+                    "Final offer change requested.",
+                    now);
+                response = new RespondFinalOfferResponse(null, null, "Final offer change requested.");
+                break;
+            case FinalOfferResponse.Decline:
+                eventName = ChangeOfferStatus(
+                    offer,
+                    conversation,
+                    NegotiationOfferStatus.Rejected,
+                    "Final offer declined.",
+                    now);
+                response = new RespondFinalOfferResponse(null, null, "Final offer declined.");
+                break;
+            default:
+                throw new BadRequestException("Unsupported final offer response.");
+        }
 
         IncrementUnreadCounts(conversation.ConversationsId, command.UserId);
 
@@ -149,7 +162,7 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
                 cancellationToken);
         }
 
-        return true;
+        return response;
     }
 
     private Task<List<ConversationParticipant>> GetActiveParticipants(
@@ -208,7 +221,7 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
             []);
     }
 
-    private async Task<string> AcceptOffer(
+    private async Task<RespondFinalOfferResponse> AcceptOffer(
         NegotiationOffer offer,
         Conversation conversation,
         DateTime now,
@@ -244,6 +257,21 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
             throw new BadRequestException("The contract draft can no longer accept a final offer.");
         }
 
+        var milestones = await _context.Set<Milestone>()
+            .Where(milestone => milestone.ContractsId == contract.ContractsId)
+            .ToListAsync(cancellationToken);
+
+        if (milestones.Count == 0)
+        {
+            throw new BadRequestException("Contract milestones must be set up before accepting the final budget.");
+        }
+
+        var milestoneTotal = milestones.Sum(milestone => milestone.Amount);
+        if (milestoneTotal != offer.FinalPrice)
+        {
+            throw new BadRequestException("Final budget must match milestone total before acceptance.");
+        }
+
         offer.Status = (int)NegotiationOfferStatus.Accepted;
         offer.RespondedAt = now;
 
@@ -252,8 +280,37 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
         contract.TotalBudget = offer.FinalPrice;
         contract.StartDate = offer.StartDate;
         contract.EndDate = offer.EndDate;
-        contract.Status = (int)ContractStatus.PendingContractDetails;
+        contract.Status = (int)ContractStatus.PendingSignature;
         contract.UpdatedAt = now;
+
+        var escrow = await _context.Set<ContractEscrow>()
+            .FirstOrDefaultAsync(existing => existing.ContractsId == contract.ContractsId, cancellationToken);
+
+        if (escrow is null)
+        {
+            escrow = new ContractEscrow
+            {
+                ContractEscrowId = Guid.NewGuid(),
+                ContractsId = contract.ContractsId,
+                RequiredAmount = offer.FinalPrice,
+                FundedAmount = 0m,
+                RequiredPercentage = 1.0m,
+                Currency = "VND",
+                Status = (int)ContractEscrowStatus.PendingFunding,
+                CreatedAt = now
+            };
+            _context.Set<ContractEscrow>().Add(escrow);
+        }
+        else
+        {
+            escrow.RequiredAmount = offer.FinalPrice;
+            escrow.FundedAmount = 0m;
+            escrow.RequiredPercentage = 1.0m;
+            escrow.Currency = string.IsNullOrWhiteSpace(escrow.Currency) ? "VND" : escrow.Currency;
+            escrow.Status = (int)ContractEscrowStatus.PendingFunding;
+            escrow.FundedAt = null;
+            escrow.ReleasedAt = null;
+        }
 
         if (offer.ProposalsId.HasValue)
         {
@@ -304,9 +361,12 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
             otherConv.UpdatedAt = now;
         }
 
-        AddSystemMessage(conversation, "Final offer accepted. Contract draft is ready for details.", now);
+        AddSystemMessage(conversation, "Final offer accepted. Contract is ready for signatures.", now);
 
-        return "ContractDraftUpdated";
+        return new RespondFinalOfferResponse(
+            contract.ContractsId,
+            contract.Status,
+            "Final offer accepted. Contract is ready for signatures.");
     }
 
     private string ChangeOfferStatus(

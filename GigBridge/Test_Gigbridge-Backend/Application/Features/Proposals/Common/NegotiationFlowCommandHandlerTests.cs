@@ -160,10 +160,11 @@ public class NegotiationFlowCommandHandlerTests
     }
 
     [Fact]
-    public async Task RespondFinalOffer_AcceptUpdatesDraftContractButDoesNotCreateEscrow()
+    public async Task RespondFinalOffer_AcceptMovesContractToSignatureAndCreatesEscrow()
     {
         var fixture = new NegotiationFixture();
         fixture.AddConversationWithParticipants();
+        fixture.AddMilestones(600m, 900m);
         fixture.Offers.Add(new NegotiationOffer
         {
             NegotiationOfferId = fixture.OfferId,
@@ -185,7 +186,7 @@ public class NegotiationFlowCommandHandlerTests
             new FixedDateTimeService(fixture.Now),
             new NoopChatRealtimeNotifier());
 
-        await handler.Handle(
+        var result = await handler.Handle(
             new RespondFinalOfferCommand(
                 fixture.FreelancerUserId,
                 new RespondFinalOfferRequest(
@@ -198,8 +199,54 @@ public class NegotiationFlowCommandHandlerTests
         Assert.Equal(fixture.FreelancerProfileId, fixture.Contract.FreelancerProfilesId);
         Assert.Equal(fixture.ProposalId, fixture.Contract.ProposalsId);
         Assert.Equal(1500m, fixture.Contract.TotalBudget);
-        Assert.Equal((int)ContractStatus.PendingContractDetails, fixture.Contract.Status);
+        Assert.Equal((int)ContractStatus.PendingSignature, fixture.Contract.Status);
         Assert.Equal(2, fixture.Proposal.Status);
+        Assert.Equal(fixture.ContractId, result.ContractId);
+        Assert.Equal((int)ContractStatus.PendingSignature, result.ContractStatus);
+        var escrow = Assert.Single(fixture.Escrows.Entities);
+        Assert.Equal(1500m, escrow.RequiredAmount);
+        Assert.Equal(0m, escrow.FundedAmount);
+        Assert.Equal(1.0m, escrow.RequiredPercentage);
+        Assert.Equal((int)ContractEscrowStatus.PendingFunding, escrow.Status);
+    }
+
+    [Fact]
+    public async Task RespondFinalOffer_AcceptRejectsWhenMilestoneTotalDoesNotMatchFinalBudget()
+    {
+        var fixture = new NegotiationFixture();
+        fixture.AddConversationWithParticipants();
+        fixture.AddMilestones(500m, 500m);
+        fixture.Offers.Add(new NegotiationOffer
+        {
+            NegotiationOfferId = fixture.OfferId,
+            ConversationsId = fixture.ConversationId,
+            JobPostsId = fixture.JobPostId,
+            ContractsId = fixture.ContractId,
+            ProposalsId = fixture.ProposalId,
+            ClientProfilesId = fixture.ClientProfileId,
+            FreelancerProfilesId = fixture.FreelancerProfileId,
+            FinalPrice = 1500m,
+            Status = (int)NegotiationOfferStatus.PendingFreelancerConfirmation,
+            CreatedAt = fixture.Now
+        });
+
+        var handler = new RespondFinalOfferCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopChatRealtimeNotifier());
+
+        var ex = await Assert.ThrowsAsync<BadRequestException>(() =>
+            handler.Handle(
+                new RespondFinalOfferCommand(
+                    fixture.FreelancerUserId,
+                    new RespondFinalOfferRequest(
+                        fixture.OfferId,
+                        FinalOfferResponse.Accept,
+                        null)),
+                CancellationToken.None));
+
+        Assert.Equal("Final budget must match milestone total before acceptance.", ex.Message);
+        Assert.Equal((int)NegotiationOfferStatus.PendingFreelancerConfirmation, fixture.Offers.Entities[0].Status);
         Assert.Empty(fixture.Escrows.Entities);
     }
 
@@ -251,6 +298,7 @@ public class NegotiationFlowCommandHandlerTests
             Messages = Context.AddSet<Message>();
             Offers = Context.AddSet<NegotiationOffer>();
             Escrows = Context.AddSet<ContractEscrow>();
+            Milestones = Context.AddSet<Milestone>();
         }
 
         public InMemoryApplicationDbContext Context { get; } = new();
@@ -270,9 +318,34 @@ public class NegotiationFlowCommandHandlerTests
         public TestDbSet<Message> Messages { get; }
         public TestDbSet<NegotiationOffer> Offers { get; }
         public TestDbSet<ContractEscrow> Escrows { get; }
+        public TestDbSet<Milestone> Milestones { get; }
         public JobPost JobPost { get; }
         public Proposal Proposal { get; }
         public Contract Contract { get; }
+
+        public void AddMilestones(decimal firstAmount, decimal secondAmount)
+        {
+            Milestones.Add(new Milestone
+            {
+                MilestonesId = Guid.NewGuid(),
+                ContractsId = ContractId,
+                Title = "Milestone 1",
+                Amount = firstAmount,
+                Status = (int)MilestoneStatus.Pending,
+                SortOrder = 0,
+                CreatedAt = Now
+            });
+            Milestones.Add(new Milestone
+            {
+                MilestonesId = Guid.NewGuid(),
+                ContractsId = ContractId,
+                Title = "Milestone 2",
+                Amount = secondAmount,
+                Status = (int)MilestoneStatus.Pending,
+                SortOrder = 1,
+                CreatedAt = Now
+            });
+        }
 
         public void AddConversationWithParticipants()
         {
