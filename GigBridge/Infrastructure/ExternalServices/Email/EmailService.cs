@@ -3,6 +3,8 @@ using Application.Features.Auth.Shared.DTOs;
 using Microsoft.Extensions.Configuration;
 using System.Net;
 using System.Net.Mail;
+using System.Net.Mime;
+using System.Text;
 
 namespace Infrastructure.Services.Email;
 
@@ -22,6 +24,7 @@ public class EmailService : IEmailService
         var userName = GetRequiredSetting("Smtp:User", "SMTP_USER");
         var password = GetRequiredSetting("Smtp:Password", "SMTP_PASSWORD");
         var from = _configuration["Smtp:From"] ?? userName;
+        var fromName = _configuration["Smtp:FromName"] ?? "GigBridge";
 
         using var client = new SmtpClient(host, port)
         {
@@ -31,11 +34,21 @@ public class EmailService : IEmailService
 
         using var message = new MailMessage
         {
-            From = new MailAddress(from),
+            From = new MailAddress(from, fromName, Encoding.UTF8),
             Subject = emailRequestDTO.Subject,
             Body = emailRequestDTO.Body,
-            IsBodyHtml = emailRequestDTO.IsHtml
+            IsBodyHtml = emailRequestDTO.IsHtml,
+            SubjectEncoding = Encoding.UTF8,
+            BodyEncoding = Encoding.UTF8
         };
+
+        if (emailRequestDTO.IsHtml && !string.IsNullOrWhiteSpace(emailRequestDTO.TextBody))
+        {
+            message.AlternateViews.Add(AlternateView.CreateAlternateViewFromString(
+                emailRequestDTO.TextBody, Encoding.UTF8, MediaTypeNames.Text.Plain));
+            message.AlternateViews.Add(AlternateView.CreateAlternateViewFromString(
+                emailRequestDTO.Body, Encoding.UTF8, MediaTypeNames.Text.Html));
+        }
 
         message.To.Add(emailRequestDTO.To);
         if (!string.IsNullOrWhiteSpace(emailRequestDTO.MessageId))

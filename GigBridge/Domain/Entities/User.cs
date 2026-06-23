@@ -106,4 +106,7 @@ public partial class User
     public virtual UserWallet? UserWallet { get; set; }
 
     public virtual ICollection<WalletTransaction> WalletTransactions { get; set; } = new List<WalletTransaction>();
+
+    public virtual ICollection<GoogleMeetConnection> GoogleMeetConnections { get; set; } = new List<GoogleMeetConnection>();
+    public virtual ICollection<GoogleMeetOAuthState> GoogleMeetOAuthStates { get; set; } = new List<GoogleMeetOAuthState>();
 }
