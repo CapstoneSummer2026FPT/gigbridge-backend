@@ -12,7 +12,8 @@ public static class MessageHelpers
     public static ScheduleEventResponse? ParseScheduleMetadata(
         Message message,
         Guid viewerUserId,
-        DateTime utcNow)
+        DateTime utcNow,
+        Schedule? currentSchedule = null)
     {
         if (message.MessageType != (int)MessageType.Schedule || string.IsNullOrWhiteSpace(message.Metadata))
         {
@@ -28,16 +29,86 @@ public static class MessageHelpers
             }
 
             var now = utcNow.Kind == DateTimeKind.Utc ? utcNow : utcNow.ToUniversalTime();
-            var isScheduled = schedule.Status == (int)ScheduleStatus.Scheduled;
-            var hasNotStarted = now < schedule.ScheduledAtUtc;
-            var beforeCutoff = now < schedule.CutoffUtc;
-            var creatorGrace = viewerUserId == schedule.CreatedByUserId && now < schedule.GraceExpiresAtUtc;
+            var status = currentSchedule?.Status ?? (ScheduleStatus)schedule.Status;
+            var agreement = currentSchedule?.AgreementStatus ??
+                (ScheduleAgreementStatus)schedule.AgreementStatus;
+            var scheduledAt = currentSchedule?.ScheduledAtUtc ?? schedule.ScheduledAtUtc;
+            var createdAt = currentSchedule?.CreatedAt ?? schedule.CreatedAt;
+            var createdBy = currentSchedule?.CreatedByUserId ?? schedule.CreatedByUserId;
+            var editCount = currentSchedule?.EditCount ?? schedule.EditCount;
+            var remainingEdits = Math.Max(0, 2 - editCount);
+            var counterCreated = currentSchedule?.CounterProposalCreatedAtUtc ??
+                schedule.CounterProposalCreatedAtUtc;
+            var cutoff = scheduledAt.AddHours(-24);
+            var graceExpiry = new[] { createdAt.AddMinutes(10), scheduledAt }.Min();
+            var counterEditExpiry = counterCreated is null
+                ? (DateTime?)null
+                : new[] { counterCreated.Value.AddHours(24), scheduledAt }.Min();
+            var isCreator = viewerUserId == createdBy;
+            var isScheduled = status == ScheduleStatus.Scheduled;
+            var hasNotStarted = now < scheduledAt;
+            var beforeCutoff = now < cutoff;
+            var creatorGrace = createdAt >= cutoff && isCreator && now < graceExpiry;
+            var canManageOriginal = agreement is ScheduleAgreementStatus.Accepted or
+                ScheduleAgreementStatus.AwaitingFreelancer &&
+                (agreement != ScheduleAgreementStatus.AwaitingFreelancer || isCreator);
+            var canRespond =
+                agreement == ScheduleAgreementStatus.AwaitingFreelancer && !isCreator ||
+                agreement == ScheduleAgreementStatus.AwaitingClient && isCreator;
+
+            ScheduleMeetingResponse? meeting = null;
+            if (currentSchedule is not null && currentSchedule.MeetingProvider != ScheduleMeetingProvider.None)
+            {
+                meeting = new ScheduleMeetingResponse(
+                    (int)currentSchedule.MeetingProvider,
+                    (int)currentSchedule.MeetingStatus,
+                    createdBy,
+                    currentSchedule.MeetingStatus == MeetingProvisioningStatus.Ready
+                        ? currentSchedule.MeetingJoinUri
+                        : null,
+                    currentSchedule.MeetingFailureCode,
+                    isCreator && currentSchedule.MeetingStatus == MeetingProvisioningStatus.Failed &&
+                    isScheduled && hasNotStarted);
+            }
+            else if (schedule.Meeting is not null &&
+                     schedule.Meeting.Provider != (int)ScheduleMeetingProvider.None)
+            {
+                var viewerCanRetry = isCreator &&
+                    schedule.Meeting.Status == (int)MeetingProvisioningStatus.Failed &&
+                    isScheduled && hasNotStarted;
+
+                meeting = schedule.Meeting with { CanRetry = viewerCanRetry };
+            }
 
             return schedule with
             {
-                CanEdit = isScheduled && hasNotStarted && schedule.RemainingEdits > 0 &&
+                Status = (int)status,
+                Title = currentSchedule?.Title ?? schedule.Title,
+                Details = currentSchedule?.Details ?? schedule.Details,
+                ScheduledAtUtc = scheduledAt,
+                TimeZoneId = currentSchedule?.TimeZoneId ?? schedule.TimeZoneId,
+                CreatedByUserId = createdBy,
+                EditCount = editCount,
+                RemainingEdits = remainingEdits,
+                Version = currentSchedule?.Version ?? schedule.Version,
+                CancellationReason = currentSchedule?.CancellationReason ?? schedule.CancellationReason,
+                CutoffUtc = cutoff,
+                GraceExpiresAtUtc = graceExpiry,
+                AgreementStatus = (int)agreement,
+                CounterProposalCreatedAtUtc = counterCreated,
+                CounterProposalEditExpiresAtUtc = counterEditExpiry,
+                CanEdit = isScheduled && hasNotStarted && remainingEdits > 0 && canManageOriginal &&
                     (beforeCutoff || creatorGrace),
-                CanCancel = isScheduled && hasNotStarted && beforeCutoff
+                CanCancel = isScheduled && hasNotStarted && canManageOriginal &&
+                    (beforeCutoff || creatorGrace),
+                CanAccept = isScheduled && hasNotStarted && canRespond,
+                CanReject = isScheduled && hasNotStarted && canRespond,
+                CanProposeTime = isScheduled && hasNotStarted &&
+                    agreement == ScheduleAgreementStatus.FreelancerRejectedAwaitingCounterproposal && !isCreator,
+                CanEditCounterProposal = isScheduled && hasNotStarted &&
+                    agreement == ScheduleAgreementStatus.AwaitingClient && !isCreator &&
+                    counterEditExpiry is not null && now < counterEditExpiry,
+                Meeting = meeting
             };
         }
         catch

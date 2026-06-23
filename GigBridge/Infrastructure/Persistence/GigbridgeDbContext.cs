@@ -36,6 +36,10 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
 
     public virtual DbSet<DeliveryOutbox> DeliveryOutboxes { get; set; }
 
+    public virtual DbSet<GoogleMeetConnection> GoogleMeetConnections { get; set; }
+    public virtual DbSet<GoogleMeetOAuthState> GoogleMeetOAuthStates { get; set; }
+    public virtual DbSet<GoogleMeetProvisioningJob> GoogleMeetProvisioningJobs { get; set; }
+
     public virtual DbSet<Dispute> Disputes { get; set; }
 
     public virtual DbSet<DisputeEvidence> DisputeEvidences { get; set; }
@@ -1365,9 +1369,18 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.TimeZoneId).HasMaxLength(64).HasDefaultValue("Asia/Ho_Chi_Minh");
             entity.Property(e => e.CancellationReason).HasMaxLength(1000);
             entity.Property(e => e.Status).HasDefaultValue(ScheduleStatus.Scheduled);
+            entity.Property(e => e.AgreementStatus).HasDefaultValue(ScheduleAgreementStatus.Accepted);
             entity.Property(e => e.EditCount).HasDefaultValue(0);
             entity.Property(e => e.Version).HasDefaultValue(1).IsConcurrencyToken();
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+
+            // Meeting fields
+            entity.Property(e => e.MeetingProvider).HasDefaultValue(ScheduleMeetingProvider.None);
+            entity.Property(e => e.MeetingStatus).HasDefaultValue(MeetingProvisioningStatus.None);
+            entity.Property(e => e.MeetingAttempt).HasDefaultValue(0);
+            entity.Property(e => e.MeetingSpaceName).HasMaxLength(255);
+            entity.Property(e => e.MeetingJoinUri).HasMaxLength(500);
+            entity.Property(e => e.MeetingFailureCode).HasMaxLength(100);
 
             entity.HasOne(e => e.Conversation).WithMany(e => e.Schedules)
                 .HasForeignKey(e => e.ConversationId).OnDelete(DeleteBehavior.Cascade);
@@ -1392,6 +1405,66 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
                 .HasForeignKey(e => e.ScheduleId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<User>().WithMany()
                 .HasForeignKey(e => e.RecipientUserId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<GoogleMeetConnection>(entity =>
+        {
+            entity.HasKey(e => e.GoogleMeetConnectionId);
+            entity.HasIndex(e => new { e.UserId, e.ConnectedAt }).IsDescending(false, true);
+            entity.HasIndex(e => new { e.UserId, e.DisconnectedAt })
+                .HasFilter("\"DisconnectedAt\" IS NULL")
+                .IsUnique();
+
+            entity.Property(e => e.GoogleMeetConnectionId).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.GoogleSubject).HasMaxLength(255).IsRequired();
+            entity.Property(e => e.GoogleEmail).HasMaxLength(320).IsRequired();
+            entity.Property(e => e.GrantedScopes).HasColumnType("text");
+            entity.Property(e => e.EncryptedRefreshToken).HasColumnType("text");
+            entity.Property(e => e.Status).HasDefaultValue(GoogleMeetConnectionStatus.Active);
+            entity.Property(e => e.LastFailureCode).HasMaxLength(100);
+            entity.Property(e => e.Version).HasDefaultValue(1).IsConcurrencyToken();
+            entity.Property(e => e.ConnectedAt).HasDefaultValueSql("now()");
+
+            entity.HasOne(e => e.User).WithMany(e => e.GoogleMeetConnections)
+                .HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<GoogleMeetOAuthState>(entity =>
+        {
+            entity.HasKey(e => e.GoogleMeetOAuthStateId);
+            entity.HasIndex(e => e.StateHash).IsUnique();
+            entity.HasIndex(e => e.FlowId).IsUnique();
+
+            entity.Property(e => e.GoogleMeetOAuthStateId).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.StateHash).HasMaxLength(64).IsRequired();
+            entity.Property(e => e.NonceHash).HasMaxLength(64).IsRequired();
+            entity.Property(e => e.ProtectedCodeVerifier).HasColumnType("text");
+            entity.Property(e => e.FrontendReturnPath).HasMaxLength(500);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+
+            entity.HasOne(e => e.User).WithMany(e => e.GoogleMeetOAuthStates)
+                .HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<GoogleMeetProvisioningJob>(entity =>
+        {
+            entity.HasKey(e => e.GoogleMeetProvisioningJobId);
+            entity.HasIndex(e => new { e.Status, e.CreatedAt });
+            entity.HasIndex(e => new { e.ScheduleId, e.Attempt }).IsUnique();
+            entity.HasIndex(e => new { e.ScheduleId, e.Status })
+                .HasFilter("\"Status\" IN (0, 1)")
+                .IsUnique();
+
+            entity.Property(e => e.GoogleMeetProvisioningJobId).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.FailureCode).HasMaxLength(100);
+            entity.Property(e => e.ReturnedSpaceName).HasMaxLength(255);
+            entity.Property(e => e.ReturnedJoinUri).HasMaxLength(500);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+
+            entity.HasOne(e => e.Schedule).WithMany(e => e.MeetProvisioningJobs)
+                .HasForeignKey(e => e.ScheduleId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.OrganizerUser).WithMany()
+                .HasForeignKey(e => e.OrganizerUserId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<PaymentProof>(entity =>

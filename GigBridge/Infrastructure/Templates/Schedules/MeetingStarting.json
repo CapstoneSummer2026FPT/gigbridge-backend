@@ -1,0 +1,12 @@
+{
+  "actor": {
+    "subject": "Meeting starts now: {{TITLE}}", "badge": "Starting now", "headline": "Your meeting starts now",
+    "introduction": "It is time to connect with the other participants.",
+    "accent": "#047857", "badgeBackground": "#ecfdf5", "actorLabel": "Reminder from"
+  },
+  "recipient": {
+    "subject": "Meeting starts now: {{TITLE}}", "badge": "Starting now", "headline": "Your meeting starts now",
+    "introduction": "It is time to connect with the other participants.",
+    "accent": "#047857", "badgeBackground": "#ecfdf5", "actorLabel": "Reminder from"
+  }
+}

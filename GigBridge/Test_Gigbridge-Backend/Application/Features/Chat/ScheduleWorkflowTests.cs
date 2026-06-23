@@ -6,6 +6,7 @@ using Application.Features.Chat.Common.Schedules;
 using Domain.Entities;
 using Domain.Enums;
 using Infrastructure.Persistence;
+using Infrastructure.Services.Email;
 using Microsoft.EntityFrameworkCore;
 using Test_Gigbridge_Backend.TestSupport;
 
@@ -13,6 +14,8 @@ namespace Test_Gigbridge_Backend.Application.Features.Chat;
 
 public class ScheduleWorkflowTests
 {
+    private static readonly ScheduleEmailRenderer EmailRenderer = new();
+
     [Fact]
     public async Task Create_PersistsNeutralPermissionsAndPersonalizesRealtimePayloads()
     {
@@ -20,7 +23,7 @@ public class ScheduleWorkflowTests
         await using var db = CreateContext();
         var fixture = Seed(db, now);
         var notifier = new CapturingChatRealtimeNotifier();
-        var handler = new ScheduleWorkflowHandlers(db, new FixedClock(now), notifier);
+        var handler = new ScheduleWorkflowService(db, new FixedClock(now), notifier, new NoopGoogleMeetOAuthService(), EmailRenderer);
 
         var created = await handler.Handle(new CreateScheduleCommand(fixture.ClientId,
             new CreateScheduleRequest(fixture.ConversationId, "Review", null, new DateTimeOffset(now.AddHours(2)))), default);
@@ -38,8 +41,9 @@ public class ScheduleWorkflowTests
             x.UserId == fixture.FreelancerId && x.EventName == "ReceiveMessage").Payload);
         Assert.True(creatorMessage.Schedule!.CanEdit);
         Assert.False(freelancerMessage.Schedule!.CanEdit);
-        Assert.False(creatorMessage.Schedule.CanCancel);
+        Assert.True(creatorMessage.Schedule.CanCancel);
         Assert.False(freelancerMessage.Schedule.CanCancel);
+        Assert.True(freelancerMessage.Schedule.CanAccept);
 
         var creatorChanged = Assert.IsType<ScheduleEventResponse>(notifier.UserEvents.Single(x =>
             x.UserId == fixture.ClientId && x.EventName == "ScheduleChanged").Payload);
@@ -51,6 +55,20 @@ public class ScheduleWorkflowTests
 
         Assert.True(MessageHelpers.ParseScheduleMetadata(persistedMessage, fixture.ClientId, now)!.CanEdit);
         Assert.False(MessageHelpers.ParseScheduleMetadata(persistedMessage, fixture.FreelancerId, now)!.CanEdit);
+
+        var emailJobs = await db.DeliveryOutboxes.Where(x => x.Channel == (int)DeliveryChannel.Email).ToListAsync();
+        var json = new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web);
+        var clientEmail = System.Text.Json.JsonSerializer.Deserialize<ScheduleDeliveryPayload>(
+            emailJobs.Single(x => x.RecipientUserId == fixture.ClientId).Payload, json)!;
+        var freelancerEmail = System.Text.Json.JsonSerializer.Deserialize<ScheduleDeliveryPayload>(
+            emailJobs.Single(x => x.RecipientUserId == fixture.FreelancerId).Payload, json)!;
+        Assert.StartsWith("Schedule proposal sent:", clientEmail.Subject);
+        Assert.StartsWith("New schedule needs your response:", freelancerEmail.Subject);
+        Assert.Contains("Hello Client", clientEmail.HtmlBody);
+        Assert.Contains("Hello Freelancer", freelancerEmail.HtmlBody);
+        Assert.Contains($"/messages?conversationId={fixture.ConversationId:D}&amp;messageId={persistedMessage.MessagesId:D}",
+            freelancerEmail.HtmlBody);
+        Assert.Contains("View schedule:", freelancerEmail.TextBody);
     }
 
     [Fact]
@@ -59,7 +77,7 @@ public class ScheduleWorkflowTests
         var now = new DateTime(2026, 6, 21, 6, 0, 0, DateTimeKind.Utc); // 13:00 ICT
         await using var db = CreateContext();
         var fixture = Seed(db, now);
-        var handler = new ScheduleWorkflowHandlers(db, new FixedClock(now), new NoopChatRealtimeNotifier());
+        var handler = new ScheduleWorkflowService(db, new FixedClock(now), new NoopChatRealtimeNotifier(), new NoopGoogleMeetOAuthService(), EmailRenderer);
         var created = await handler.Handle(new CreateScheduleCommand(fixture.ClientId,
             new CreateScheduleRequest(fixture.ConversationId, " Review  call ", null, new DateTimeOffset(now.AddHours(2)))), default);
 
@@ -77,14 +95,52 @@ public class ScheduleWorkflowTests
         var now = new DateTime(2026, 6, 21, 6, 0, 0, DateTimeKind.Utc);
         await using var db = CreateContext();
         var fixture = Seed(db, now);
-        var handler = new ScheduleWorkflowHandlers(db, new FixedClock(now), new NoopChatRealtimeNotifier());
+        var handler = new ScheduleWorkflowService(db, new FixedClock(now), new NoopChatRealtimeNotifier(), new NoopGoogleMeetOAuthService(), EmailRenderer);
         var starts = new DateTimeOffset(now.AddDays(2));
         var created = await handler.Handle(new CreateScheduleCommand(fixture.ClientId,
             new CreateScheduleRequest(fixture.ConversationId, "Review call", "Line one\r\nLine two", starts)), default);
 
+        var accepted = await handler.Handle(new AcceptScheduleCommand(fixture.FreelancerId,
+            created.Schedule.ScheduleId, new ScheduleVersionRequest(created.Schedule.Version)), default);
         await Assert.ThrowsAsync<BadRequestException>(() => handler.Handle(new UpdateScheduleCommand(fixture.FreelancerId,
-            created.Schedule.ScheduleId, new UpdateScheduleRequest(" Review   call ", "Line one\nLine two", starts, 1)), default));
+            created.Schedule.ScheduleId, new UpdateScheduleRequest(" Review   call ", "Line one\nLine two", starts, accepted.Schedule.Version)), default));
         Assert.Equal(0, (await db.Schedules.SingleAsync()).EditCount);
+    }
+
+    [Fact]
+    public async Task Edit_LongLeadSchedule_IsRejectedInsideFinal24Hours()
+    {
+        var now = new DateTime(2026, 6, 21, 6, 0, 0, DateTimeKind.Utc);
+        await using var db = CreateContext();
+        var fixture = Seed(db, now);
+        var starts = new DateTimeOffset(now.AddHours(24).AddMinutes(5));
+        var createHandler = new ScheduleWorkflowService(db, new FixedClock(now), new NoopChatRealtimeNotifier(), new NoopGoogleMeetOAuthService(), EmailRenderer);
+        var created = await createHandler.Handle(new CreateScheduleCommand(fixture.ClientId,
+            new CreateScheduleRequest(fixture.ConversationId, "Review", null, starts)), default);
+
+        var editHandler = new ScheduleWorkflowService(db, new FixedClock(now.AddMinutes(6)), new NoopChatRealtimeNotifier(), new NoopGoogleMeetOAuthService(), EmailRenderer);
+
+        await Assert.ThrowsAsync<BadRequestException>(() => editHandler.Handle(
+            new UpdateScheduleCommand(fixture.ClientId, created.Schedule.ScheduleId,
+                new UpdateScheduleRequest("Changed", null, starts, created.Schedule.Version)), default));
+    }
+
+    [Fact]
+    public async Task Edit_ShortLeadSchedule_AllowsCreatorGraceInsideFinal24Hours()
+    {
+        var now = new DateTime(2026, 6, 21, 6, 0, 0, DateTimeKind.Utc);
+        await using var db = CreateContext();
+        var fixture = Seed(db, now);
+        var starts = new DateTimeOffset(now.AddHours(12));
+        var createHandler = new ScheduleWorkflowService(db, new FixedClock(now), new NoopChatRealtimeNotifier(), new NoopGoogleMeetOAuthService(), EmailRenderer);
+        var created = await createHandler.Handle(new CreateScheduleCommand(fixture.ClientId,
+            new CreateScheduleRequest(fixture.ConversationId, "Review", null, starts)), default);
+
+        var editHandler = new ScheduleWorkflowService(db, new FixedClock(now.AddMinutes(5)), new NoopChatRealtimeNotifier(), new NoopGoogleMeetOAuthService(), EmailRenderer);
+        var edited = await editHandler.Handle(new UpdateScheduleCommand(fixture.ClientId, created.Schedule.ScheduleId,
+            new UpdateScheduleRequest("Changed", null, starts, created.Schedule.Version)), default);
+
+        Assert.Equal("Changed", edited.Schedule.Title);
     }
 
     [Fact]
@@ -93,11 +149,13 @@ public class ScheduleWorkflowTests
         var now = new DateTime(2026, 6, 21, 6, 0, 0, DateTimeKind.Utc);
         await using var db = CreateContext();
         var fixture = Seed(db, now);
-        var handler = new ScheduleWorkflowHandlers(db, new FixedClock(now), new NoopChatRealtimeNotifier());
+        var handler = new ScheduleWorkflowService(db, new FixedClock(now), new NoopChatRealtimeNotifier(), new NoopGoogleMeetOAuthService(), EmailRenderer);
         var created = await handler.Handle(new CreateScheduleCommand(fixture.ClientId,
             new CreateScheduleRequest(fixture.ConversationId, "Review", null, new DateTimeOffset(now.AddDays(3)))), default);
+        var accepted = await handler.Handle(new AcceptScheduleCommand(fixture.FreelancerId,
+            created.Schedule.ScheduleId, new ScheduleVersionRequest(created.Schedule.Version)), default);
         var one = await handler.Handle(new UpdateScheduleCommand(fixture.ClientId, created.Schedule.ScheduleId,
-            new UpdateScheduleRequest("Review one", null, new DateTimeOffset(now.AddDays(3)), 1)), default);
+            new UpdateScheduleRequest("Review one", null, new DateTimeOffset(now.AddDays(3)), accepted.Schedule.Version)), default);
         var two = await handler.Handle(new UpdateScheduleCommand(fixture.FreelancerId, created.Schedule.ScheduleId,
             new UpdateScheduleRequest("Review two", null, new DateTimeOffset(now.AddDays(3)), one.Schedule.Version)), default);
         await Assert.ThrowsAsync<BadRequestException>(() => handler.Handle(new UpdateScheduleCommand(fixture.ClientId,
@@ -110,11 +168,11 @@ public class ScheduleWorkflowTests
         var now = new DateTime(2026, 6, 21, 6, 0, 0, DateTimeKind.Utc);
         await using var db = CreateContext();
         var fixture = Seed(db, now);
-        var handler = new ScheduleWorkflowHandlers(db, new FixedClock(now), new NoopChatRealtimeNotifier());
+        var handler = new ScheduleWorkflowService(db, new FixedClock(now), new NoopChatRealtimeNotifier(), new NoopGoogleMeetOAuthService(), EmailRenderer);
         await handler.Handle(new CreateScheduleCommand(fixture.ClientId,
             new CreateScheduleRequest(fixture.ConversationId, "First", null, new DateTimeOffset(now.AddDays(1)))), default);
 
-        await Assert.ThrowsAsync<ConflictException>(() => handler.Handle(new CreateScheduleCommand(fixture.FreelancerId,
+        await Assert.ThrowsAsync<ConflictException>(() => handler.Handle(new CreateScheduleCommand(fixture.ClientId,
             new CreateScheduleRequest(fixture.ConversationId, "Second", null, new DateTimeOffset(now.AddDays(2)))), default));
     }
 
@@ -135,14 +193,214 @@ public class ScheduleWorkflowTests
             CreatedAt = now.AddDays(-1)
         });
         await db.SaveChangesAsync();
-        var handler = new ScheduleWorkflowHandlers(db, new FixedClock(now), new NoopChatRealtimeNotifier());
+        var handler = new ScheduleWorkflowService(db, new FixedClock(now), new NoopChatRealtimeNotifier(), new NoopGoogleMeetOAuthService(), EmailRenderer);
 
-        await handler.Handle(new CreateScheduleCommand(fixture.FreelancerId,
+        await handler.Handle(new CreateScheduleCommand(fixture.ClientId,
             new CreateScheduleRequest(fixture.ConversationId, "Next", null, new DateTimeOffset(now.AddDays(1)))), default);
 
         var schedules = await db.Schedules.OrderBy(x => x.ScheduledAtUtc).ToListAsync();
         Assert.Equal(ScheduleStatus.Completed, schedules[0].Status);
         Assert.Equal(ScheduleStatus.Scheduled, schedules[1].Status);
+    }
+
+    [Fact]
+    public async Task AgreementFlow_RejectCounterProposeAndAccept_UsesExpectedRolesAndPermissions()
+    {
+        var now = new DateTime(2026, 6, 21, 6, 0, 0, DateTimeKind.Utc);
+        await using var db = CreateContext();
+        var fixture = Seed(db, now);
+        var notifier = new CapturingChatRealtimeNotifier();
+        var handler = new ScheduleWorkflowService(db, new FixedClock(now), notifier, new NoopGoogleMeetOAuthService(), EmailRenderer);
+
+        var created = await handler.Handle(new CreateScheduleCommand(fixture.ClientId,
+            new CreateScheduleRequest(fixture.ConversationId, "Review", null, new DateTimeOffset(now.AddDays(3)))), default);
+        Assert.Equal((int)ScheduleAgreementStatus.AwaitingFreelancer, created.Schedule.AgreementStatus);
+        Assert.False(created.Schedule.CanAccept);
+
+        await Assert.ThrowsAsync<ForbiddenAccessException>(() => handler.Handle(new AcceptScheduleCommand(
+            fixture.ClientId, created.Schedule.ScheduleId, new ScheduleVersionRequest(created.Schedule.Version)), default));
+
+        var rejected = await handler.Handle(new RejectScheduleCommand(fixture.FreelancerId,
+            created.Schedule.ScheduleId, new ScheduleVersionRequest(created.Schedule.Version)), default);
+        Assert.Equal((int)ScheduleAgreementStatus.FreelancerRejectedAwaitingCounterproposal,
+            rejected.Schedule.AgreementStatus);
+        Assert.True(rejected.Schedule.CanProposeTime);
+        Assert.Contains(await db.Notifications.ToListAsync(), n =>
+            n.UserId == fixture.ClientId && n.Title == "Freelancer rejected the schedule");
+
+        var counter = await handler.Handle(new CreateCounterProposalCommand(fixture.FreelancerId,
+            created.Schedule.ScheduleId,
+            new CounterProposalRequest(new DateTimeOffset(now.AddDays(4)), rejected.Schedule.Version)), default);
+        Assert.Equal((int)ScheduleAgreementStatus.AwaitingClient, counter.Schedule.AgreementStatus);
+        Assert.True(counter.Schedule.CanEditCounterProposal);
+
+        var clientView = await handler.Handle(new GetScheduleQuery(fixture.ClientId, created.Schedule.ScheduleId), default);
+        Assert.True(clientView.CanAccept);
+        var accepted = await handler.Handle(new AcceptScheduleCommand(fixture.ClientId,
+            created.Schedule.ScheduleId, new ScheduleVersionRequest(counter.Schedule.Version)), default);
+        Assert.Equal((int)ScheduleAgreementStatus.Accepted, accepted.Schedule.AgreementStatus);
+        var scheduleCard = await db.Messages.SingleAsync(x => x.ScheduleId == created.Schedule.ScheduleId);
+        Assert.Equal(ScheduleEventType.Accepted, scheduleCard.ScheduleEventType);
+        Assert.Equal(accepted.Schedule.Version, scheduleCard.ScheduleEventSequence);
+        var startDeliveries = await db.DeliveryOutboxes
+            .Where(x => x.ScheduleId == created.Schedule.ScheduleId && x.DeliveryKey.Contains(":start:"))
+            .ToListAsync();
+        Assert.Equal(4, startDeliveries.Count);
+        Assert.All(startDeliveries, delivery =>
+        {
+            Assert.Equal((int)DeliveryOutboxStatus.Pending, delivery.Status);
+            Assert.Equal(accepted.Schedule.ScheduledAtUtc, delivery.NextAttemptAt);
+            var payload = System.Text.Json.JsonSerializer.Deserialize<ScheduleDeliveryPayload>(delivery.Payload,
+                new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+            Assert.NotNull(payload);
+            Assert.True(payload.CreateNotificationAtDelivery);
+            Assert.Equal("Meeting time reached", payload.NotificationTitle);
+            Assert.Contains("Your meeting starts now", payload.HtmlBody);
+            Assert.Contains("GigBridge", payload.HtmlBody);
+            Assert.False(string.IsNullOrWhiteSpace(payload.TextBody));
+        });
+        await Assert.ThrowsAsync<ConflictException>(() => handler.Handle(new AcceptScheduleCommand(fixture.ClientId,
+            created.Schedule.ScheduleId, new ScheduleVersionRequest(counter.Schedule.Version)), default));
+    }
+
+    [Fact]
+    public void MeetingStartEmail_IsBrandedAndHtmlEncodesUserContent()
+    {
+        var email = EmailRenderer.Render(ScheduleNotificationType.MeetingStarting,
+            new ScheduleEmailModel("Taylor", "GigBridge", false, "Review <script>",
+                "23 Jun 2026, 13:30 ICT", "Discuss & confirm", null,
+                "https://app.gigbridge.test/messages?conversationId=1",
+                "https://meet.google.com/abc-defg-hij"));
+
+        Assert.Contains("<!doctype html>", email.HtmlBody);
+        Assert.Contains("Review &lt;script&gt;", email.HtmlBody);
+        Assert.Contains("Discuss &amp; confirm", email.HtmlBody);
+        Assert.Contains("Join meeting", email.HtmlBody);
+        Assert.Contains("Join meeting: https://meet.google.com/abc-defg-hij", email.TextBody);
+        Assert.DoesNotContain("Review <script>", email.HtmlBody);
+    }
+
+    [Theory]
+    [InlineData(ScheduleNotificationType.ProposalCreated, "Schedule proposal sent", "Your schedule proposal was sent")]
+    [InlineData(ScheduleNotificationType.ScheduleUpdated, "Schedule updated", "Your schedule changes were saved")]
+    [InlineData(ScheduleNotificationType.ScheduleDeclined, "You declined the schedule", "You declined the proposed schedule")]
+    [InlineData(ScheduleNotificationType.CounterProposalCreated, "New time proposed", "Your counterproposal was sent")]
+    [InlineData(ScheduleNotificationType.CounterProposalUpdated, "Proposed time updated", "Your proposed time was updated")]
+    [InlineData(ScheduleNotificationType.ScheduleConfirmed, "Schedule confirmed", "You confirmed the schedule")]
+    [InlineData(ScheduleNotificationType.CounterProposalDeclined, "You declined the proposed time", "You declined the proposed time")]
+    [InlineData(ScheduleNotificationType.ScheduleCancelled, "Schedule cancelled", "You cancelled the schedule")]
+    [InlineData(ScheduleNotificationType.MeetingStarting, "Meeting starts now", "Your meeting starts now")]
+    public void ScheduleNotificationTypes_RenderMappedSubjectHeadlineAndFallback(
+        ScheduleNotificationType type, string expectedSubject, string expectedHeadline)
+    {
+        var email = EmailRenderer.Render(type,
+            new ScheduleEmailModel("Taylor", "Taylor", true, "Design review", "23 Jun 2026, 13:30 ICT",
+                "Review the final design", "Client unavailable", "https://app.gigbridge.test/messages?conversationId=1"));
+
+        Assert.Contains(expectedSubject, email.Subject);
+        Assert.Contains(expectedHeadline, email.HtmlBody);
+        Assert.Contains("Hello Taylor", email.HtmlBody);
+        Assert.Contains("View schedule", email.HtmlBody);
+        Assert.Contains("Client unavailable", email.TextBody);
+    }
+
+    [Fact]
+    public async Task AcceptedScheduleEditReschedulesAndCancellationCancelsStartDeliveries()
+    {
+        var now = new DateTime(2026, 6, 21, 6, 0, 0, DateTimeKind.Utc);
+        await using var db = CreateContext();
+        var fixture = Seed(db, now);
+        var handler = new ScheduleWorkflowService(db, new FixedClock(now), new NoopChatRealtimeNotifier(), new NoopGoogleMeetOAuthService(), EmailRenderer);
+        var created = await handler.Handle(new CreateScheduleCommand(fixture.ClientId,
+            new CreateScheduleRequest(fixture.ConversationId, "Review", null, new DateTimeOffset(now.AddDays(3)))), default);
+        var accepted = await handler.Handle(new AcceptScheduleCommand(fixture.FreelancerId,
+            created.Schedule.ScheduleId, new ScheduleVersionRequest(created.Schedule.Version)), default);
+        var newStart = now.AddDays(4);
+        var edited = await handler.Handle(new UpdateScheduleCommand(fixture.ClientId, created.Schedule.ScheduleId,
+            new UpdateScheduleRequest("Review", null, new DateTimeOffset(newStart), accepted.Schedule.Version)), default);
+
+        var startDeliveries = await db.DeliveryOutboxes
+            .Where(x => x.ScheduleId == created.Schedule.ScheduleId && x.DeliveryKey.Contains(":start:"))
+            .ToListAsync();
+        Assert.Equal(4, startDeliveries.Count);
+        Assert.All(startDeliveries, x => Assert.Equal(newStart, x.NextAttemptAt));
+
+        await handler.Handle(new CancelScheduleCommand(fixture.ClientId, created.Schedule.ScheduleId,
+            new CancelScheduleRequest("No longer needed", edited.Schedule.Version)), default);
+        Assert.All(startDeliveries, x => Assert.Equal((int)DeliveryOutboxStatus.Cancelled, x.Status));
+    }
+
+    [Fact]
+    public async Task CounterProposalEdit_ClosesExactlyTwentyFourHoursAfterCreation()
+    {
+        var now = new DateTime(2026, 6, 21, 6, 0, 0, DateTimeKind.Utc);
+        await using var db = CreateContext();
+        var fixture = Seed(db, now);
+        var handler = new ScheduleWorkflowService(db, new FixedClock(now), new NoopChatRealtimeNotifier(), new NoopGoogleMeetOAuthService(), EmailRenderer);
+        var created = await handler.Handle(new CreateScheduleCommand(fixture.ClientId,
+            new CreateScheduleRequest(fixture.ConversationId, "Review", null, new DateTimeOffset(now.AddDays(4)))), default);
+        var rejected = await handler.Handle(new RejectScheduleCommand(fixture.FreelancerId,
+            created.Schedule.ScheduleId, new ScheduleVersionRequest(created.Schedule.Version)), default);
+        var counter = await handler.Handle(new CreateCounterProposalCommand(fixture.FreelancerId,
+            created.Schedule.ScheduleId,
+            new CounterProposalRequest(new DateTimeOffset(now.AddDays(5)), rejected.Schedule.Version)), default);
+
+        var beforeExpiryHandler = new ScheduleWorkflowService(db, new FixedClock(now.AddHours(23).AddMinutes(59)),
+            new NoopChatRealtimeNotifier(), new NoopGoogleMeetOAuthService(), EmailRenderer);
+        var edited = await beforeExpiryHandler.Handle(new UpdateCounterProposalCommand(
+            fixture.FreelancerId, created.Schedule.ScheduleId,
+            new CounterProposalRequest(new DateTimeOffset(now.AddDays(6)), counter.Schedule.Version)), default);
+
+        var expiredHandler = new ScheduleWorkflowService(db, new FixedClock(now.AddHours(24)),
+            new NoopChatRealtimeNotifier(), new NoopGoogleMeetOAuthService(), EmailRenderer);
+        await Assert.ThrowsAsync<BadRequestException>(() => expiredHandler.Handle(new UpdateCounterProposalCommand(
+            fixture.FreelancerId, created.Schedule.ScheduleId,
+            new CounterProposalRequest(new DateTimeOffset(now.AddDays(7)), edited.Schedule.Version)), default));
+    }
+
+    [Fact]
+    public async Task CounterProposalEdit_ClosesWhenProposedTimeArrives()
+    {
+        var now = new DateTime(2026, 6, 21, 6, 0, 0, DateTimeKind.Utc);
+        await using var db = CreateContext();
+        var fixture = Seed(db, now);
+        var handler = new ScheduleWorkflowService(db, new FixedClock(now), new NoopChatRealtimeNotifier(), new NoopGoogleMeetOAuthService(), EmailRenderer);
+        var created = await handler.Handle(new CreateScheduleCommand(fixture.ClientId,
+            new CreateScheduleRequest(fixture.ConversationId, "Review", null, new DateTimeOffset(now.AddDays(3)))), default);
+        var rejected = await handler.Handle(new RejectScheduleCommand(fixture.FreelancerId,
+            created.Schedule.ScheduleId, new ScheduleVersionRequest(created.Schedule.Version)), default);
+        var counter = await handler.Handle(new CreateCounterProposalCommand(fixture.FreelancerId,
+            created.Schedule.ScheduleId,
+            new CounterProposalRequest(new DateTimeOffset(now.AddHours(2)), rejected.Schedule.Version)), default);
+
+        var startHandler = new ScheduleWorkflowService(db, new FixedClock(now.AddHours(2)),
+            new NoopChatRealtimeNotifier(), new NoopGoogleMeetOAuthService(), EmailRenderer);
+        await Assert.ThrowsAsync<BadRequestException>(() => startHandler.Handle(new UpdateCounterProposalCommand(
+            fixture.FreelancerId, created.Schedule.ScheduleId,
+            new CounterProposalRequest(new DateTimeOffset(now.AddDays(1)), counter.Schedule.Version)), default));
+    }
+
+    [Fact]
+    public async Task ClientRejectingCounterProposal_IsTerminalAndAllowsNewSchedule()
+    {
+        var now = new DateTime(2026, 6, 21, 6, 0, 0, DateTimeKind.Utc);
+        await using var db = CreateContext();
+        var fixture = Seed(db, now);
+        var handler = new ScheduleWorkflowService(db, new FixedClock(now), new NoopChatRealtimeNotifier(), new NoopGoogleMeetOAuthService(), EmailRenderer);
+        var created = await handler.Handle(new CreateScheduleCommand(fixture.ClientId,
+            new CreateScheduleRequest(fixture.ConversationId, "Review", null, new DateTimeOffset(now.AddDays(3)))), default);
+        var rejected = await handler.Handle(new RejectScheduleCommand(fixture.FreelancerId,
+            created.Schedule.ScheduleId, new ScheduleVersionRequest(created.Schedule.Version)), default);
+        var counter = await handler.Handle(new CreateCounterProposalCommand(fixture.FreelancerId,
+            created.Schedule.ScheduleId,
+            new CounterProposalRequest(new DateTimeOffset(now.AddDays(4)), rejected.Schedule.Version)), default);
+        var terminal = await handler.Handle(new RejectScheduleCommand(fixture.ClientId,
+            created.Schedule.ScheduleId, new ScheduleVersionRequest(counter.Schedule.Version)), default);
+
+        Assert.Equal((int)ScheduleStatus.Rejected, terminal.Schedule.Status);
+        var next = await handler.Handle(new CreateScheduleCommand(fixture.ClientId,
+            new CreateScheduleRequest(fixture.ConversationId, "Next", null, new DateTimeOffset(now.AddDays(5)))), default);
+        Assert.Equal((int)ScheduleAgreementStatus.AwaitingFreelancer, next.Schedule.AgreementStatus);
     }
 
     [Fact]
@@ -161,6 +419,18 @@ public class ScheduleWorkflowTests
 
     private static GigbridgeDbContext CreateContext() => new(new DbContextOptionsBuilder<GigbridgeDbContext>()
         .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
+
+    private sealed class NoopGoogleMeetOAuthService : IGoogleMeetOAuthService
+    {
+        public Task<AuthorizationUrlResult> GetAuthorizationUrlAsync(Guid userId, CancellationToken ct) =>
+            Task.FromResult(new AuthorizationUrlResult("https://example.com", DateTime.UtcNow.AddMinutes(5), Guid.NewGuid()));
+        public Task<string> HandleCallbackAsync(Guid userId, string state, string? code, string? error, CancellationToken ct) =>
+            Task.FromResult("success");
+        public Task<GoogleMeetConnectionStatusResponse> GetStatusAsync(Guid userId, CancellationToken ct) =>
+            Task.FromResult(new GoogleMeetConnectionStatusResponse(false, null, null, false));
+        public Task DisconnectAsync(Guid userId, CancellationToken ct) => Task.CompletedTask;
+        public Task<string?> GetAccessTokenAsync(Guid userId, CancellationToken ct) => Task.FromResult<string?>(null);
+    }
 
     private static (Guid ClientId, Guid FreelancerId, Guid ConversationId) Seed(GigbridgeDbContext db, DateTime now)
     {
