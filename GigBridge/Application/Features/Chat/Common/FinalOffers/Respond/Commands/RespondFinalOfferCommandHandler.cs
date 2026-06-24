@@ -321,7 +321,7 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
 
             if (proposal is not null)
             {
-                proposal.Status = 2;
+                proposal.Status = 3;
                 proposal.UpdatedAt = now;
             }
         }
@@ -337,17 +337,6 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
         {
             pendingOffer.Status = (int)NegotiationOfferStatus.Cancelled;
             pendingOffer.RespondedAt = now;
-        }
-
-        // Reject other proposals for the same job post
-        var otherProposals = await _context.Set<Proposal>()
-            .Where(p => p.JobPostsId == offer.JobPostsId && p.ProposalsId != offer.ProposalsId)
-            .ToListAsync(cancellationToken);
-
-        foreach (var prop in otherProposals)
-        {
-            prop.Status = 4; // Rejected
-            prop.UpdatedAt = now;
         }
 
         // Decouple other conversations from the same JobPost by setting ContractsId to null

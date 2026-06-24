@@ -107,6 +107,7 @@ public class NegotiationFlowCommandHandlerTests
     {
         var fixture = new NegotiationFixture();
         fixture.AddConversationWithParticipants();
+        fixture.AddMilestones(600m, 900m);
         var handler = new CreateFinalOfferCommandHandler(
             fixture.Context,
             new FixedDateTimeService(fixture.Now),
@@ -133,6 +134,63 @@ public class NegotiationFlowCommandHandlerTests
         Assert.Equal((int)MessageType.FinalOffer, message.MessageType);
         Assert.Equal(fixture.ClientUserId, message.SenderUserId);
         Assert.Contains(offerId.ToString(), message.Metadata);
+    }
+
+    [Fact]
+    public async Task CreateFinalOffer_RejectsWhenMilestonesAreMissing()
+    {
+        var fixture = new NegotiationFixture();
+        fixture.AddConversationWithParticipants();
+        var handler = new CreateFinalOfferCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopChatRealtimeNotifier());
+
+        var ex = await Assert.ThrowsAsync<BadRequestException>(() =>
+            handler.Handle(
+                new CreateFinalOfferCommand(
+                    fixture.ClientUserId,
+                    new CreateFinalOfferRequest(
+                        fixture.ConversationId,
+                        1500m,
+                        "Build the first production release.",
+                        null,
+                        null,
+                        null)),
+                CancellationToken.None));
+
+        Assert.Equal("Contract milestones must be set up before creating the final offer.", ex.Message);
+        Assert.Empty(fixture.Offers.Entities);
+        Assert.Empty(fixture.Messages.Entities);
+    }
+
+    [Fact]
+    public async Task CreateFinalOffer_RejectsWhenMilestoneTotalDoesNotMatchFinalPrice()
+    {
+        var fixture = new NegotiationFixture();
+        fixture.AddConversationWithParticipants();
+        fixture.AddMilestones(500m, 500m);
+        var handler = new CreateFinalOfferCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopChatRealtimeNotifier());
+
+        var ex = await Assert.ThrowsAsync<BadRequestException>(() =>
+            handler.Handle(
+                new CreateFinalOfferCommand(
+                    fixture.ClientUserId,
+                    new CreateFinalOfferRequest(
+                        fixture.ConversationId,
+                        1500m,
+                        "Build the first production release.",
+                        null,
+                        null,
+                        null)),
+                CancellationToken.None));
+
+        Assert.Equal("Final budget must match milestone total before sending the final offer.", ex.Message);
+        Assert.Empty(fixture.Offers.Entities);
+        Assert.Empty(fixture.Messages.Entities);
     }
 
     [Fact]
@@ -165,6 +223,16 @@ public class NegotiationFlowCommandHandlerTests
         var fixture = new NegotiationFixture();
         fixture.AddConversationWithParticipants();
         fixture.AddMilestones(600m, 900m);
+        var waitlistedProposal = new Proposal
+        {
+            ProposalsId = Guid.NewGuid(),
+            JobPostsId = fixture.JobPostId,
+            FreelancerProfilesId = Guid.NewGuid(),
+            ProposedBudget = 1400m,
+            Status = 1,
+            JobPosts = fixture.JobPost
+        };
+        fixture.Context.Set<Proposal>().Add(waitlistedProposal);
         fixture.Offers.Add(new NegotiationOffer
         {
             NegotiationOfferId = fixture.OfferId,
@@ -200,7 +268,8 @@ public class NegotiationFlowCommandHandlerTests
         Assert.Equal(fixture.ProposalId, fixture.Contract.ProposalsId);
         Assert.Equal(1500m, fixture.Contract.TotalBudget);
         Assert.Equal((int)ContractStatus.PendingSignature, fixture.Contract.Status);
-        Assert.Equal(2, fixture.Proposal.Status);
+        Assert.Equal(3, fixture.Proposal.Status);
+        Assert.Equal(1, waitlistedProposal.Status);
         Assert.Equal(fixture.ContractId, result.ContractId);
         Assert.Equal((int)ContractStatus.PendingSignature, result.ContractStatus);
         var escrow = Assert.Single(fixture.Escrows.Entities);

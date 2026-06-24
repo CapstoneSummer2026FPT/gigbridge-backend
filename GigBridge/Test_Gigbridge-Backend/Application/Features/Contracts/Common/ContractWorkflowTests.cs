@@ -195,11 +195,29 @@ public class ContractWorkflowTests
         var fixture = new ContractWorkflowFixture();
         fixture.MoveToPendingSignatureWithDocument();
         fixture.MarkDocumentFullySigned();
+        var waitlistedUserId = Guid.NewGuid();
+        var waitlistedFreelancerProfile = new FreelancerProfile
+        {
+            FreelancerProfilesId = Guid.NewGuid(),
+            UserId = waitlistedUserId
+        };
+        var waitlistedProposal = new Proposal
+        {
+            ProposalsId = Guid.NewGuid(),
+            JobPostsId = fixture.JobPostId,
+            FreelancerProfilesId = waitlistedFreelancerProfile.FreelancerProfilesId,
+            FreelancerProfiles = waitlistedFreelancerProfile,
+            Status = 1
+        };
+        fixture.Context.Set<FreelancerProfile>().Add(waitlistedFreelancerProfile);
+        fixture.Context.Set<Proposal>().Add(waitlistedProposal);
+        var notificationService = new RecordingNotificationService();
 
         var handler = new AcceptContractMilestonesCommandHandler(
             fixture.Context,
             new FixedDateTimeService(fixture.Now),
-            new NoopChatRealtimeNotifier());
+            new NoopChatRealtimeNotifier(),
+            notificationService);
 
         var result = await handler.Handle(
             new AcceptContractMilestonesCommand(fixture.ContractId, fixture.FreelancerUserId),
@@ -209,6 +227,12 @@ public class ContractWorkflowTests
         Assert.Equal((int)ContractStatus.PendingEscrow, result.Status);
         Assert.Equal(fixture.Escrows.Entities[0].ContractEscrowId, result.EscrowId);
         Assert.Equal((int)ContractEscrowStatus.PendingFunding, fixture.Escrows.Entities[0].Status);
+        Assert.Equal(2, fixture.Context.Set<JobPost>().Single().Status);
+        Assert.Equal((int)ConversationType.ContractWorkroom, fixture.Conversation.ConversationType);
+        var notification = Assert.Single(notificationService.Notifications);
+        Assert.Equal(waitlistedUserId, notification.UserId);
+        Assert.Equal(NotificationType.ProposalStatusChanged, notification.Type);
+        Assert.Equal(waitlistedProposal.ProposalsId, notification.ReferenceId);
     }
 
     [Fact]
@@ -435,6 +459,48 @@ public class ContractWorkflowTests
             return templateId;
         }
     }
+
+    private sealed class RecordingNotificationService : INotificationService
+    {
+        public List<NotificationCall> Notifications { get; } = [];
+
+        public Task CreateNotificationAsync(
+            Guid userId,
+            NotificationType type,
+            string title,
+            string? content = null,
+            Guid? referenceId = null,
+            string? referenceType = null,
+            CancellationToken cancellationToken = default)
+        {
+            Notifications.Add(new NotificationCall(userId, type, title, content, referenceId, referenceType));
+            return Task.CompletedTask;
+        }
+
+        public Task CreateBroadcastNotificationAsync(
+            NotificationTarget target,
+            NotificationType type,
+            string title,
+            string? content = null,
+            Guid? referenceId = null,
+            string? referenceType = null,
+            Guid? targetUserId = null,
+            bool sendEmail = false,
+            Guid? createdByAdminId = null,
+            DateTime? expiresAt = null,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed record NotificationCall(
+        Guid UserId,
+        NotificationType Type,
+        string Title,
+        string? Content,
+        Guid? ReferenceId,
+        string? ReferenceType);
 
     private sealed class FixedDateTimeService : IDateTimeService
     {

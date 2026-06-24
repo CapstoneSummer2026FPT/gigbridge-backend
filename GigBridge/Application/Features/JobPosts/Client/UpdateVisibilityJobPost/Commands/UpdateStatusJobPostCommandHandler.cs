@@ -54,7 +54,7 @@ public class UpdateStatusJobPostCommandHandler
         {
             var contract = await _context.Set<Contract>()
                 .Include(c => c.Milestones)
-                .FirstOrDefaultAsync(c => c.JobPostsId == jobPost.JobPostsId && c.FreelancerProfilesId == null, cancellationToken);
+                .FirstOrDefaultAsync(c => c.JobPostsId == jobPost.JobPostsId, cancellationToken);
 
             if (contract is null)
             {
@@ -92,11 +92,6 @@ public class UpdateStatusJobPostCommandHandler
                 }
             }
 
-            var milestonesSum = contract.Milestones.Sum(m => m.Amount);
-            if (milestonesSum != contract.TotalBudget)
-            {
-                throw new BadRequestException($"Total milestone budget ({milestonesSum}) must match contract budget ({contract.TotalBudget}).");
-            }
         }
 
         jobPost.Status = command.Request.Status;

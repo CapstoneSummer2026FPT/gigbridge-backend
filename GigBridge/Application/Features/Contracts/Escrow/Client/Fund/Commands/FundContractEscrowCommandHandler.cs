@@ -179,7 +179,7 @@ public sealed class FundContractEscrowCommandHandler :
         await ContractConversationEvents.AddSystemMessageAsync(
             _context,
             contract.ContractsId,
-            "Escrow funded. Workspace is now open.",
+            "Escrow funded. Contract is now active.",
             now,
             cancellationToken);
 

@@ -89,12 +89,6 @@ public sealed class CompleteJobPostContractSetupCommandHandler
             }
         }
 
-        var milestonesSum = contract.Milestones.Sum(m => m.Amount);
-        if (milestonesSum != contract.TotalBudget)
-        {
-            throw new BadRequestException($"Total milestone budget ({milestonesSum}) must match contract budget ({contract.TotalBudget}).");
-        }
-
         var now = _dateTimeService.UtcNow;
 
         // Publish the job post by setting Status = Open (1)

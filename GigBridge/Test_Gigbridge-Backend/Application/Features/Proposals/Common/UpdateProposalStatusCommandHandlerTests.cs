@@ -75,7 +75,7 @@ public class UpdateProposalStatusCommandHandlerTests
         var command = new UpdateProposalStatusCommand(
             acceptedProposalId,
             clientUserId,
-            new UpdateProposalStatusRequest { Status = 2 });
+            new UpdateProposalStatusRequest { Status = 3 });
 
         await Assert.ThrowsAsync<BadRequestException>(
             () => handler.Handle(command, CancellationToken.None));
@@ -137,7 +137,7 @@ public class UpdateProposalStatusCommandHandlerTests
         var command = new UpdateProposalStatusCommand(
             proposalId,
             clientUserId,
-            new UpdateProposalStatusRequest { Status = 2 });
+            new UpdateProposalStatusRequest { Status = 3 });
 
         await Assert.ThrowsAsync<BadRequestException>(
             () => handler.Handle(command, CancellationToken.None));

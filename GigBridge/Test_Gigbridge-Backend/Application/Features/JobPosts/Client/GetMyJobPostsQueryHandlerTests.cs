@@ -69,7 +69,6 @@ public class GetMyJobPostsQueryHandlerTests
             BudgetMax = 1000m,
             Currency = "VND",
             EstimatedDuration = "2 weeks",
-            MaxHires = 2,
             Location = "Remote",
             Status = 1,
             Visibility = 2,
@@ -118,7 +117,6 @@ public class GetMyJobPostsQueryHandlerTests
         Assert.Equal(1000m, dto.BudgetMax);
         Assert.Equal("VND", dto.Currency);
         Assert.Equal("2 weeks", dto.EstimatedDuration);
-        Assert.Equal(2, dto.MaxHires);
         Assert.Equal("Remote", dto.Location);
         Assert.Equal(1, dto.Status);
         Assert.Equal(2, dto.Visibility);

@@ -40,9 +40,10 @@ public sealed class UpdateContractDetailsCommandHandler :
         }
 
         if (contract.Status != (int)ContractStatus.PendingContractDetails &&
-            contract.Status != (int)ContractStatus.PendingFreelancerSelection)
+            contract.Status != (int)ContractStatus.PendingFreelancerSelection &&
+            contract.Status != (int)ContractStatus.InNegotiation)
         {
-            throw new BadRequestException("Contract details can only be edited while in pending selection or pending details.");
+            throw new BadRequestException("Contract details can only be edited while in pending selection, negotiation, or pending details.");
         }
 
         await ContractParticipantGuard.EnsureClientAsync(_context, contract, command.UserId, cancellationToken);

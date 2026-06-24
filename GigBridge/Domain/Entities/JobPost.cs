@@ -23,8 +23,6 @@ public partial class JobPost
 
     public string? EstimatedDuration { get; set; }
 
-    public int? MaxHires { get; set; }
-
     public string? Location { get; set; }
 
     /// <summary>
@@ -51,7 +49,7 @@ public partial class JobPost
 
     public virtual ClientProfile ClientProfiles { get; set; } = null!;
 
-    public virtual ICollection<Contract> Contracts { get; set; } = new List<Contract>();
+    public virtual Contract? Contract { get; set; }
 
     public virtual ICollection<Conversation> Conversations { get; set; } = new List<Conversation>();
 

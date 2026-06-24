@@ -55,7 +55,6 @@ public static class JobInvitationProjection
             BudgetMax = invitation.JobPosts.BudgetMax,
             Currency = invitation.JobPosts.Currency,
             EstimatedDuration = invitation.JobPosts.EstimatedDuration,
-            MaxHires = invitation.JobPosts.MaxHires,
             Location = invitation.JobPosts.Location,
             JobStatus = invitation.JobPosts.Status,
             JobVisibility = invitation.JobPosts.Visibility,

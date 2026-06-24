@@ -8,7 +8,6 @@ public sealed record SaveDraftJobPostRequest(
     decimal? BudgetMax,
     string? Currency,
     string? EstimatedDuration,
-    int? MaxHires,
     string? Location,
     int? Visibility,
     DateTime? EndDate,

@@ -74,7 +74,6 @@ public class GetMyJobPostsQueryHandler : IRequestHandler<GetMyJobPostsQuery, IEn
                 BudgetMax = jobPost.BudgetMax,
                 Currency = jobPost.Currency,
                 EstimatedDuration = jobPost.EstimatedDuration,
-                MaxHires = jobPost.MaxHires,
                 Location = jobPost.Location,
 
                 Status = jobPost.Status,

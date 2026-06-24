@@ -16,15 +16,18 @@ public sealed class AcceptContractMilestonesCommandHandler :
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
     private readonly IChatRealtimeNotifier _chatRealtimeNotifier;
+    private readonly INotificationService? _notificationService;
 
     public AcceptContractMilestonesCommandHandler(
         IApplicationDbContext context,
         IDateTimeService dateTimeService,
-        IChatRealtimeNotifier chatRealtimeNotifier)
+        IChatRealtimeNotifier chatRealtimeNotifier,
+        INotificationService? notificationService = null)
     {
         _context = context;
         _dateTimeService = dateTimeService;
         _chatRealtimeNotifier = chatRealtimeNotifier;
+        _notificationService = notificationService;
     }
 
     public async Task<ContractWorkflowResponse> Handle(
@@ -97,14 +100,44 @@ public sealed class AcceptContractMilestonesCommandHandler :
         contract.Status = (int)ContractStatus.PendingEscrow;
         contract.UpdatedAt = now;
 
+        var jobPost = await _context.Set<JobPost>()
+            .FirstOrDefaultAsync(jobPost => jobPost.JobPostsId == contract.JobPostsId, cancellationToken);
+
+        if (jobPost is not null)
+        {
+            jobPost.Status = 2; // Closed
+            jobPost.UpdatedAt = now;
+        }
+
+        var conversations = await _context.Set<Conversation>()
+            .Where(conversation => conversation.ContractsId == contract.ContractsId)
+            .ToListAsync(cancellationToken);
+
+        Guid? workspaceConversationId = null;
+        foreach (var conversation in conversations)
+        {
+            if (conversation.ConversationType == (int)ConversationType.JobNegotiation)
+            {
+                conversation.ConversationType = (int)ConversationType.ContractWorkroom;
+                conversation.UpdatedAt = now;
+            }
+
+            if (conversation.ConversationType == (int)ConversationType.ContractWorkroom)
+            {
+                workspaceConversationId ??= conversation.ConversationsId;
+            }
+        }
+
         await ContractConversationEvents.AddSystemMessageAsync(
             _context,
             contract.ContractsId,
-            "Milestones accepted. Waiting for client escrow funding.",
+            "Milestones accepted. Workspace is now open. Waiting for client escrow funding.",
             now,
             cancellationToken);
 
         await _context.SaveChangesAsync(cancellationToken);
+
+        await NotifyWaitlistedFreelancers(contract, jobPost, cancellationToken);
 
         var participantUserIds = await _context.Set<ConversationParticipant>()
             .AsNoTracking()
@@ -118,8 +151,17 @@ public sealed class AcceptContractMilestonesCommandHandler :
             await _chatRealtimeNotifier.SendUsersEventAsync(
                 [.. participantUserIds],
                 "ContractMilestonesAccepted",
-                new { contractId = contract.ContractsId },
+                new { contractId = contract.ContractsId, conversationId = workspaceConversationId },
                 cancellationToken);
+
+            if (workspaceConversationId.HasValue)
+            {
+                await _chatRealtimeNotifier.SendUsersEventAsync(
+                    [.. participantUserIds],
+                    "WorkspaceOpened",
+                    new { contractId = contract.ContractsId, conversationId = workspaceConversationId.Value },
+                    cancellationToken);
+            }
         }
 
         return new ContractWorkflowResponse(
@@ -127,5 +169,37 @@ public sealed class AcceptContractMilestonesCommandHandler :
             contract.Status,
             escrow.ContractEscrowId,
             fullySignedDocument.EsignDocumentsId);
+    }
+
+    private async Task NotifyWaitlistedFreelancers(
+        Contract contract,
+        JobPost? jobPost,
+        CancellationToken cancellationToken)
+    {
+        if (_notificationService is null)
+        {
+            return;
+        }
+
+        var waitlistedProposals = await _context.Set<Proposal>()
+            .AsNoTracking()
+            .Include(proposal => proposal.FreelancerProfiles)
+            .Where(proposal =>
+                proposal.JobPostsId == contract.JobPostsId &&
+                proposal.ProposalsId != contract.ProposalsId &&
+                (proposal.Status == 1 || proposal.Status == 2))
+            .ToListAsync(cancellationToken);
+
+        foreach (var proposal in waitlistedProposals)
+        {
+            await _notificationService.CreateNotificationAsync(
+                proposal.FreelancerProfiles.UserId,
+                NotificationType.ProposalStatusChanged,
+                "Proposal moved to waiting list",
+                $"The client selected another freelancer for \"{jobPost?.Title ?? contract.Title}\". Your proposal remains on the waiting list for future consideration.",
+                proposal.ProposalsId,
+                "Proposal",
+                cancellationToken);
+        }
     }
 }

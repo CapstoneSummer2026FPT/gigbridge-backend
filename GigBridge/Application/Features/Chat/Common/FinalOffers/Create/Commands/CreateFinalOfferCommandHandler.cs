@@ -76,6 +76,21 @@ public class CreateFinalOfferCommandHandler : IRequestHandler<CreateFinalOfferCo
             throw new BadRequestException("Final offers can only be created while the contract is being negotiated.");
         }
 
+        var milestones = await _context.Set<Milestone>()
+            .Where(milestone => milestone.ContractsId == contract.ContractsId)
+            .ToListAsync(cancellationToken);
+
+        if (milestones.Count == 0)
+        {
+            throw new BadRequestException("Contract milestones must be set up before creating the final offer.");
+        }
+
+        var milestoneTotal = milestones.Sum(milestone => milestone.Amount);
+        if (milestoneTotal != request.FinalPrice)
+        {
+            throw new BadRequestException("Final budget must match milestone total before sending the final offer.");
+        }
+
         var clientProfile = await _context.Set<ClientProfile>()
             .FirstOrDefaultAsync(profile => profile.UserId == command.UserId, cancellationToken);
 

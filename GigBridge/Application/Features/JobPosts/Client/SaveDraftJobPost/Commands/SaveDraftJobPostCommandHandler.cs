@@ -92,7 +92,6 @@ public sealed class SaveDraftJobPostCommandHandler
         jobPost.EstimatedDuration = string.IsNullOrWhiteSpace(request.EstimatedDuration)
             ? null
             : request.EstimatedDuration.Trim();
-        jobPost.MaxHires = request.MaxHires;
         jobPost.Location = string.IsNullOrWhiteSpace(request.Location)
             ? null
             : request.Location.Trim();

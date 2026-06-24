@@ -30,8 +30,6 @@ public sealed class GetMyJobPostDetailDto
 
     public string? EstimatedDuration { get; set; }
 
-    public int? MaxHires { get; set; }
-
     public string? Location { get; set; }
 
     public int? Visibility { get; set; }

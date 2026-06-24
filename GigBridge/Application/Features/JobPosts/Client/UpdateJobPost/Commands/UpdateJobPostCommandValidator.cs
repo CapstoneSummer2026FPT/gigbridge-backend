@@ -45,11 +45,6 @@ public class UpdateJobPostCommandValidator : AbstractValidator<UpdateJobPostComm
                 request.BudgetMin.Value <= request.BudgetMax.Value)
             .WithMessage("BudgetMin must be less than or equal to BudgetMax.");
 
-        RuleFor(x => x.Request.MaxHires)
-            .GreaterThan(0)
-            .When(x => x.Request.MaxHires.HasValue)
-            .WithMessage("MaxHires must be greater than 0.");
-
         RuleFor(x => x.Request.Visibility)
             .NotNull()
             .WithMessage("Visibility is required.")

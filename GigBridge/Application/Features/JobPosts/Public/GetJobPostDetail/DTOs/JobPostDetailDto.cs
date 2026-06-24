@@ -18,7 +18,6 @@ public record JobPostDetailDto(
     decimal? BudgetMax,
     string? Currency,
     string? EstimatedDuration,
-    int? MaxHires,
     string? Location,
     DateTime? EndDate,
     DateTime CreatedAt,

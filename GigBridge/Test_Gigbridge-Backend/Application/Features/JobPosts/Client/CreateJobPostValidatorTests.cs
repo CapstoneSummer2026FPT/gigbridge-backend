@@ -113,7 +113,6 @@ public class CreateJobPostValidatorTests
             BudgetMax: 1000m,
             Currency: "VND",
             EstimatedDuration: "2 weeks",
-            MaxHires: 1,
             Location: "Remote",
             Visibility: 1,
             EndDate: DateTime.UtcNow.AddDays(7),

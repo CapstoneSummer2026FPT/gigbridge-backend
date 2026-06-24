@@ -16,9 +16,8 @@ public static class JobPostDraftContractHelper
         DateTime now,
         CancellationToken cancellationToken)
     {
-        // Check if a contract for this JobPost already exists with no freelancer selected
         var existingContract = await context.Set<Contract>()
-            .FirstOrDefaultAsync(c => c.JobPostsId == jobPost.JobPostsId && c.FreelancerProfilesId == null, cancellationToken);
+            .FirstOrDefaultAsync(c => c.JobPostsId == jobPost.JobPostsId, cancellationToken);
 
         var budget = jobPost.BudgetMax ?? jobPost.BudgetMin ?? 0m;
 
