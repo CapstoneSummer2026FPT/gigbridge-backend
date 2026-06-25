@@ -266,11 +266,7 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
             throw new BadRequestException("Contract milestones must be set up before accepting the final budget.");
         }
 
-        var milestoneTotal = milestones.Sum(milestone => milestone.Amount);
-        if (milestoneTotal != offer.FinalPrice)
-        {
-            throw new BadRequestException("Final budget must match milestone total before acceptance.");
-        }
+        NormalizeMilestoneAmounts(milestones, offer.FinalPrice);
 
         offer.Status = (int)NegotiationOfferStatus.Accepted;
         offer.RespondedAt = now;
@@ -356,6 +352,40 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
             contract.ContractsId,
             contract.Status,
             "Final offer accepted. Contract is ready for signatures.");
+    }
+
+    private static void NormalizeMilestoneAmounts(
+        IReadOnlyList<Milestone> milestones,
+        decimal finalPrice)
+    {
+        var currentTotal = milestones.Sum(milestone => milestone.Amount);
+        if (currentTotal == finalPrice)
+        {
+            return;
+        }
+
+        if (currentTotal <= 0)
+        {
+            throw new BadRequestException("Contract milestones must have a positive total before accepting the final budget.");
+        }
+
+        var remaining = finalPrice;
+        for (var index = 0; index < milestones.Count; index++)
+        {
+            var milestone = milestones[index];
+            if (index == milestones.Count - 1)
+            {
+                milestone.Amount = remaining;
+                break;
+            }
+
+            var normalizedAmount = Math.Round(
+                milestone.Amount * finalPrice / currentTotal,
+                2,
+                MidpointRounding.AwayFromZero);
+            milestone.Amount = normalizedAmount;
+            remaining -= normalizedAmount;
+        }
     }
 
     private string ChangeOfferStatus(

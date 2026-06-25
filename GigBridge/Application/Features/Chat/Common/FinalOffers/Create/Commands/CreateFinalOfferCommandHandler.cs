@@ -85,12 +85,6 @@ public class CreateFinalOfferCommandHandler : IRequestHandler<CreateFinalOfferCo
             throw new BadRequestException("Contract milestones must be set up before creating the final offer.");
         }
 
-        var milestoneTotal = milestones.Sum(milestone => milestone.Amount);
-        if (milestoneTotal != request.FinalPrice)
-        {
-            throw new BadRequestException("Final budget must match milestone total before sending the final offer.");
-        }
-
         var clientProfile = await _context.Set<ClientProfile>()
             .FirstOrDefaultAsync(profile => profile.UserId == command.UserId, cancellationToken);
 

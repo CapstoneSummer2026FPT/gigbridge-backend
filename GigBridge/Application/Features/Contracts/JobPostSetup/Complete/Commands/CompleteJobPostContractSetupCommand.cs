@@ -1,5 +1,4 @@
 using System;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Application.Common.Exceptions;
@@ -7,7 +6,6 @@ using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Features.Contracts.Common.Internal;
 using Domain.Entities;
-using Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -53,46 +51,20 @@ public sealed class CompleteJobPostContractSetupCommandHandler
             throw new NotFoundException("Job post associated with this contract does not exist.");
         }
 
-        if (jobPost.Status != 0) // Draft is 0
+        await JobPostSetupPublishGuard.EnsureCanPublishAsync(
+            _context,
+            jobPost,
+            contract,
+            cancellationToken);
+
+        if (jobPost.Status == JobPostSetupPublishGuard.OpenStatus)
         {
-            throw new BadRequestException("Job post must be in Draft status to complete setup.");
-        }
-
-        // Verify JobPost E-sign document is FullySigned
-        var isEsignFullySigned = await _context.Set<EsignDocument>()
-            .AnyAsync(
-                doc => doc.JobPostsId == jobPost.JobPostsId &&
-                       doc.Status == (int)ESignDocumentStatus.FullySigned,
-                cancellationToken);
-
-        if (!isEsignFullySigned)
-        {
-            throw new BadRequestException("Job post e-sign document is not fully signed.");
-        }
-
-        // Validate Milestones
-        if (contract.Milestones.Count == 0)
-        {
-            throw new BadRequestException("At least one milestone is required.");
-        }
-
-        foreach (var milestone in contract.Milestones)
-        {
-            if (string.IsNullOrWhiteSpace(milestone.Title))
-            {
-                throw new BadRequestException("Milestone title cannot be empty.");
-            }
-
-            if (milestone.Amount <= 0)
-            {
-                throw new BadRequestException("Milestone amount must be positive.");
-            }
+            return true;
         }
 
         var now = _dateTimeService.UtcNow;
 
-        // Publish the job post by setting Status = Open (1)
-        jobPost.Status = 1;
+        jobPost.Status = JobPostSetupPublishGuard.OpenStatus;
         jobPost.UpdatedAt = now;
 
         await _context.SaveChangesAsync(cancellationToken);

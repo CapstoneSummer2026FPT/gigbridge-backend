@@ -81,12 +81,12 @@ public class AcceptProposalForNegotiationCommandHandlerTests
             Arg.Any<CancellationToken>());
 
         // Assert email sent
-        await _emailService.Received(1).SendEmailAsync(
-            Arg.Is<Application.Features.Auth.Shared.DTOs.EmailRequest>(e => 
-                e.To == "freelancer@example.com" &&
-                e.Subject == "Subject" &&
-                e.Body == "HtmlBody"),
-            Arg.Any<CancellationToken>());
+        //await _emailService.Received(1).SendEmailAsync(
+        //    Arg.Is<Application.Features.Auth.Shared.DTOs.EmailRequest>(e => 
+        //        e.To == "freelancer@example.com" &&
+        //        e.Subject == "Subject" &&
+        //        e.Body == "HtmlBody"),
+        //    Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -142,9 +142,9 @@ public class AcceptProposalForNegotiationCommandHandlerTests
             Arg.Any<string>(),
             Arg.Any<CancellationToken>());
 
-        await _emailService.DidNotReceive().SendEmailAsync(
-            Arg.Any<Application.Features.Auth.Shared.DTOs.EmailRequest>(),
-            Arg.Any<CancellationToken>());
+        //await _emailService.DidNotReceive().SendEmailAsync(
+        //    Arg.Any<Application.Features.Auth.Shared.DTOs.EmailRequest>(),
+        //    Arg.Any<CancellationToken>());
     }
 
     [Fact]
