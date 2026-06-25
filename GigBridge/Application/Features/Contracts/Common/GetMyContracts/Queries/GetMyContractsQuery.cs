@@ -5,4 +5,4 @@ using MediatR;
 
 namespace Application.Features.Contracts.Common.GetMyContracts.Queries;
 
-public record GetMyContractsQuery(Guid UserId) : IRequest<List<ContractDtoResponse>>;
+public record GetMyContractsQuery(Guid UserId, int? Status = null) : IRequest<List<ContractDtoResponse>>;

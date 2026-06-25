@@ -38,6 +38,6 @@ public class NegotiationOffersController : BaseApiController
 
         var result = await Mediator.Send(new RespondFinalOfferCommand(userId, request));
 
-        return Ok(ApiResponse<bool>.Ok(result, "Final offer response recorded"));
+        return Ok(ApiResponse<RespondFinalOfferResponse>.Ok(result, "Final offer response recorded"));
     }
 }

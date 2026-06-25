@@ -2,6 +2,7 @@ using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Common.Models;
 using Application.Features.Chat.Common.Schedules;
+using Application.Features.Proposals.Common.Email;
 using Infrastructure.BackgroundJobs;
 using Infrastructure.ExternalServices.Ai;
 using Infrastructure.ExternalServices.GoogleMeet;
@@ -122,6 +123,7 @@ public static class DependencyInjection
         services.AddScoped<IEmailService, EmailService>();
         services.AddScoped<IAuthEmailSender, AuthEmailSender>();
         services.AddSingleton<IScheduleEmailRenderer, ScheduleEmailRenderer>();
+        services.AddSingleton<IProposalNegotiationEmailRenderer, ProposalNegotiationEmailRenderer>();
         services.AddScoped<IMediaService, MediaService>();
         services.AddScoped<INotificationService, NotificationService>();
         services.AddTransient<IDateTimeService, DateTimeService>();

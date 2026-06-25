@@ -86,22 +86,14 @@ public class UpdateProposalStatusCommandHandler
         {
             throw new BadRequestException("Client cannot update draft proposal.");
         }
-        // 2 = Shortlisted, 3 = Accepted, 4 = Rejected
-        if (requestedStatus != 2 && requestedStatus != 3 && requestedStatus != 4)
+        // 2 = Shortlisted, 4 = Rejected. Accepting must go through the final-offer flow.
+        if (requestedStatus != 2 && requestedStatus != 4)
         {
-            throw new UnauthorizedAccessException(
-                "Client can only update proposal status to Shortlisted, Accepted, or Rejected.");
+            throw new BadRequestException(
+                "Client can only update proposal status to Shortlisted or Rejected. Use the final-offer flow to accept a proposal.");
         }
 
         proposal.Status = requestedStatus;
-
-        // 3 = Accepted
-        if (requestedStatus == 3)
-        {
-            proposal.JobPosts.Status = 3;
-            proposal.JobPosts.UpdatedAt = _dateTimeService.UtcNow;
-
-        }
     }
 
 

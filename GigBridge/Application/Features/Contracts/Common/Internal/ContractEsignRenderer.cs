@@ -20,7 +20,12 @@ internal static class ContractEsignRenderer
         CancellationToken cancellationToken)
     {
         var existing = await context.Set<EsignDocument>()
-            .FirstOrDefaultAsync(document => document.ContractsId == contract.ContractsId, cancellationToken);
+            .Where(document =>
+                document.ContractsId == contract.ContractsId &&
+                document.Status != (int)ESignDocumentStatus.Voided &&
+                document.Status != (int)ESignDocumentStatus.Expired)
+            .OrderByDescending(document => document.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
 
         if (existing is not null)
         {

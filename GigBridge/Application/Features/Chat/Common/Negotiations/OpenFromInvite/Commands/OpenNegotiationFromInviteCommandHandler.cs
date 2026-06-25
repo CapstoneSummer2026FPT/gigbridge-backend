@@ -52,6 +52,11 @@ public class OpenNegotiationFromInviteCommandHandler
             throw new ForbiddenAccessException("You do not own this job post.");
         }
 
+        if (jobPost.Status != 1)
+        {
+            throw new BadRequestException("Job post is no longer open for negotiations.");
+        }
+
         var freelancerProfile = await _context.Set<FreelancerProfile>()
             .FirstOrDefaultAsync(
                 profile => profile.FreelancerProfilesId == command.FreelancerProfileId,

@@ -105,8 +105,13 @@ public class ESignJobPostWorkflowTests
         Assert.Equal("unit-test", signature.UserAgent);
         Assert.Equal((int)ESignDocumentStatus.FullySigned, document.Status);
         Assert.Equal(fixture.Now, document.FinalizedAt);
-        Assert.Equal(1, fixture.JobPost.Status);
-        Assert.Equal(fixture.Now, fixture.JobPost.UpdatedAt);
+        Assert.Equal(0, fixture.JobPost.Status);
+
+        var draftContract = fixture.Context.Set<Contract>()
+            .FirstOrDefault(c => c.JobPostsId == fixture.JobPostId);
+        Assert.NotNull(draftContract);
+        Assert.Equal((int)ContractStatus.PendingFreelancerSelection, draftContract.Status);
+        Assert.Null(draftContract.FreelancerProfilesId);
     }
 
     [Fact]

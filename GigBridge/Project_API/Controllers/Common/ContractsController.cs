@@ -28,14 +28,14 @@ public class ContractsController : BaseApiController
     }
 
     [HttpGet("my-contracts")]
-    public async Task<IActionResult> GetMyContracts()
+    public async Task<IActionResult> GetMyContracts([FromQuery] int? status)
     {
         if (!TryGetCurrentUserId(out var userId))
         {
             return InvalidTokenResponse();
         }
 
-        var result = await Mediator.Send(new GetMyContractsQuery(userId));
+        var result = await Mediator.Send(new GetMyContractsQuery(userId, status));
 
         return Ok(ApiResponse<List<ContractDtoResponse>>.Ok(result, "Success"));
     }

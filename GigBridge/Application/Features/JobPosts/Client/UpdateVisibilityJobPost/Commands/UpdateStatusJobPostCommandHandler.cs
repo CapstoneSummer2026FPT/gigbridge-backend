@@ -1,6 +1,8 @@
-﻿using Application.Common.Exceptions;
+using System;
+using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Application.Features.Contracts.Common.Internal;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -45,6 +47,19 @@ public class UpdateStatusJobPostCommandHandler
         if (jobPost is null)
         {
             throw new NotFoundException("Job post does not exist or you do not have permission to update it.");
+        }
+
+        if (command.Request.Status == JobPostSetupPublishGuard.OpenStatus)
+        {
+            var contract = await _context.Set<Contract>()
+                .Include(c => c.Milestones)
+                .FirstOrDefaultAsync(c => c.JobPostsId == jobPost.JobPostsId, cancellationToken);
+
+            await JobPostSetupPublishGuard.EnsureCanPublishAsync(
+                _context,
+                jobPost,
+                contract,
+                cancellationToken);
         }
 
         jobPost.Status = command.Request.Status;

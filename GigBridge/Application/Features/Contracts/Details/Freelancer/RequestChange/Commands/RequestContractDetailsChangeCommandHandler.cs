@@ -15,13 +15,16 @@ public sealed class RequestContractDetailsChangeCommandHandler :
 {
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
+    private readonly IChatRealtimeNotifier _chatRealtimeNotifier;
 
     public RequestContractDetailsChangeCommandHandler(
         IApplicationDbContext context,
-        IDateTimeService dateTimeService)
+        IDateTimeService dateTimeService,
+        IChatRealtimeNotifier chatRealtimeNotifier)
     {
         _context = context;
         _dateTimeService = dateTimeService;
+        _chatRealtimeNotifier = chatRealtimeNotifier;
     }
 
     public async Task<ContractWorkflowResponse> Handle(
@@ -59,6 +62,22 @@ public sealed class RequestContractDetailsChangeCommandHandler :
             cancellationToken);
 
         await _context.SaveChangesAsync(cancellationToken);
+
+        var participantUserIds = await _context.Set<ConversationParticipant>()
+            .AsNoTracking()
+            .Where(p => p.Conversations.ContractsId == contract.ContractsId && p.LeftAt == null && p.DeletedAt == null)
+            .Select(p => p.UserId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        if (participantUserIds.Any())
+        {
+            await _chatRealtimeNotifier.SendUsersEventAsync(
+                [.. participantUserIds],
+                "ContractDetailsChangeRequested",
+                new { contractId = contract.ContractsId },
+                cancellationToken);
+        }
 
         return new ContractWorkflowResponse(contract.ContractsId, contract.Status, null, null);
     }

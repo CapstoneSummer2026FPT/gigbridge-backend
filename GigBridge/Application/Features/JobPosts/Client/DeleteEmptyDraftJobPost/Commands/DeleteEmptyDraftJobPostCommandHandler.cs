@@ -38,7 +38,7 @@ public sealed class DeleteEmptyDraftJobPostCommandHandler
         }
 
         var jobPost = await _context.Set<JobPost>()
-            .Include(jobPost => jobPost.Contracts)
+            .Include(jobPost => jobPost.Contract)
             .Include(jobPost => jobPost.EsignDocuments)
             .Include(jobPost => jobPost.JobPostAttachments)
             .Include(jobPost => jobPost.JobPostQuestions)
@@ -85,13 +85,11 @@ public sealed class DeleteEmptyDraftJobPostCommandHandler
                jobPost.BudgetMax.HasValue ||
                HasMeaningfulCurrency(jobPost.Currency) ||
                !string.IsNullOrWhiteSpace(jobPost.EstimatedDuration) ||
-               jobPost.MaxHires.HasValue ||
                !string.IsNullOrWhiteSpace(jobPost.Location) ||
                jobPost.EndDate.HasValue ||
                (jobPost.Visibility.HasValue && jobPost.Visibility.Value != PublicVisibility) ||
                jobPost.IsAigenerated == true ||
                jobPost.CustomSkillNames.Any(skillName => !string.IsNullOrWhiteSpace(skillName)) ||
-               jobPost.Contracts.Count > 0 ||
                jobPost.EsignDocuments.Count > 0 ||
                jobPost.JobPostAttachments.Count > 0 ||
                jobPost.JobPostQuestions.Count > 0 ||

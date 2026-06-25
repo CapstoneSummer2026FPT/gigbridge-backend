@@ -53,6 +53,11 @@ public class StartNegotiationFromProposalCommandHandler
             throw new ForbiddenAccessException("You do not own this job post.");
         }
 
+        if (proposal.JobPosts.Status != 1)
+        {
+            throw new BadRequestException("Job post is no longer open for negotiations.");
+        }
+
         var now = _dateTimeService.UtcNow;
         var contract = await _context.Set<Contract>()
             .FirstOrDefaultAsync(

@@ -69,7 +69,6 @@ public sealed class GetMyDraftJobPostsQueryHandler
                 BudgetMax = jobPost.BudgetMax,
                 Currency = jobPost.Currency,
                 EstimatedDuration = jobPost.EstimatedDuration,
-                MaxHires = jobPost.MaxHires,
                 Location = jobPost.Location,
                 Status = jobPost.Status,
                 Visibility = jobPost.Visibility,

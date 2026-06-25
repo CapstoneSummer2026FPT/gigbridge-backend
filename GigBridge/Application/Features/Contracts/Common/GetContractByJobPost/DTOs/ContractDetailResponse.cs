@@ -29,4 +29,12 @@ public class ContractDetailResponse
     public DateTime? UpdatedAt { get; set; }
 
     public ContractEscrowResponse? Escrow { get; set; }
+
+    public string? JobTitle { get; set; }
+    public string? JobDescription { get; set; }
+    public string? ClientName { get; set; }
+    public string? ClientEmail { get; set; }
+    public string? FreelancerName { get; set; }
+    public string? FreelancerEmail { get; set; }
+    public Guid? ConversationId { get; set; }
 }

@@ -66,8 +66,6 @@ public sealed class JobInvitationDto
 
     public string? EstimatedDuration { get; set; }
 
-    public int? MaxHires { get; set; }
-
     public string? Location { get; set; }
 
     public int JobStatus { get; set; }

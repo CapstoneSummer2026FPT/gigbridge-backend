@@ -41,6 +41,19 @@ public sealed class ESignController : BaseApiController
         return Ok(ApiResponse<ESignDocumentResponse>.Ok(result, "E-sign document retrieved"));
     }
 
+    [HttpGet("documents/by-contract/{contractId:guid}")]
+    public async Task<IActionResult> GetDocumentByContract(Guid contractId)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return InvalidTokenResponse();
+        }
+
+        var result = await Mediator.Send(new Application.Features.ESign.Common.GetDocumentByContract.Queries.GetESignDocumentByContractQuery(contractId, userId));
+
+        return Ok(ApiResponse<ESignDocumentResponse>.Ok(result, "E-sign document retrieved"));
+    }
+
     [HttpPost("documents/from-job/{jobPostId:guid}")]
     [Authorize(Roles = "Client")]
     public async Task<IActionResult> CreateDocumentFromJob(Guid jobPostId)

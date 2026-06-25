@@ -38,7 +38,6 @@ public class UpdateJobPostCommandHandlerTests
             BudgetMax: 200m,
             Currency: "VND",
             EstimatedDuration: "1 week",
-            MaxHires: 1,
             Location: "Remote",
             Visibility: 2,
             EndDate: now.AddDays(7),

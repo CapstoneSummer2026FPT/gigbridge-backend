@@ -37,7 +37,34 @@ public class GetContractByIdQueryHandler : IRequestHandler<GetContractByIdQuery,
             .AsNoTracking()
             .FirstOrDefaultAsync(e => e.ContractsId == contract.ContractsId, cancellationToken);
 
-        return ToResponse(contract, escrow);
+        var jobPost = await _context.Set<JobPost>()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(jp => jp.JobPostsId == contract.JobPostsId, cancellationToken);
+
+        var clientProfile = await _context.Set<ClientProfile>()
+            .AsNoTracking()
+            .Include(cp => cp.User)
+            .FirstOrDefaultAsync(cp => cp.ClientProfilesId == contract.ClientProfilesId, cancellationToken);
+        var clientUser = clientProfile?.User;
+
+        User? freelancerUser = null;
+        if (contract.FreelancerProfilesId.HasValue)
+        {
+            var freelancerProfile = await _context.Set<FreelancerProfile>()
+                .AsNoTracking()
+                .Include(fp => fp.User)
+                .FirstOrDefaultAsync(fp => fp.FreelancerProfilesId == contract.FreelancerProfilesId.Value, cancellationToken);
+            freelancerUser = freelancerProfile?.User;
+        }
+
+        var conversationId = await _context.Set<Conversation>()
+            .AsNoTracking()
+            .Where(c => c.ContractsId == contract.ContractsId)
+            .OrderByDescending(c => c.CreatedAt)
+            .Select(c => (Guid?)c.ConversationsId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return ToResponse(contract, escrow, jobPost, clientUser, freelancerUser, conversationId);
     }
 
     private async Task EnsureCanViewContract(Contract contract, Guid userId, CancellationToken cancellationToken)
@@ -78,7 +105,13 @@ public class GetContractByIdQueryHandler : IRequestHandler<GetContractByIdQuery,
         throw new ForbiddenAccessException("You do not have permission to view this contract.");
     }
 
-    private static ContractDetailResponse ToResponse(Contract contract, ContractEscrow? escrow)
+    private static ContractDetailResponse ToResponse(
+        Contract contract,
+        ContractEscrow? escrow,
+        JobPost? jobPost,
+        User? clientUser,
+        User? freelancerUser,
+        Guid? conversationId)
     {
         return new ContractDetailResponse
         {
@@ -106,7 +139,14 @@ public class GetContractByIdQueryHandler : IRequestHandler<GetContractByIdQuery,
                 Status = escrow.Status,
                 CreatedAt = escrow.CreatedAt,
                 FundedAt = escrow.FundedAt
-            }
+            },
+            JobTitle = jobPost?.Title,
+            JobDescription = jobPost?.Description,
+            ClientName = clientUser?.FullName ?? "Client",
+            ClientEmail = clientUser?.Email,
+            FreelancerName = freelancerUser?.FullName,
+            FreelancerEmail = freelancerUser?.Email,
+            ConversationId = conversationId
         };
     }
 }

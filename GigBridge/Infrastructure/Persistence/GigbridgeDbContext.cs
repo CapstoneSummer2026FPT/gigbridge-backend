@@ -268,7 +268,7 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
 
             entity.HasIndex(e => new { e.FreelancerProfilesId, e.Status }, "IX_Contracts_FreelancerProfilesId_Status");
 
-            entity.HasIndex(e => e.JobPostsId, "IX_Contracts_JobPostsId");
+            entity.HasIndex(e => e.JobPostsId, "IX_Contracts_JobPostsId").IsUnique();
 
             entity.HasIndex(e => e.Status, "IX_Contracts_Status");
 
@@ -297,8 +297,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("Contracts_flPro_FreelancerProfilesId_fkey");
 
-            entity.HasOne(d => d.JobPosts).WithMany(p => p.Contracts)
-                .HasForeignKey(d => d.JobPostsId)
+            entity.HasOne(d => d.JobPosts).WithOne(p => p.Contract)
+                .HasForeignKey<Contract>(d => d.JobPostsId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("Contracts_jp_JobPostsId_fkey");
 
@@ -905,7 +905,7 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
                 .HasColumnName("IsAIGenerated");
 
             entity.Property(e => e.Status)
-                .HasComment("Enum JobPostStatus: 0=Draft, 1=Open, 2=InProgress, 3=Closed, 4=Cancelled");
+                .HasComment("Enum JobPostStatus: 0=Draft, 1=Open, 2=Closed, 3=Cancelled");
 
             entity.Property(e => e.Title)
                 .HasMaxLength(500);

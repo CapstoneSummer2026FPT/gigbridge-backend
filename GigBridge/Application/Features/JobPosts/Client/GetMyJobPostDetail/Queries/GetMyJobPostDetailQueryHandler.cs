@@ -66,7 +66,6 @@ public class GetMyJobPostDetailQueryHandler
                 BudgetMax = jobPost.BudgetMax,
                 Currency = jobPost.Currency,
                 EstimatedDuration = jobPost.EstimatedDuration,
-                MaxHires = jobPost.MaxHires,
                 Location = jobPost.Location,
                 Visibility = jobPost.Visibility,
                 Status = jobPost.Status,

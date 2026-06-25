@@ -103,13 +103,14 @@ public sealed class SignContractCommandHandler :
             signedRoles.Add((int)signerRole);
         }
 
-        if (signedRoles.Contains((int)ESignerRole.Client) &&
-            signedRoles.Contains((int)ESignerRole.Freelancer))
+        var isFullySigned = signedRoles.Contains((int)ESignerRole.Client) &&
+            signedRoles.Contains((int)ESignerRole.Freelancer);
+
+        if (isFullySigned)
         {
             document.Status = (int)ESignDocumentStatus.FullySigned;
             document.FinalizedAt = now;
             document.UpdatedAt = now;
-            contract.Status = (int)ContractStatus.PendingEscrow;
             contract.UpdatedAt = now;
 
             var conversations = await _context.Set<Conversation>()
@@ -118,15 +119,11 @@ public sealed class SignContractCommandHandler :
 
             foreach (var conversation in conversations)
             {
-                if (conversation.ConversationType == (int)ConversationType.JobNegotiation)
-                {
-                    conversation.ConversationType = (int)ConversationType.ContractWorkroom;
-                    ContractConversationEvents.AddSystemMessage(
-                        _context,
-                        conversation,
-                        "Contract fully signed. Workroom is ready while escrow awaits funding.",
-                        now);
-                }
+                ContractConversationEvents.AddSystemMessage(
+                    _context,
+                    conversation,
+                    "Contract fully signed. Waiting for freelancer milestone acceptance.",
+                    now);
             }
         }
         else
@@ -137,7 +134,7 @@ public sealed class SignContractCommandHandler :
 
         await _context.SaveChangesAsync(cancellationToken);
 
-        if (contract.Status == (int)ContractStatus.PendingEscrow)
+        if (isFullySigned)
         {
             var conversationIds = await _context.Set<Conversation>()
                 .Where(conversation => conversation.ContractsId == contract.ContractsId)

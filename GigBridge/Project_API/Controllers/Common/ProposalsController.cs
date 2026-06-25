@@ -1,6 +1,7 @@
-﻿using Application.Common.Models;
+using Application.Common.Models;
 using Application.Features.Proposals.Common.DTOs;
 using Application.Features.Proposals.Common.GetProposalDetail.Queries;
+using Application.Features.Proposals.Common.AcceptForNegotiation.Commands;
 using Application.Features.Proposals.Common.UpdateProposalStatus.Commands;
 using Application.Features.Proposals.Common.UpdateProposalStatus.Commands.DTOs;
 using Application.Features.Proposals.Freelancer.GetMyProposalByJobPost.Queries;
@@ -61,5 +62,20 @@ public class ProposalsController : BaseApiController
         var result = await Mediator.Send(command);
 
         return Ok(ApiResponse<bool>.Ok(result, "Proposal status updated successfully"));
+    }
+
+    [HttpPost("{proposalId}/accept-for-negotiation")]
+    [Authorize(Roles = "Client")]
+    public async Task<IActionResult> AcceptProposalForNegotiation(Guid proposalId)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return InvalidTokenResponse();
+        }
+
+        var command = new AcceptProposalForNegotiationCommand(proposalId, userId);
+        var conversationId = await Mediator.Send(command);
+
+        return Ok(ApiResponse<Guid>.Ok(conversationId, "Proposal accepted for negotiation"));
     }
 }

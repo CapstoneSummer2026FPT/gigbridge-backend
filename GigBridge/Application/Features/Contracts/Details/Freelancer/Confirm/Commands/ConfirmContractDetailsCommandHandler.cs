@@ -15,13 +15,16 @@ public sealed class ConfirmContractDetailsCommandHandler :
 {
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
+    private readonly IChatRealtimeNotifier _chatRealtimeNotifier;
 
     public ConfirmContractDetailsCommandHandler(
         IApplicationDbContext context,
-        IDateTimeService dateTimeService)
+        IDateTimeService dateTimeService,
+        IChatRealtimeNotifier chatRealtimeNotifier)
     {
         _context = context;
         _dateTimeService = dateTimeService;
+        _chatRealtimeNotifier = chatRealtimeNotifier;
     }
 
     public async Task<ContractWorkflowResponse> Handle(
@@ -47,7 +50,7 @@ public sealed class ConfirmContractDetailsCommandHandler :
             .Where(milestone => milestone.ContractsId == contract.ContractsId)
             .ToListAsync(cancellationToken);
 
-        ContractDetailsValidator.ValidateMilestones(contract, milestones);
+        ContractDetailsValidator.ValidateMilestonesForSubmitOrPublish(contract, milestones);
 
         var now = _dateTimeService.UtcNow;
         var escrow = await _context.Set<ContractEscrow>()
@@ -80,6 +83,22 @@ public sealed class ConfirmContractDetailsCommandHandler :
             cancellationToken);
 
         await _context.SaveChangesAsync(cancellationToken);
+
+        var participantUserIds = await _context.Set<ConversationParticipant>()
+            .AsNoTracking()
+            .Where(p => p.Conversations.ContractsId == contract.ContractsId && p.LeftAt == null && p.DeletedAt == null)
+            .Select(p => p.UserId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        if (participantUserIds.Any())
+        {
+            await _chatRealtimeNotifier.SendUsersEventAsync(
+                [.. participantUserIds],
+                "ContractDetailsConfirmed",
+                new { contractId = contract.ContractsId },
+                cancellationToken);
+        }
 
         return new ContractWorkflowResponse(contract.ContractsId, contract.Status, escrow.ContractEscrowId, null);
     }
