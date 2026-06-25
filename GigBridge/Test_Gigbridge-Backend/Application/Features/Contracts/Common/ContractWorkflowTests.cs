@@ -241,11 +241,13 @@ public class ContractWorkflowTests
         var fixture = new ContractWorkflowFixture();
         fixture.MoveToPendingSignatureWithDocument();
         fixture.MarkDocumentFullySigned();
+        var notificationService = new RecordingNotificationService();
 
         var handler = new RequestContractMilestoneChangeCommandHandler(
             fixture.Context,
             new FixedDateTimeService(fixture.Now),
-            new NoopChatRealtimeNotifier());
+            new NoopChatRealtimeNotifier(),
+            notificationService);
 
         var result = await handler.Handle(
             new RequestContractMilestoneChangeCommand(
@@ -259,6 +261,13 @@ public class ContractWorkflowTests
         Assert.Equal((int)ESignDocumentStatus.Voided, fixture.EsignDocuments.Entities[0].Status);
         Assert.All(fixture.EsignSignatures.Entities, signature =>
             Assert.Equal((int)ESignSignatureStatus.Declined, signature.Status));
+        var notification = Assert.Single(notificationService.Notifications);
+        Assert.Equal(fixture.ClientUserId, notification.UserId);
+        Assert.Equal(NotificationType.MilestoneUpdated, notification.Type);
+        Assert.Equal("Milestone change requested", notification.Title);
+        Assert.Contains("Please adjust the second milestone.", notification.Content);
+        Assert.Equal(fixture.ContractId, notification.ReferenceId);
+        Assert.Equal("Contract", notification.ReferenceType);
     }
 
     private sealed class ContractWorkflowFixture

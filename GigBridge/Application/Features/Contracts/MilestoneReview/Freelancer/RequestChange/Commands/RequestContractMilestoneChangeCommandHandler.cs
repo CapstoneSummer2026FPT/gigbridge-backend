@@ -16,15 +16,18 @@ public sealed class RequestContractMilestoneChangeCommandHandler :
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
     private readonly IChatRealtimeNotifier _chatRealtimeNotifier;
+    private readonly INotificationService _notificationService;
 
     public RequestContractMilestoneChangeCommandHandler(
         IApplicationDbContext context,
         IDateTimeService dateTimeService,
-        IChatRealtimeNotifier chatRealtimeNotifier)
+        IChatRealtimeNotifier chatRealtimeNotifier,
+        INotificationService notificationService)
     {
         _context = context;
         _dateTimeService = dateTimeService;
         _chatRealtimeNotifier = chatRealtimeNotifier;
+        _notificationService = notificationService;
     }
 
     public async Task<ContractWorkflowResponse> Handle(
@@ -93,6 +96,28 @@ public sealed class RequestContractMilestoneChangeCommandHandler :
             cancellationToken);
 
         await _context.SaveChangesAsync(cancellationToken);
+
+        var clientUserId = await _context.Set<ClientProfile>()
+            .Where(profile => profile.ClientProfilesId == contract.ClientProfilesId)
+            .Select(profile => profile.UserId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (clientUserId != Guid.Empty)
+        {
+            var reason = command.Request.Reason?.Trim();
+            var notificationContent = string.IsNullOrWhiteSpace(reason)
+                ? $"The freelancer requested milestone changes for \"{contract.Title}\". Please update the contract milestones."
+                : $"The freelancer requested milestone changes for \"{contract.Title}\": {reason}";
+
+            await _notificationService.CreateNotificationAsync(
+                clientUserId,
+                NotificationType.MilestoneUpdated,
+                "Milestone change requested",
+                notificationContent,
+                contract.ContractsId,
+                "Contract",
+                cancellationToken);
+        }
 
         var participantUserIds = await _context.Set<ConversationParticipant>()
             .AsNoTracking()
