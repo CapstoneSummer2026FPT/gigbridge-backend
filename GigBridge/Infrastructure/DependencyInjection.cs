@@ -8,6 +8,7 @@ using Infrastructure.ExternalServices.Ai;
 using Infrastructure.ExternalServices.GoogleMeet;
 using Infrastructure.ExternalServices.Payments;
 using Infrastructure.Persistence;
+using Infrastructure.Services;
 using Infrastructure.Services.Auth;
 using Infrastructure.Services.Common;
 using Infrastructure.Services.Email;
@@ -127,6 +128,7 @@ public static class DependencyInjection
         services.AddScoped<IMediaService, MediaService>();
         services.AddScoped<INotificationService, NotificationService>();
         services.AddTransient<IDateTimeService, DateTimeService>();
+        services.AddScoped<IContentModerationService, ContentModerationService>();
         services.AddScoped<IWalletTopUpPaymentService, PayOsWalletTopUpPaymentService>();
         services.AddScoped<IPayOsPaymentLinkClient>(provider =>
             new PayOsPaymentLinkClient(provider.GetRequiredKeyedService<PayOSClient>("OrderClient")));

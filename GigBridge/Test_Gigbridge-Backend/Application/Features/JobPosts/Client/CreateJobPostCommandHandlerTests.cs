@@ -1,8 +1,10 @@
+using Application.Common.Exceptions;
 using Application.Common.Interfaces.IService;
 using Application.Features.JobPosts.Client.CreateJobPost.Commands;
 using Application.Features.JobPosts.Client.CreateJobPost.DTOs;
 using Domain.Entities;
 using Domain.Enums;
+using Infrastructure.Services;
 using Test_Gigbridge_Backend.TestSupport;
 
 namespace Test_Gigbridge_Backend.Application.Features.JobPosts.Client;
@@ -36,7 +38,10 @@ public class CreateJobPostCommandHandlerTests
             SkillIds: new List<Guid>(),
             CustomSkillNames: new List<string>());
 
-        var handler = new CreateJobPostCommandHandler(context, new FixedDateTimeService(now));
+        var handler = new CreateJobPostCommandHandler(
+            context,
+            new FixedDateTimeService(now),
+            new ContentModerationService());
         var jobPostId = await handler.Handle(new CreateJobPostCommand(request, userId), CancellationToken.None);
 
         var jobPost = Assert.Single(jobPosts.Entities);
@@ -80,11 +85,53 @@ public class CreateJobPostCommandHandlerTests
             SkillIds: new List<Guid>(),
             CustomSkillNames: new List<string>());
 
-        var handler = new CreateJobPostCommandHandler(context, new FixedDateTimeService(now));
+        var handler = new CreateJobPostCommandHandler(
+            context,
+            new FixedDateTimeService(now),
+            new ContentModerationService());
         await handler.Handle(new CreateJobPostCommand(request, userId), CancellationToken.None);
 
         var contract = Assert.Single(contracts.Entities);
         Assert.Equal(1200m, contract.TotalBudget);
+    }
+
+    [Fact]
+    public async Task Handle_WithUnsafeContent_ThrowsValidationExceptionAndDoesNotSave()
+    {
+        var now = new DateTime(2026, 6, 10, 10, 0, 0, DateTimeKind.Utc);
+        var context = new InMemoryApplicationDbContext();
+        var userId = Guid.NewGuid();
+        var jobPosts = context.AddSet<JobPost>();
+        var contracts = context.AddSet<Contract>();
+
+        var request = new CreateJobPostRequest(
+            Title: "Buôn ma tuy",
+            Description: "Tuyen nguoi van chuyen hang",
+            MajorCategoryId: null,
+            BudgetMin: null,
+            BudgetMax: 1200m,
+            Currency: "VND",
+            EstimatedDuration: null,
+            Location: null,
+            Visibility: null,
+            EndDate: null,
+            SkillIds: new List<Guid>(),
+            CustomSkillNames: new List<string>());
+
+        var handler = new CreateJobPostCommandHandler(
+            context,
+            new FixedDateTimeService(now),
+            new ContentModerationService());
+
+        var exception = await Assert.ThrowsAsync<ValidationException>(() =>
+            handler.Handle(new CreateJobPostCommand(request, userId), CancellationToken.None));
+
+        Assert.Contains(
+            "Job post appears to request or promote illegal drug-related work.",
+            exception.Errors["JobPostContent"]);
+        Assert.Empty(jobPosts.Entities);
+        Assert.Empty(contracts.Entities);
+        Assert.Equal(0, context.SaveChangesCount);
     }
 
     private sealed class FixedDateTimeService : IDateTimeService
