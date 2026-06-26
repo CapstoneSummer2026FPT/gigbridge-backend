@@ -32,6 +32,8 @@ builder.Services.AddHybridCache(builder.Configuration);
 
 var app = builder.Build();
 
+await app.EnsureLocalESignTemplatesAsync();
+
 // Enable Swagger in all environments for testing
 app.UseSwagger();
 app.UseSwaggerUI();
