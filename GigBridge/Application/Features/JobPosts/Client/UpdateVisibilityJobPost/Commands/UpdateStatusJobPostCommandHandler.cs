@@ -14,13 +14,16 @@ public class UpdateStatusJobPostCommandHandler
 {
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
+    private readonly IContentModerationService _contentModerationService;
 
     public UpdateStatusJobPostCommandHandler(
         IApplicationDbContext context,
-        IDateTimeService dateTimeService)
+        IDateTimeService dateTimeService,
+        IContentModerationService contentModerationService)
     {
         _context = context;
         _dateTimeService = dateTimeService;
+        _contentModerationService = contentModerationService;
     }
 
     public async Task<bool> Handle(
@@ -51,6 +54,18 @@ public class UpdateStatusJobPostCommandHandler
 
         if (command.Request.Status == JobPostSetupPublishGuard.OpenStatus)
         {
+            var moderationResult = _contentModerationService.ValidateJobPostContent(
+                jobPost.Title,
+                jobPost.Description);
+
+            if (!moderationResult.IsAllowed)
+            {
+                throw new ValidationException(new Dictionary<string, string[]>
+                {
+                    ["JobPostContent"] = new[] { ContentModerationMessages.JobPostContentViolation }
+                });
+            }
+
             var contract = await _context.Set<Contract>()
                 .Include(c => c.Milestones)
                 .FirstOrDefaultAsync(c => c.JobPostsId == jobPost.JobPostsId, cancellationToken);

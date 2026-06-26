@@ -1,11 +1,12 @@
 using Application.Features.JobPosts.Client.UpdateJobPost.Commands;
 using Application.Features.JobPosts.Client.UpdateJobPost.DTOs;
+using Infrastructure.Services;
 
 namespace Test_Gigbridge_Backend.Application.Features.JobPosts.Client;
 
 public class UpdateJobPostCommandValidatorTests
 {
-    private readonly UpdateJobPostCommandValidator _validator = new();
+    private readonly UpdateJobPostCommandValidator _validator = new(new ContentModerationService());
 
     [Theory]
     [InlineData(0)]
@@ -77,6 +78,23 @@ public class UpdateJobPostCommandValidatorTests
         var result = _validator.Validate(new UpdateJobPostCommand(Guid.NewGuid(), Guid.NewGuid(), request));
 
         Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public void Validate_ReturnsError_WhenContentModerationBlocksJobPost()
+    {
+        var request = CreateValidRequest() with
+        {
+            Title = "Security task",
+            Description = "Viet malware va ddos website doi thu."
+        };
+
+        var result = _validator.Validate(new UpdateJobPostCommand(Guid.NewGuid(), Guid.NewGuid(), request));
+
+        Assert.False(result.IsValid);
+        Assert.Contains(
+            result.Errors,
+            error => error.ErrorMessage.Contains("community and legal safety standards"));
     }
 
     private static UpdateJobPostRequest CreateValidRequest()

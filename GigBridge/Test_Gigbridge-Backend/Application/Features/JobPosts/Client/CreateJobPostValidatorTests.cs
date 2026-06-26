@@ -1,11 +1,12 @@
 using Application.Features.JobPosts.Client.CreateJobPost.Commands;
 using Application.Features.JobPosts.Client.CreateJobPost.DTOs;
+using Infrastructure.Services;
 
 namespace Test_Gigbridge_Backend.Application.Features.JobPosts.Client;
 
 public class CreateJobPostValidatorTests
 {
-    private readonly CreateJobPostValidator _validator = new();
+    private readonly CreateJobPostValidator _validator = new(new ContentModerationService());
 
     [Fact]
     public void Validate_ReturnsNoErrorsForValidRequest()
@@ -101,6 +102,24 @@ public class CreateJobPostValidatorTests
         var result = _validator.Validate(command);
 
         Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public void Validate_ReturnsError_WhenContentModerationBlocksJobPost()
+    {
+        var request = CreateValidRequest() with
+        {
+            Title = "Payment transfer assistant",
+            Description = "Cho thue tai khoan ngan hang va nhan tien ho."
+        };
+        var command = new CreateJobPostCommand(request, Guid.NewGuid());
+
+        var result = _validator.Validate(command);
+
+        Assert.False(result.IsValid);
+        Assert.Contains(
+            result.Errors,
+            error => error.ErrorMessage.Contains("community and legal safety standards"));
     }
 
     private static CreateJobPostRequest CreateValidRequest()

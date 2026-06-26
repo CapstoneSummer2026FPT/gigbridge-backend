@@ -1,11 +1,16 @@
+using Application.Common.Interfaces.IService;
 using FluentValidation;
 
 namespace Application.Features.JobPosts.Client.UpdateJobPost.Commands;
 
 public class UpdateJobPostCommandValidator : AbstractValidator<UpdateJobPostCommand>
 {
-    public UpdateJobPostCommandValidator()
+    private readonly IContentModerationService _contentModerationService;
+
+    public UpdateJobPostCommandValidator(IContentModerationService contentModerationService)
     {
+        _contentModerationService = contentModerationService;
+
         RuleFor(x => x.JobPostId)
             .NotEmpty()
             .WithMessage("JobPostId is required.");
@@ -27,6 +32,13 @@ public class UpdateJobPostCommandValidator : AbstractValidator<UpdateJobPostComm
         RuleFor(x => x.Request.Description)
             .NotEmpty()
             .WithMessage("Description is required.");
+
+        RuleFor(x => x.Request)
+            .Must(request => _contentModerationService
+                .ValidateJobPostContent(request.Title, request.Description)
+                .IsAllowed)
+            .When(x => x.Request is not null)
+            .WithMessage(ContentModerationMessages.JobPostContentViolation);
 
         RuleFor(x => x.Request.BudgetMin)
             .GreaterThanOrEqualTo(0)

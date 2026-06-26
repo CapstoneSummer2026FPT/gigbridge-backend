@@ -4,6 +4,7 @@ using Application.Features.JobPosts.Client.UpdateStatusJobPost.Commands;
 using Application.Features.JobPosts.Client.UpdateStatusJobPost.DTOs;
 using Domain.Entities;
 using Domain.Enums;
+using Infrastructure.Services;
 using Test_Gigbridge_Backend.TestSupport;
 
 namespace Test_Gigbridge_Backend.Application.Features.JobPosts.Client;
@@ -46,6 +47,28 @@ public class UpdateStatusJobPostCommandHandlerTests
                     fixture.ClientUserId,
                     new UpdateStatusJobPostRequest { Status = 1 }),
                 CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Handle_OpenStatusWithIllegalContent_ThrowsValidationException()
+    {
+        var fixture = new UpdateStatusFixture();
+        fixture.JobPost.Description = "Cho thue tai khoan ngan hang va nhan tien ho.";
+        fixture.AddFullySignedDocument();
+        fixture.AddValidMilestone();
+
+        var handler = fixture.CreateHandler();
+
+        var exception = await Assert.ThrowsAsync<ValidationException>(() =>
+            handler.Handle(
+                new UpdateStatusJobPostCommand(
+                    fixture.JobPostId,
+                    fixture.ClientUserId,
+                    new UpdateStatusJobPostRequest { Status = 1 }),
+                CancellationToken.None));
+
+        Assert.Contains("JobPostContent", exception.Errors.Keys);
+        Assert.Equal(0, fixture.JobPost.Status);
     }
 
     private sealed class UpdateStatusFixture
@@ -99,7 +122,8 @@ public class UpdateStatusJobPostCommandHandlerTests
         {
             return new UpdateStatusJobPostCommandHandler(
                 Context,
-                new FixedDateTimeService(Now));
+                new FixedDateTimeService(Now),
+                new ContentModerationService());
         }
 
         public void AddFullySignedDocument()
