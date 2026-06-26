@@ -9,4 +9,6 @@ public interface IUserEloService
     Task ApplyLoginActivityAsync(User user, CancellationToken cancellationToken);
 
     Task ApplyReviewScoreAsync(Guid reviewId, Guid revieweeId, int rating, CancellationToken cancellationToken);
+
+    Task ApplyCheatingPenaltyAsync(Guid violationId, Guid userId, int pointsDelta, CancellationToken cancellationToken);
 }

@@ -60,6 +60,7 @@ if (!app.Environment.IsEnvironment("Testing"))
 }
 
 app.UseAuthentication();
+app.UseMiddleware<Project_API.Middleware.AccountStatusMiddleware>();
 app.UseAuthorization();
 
 app.MapHealthChecks("/health");

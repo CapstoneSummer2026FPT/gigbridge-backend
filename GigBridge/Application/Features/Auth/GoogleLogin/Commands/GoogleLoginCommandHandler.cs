@@ -59,6 +59,11 @@ public class GoogleLoginCommandHandler : IRequestHandler<GoogleLoginCommand, (Lo
             throw new UnauthorizedAccessException("Your account has been suspended by the administrator");
         }
 
+        if (user.SuspendedUntil.HasValue && user.SuspendedUntil.Value > _dateTimeService.UtcNow)
+        {
+            throw new UnauthorizedAccessException($"Your account is suspended until {user.SuspendedUntil.Value:O}");
+        }
+
         if (!isNewUser)
         {
             await _userEloService.ApplyLoginActivityAsync(user, cancellationToken);

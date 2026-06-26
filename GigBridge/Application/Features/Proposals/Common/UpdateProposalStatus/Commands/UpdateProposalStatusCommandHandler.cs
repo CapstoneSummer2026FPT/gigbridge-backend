@@ -1,6 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Application.Features.Proposals.Common.UpdateProposalStatus.Commands.DTOs;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
@@ -9,20 +10,23 @@ using Microsoft.EntityFrameworkCore;
 namespace Application.Features.Proposals.Common.UpdateProposalStatus.Commands;
 
 public class UpdateProposalStatusCommandHandler
-    : IRequestHandler<UpdateProposalStatusCommand, bool>
+    : IRequestHandler<UpdateProposalStatusCommand, UpdateProposalStatusResponse>
 {
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
+    private readonly IProposalCheatingService? _proposalCheatingService;
 
     public UpdateProposalStatusCommandHandler(
         IApplicationDbContext context,
-        IDateTimeService dateTimeService)
+        IDateTimeService dateTimeService,
+        IProposalCheatingService? proposalCheatingService = null)
     {
         _context = context;
         _dateTimeService = dateTimeService;
+        _proposalCheatingService = proposalCheatingService;
     }
 
-    public async Task<bool> Handle(
+    public async Task<UpdateProposalStatusResponse> Handle(
         UpdateProposalStatusCommand command,
         CancellationToken cancellationToken)
     {
@@ -64,7 +68,19 @@ public class UpdateProposalStatusCommandHandler
         }
         else if (isFreelancerOwner)
         {
+            var isDraftSubmission = proposal.Status == 0 && requestedStatus == 1;
             UpdateStatusByFreelancer(proposal, requestedStatus);
+            var cheatingPenalty = isDraftSubmission && _proposalCheatingService is not null
+                ? await _proposalCheatingService.ApplySubmissionPenaltyIfNeededAsync(
+                    proposal,
+                    command.UserId,
+                    cancellationToken)
+                : null;
+
+            proposal.UpdatedAt = _dateTimeService.UtcNow;
+            await _context.SaveChangesAsync(cancellationToken);
+
+            return new UpdateProposalStatusResponse(true, proposal.Status, cheatingPenalty);
         }
         else
         {
@@ -75,7 +91,7 @@ public class UpdateProposalStatusCommandHandler
 
         await _context.SaveChangesAsync(cancellationToken);
 
-        return true;
+        return new UpdateProposalStatusResponse(true, proposal.Status, null);
     }
 
     private void UpdateStatusByClient(

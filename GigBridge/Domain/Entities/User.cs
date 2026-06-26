@@ -28,6 +28,12 @@ public partial class User
 
     public bool IsSetup { get; set; }
 
+    public DateTime? SuspendedUntil { get; set; }
+
+    public DateTime? SuspendedAt { get; set; }
+
+    public string? SuspensionReason { get; set; }
+
     public string? PreferredLanguage { get; set; }
 
     public string? Provider { get; set; }
@@ -82,6 +88,12 @@ public partial class User
     public virtual ICollection<PaymentProof> PaymentProofs { get; set; } = new List<PaymentProof>();
 
     public virtual ICollection<PlatformSetting> PlatformSettings { get; set; } = new List<PlatformSetting>();
+
+    public virtual ICollection<ProposalCheatingEvent> ProposalCheatingEvents { get; set; } = new List<ProposalCheatingEvent>();
+
+    public virtual ICollection<FreelancerCheatingViolation> FreelancerCheatingViolations { get; set; } = new List<FreelancerCheatingViolation>();
+
+    public virtual ICollection<FreelancerCheatingViolation> ReviewedFreelancerCheatingViolations { get; set; } = new List<FreelancerCheatingViolation>();
 
     public virtual ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
 
