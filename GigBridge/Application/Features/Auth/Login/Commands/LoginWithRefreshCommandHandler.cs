@@ -51,7 +51,7 @@ namespace Application.Features.Auth.Login.Commands
                 throw new UnauthorizedAccessException("Invalid email or password");
             }
 
-            EnsureUserCanLogin(user);
+            EnsureUserCanLogin(user, _dateTimeService.UtcNow);
 
             await _userEloService.ApplyLoginActivityAsync(user, cancellationToken);
             var refreshToken = RotateRefreshToken(user);
@@ -73,11 +73,16 @@ namespace Application.Features.Auth.Login.Commands
             return refreshToken;
         }
 
-        private static void EnsureUserCanLogin(User user)
+        private static void EnsureUserCanLogin(User user, DateTime now)
         {
             if (!user.IsActive)
             {
                 throw new UnauthorizedAccessException("Your account has been suspended by the administrator");
+            }
+
+            if (user.SuspendedUntil.HasValue && user.SuspendedUntil.Value > now)
+            {
+                throw new UnauthorizedAccessException($"Your account is suspended until {user.SuspendedUntil.Value:O}");
             }
 
             if (!user.IsEmailVerified)

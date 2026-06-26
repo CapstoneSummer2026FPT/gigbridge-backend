@@ -10,6 +10,9 @@ public class AdminUserDto
     public int Role { get; init; }
     public bool IsEmailVerified { get; init; }
     public bool IsActive { get; init; }
+    public DateTime? SuspendedUntil { get; init; }
+    public DateTime? SuspendedAt { get; init; }
+    public string? SuspensionReason { get; init; }
     public string? PreferredLanguage { get; init; }
     public string? Provider { get; init; }
     public int OpenReportCount { get; set; }

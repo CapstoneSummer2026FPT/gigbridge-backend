@@ -61,7 +61,7 @@ public class ProposalsController : BaseApiController
 
         var result = await Mediator.Send(command);
 
-        return Ok(ApiResponse<bool>.Ok(result, "Proposal status updated successfully"));
+        return Ok(ApiResponse<UpdateProposalStatusResponse>.Ok(result, "Proposal status updated successfully"));
     }
 
     [HttpPost("{proposalId}/accept-for-negotiation")]

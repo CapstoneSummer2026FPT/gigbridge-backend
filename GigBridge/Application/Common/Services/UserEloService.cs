@@ -13,6 +13,7 @@ public class UserEloService : IUserEloService
 {
     private const string UserSource = "User";
     private const string ReviewSource = "Review";
+    private const string CheatingViolationSource = "FreelancerCheatingViolation";
 
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
@@ -146,6 +147,49 @@ public class UserEloService : IUserEloService
                 rating,
                 component = "review_rating",
                 requestedDelta = ratingDelta
+            },
+            now,
+            cancellationToken);
+    }
+
+    public async Task ApplyCheatingPenaltyAsync(
+        Guid violationId,
+        Guid userId,
+        int pointsDelta,
+        CancellationToken cancellationToken)
+    {
+        if (pointsDelta >= 0)
+        {
+            return;
+        }
+
+        var user = await _context.Set<User>()
+            .FirstOrDefaultAsync(existingUser => existingUser.UserId == userId, cancellationToken);
+
+        if (user is null)
+        {
+            throw new NotFoundException("Freelancer does not exist.");
+        }
+
+        if (user.Role != (int)UserRole.Freelancer)
+        {
+            return;
+        }
+
+        var now = _dateTimeService.UtcNow;
+        var score = await EnsureScoreAsync(userId, now, cancellationToken);
+
+        await ApplyDeltaAsync(
+            score,
+            pointsDelta,
+            UserEloPointReason.CheatingPenalty,
+            CheatingViolationSource,
+            violationId,
+            $"cheating:{violationId}:{userId}:penalty",
+            new
+            {
+                violationId,
+                requestedDelta = pointsDelta
             },
             now,
             cancellationToken);
