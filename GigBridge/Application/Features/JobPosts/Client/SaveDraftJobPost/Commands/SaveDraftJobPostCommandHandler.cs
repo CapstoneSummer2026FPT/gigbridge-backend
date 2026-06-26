@@ -18,13 +18,16 @@ public sealed class SaveDraftJobPostCommandHandler
 
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
+    private readonly IContentModerationService _contentModerationService;
 
     public SaveDraftJobPostCommandHandler(
         IApplicationDbContext context,
-        IDateTimeService dateTimeService)
+        IDateTimeService dateTimeService,
+        IContentModerationService contentModerationService)
     {
         _context = context;
         _dateTimeService = dateTimeService;
+        _contentModerationService = contentModerationService;
     }
 
     public async Task<bool> Handle(
@@ -55,6 +58,11 @@ public sealed class SaveDraftJobPostCommandHandler
         {
             throw new BadRequestException("Only draft job posts can be saved as draft.");
         }
+
+        JobPostContentModerationGuard.EnsureAllowed(
+            _contentModerationService,
+            command.Request.Title,
+            command.Request.Description);
 
         var normalizedSkills = await JobPostSkillNormalizer.NormalizeAsync(
             _context,

@@ -3,6 +3,7 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Features.Contracts.Common.Internal;
+using Application.Features.JobPosts.Client.Common;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -52,20 +53,13 @@ public class UpdateStatusJobPostCommandHandler
             throw new NotFoundException("Job post does not exist or you do not have permission to update it.");
         }
 
+        JobPostContentModerationGuard.EnsureAllowed(
+            _contentModerationService,
+            jobPost.Title,
+            jobPost.Description);
+
         if (command.Request.Status == JobPostSetupPublishGuard.OpenStatus)
         {
-            var moderationResult = _contentModerationService.ValidateJobPostContent(
-                jobPost.Title,
-                jobPost.Description);
-
-            if (!moderationResult.IsAllowed)
-            {
-                throw new ValidationException(new Dictionary<string, string[]>
-                {
-                    ["JobPostContent"] = new[] { ContentModerationMessages.JobPostContentViolation }
-                });
-            }
-
             var contract = await _context.Set<Contract>()
                 .Include(c => c.Milestones)
                 .FirstOrDefaultAsync(c => c.JobPostsId == jobPost.JobPostsId, cancellationToken);

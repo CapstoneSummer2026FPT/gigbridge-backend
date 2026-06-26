@@ -131,8 +131,8 @@ public class ContentModerationService : IContentModerationService
             HardBlock: true,
             HardPhrases:
             [
-                "hoi lo", "dua hoi lo", "nhan hoi lo", "tron thue", "lam gia hoa don",
-                "hoa don khong", "bribery", "corruption", "tax evasion", "fake invoice"
+                    "hoi lo", "dua hoi lo", "nhan hoi lo", "tron thue", "lam gia hoa don",
+                    "hoa don khong", "bribery", "corruption", "tax evasion", "fake invoice"
             ]),
 
         new(

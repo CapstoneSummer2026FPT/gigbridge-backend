@@ -1,3 +1,4 @@
+using Application.Common.Interfaces.IService;
 using FluentValidation;
 
 namespace Application.Features.JobPosts.Client.SaveDraftJobPost.Commands;
@@ -5,8 +6,12 @@ namespace Application.Features.JobPosts.Client.SaveDraftJobPost.Commands;
 public sealed class SaveDraftJobPostCommandValidator
     : AbstractValidator<SaveDraftJobPostCommand>
 {
-    public SaveDraftJobPostCommandValidator()
+    private readonly IContentModerationService _contentModerationService;
+
+    public SaveDraftJobPostCommandValidator(IContentModerationService contentModerationService)
     {
+        _contentModerationService = contentModerationService;
+
         RuleFor(x => x.JobPostId)
             .NotEmpty().WithMessage("JobPostId is required.");
 
@@ -22,6 +27,12 @@ public sealed class SaveDraftJobPostCommandValidator
                 .MaximumLength(200)
                 .When(x => !string.IsNullOrWhiteSpace(x.Request.Title))
                 .WithMessage("Title must not exceed 200 characters.");
+
+            RuleFor(x => x.Request)
+                .Must(request => _contentModerationService
+                    .ValidateJobPostContent(request.Title, request.Description)
+                    .IsAllowed)
+                .WithMessage(ContentModerationMessages.JobPostContentViolation);
 
             RuleFor(x => x.Request.BudgetMin)
                 .GreaterThanOrEqualTo(0)

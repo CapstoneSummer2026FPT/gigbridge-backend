@@ -1,5 +1,6 @@
 using Application.Features.JobPosts.Client.SaveDraftJobPost.Commands;
 using Application.Features.JobPosts.Client.SaveDraftJobPost.DTOs;
+using Infrastructure.Services;
 using System;
 using System.Collections.Generic;
 using Xunit;
@@ -8,7 +9,7 @@ namespace Test_Gigbridge_Backend.Application.Features.JobPosts.Client;
 
 public class SaveDraftJobPostCommandValidatorTests
 {
-    private readonly SaveDraftJobPostCommandValidator _validator = new();
+    private readonly SaveDraftJobPostCommandValidator _validator = new(new ContentModerationService());
 
     [Fact]
     public void Validate_ReturnsNoErrorsForValidDraft()
@@ -44,6 +45,39 @@ public class SaveDraftJobPostCommandValidatorTests
         {
             SkillIds = new List<Guid> { Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid() },
             CustomSkillNames = new List<string> { "Skill1", "Skill2", "Skill3", "Skill4", "Skill5" } // Total = 10
+        };
+        var command = new SaveDraftJobPostCommand(Guid.NewGuid(), Guid.NewGuid(), request);
+
+        var result = _validator.Validate(command);
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public void Validate_ReturnsError_WhenDraftContentModerationBlocksJobPost()
+    {
+        var request = CreateValidRequest() with
+        {
+            Title = "Buôn ma tuy",
+            Description = "Draft content"
+        };
+        var command = new SaveDraftJobPostCommand(Guid.NewGuid(), Guid.NewGuid(), request);
+
+        var result = _validator.Validate(command);
+
+        Assert.False(result.IsValid);
+        Assert.Contains(
+            result.Errors,
+            error => error.ErrorMessage.Contains("community and legal safety standards"));
+    }
+
+    [Fact]
+    public void Validate_ReturnsNoErrors_WhenDraftTitleAndDescriptionAreEmpty()
+    {
+        var request = CreateValidRequest() with
+        {
+            Title = null,
+            Description = null
         };
         var command = new SaveDraftJobPostCommand(Guid.NewGuid(), Guid.NewGuid(), request);
 

@@ -40,10 +40,39 @@ public class ContentModerationServiceTests
     {
         var result = _service.ValidateJobPostContent(
             "Nhan giao viec gap",
-            "Can nguoi van chuyen m.a-t_u/y trong ngay.");
+            "Can nguoi b.u.o.n m.a t.u.y trong ngay.");
 
         Assert.False(result.IsAllowed);
         Assert.Contains("Illegal drugs / narcotics", result.MatchedCategories);
+    }
+
+    [Theory]
+    [InlineData("Bu\u00f4n ma t\u00fay")]
+    [InlineData("Bu\u00f4n ma tuy")]
+    [InlineData("buon ma tuy")]
+    [InlineData("b.u.o.n m.a t.u.y")]
+    [InlineData("v\u1eadn chuy\u1ec3n ma t\u00fay")]
+    [InlineData("ca do bong da")]
+    [InlineData("cho thue tai khoan ngan hang")]
+    [InlineData("rua tien")]
+    [InlineData("hack tai khoan")]
+    [InlineData("lam cccd gia")]
+    public void ValidateJobPostContent_BlocksRequiredExamples(string unsafeText)
+    {
+        var result = _service.ValidateJobPostContent(unsafeText, "Tuyen nguoi lam viec gap.");
+
+        Assert.False(result.IsAllowed);
+        Assert.True(result.RiskScore >= 100);
+    }
+
+    [Fact]
+    public void ValidateJobPostContent_AllowsNormalTechnicalPaymentJob()
+    {
+        var result = _service.ValidateJobPostContent(
+            "Backend Developer for payment system",
+            "Build payment API integrations and reporting for a legitimate marketplace.");
+
+        Assert.True(result.IsAllowed);
     }
 
     [Fact]

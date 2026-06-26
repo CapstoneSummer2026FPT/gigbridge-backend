@@ -12,17 +12,25 @@ public class UpdateJobPostCommandHandler : IRequestHandler<UpdateJobPostCommand,
 {
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
+    private readonly IContentModerationService _contentModerationService;
 
     public UpdateJobPostCommandHandler(
         IApplicationDbContext context,
-        IDateTimeService dateTimeService)
+        IDateTimeService dateTimeService,
+        IContentModerationService contentModerationService)
     {
         _context = context;
         _dateTimeService = dateTimeService;
+        _contentModerationService = contentModerationService;
     }
 
     public async Task<bool> Handle(UpdateJobPostCommand command, CancellationToken cancellationToken)
     {
+        JobPostContentModerationGuard.EnsureAllowed(
+            _contentModerationService,
+            command.Request.Title,
+            command.Request.Description);
+
         var clientProfile = await _context.Set<ClientProfile>()
             .FirstOrDefaultAsync(
                 profile => profile.UserId == command.UserId,

@@ -71,6 +71,26 @@ public class UpdateStatusJobPostCommandHandlerTests
         Assert.Equal(0, fixture.JobPost.Status);
     }
 
+    [Fact]
+    public async Task Handle_NonOpenStatusWithIllegalContent_ThrowsValidationException()
+    {
+        var fixture = new UpdateStatusFixture();
+        fixture.JobPost.Description = "Hack tai khoan nguoi dung.";
+
+        var handler = fixture.CreateHandler();
+
+        var exception = await Assert.ThrowsAsync<ValidationException>(() =>
+            handler.Handle(
+                new UpdateStatusJobPostCommand(
+                    fixture.JobPostId,
+                    fixture.ClientUserId,
+                    new UpdateStatusJobPostRequest { Status = 2 }),
+                CancellationToken.None));
+
+        Assert.Contains("JobPostContent", exception.Errors.Keys);
+        Assert.Equal(0, fixture.JobPost.Status);
+    }
+
     private sealed class UpdateStatusFixture
     {
         public UpdateStatusFixture()
