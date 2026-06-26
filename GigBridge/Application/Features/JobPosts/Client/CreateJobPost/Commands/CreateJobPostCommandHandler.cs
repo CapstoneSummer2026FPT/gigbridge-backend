@@ -13,15 +13,25 @@ public class CreateJobPostCommandHandler : IRequestHandler<CreateJobPostCommand,
 {
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
+    private readonly IContentModerationService _contentModerationService;
 
-    public CreateJobPostCommandHandler(IApplicationDbContext context, IDateTimeService dateTimeService)
+    public CreateJobPostCommandHandler(
+        IApplicationDbContext context,
+        IDateTimeService dateTimeService,
+        IContentModerationService contentModerationService)
     {
         _context = context;
         _dateTimeService = dateTimeService;
+        _contentModerationService = contentModerationService;
     }
 
     public async Task<Guid> Handle(CreateJobPostCommand command, CancellationToken cancellationToken)
     {
+        JobPostContentModerationGuard.EnsureAllowed(
+            _contentModerationService,
+            command.Request.Title,
+            command.Request.Description);
+
         var clientProfile = await _context.Set<ClientProfile>()
             .FirstOrDefaultAsync(profile => profile.UserId == command.UserId, cancellationToken);
 

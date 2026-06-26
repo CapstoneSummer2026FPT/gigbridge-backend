@@ -92,15 +92,10 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, (
             throw new UnauthorizedAccessException("Invalid refresh token");
         }
 
-        // Bypass strict expiration check to allow silent session renewal system-wide.
-        // The session remains secure because the refresh token is rotated on every refresh request,
-        // which invalidates the old token and protects against replay attacks.
-        /*
         if (user.RefreshTokenExpiry < _dateTimeService.UtcNow)
         {
             throw new UnauthorizedAccessException("Refresh token expired");
         }
-        */
     }
 
     private string RotateRefreshToken(User user)

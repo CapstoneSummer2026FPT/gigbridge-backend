@@ -1,11 +1,12 @@
 using Application.Features.JobPosts.Client.CreateJobPost.Commands;
 using Application.Features.JobPosts.Client.CreateJobPost.DTOs;
+using Infrastructure.Services;
 
 namespace Test_Gigbridge_Backend.Application.Features.JobPosts.Client;
 
 public class CreateJobPostValidatorTests
 {
-    private readonly CreateJobPostValidator _validator = new();
+    private readonly CreateJobPostValidator _validator = new(new ContentModerationService());
 
     [Fact]
     public void Validate_ReturnsNoErrorsForValidRequest()
@@ -101,6 +102,46 @@ public class CreateJobPostValidatorTests
         var result = _validator.Validate(command);
 
         Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public void Validate_ReturnsError_WhenContentModerationBlocksJobPost()
+    {
+        var request = CreateValidRequest() with
+        {
+            Title = "Bu\u00f4n ma tuy",
+            Description = "Tuyen nguoi van chuyen hang."
+        };
+        var command = new CreateJobPostCommand(request, Guid.NewGuid());
+
+        var result = _validator.Validate(command);
+
+        Assert.False(result.IsValid);
+        Assert.Contains(
+            result.Errors,
+            error =>
+                error.PropertyName == "JobPostContent" &&
+                error.ErrorMessage == "Job post appears to request or promote illegal drug-related work.");
+    }
+
+    [Fact]
+    public void Validate_ReturnsGamblingViolation_WhenGamblingContentIsBlocked()
+    {
+        var request = CreateValidRequest() with
+        {
+            Title = "ca do bong da",
+            Description = "Tuyen nhan vien truc ca."
+        };
+        var command = new CreateJobPostCommand(request, Guid.NewGuid());
+
+        var result = _validator.Validate(command);
+
+        Assert.False(result.IsValid);
+        Assert.Contains(
+            result.Errors,
+            error =>
+                error.PropertyName == "JobPostContent" &&
+                error.ErrorMessage == "Job post appears to contain gambling or betting-related work.");
     }
 
     private static CreateJobPostRequest CreateValidRequest()
