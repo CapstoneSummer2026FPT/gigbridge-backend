@@ -79,10 +79,7 @@ public class GenerateJobDescriptionCommandHandler
         // 4. Build AI request
         var aiRequest = new JobPostGenerationRequestDto
         {
-            ClientQuestions = command.VettingQuestions
-                .Where(q => !string.IsNullOrWhiteSpace(q))
-                .Select(q => new ClientQuestionDto { Question = q.Trim() })
-                .ToList(),
+            ClientPrompt = command.ClientPrompt,
             AllowedMajors = majors,
             AllowedCategories = subcategories,
             AvailableSkills = skills
@@ -191,7 +188,8 @@ public class GenerateJobDescriptionCommandHandler
             MajorCategoryId = selectedMajorCategoryId,
             Skills = finalSkills,
             CustomSkills = finalCustomSkills,
-            Description = aiResponse.Description
+            Description = aiResponse.Description,
+            QuestionRecruitment = aiResponse.QuestionRecruitment
         };
     }
 }
