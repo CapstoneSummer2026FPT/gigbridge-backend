@@ -3,6 +3,7 @@ using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
 
+
 namespace Project_API.Extensions;
 
 public static class ServiceCollectionExtensions
@@ -109,7 +110,8 @@ public static class ServiceCollectionExtensions
                 })
                 .AllowAnyHeader()
                 .AllowAnyMethod()
-                .AllowCredentials());
+                .AllowCredentials()
+          );
         });
 
         return services;
