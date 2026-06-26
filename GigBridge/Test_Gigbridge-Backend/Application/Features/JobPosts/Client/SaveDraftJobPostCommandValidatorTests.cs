@@ -68,7 +68,9 @@ public class SaveDraftJobPostCommandValidatorTests
         Assert.False(result.IsValid);
         Assert.Contains(
             result.Errors,
-            error => error.ErrorMessage.Contains("community and legal safety standards"));
+            error =>
+                error.PropertyName == "JobPostContent" &&
+                error.ErrorMessage == "Job post appears to request or promote illegal drug-related work.");
     }
 
     [Fact]

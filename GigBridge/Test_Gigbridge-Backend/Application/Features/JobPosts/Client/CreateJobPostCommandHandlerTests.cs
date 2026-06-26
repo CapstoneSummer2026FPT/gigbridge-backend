@@ -123,9 +123,12 @@ public class CreateJobPostCommandHandlerTests
             new FixedDateTimeService(now),
             new ContentModerationService());
 
-        await Assert.ThrowsAsync<ValidationException>(() =>
+        var exception = await Assert.ThrowsAsync<ValidationException>(() =>
             handler.Handle(new CreateJobPostCommand(request, userId), CancellationToken.None));
 
+        Assert.Contains(
+            "Job post appears to request or promote illegal drug-related work.",
+            exception.Errors["JobPostContent"]);
         Assert.Empty(jobPosts.Entities);
         Assert.Empty(contracts.Entities);
         Assert.Equal(0, context.SaveChangesCount);

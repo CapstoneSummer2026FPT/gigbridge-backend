@@ -94,7 +94,9 @@ public class UpdateJobPostCommandValidatorTests
         Assert.False(result.IsValid);
         Assert.Contains(
             result.Errors,
-            error => error.ErrorMessage.Contains("community and legal safety standards"));
+            error =>
+                error.PropertyName == "JobPostContent" &&
+                error.ErrorMessage == "Job post appears to contain cybercrime, malware, hacking, or credential theft-related work.");
     }
 
     private static UpdateJobPostRequest CreateValidRequest()

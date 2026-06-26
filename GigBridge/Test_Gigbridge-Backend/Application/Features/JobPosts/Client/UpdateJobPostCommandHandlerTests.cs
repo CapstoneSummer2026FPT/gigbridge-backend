@@ -103,9 +103,12 @@ public class UpdateJobPostCommandHandlerTests
             new FixedDateTimeService(now),
             new ContentModerationService());
 
-        await Assert.ThrowsAsync<ValidationException>(() =>
+        var exception = await Assert.ThrowsAsync<ValidationException>(() =>
             handler.Handle(new UpdateJobPostCommand(jobPostId, userId, request), CancellationToken.None));
 
+        Assert.Contains(
+            "Job post appears to request or promote illegal drug-related work.",
+            exception.Errors["JobPostContent"]);
         Assert.Equal("Old title", jobPost.Title);
         Assert.Equal("Old description", jobPost.Description);
         Assert.Equal(0, jobPost.Visibility);

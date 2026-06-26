@@ -67,7 +67,9 @@ public class UpdateStatusJobPostCommandHandlerTests
                     new UpdateStatusJobPostRequest { Status = 1 }),
                 CancellationToken.None));
 
-        Assert.Contains("JobPostContent", exception.Errors.Keys);
+        Assert.Contains(
+            "Job post appears to contain money laundering or suspicious payment transfer activity.",
+            exception.Errors["JobPostContent"]);
         Assert.Equal(0, fixture.JobPost.Status);
     }
 
@@ -87,7 +89,9 @@ public class UpdateStatusJobPostCommandHandlerTests
                     new UpdateStatusJobPostRequest { Status = 2 }),
                 CancellationToken.None));
 
-        Assert.Contains("JobPostContent", exception.Errors.Keys);
+        Assert.Contains(
+            "Job post appears to contain cybercrime, malware, hacking, or credential theft-related work.",
+            exception.Errors["JobPostContent"]);
         Assert.Equal(0, fixture.JobPost.Status);
     }
 

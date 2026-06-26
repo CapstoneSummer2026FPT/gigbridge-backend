@@ -109,8 +109,8 @@ public class CreateJobPostValidatorTests
     {
         var request = CreateValidRequest() with
         {
-            Title = "Payment transfer assistant",
-            Description = "Cho thue tai khoan ngan hang va nhan tien ho."
+            Title = "Bu\u00f4n ma tuy",
+            Description = "Tuyen nguoi van chuyen hang."
         };
         var command = new CreateJobPostCommand(request, Guid.NewGuid());
 
@@ -119,7 +119,29 @@ public class CreateJobPostValidatorTests
         Assert.False(result.IsValid);
         Assert.Contains(
             result.Errors,
-            error => error.ErrorMessage.Contains("community and legal safety standards"));
+            error =>
+                error.PropertyName == "JobPostContent" &&
+                error.ErrorMessage == "Job post appears to request or promote illegal drug-related work.");
+    }
+
+    [Fact]
+    public void Validate_ReturnsGamblingViolation_WhenGamblingContentIsBlocked()
+    {
+        var request = CreateValidRequest() with
+        {
+            Title = "ca do bong da",
+            Description = "Tuyen nhan vien truc ca."
+        };
+        var command = new CreateJobPostCommand(request, Guid.NewGuid());
+
+        var result = _validator.Validate(command);
+
+        Assert.False(result.IsValid);
+        Assert.Contains(
+            result.Errors,
+            error =>
+                error.PropertyName == "JobPostContent" &&
+                error.ErrorMessage == "Job post appears to contain gambling or betting-related work.");
     }
 
     private static CreateJobPostRequest CreateValidRequest()

@@ -19,7 +19,19 @@ internal static class JobPostContentModerationGuard
 
         throw new ValidationException(new Dictionary<string, string[]>
         {
-            ["JobPostContent"] = new[] { ContentModerationMessages.JobPostContentViolation }
+            ["JobPostContent"] = GetViolationMessages(moderationResult).ToArray()
         });
+    }
+
+    private static IEnumerable<string> GetViolationMessages(ContentModerationResult moderationResult)
+    {
+        var violations = moderationResult.Violations
+            .Where(violation => !string.IsNullOrWhiteSpace(violation))
+            .Distinct()
+            .ToArray();
+
+        return violations.Length > 0
+            ? violations
+            : new[] { ContentModerationMessages.JobPostContentViolation };
     }
 }
