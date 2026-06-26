@@ -59,14 +59,15 @@ public class GenerateJobDescriptionCommandHandlerTests
             CategoryId = categoryId.ToString(),
             SystemSkillIds = new List<string>(),
             CustomSkills = new List<string>(),
-            Description = "We are looking for a Senior React Developer..."
+            Description = "We are looking for a Senior React Developer...",
+            QuestionRecruitment = new List<string> { "What is React?", "Explain TypeScript generic types." }
         };
 
         var fakeAiClient = new FakeAiServiceClient { ResponseToReturn = aiResponse };
         var fakeDateTime = new FakeDateTimeService(DateTime.UtcNow);
 
         var handler = new GenerateJobDescriptionCommandHandler(context, fakeAiClient, fakeDateTime);
-        var command = new GenerateJobDescriptionCommand(new List<string> { "React", "TypeScript" });
+        var command = new GenerateJobDescriptionCommand("React, TypeScript developer");
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -80,6 +81,9 @@ public class GenerateJobDescriptionCommandHandlerTests
         Assert.Equal("Frontend Engineering", result.CategoryName);
         Assert.Equal(majorCategoryId, result.MajorCategoryId);
         Assert.Equal("We are looking for a Senior React Developer...", result.Description);
+        Assert.NotNull(result.QuestionRecruitment);
+        Assert.Equal(2, result.QuestionRecruitment.Count);
+        Assert.Contains("What is React?", result.QuestionRecruitment);
     }
 
     private class FakeAiServiceClient : IAiServiceClient

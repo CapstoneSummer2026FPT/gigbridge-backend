@@ -24,4 +24,7 @@ public class JobPostGenerationResponseDto
 
     [JsonPropertyName("is_ai_generated")]
     public bool IsAiGenerated { get; set; }
+
+    [JsonPropertyName("question_recruitment")]
+    public List<string> QuestionRecruitment { get; set; } = new();
 }

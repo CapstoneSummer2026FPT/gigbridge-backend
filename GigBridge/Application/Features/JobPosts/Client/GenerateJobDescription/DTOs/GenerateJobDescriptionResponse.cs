@@ -20,4 +20,5 @@ public class GenerateJobDescriptionResponse
     public List<GeneratedSkillDto> Skills { get; set; } = new();
     public List<string> CustomSkills { get; set; } = new();
     public string Description { get; set; } = null!;
+    public List<string> QuestionRecruitment { get; set; } = new();
 }

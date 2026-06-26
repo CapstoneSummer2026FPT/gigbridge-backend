@@ -2,12 +2,6 @@ using System.Text.Json.Serialization;
 
 namespace Application.Common.Models.Ai;
 
-public class ClientQuestionDto
-{
-    [JsonPropertyName("question")]
-    public string Question { get; set; } = null!;
-}
-
 public class MajorOptionDto
 {
     [JsonPropertyName("major_id")]
@@ -40,8 +34,8 @@ public class SkillOptionDto
 
 public class JobPostGenerationRequestDto
 {
-    [JsonPropertyName("client_questions")]
-    public List<ClientQuestionDto> ClientQuestions { get; set; } = new();
+    [JsonPropertyName("client_prompt")]
+    public string ClientPrompt { get; set; } = null!;
 
     [JsonPropertyName("allowed_majors")]
     public List<MajorOptionDto> AllowedMajors { get; set; } = new();
