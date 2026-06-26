@@ -65,7 +65,12 @@ public class ExceptionHandlingMiddleware
         object response;
         if (exception is ValidationException validationException)
         {
-            response = ApiResponse<object>.Error((int)statusCode, "Validation failed", validationException.Errors);
+            var message = validationException.Errors
+                .SelectMany(error => error.Value)
+                .FirstOrDefault(error => !string.IsNullOrWhiteSpace(error))
+                ?? "Validation failed";
+
+            response = ApiResponse<object>.Error((int)statusCode, message, validationException.Errors);
         }
         else
         {

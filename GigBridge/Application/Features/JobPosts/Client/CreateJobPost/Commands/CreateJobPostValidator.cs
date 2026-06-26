@@ -1,17 +1,45 @@
+using Application.Common.Interfaces.IService;
 using FluentValidation;
 
 namespace Application.Features.JobPosts.Client.CreateJobPost.Commands;
 
 public class CreateJobPostValidator : AbstractValidator<CreateJobPostCommand>
 {
-    public CreateJobPostValidator()
+    private readonly IContentModerationService _contentModerationService;
+
+    public CreateJobPostValidator(IContentModerationService contentModerationService)
     {
+        _contentModerationService = contentModerationService;
+
         RuleFor(x => x.Request.Title)
             .NotEmpty().WithMessage("Title is required.")
             .MaximumLength(200).WithMessage("Title must not exceed 200 characters.");
 
         RuleFor(x => x.Request.Description)
             .NotEmpty().WithMessage("Description is required.");
+
+        RuleFor(x => x.Request)
+            .Custom((request, context) =>
+            {
+                if (request is null)
+                {
+                    return;
+                }
+
+                var moderationResult = _contentModerationService.ValidateJobPostContent(
+                    request.Title,
+                    request.Description);
+
+                if (moderationResult.IsAllowed)
+                {
+                    return;
+                }
+
+                foreach (var violation in GetViolationMessages(moderationResult))
+                {
+                    context.AddFailure("JobPostContent", violation);
+                }
+            });
 
         RuleFor(x => x.Request.BudgetMin)
             .GreaterThanOrEqualTo(0)
@@ -37,5 +65,17 @@ public class CreateJobPostValidator : AbstractValidator<CreateJobPostCommand>
                      (x.Request.CustomSkillNames != null ? x.Request.CustomSkillNames.Count : 0))
             .LessThanOrEqualTo(10)
             .WithMessage("You can select up to 10 skills in total (including custom skills).");
+    }
+
+    private static IEnumerable<string> GetViolationMessages(ContentModerationResult moderationResult)
+    {
+        var violations = moderationResult.Violations
+            .Where(violation => !string.IsNullOrWhiteSpace(violation))
+            .Distinct()
+            .ToArray();
+
+        return violations.Length > 0
+            ? violations
+            : new[] { ContentModerationMessages.JobPostContentViolation };
     }
 }
