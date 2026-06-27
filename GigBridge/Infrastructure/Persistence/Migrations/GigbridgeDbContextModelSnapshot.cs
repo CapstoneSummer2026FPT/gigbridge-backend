@@ -1197,6 +1197,87 @@ namespace Infrastructure.Persistence.Migrations
                     b.ToTable("FAQCategories", (string)null);
                 });
 
+            modelBuilder.Entity("Domain.Entities.FreelancerCheatingViolation", b =>
+                {
+                    b.Property<Guid>("FreelancerCheatingViolationsId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("FreelancerCheatingViolationsId")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<int>("Action")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("AdminNote")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<int>("CopyCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<int>("EloDelta")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("FocusLossCount")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("FreelancerUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("FullscreenExitCount")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsReviewed")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("PasteCount")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("ProposalsId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ReviewedByAdminId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ScreenshotAttemptCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("SuspendedUntil")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("TabSwitchCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TotalEventCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ViolationNumber")
+                        .HasColumnType("integer");
+
+                    b.HasKey("FreelancerCheatingViolationsId")
+                        .HasName("FreelancerCheatingViolations_pkey");
+
+                    b.HasIndex("ReviewedByAdminId");
+
+                    b.HasIndex(new[] { "FreelancerUserId", "CreatedAt" }, "IX_FreelancerCheatingViolations_FreelancerUserId_CreatedAt")
+                        .IsDescending(false, true);
+
+                    b.HasIndex(new[] { "IsReviewed" }, "IX_FreelancerCheatingViolations_IsReviewed");
+
+                    b.HasIndex(new[] { "ProposalsId" }, "IX_FreelancerCheatingViolations_ProposalsId")
+                        .IsUnique();
+
+                    b.ToTable("FreelancerCheatingViolations");
+                });
+
             modelBuilder.Entity("Domain.Entities.FreelancerProfile", b =>
                 {
                     b.Property<Guid>("FreelancerProfilesId")
@@ -2534,6 +2615,66 @@ namespace Infrastructure.Persistence.Migrations
                     b.ToTable("ProposalAttachments");
                 });
 
+            modelBuilder.Entity("Domain.Entities.ProposalCheatingEvent", b =>
+                {
+                    b.Property<Guid>("ProposalCheatingEventsId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("ProposalCheatingEventsId")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<string>("ClientEventId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<int>("EventType")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("FreelancerUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("IpAddress")
+                        .HasMaxLength(45)
+                        .HasColumnType("character varying(45)");
+
+                    b.Property<Guid?>("JobPostQuestionsId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Metadata")
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTime>("OccurredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("ProposalsId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("UserAgent")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.HasKey("ProposalCheatingEventsId")
+                        .HasName("ProposalCheatingEvents_pkey");
+
+                    b.HasIndex("JobPostQuestionsId");
+
+                    b.HasIndex(new[] { "EventType" }, "IX_ProposalCheatingEvents_EventType");
+
+                    b.HasIndex(new[] { "FreelancerUserId", "CreatedAt" }, "IX_ProposalCheatingEvents_FreelancerUserId_CreatedAt")
+                        .IsDescending(false, true);
+
+                    b.HasIndex(new[] { "ProposalsId", "ClientEventId" }, "IX_ProposalCheatingEvents_ProposalsId_ClientEventId")
+                        .IsUnique();
+
+                    b.ToTable("ProposalCheatingEvents");
+                });
+
             modelBuilder.Entity("Domain.Entities.RefreshToken", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3127,6 +3268,16 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<int>("Role")
                         .HasColumnType("integer")
                         .HasComment("Enum UserRole: 0=Client, 1=Freelancer, 2=Admin");
+
+                    b.Property<DateTime?>("SuspendedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("SuspendedUntil")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SuspensionReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
 
                     b.Property<DateTime?>("TokenExpiry")
                         .HasColumnType("timestamp with time zone");
@@ -3815,6 +3966,34 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("Faqcategories");
                 });
 
+            modelBuilder.Entity("Domain.Entities.FreelancerCheatingViolation", b =>
+                {
+                    b.HasOne("Domain.Entities.User", "FreelancerUser")
+                        .WithMany("FreelancerCheatingViolations")
+                        .HasForeignKey("FreelancerUserId")
+                        .IsRequired()
+                        .HasConstraintName("FreelancerCheatingViolations_usr_FreelancerUserId_fkey");
+
+                    b.HasOne("Domain.Entities.Proposal", "Proposals")
+                        .WithMany()
+                        .HasForeignKey("ProposalsId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FreelancerCheatingViolations_propo_ProposalsId_fkey");
+
+                    b.HasOne("Domain.Entities.User", "ReviewedByAdmin")
+                        .WithMany("ReviewedFreelancerCheatingViolations")
+                        .HasForeignKey("ReviewedByAdminId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("FreelancerCheatingViolations_usr_ReviewedByAdminId_fkey");
+
+                    b.Navigation("FreelancerUser");
+
+                    b.Navigation("Proposals");
+
+                    b.Navigation("ReviewedByAdmin");
+                });
+
             modelBuilder.Entity("Domain.Entities.FreelancerProfile", b =>
                 {
                     b.HasOne("Domain.Entities.User", "User")
@@ -4225,6 +4404,34 @@ namespace Infrastructure.Persistence.Migrations
                         .HasForeignKey("ProposalsId")
                         .IsRequired()
                         .HasConstraintName("ProposalAttachments_propo_ProposalsId_fkey");
+
+                    b.Navigation("Proposals");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ProposalCheatingEvent", b =>
+                {
+                    b.HasOne("Domain.Entities.User", "FreelancerUser")
+                        .WithMany("ProposalCheatingEvents")
+                        .HasForeignKey("FreelancerUserId")
+                        .IsRequired()
+                        .HasConstraintName("ProposalCheatingEvents_usr_FreelancerUserId_fkey");
+
+                    b.HasOne("Domain.Entities.JobPostQuestion", "JobPostQuestions")
+                        .WithMany()
+                        .HasForeignKey("JobPostQuestionsId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("ProposalCheatingEvents_jpq_JobPostQuestionsId_fkey");
+
+                    b.HasOne("Domain.Entities.Proposal", "Proposals")
+                        .WithMany()
+                        .HasForeignKey("ProposalsId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("ProposalCheatingEvents_propo_ProposalsId_fkey");
+
+                    b.Navigation("FreelancerUser");
+
+                    b.Navigation("JobPostQuestions");
 
                     b.Navigation("Proposals");
                 });
@@ -4671,6 +4878,8 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.Navigation("EsignTemplates");
 
+                    b.Navigation("FreelancerCheatingViolations");
+
                     b.Navigation("FreelancerProfile");
 
                     b.Navigation("GoogleMeetConnections");
@@ -4687,6 +4896,8 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.Navigation("PlatformSettings");
 
+                    b.Navigation("ProposalCheatingEvents");
+
                     b.Navigation("RefreshTokens");
 
                     b.Navigation("ReportReporters");
@@ -4696,6 +4907,8 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("ReviewReviewees");
 
                     b.Navigation("ReviewReviewers");
+
+                    b.Navigation("ReviewedFreelancerCheatingViolations");
 
                     b.Navigation("SavedFreelancers");
 

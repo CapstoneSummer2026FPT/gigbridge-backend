@@ -35,6 +35,7 @@ public static class DependencyInjection
         }, typeof(MappingProfile));
         services.AddScoped<ScheduleWorkflowService>();
         services.AddScoped<IUserEloService, UserEloService>();
+        services.AddScoped<IProposalCheatingService, ProposalCheatingService>();
         services.AddScoped<ScheduleWorkflowService>();
 
         services.AddSingleton<DeadlineWarningService>();

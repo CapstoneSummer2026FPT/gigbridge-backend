@@ -91,27 +91,30 @@ public sealed class SignContractCommandHandler :
         existingSignature.IpAddress = command.IpAddress;
         existingSignature.UserAgent = command.UserAgent;
 
-        var signedRoles = await _context.Set<EsignSignature>()
-            .Where(signature =>
-                signature.EsignDocumentsId == document.EsignDocumentsId &&
-                signature.Status == (int)ESignSignatureStatus.Signed)
-            .Select(signature => signature.SignerRole)
-            .ToListAsync(cancellationToken);
+        var readiness = await ContractEsignSignatureBridge.ApplyClientJobPostSignatureAndGetReadinessAsync(
+            _context,
+            contract,
+            document,
+            now,
+            cancellationToken,
+            signerRole);
 
-        if (!signedRoles.Contains((int)signerRole))
-        {
-            signedRoles.Add((int)signerRole);
-        }
+        var isFullySigned = readiness.IsFullySigned;
 
-        var isFullySigned = signedRoles.Contains((int)ESignerRole.Client) &&
-            signedRoles.Contains((int)ESignerRole.Freelancer);
+        Guid? escrowId = null;
 
         if (isFullySigned)
         {
             document.Status = (int)ESignDocumentStatus.FullySigned;
             document.FinalizedAt = now;
             document.UpdatedAt = now;
-            contract.UpdatedAt = now;
+
+            var escrow = await ContractEscrowReadiness.EnsurePendingEscrowAsync(
+                _context,
+                contract,
+                now,
+                cancellationToken);
+            escrowId = escrow.ContractEscrowId;
 
             var conversations = await _context.Set<Conversation>()
                 .Where(conversation => conversation.ContractsId == contract.ContractsId)
@@ -122,7 +125,7 @@ public sealed class SignContractCommandHandler :
                 ContractConversationEvents.AddSystemMessage(
                     _context,
                     conversation,
-                    "Contract fully signed. Waiting for freelancer milestone acceptance.",
+                    "Contract fully signed. Waiting for client escrow funding.",
                     now);
             }
         }
@@ -136,16 +139,21 @@ public sealed class SignContractCommandHandler :
 
         if (isFullySigned)
         {
-            var conversationIds = await _context.Set<Conversation>()
-                .Where(conversation => conversation.ContractsId == contract.ContractsId)
-                .Select(conversation => conversation.ConversationsId)
+            var participantUserIds = await _context.Set<ConversationParticipant>()
+                .AsNoTracking()
+                .Where(participant =>
+                    participant.Conversations.ContractsId == contract.ContractsId &&
+                    participant.LeftAt == null &&
+                    participant.DeletedAt == null)
+                .Select(participant => participant.UserId)
+                .Distinct()
                 .ToListAsync(cancellationToken);
 
-            foreach (var conversationId in conversationIds)
+            if (participantUserIds.Any())
             {
-                await _chatRealtimeNotifier.SendConversationEventAsync(
-                    conversationId,
-                    "ContractFullySigned",
+                await _chatRealtimeNotifier.SendUsersEventAsync(
+                    [.. participantUserIds],
+                    "ContractReadyForEscrowFunding",
                     new { contractId = contract.ContractsId },
                     cancellationToken);
             }
@@ -154,7 +162,7 @@ public sealed class SignContractCommandHandler :
         return new ContractWorkflowResponse(
             contract.ContractsId,
             contract.Status,
-            null,
+            escrowId,
             document.EsignDocumentsId);
     }
 

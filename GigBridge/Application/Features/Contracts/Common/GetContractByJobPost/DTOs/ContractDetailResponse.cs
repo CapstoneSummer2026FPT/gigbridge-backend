@@ -24,9 +24,15 @@ public class ContractDetailResponse
 
     public DateOnly? EndDate { get; set; }
 
+    public DateTime? CompletedAt { get; set; }
+
     public DateTime CreatedAt { get; set; }
 
     public DateTime? UpdatedAt { get; set; }
+
+    public bool CanReview { get; set; }
+
+    public bool HasReviewedByCurrentUser { get; set; }
 
     public ContractEscrowResponse? Escrow { get; set; }
 

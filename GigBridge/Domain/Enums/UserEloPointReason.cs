@@ -6,5 +6,6 @@ public enum UserEloPointReason
     InactivityPenalty = 1,
     ReturnBonus = 2,
     JobCompletion = 3,
-    ReviewRating = 4
+    ReviewRating = 4,
+    CheatingPenalty = 5
 }

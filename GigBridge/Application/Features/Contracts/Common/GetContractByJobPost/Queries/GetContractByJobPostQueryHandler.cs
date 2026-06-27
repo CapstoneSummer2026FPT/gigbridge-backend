@@ -1,6 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Features.Contracts.Common.GetContractByJobPost.DTOs;
+using Application.Features.Contracts.Common.Internal;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
@@ -68,7 +69,13 @@ public class GetContractByJobPostQueryHandler
             .Select(c => (Guid?)c.ConversationsId)
             .FirstOrDefaultAsync(cancellationToken);
 
-        return ToResponse(contract, escrow, jobPost, clientUser, freelancerUser, conversationId);
+        var reviewState = await ContractReviewReadiness.GetStateAsync(
+            _context,
+            contract,
+            request.UserId,
+            cancellationToken);
+
+        return ToResponse(contract, escrow, jobPost, clientUser, freelancerUser, conversationId, reviewState);
     }
 
     private async Task EnsureCanViewContract(
@@ -126,7 +133,8 @@ public class GetContractByJobPostQueryHandler
         JobPost? jobPost,
         User? clientUser,
         User? freelancerUser,
-        Guid? conversationId)
+        Guid? conversationId,
+        ContractReviewState reviewState)
     {
         return new ContractDetailResponse
         {
@@ -141,8 +149,11 @@ public class GetContractByJobPostQueryHandler
             Status = contract.Status,
             StartDate = contract.StartDate,
             EndDate = contract.EndDate,
+            CompletedAt = contract.CompletedAt,
             CreatedAt = contract.CreatedAt,
             UpdatedAt = contract.UpdatedAt,
+            CanReview = reviewState.CanReview,
+            HasReviewedByCurrentUser = reviewState.HasReviewedByCurrentUser,
             Escrow = escrow is null
                 ? null
                 : new ContractEscrowResponse

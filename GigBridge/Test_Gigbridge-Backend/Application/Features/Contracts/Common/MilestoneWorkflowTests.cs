@@ -137,6 +137,45 @@ public class MilestoneWorkflowTests
         Assert.Single(fixture.EscrowTransactions.Entities);
     }
 
+    [Fact]
+    public async Task WithdrawMilestone_CompletesContractAfterAllMilestonesReachReleaseCap()
+    {
+        var fixture = new MilestoneWorkflowFixture();
+        var handler = new WithdrawMilestoneCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now.AddMinutes(5)));
+
+        fixture.ApproveMilestone(fixture.FirstMilestone);
+        fixture.ApproveMilestone(fixture.SecondMilestone);
+        fixture.ApproveMilestone(fixture.ThirdMilestone);
+
+        await handler.Handle(
+            new WithdrawMilestoneCommand(fixture.ContractId, fixture.FirstMilestoneId, fixture.FreelancerUserId),
+            CancellationToken.None);
+        Assert.Equal((int)ContractStatus.Active, fixture.Contract.Status);
+
+        await handler.Handle(
+            new WithdrawMilestoneCommand(fixture.ContractId, fixture.SecondMilestoneId, fixture.FreelancerUserId),
+            CancellationToken.None);
+        Assert.Equal((int)ContractStatus.Active, fixture.Contract.Status);
+
+        await handler.Handle(
+            new WithdrawMilestoneCommand(fixture.ContractId, fixture.ThirdMilestoneId, fixture.FreelancerUserId),
+            CancellationToken.None);
+
+        Assert.Equal((int)ContractStatus.Completed, fixture.Contract.Status);
+        Assert.Equal(fixture.Now.AddMinutes(5), fixture.Contract.CompletedAt);
+        Assert.Equal(800_000m, fixture.Escrow.ReleasedAmount);
+        Assert.Equal((int)ContractEscrowStatus.PartiallyReleased, fixture.Escrow.Status);
+        Assert.Equal(200m, fixture.ClientWallet.HeldTokens);
+        Assert.Equal(800m, fixture.FreelancerWallet.AvailableTokens);
+
+        var systemMessages = fixture.Context.Set<Message>().ToList();
+        Assert.Contains(
+            systemMessages,
+            message => message.Content == "Contract completed. Reviews are now open.");
+    }
+
     private sealed class MilestoneWorkflowFixture
     {
         public MilestoneWorkflowFixture()
@@ -217,7 +256,16 @@ public class MilestoneWorkflowTests
             EscrowTransactions = Context.AddSet<EscrowTransaction>();
             Context.AddSet<Subscription>();
             Context.AddSet<SubscriptionPlan>();
-            Context.AddSet<Conversation>();
+            Context.AddSet(new Conversation
+            {
+                ConversationsId = Guid.NewGuid(),
+                ConversationType = (int)ConversationType.ContractWorkroom,
+                Title = "Contract workroom",
+                ContractsId = ContractId,
+                CreatedByUserId = ClientUserId,
+                Status = (int)ConversationStatus.Active,
+                CreatedAt = Now
+            });
             Context.AddSet<Message>();
         }
 
