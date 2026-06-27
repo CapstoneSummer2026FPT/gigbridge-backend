@@ -7,4 +7,7 @@ public record CheatingEventLogResponse(
     int CopyCount,
     int PasteCount,
     int TabSwitchCount,
+    int ScreenshotAttemptCount,
+    int FocusLossCount,
+    int FullscreenExitCount,
     string WarningMessage);

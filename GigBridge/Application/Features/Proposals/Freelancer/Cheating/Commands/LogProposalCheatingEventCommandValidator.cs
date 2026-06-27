@@ -17,7 +17,7 @@ public class LogProposalCheatingEventCommandValidator : AbstractValidator<LogPro
                 .MaximumLength(100);
 
             RuleFor(command => command.Request.EventType)
-                .InclusiveBetween(0, 2);
+                .InclusiveBetween(0, 5);
 
             RuleFor(command => command.Request.Metadata)
                 .Must(metadata => metadata is null || metadata.Count <= 20)

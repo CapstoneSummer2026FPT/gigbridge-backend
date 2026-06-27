@@ -14,6 +14,9 @@ public class AdminCheatingViolationDto
     public int CopyCount { get; init; }
     public int PasteCount { get; init; }
     public int TabSwitchCount { get; init; }
+    public int ScreenshotAttemptCount { get; init; }
+    public int FocusLossCount { get; init; }
+    public int FullscreenExitCount { get; init; }
     public int Action { get; init; }
     public int EloDelta { get; init; }
     public DateTime? SuspendedUntil { get; init; }

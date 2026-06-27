@@ -149,6 +149,9 @@ public class ProposalCheatingService : IProposalCheatingService
             CopyCount = events.Count(cheatingEvent => cheatingEvent.EventType == (int)CheatingEventType.Copy),
             PasteCount = events.Count(cheatingEvent => cheatingEvent.EventType == (int)CheatingEventType.Paste),
             TabSwitchCount = events.Count(cheatingEvent => cheatingEvent.EventType == (int)CheatingEventType.TabSwitch),
+            ScreenshotAttemptCount = events.Count(cheatingEvent => cheatingEvent.EventType == (int)CheatingEventType.ScreenshotAttempt),
+            FocusLossCount = events.Count(cheatingEvent => cheatingEvent.EventType == (int)CheatingEventType.FocusLoss),
+            FullscreenExitCount = events.Count(cheatingEvent => cheatingEvent.EventType == (int)CheatingEventType.FullscreenExit),
             Action = (int)action,
             EloDelta = CheatingPenaltyPoints,
             SuspendedUntil = suspendedUntil,
@@ -242,14 +245,21 @@ public class ProposalCheatingService : IProposalCheatingService
         var copyCount = counts.FirstOrDefault(item => item.EventType == (int)CheatingEventType.Copy)?.Count ?? 0;
         var pasteCount = counts.FirstOrDefault(item => item.EventType == (int)CheatingEventType.Paste)?.Count ?? 0;
         var tabSwitchCount = counts.FirstOrDefault(item => item.EventType == (int)CheatingEventType.TabSwitch)?.Count ?? 0;
+        var screenshotAttemptCount = counts.FirstOrDefault(item => item.EventType == (int)CheatingEventType.ScreenshotAttempt)?.Count ?? 0;
+        var focusLossCount = counts.FirstOrDefault(item => item.EventType == (int)CheatingEventType.FocusLoss)?.Count ?? 0;
+        var fullscreenExitCount = counts.FirstOrDefault(item => item.EventType == (int)CheatingEventType.FullscreenExit)?.Count ?? 0;
+        var totalCount = counts.Sum(item => item.Count);
 
         return new CheatingEventLogResponse(
             proposalId,
             eventType,
-            copyCount + pasteCount + tabSwitchCount,
+            totalCount,
             copyCount,
             pasteCount,
             tabSwitchCount,
+            screenshotAttemptCount,
+            focusLossCount,
+            fullscreenExitCount,
             "Cheating behavior detected. Continued violations may reduce Elo points or suspend your account.");
     }
 

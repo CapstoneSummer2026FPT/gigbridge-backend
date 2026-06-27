@@ -20,6 +20,12 @@ public partial class FreelancerCheatingViolation
 
     public int TabSwitchCount { get; set; }
 
+    public int ScreenshotAttemptCount { get; set; }
+
+    public int FocusLossCount { get; set; }
+
+    public int FullscreenExitCount { get; set; }
+
     public int Action { get; set; }
 
     public int EloDelta { get; set; }

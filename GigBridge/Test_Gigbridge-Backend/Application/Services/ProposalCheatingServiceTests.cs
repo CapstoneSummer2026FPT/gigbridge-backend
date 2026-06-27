@@ -1,5 +1,6 @@
 using Application.Common.Interfaces.IService;
 using Application.Common.Services;
+using Application.Features.Proposals.Freelancer.Cheating.Commands;
 using Application.Features.Proposals.Freelancer.Cheating.DTOs;
 using Domain.Entities;
 using Domain.Enums;
@@ -48,6 +49,58 @@ public class ProposalCheatingServiceTests
         Assert.Equal(1, await context.ProposalCheatingEvents.CountAsync());
     }
 
+    [Theory]
+    [InlineData(CheatingEventType.ScreenshotAttempt)]
+    [InlineData(CheatingEventType.FocusLoss)]
+    [InlineData(CheatingEventType.FullscreenExit)]
+    public async Task LogEventAsync_TracksScreenshotGuardEventCounts(CheatingEventType eventType)
+    {
+        await using var context = CreateContext();
+        var now = new DateTime(2026, 6, 26, 8, 0, 0, DateTimeKind.Utc);
+        var fixture = AddDraftProposalFixture(context, now);
+        await context.SaveChangesAsync();
+
+        var service = CreateService(context, now);
+        var response = await service.LogEventAsync(
+            fixture.Proposal.ProposalsId,
+            fixture.User.UserId,
+            new LogProposalCheatingEventRequest
+            {
+                EventType = (int)eventType,
+                ClientEventId = $"{eventType}-1",
+                OccurredAt = now
+            },
+            "127.0.0.1",
+            "test-agent",
+            CancellationToken.None);
+
+        Assert.Equal(1, response.TotalSessionEventCount);
+        Assert.Equal(eventType == CheatingEventType.ScreenshotAttempt ? 1 : 0, response.ScreenshotAttemptCount);
+        Assert.Equal(eventType == CheatingEventType.FocusLoss ? 1 : 0, response.FocusLossCount);
+        Assert.Equal(eventType == CheatingEventType.FullscreenExit ? 1 : 0, response.FullscreenExitCount);
+    }
+
+    [Fact]
+    public void LogProposalCheatingEventCommandValidator_RejectsUnknownEventType()
+    {
+        var validator = new LogProposalCheatingEventCommandValidator();
+        var command = new LogProposalCheatingEventCommand(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            new LogProposalCheatingEventRequest
+            {
+                EventType = 6,
+                ClientEventId = "unknown-event-type"
+            },
+            "127.0.0.1",
+            "test-agent");
+
+        var result = validator.Validate(command);
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, error => error.PropertyName == "Request.EventType");
+    }
+
     [Fact]
     public async Task ApplySubmissionPenaltyIfNeededAsync_FirstViolation_DeductsEloWithoutSuspension()
     {
@@ -73,6 +126,34 @@ public class ProposalCheatingServiceTests
         Assert.Null(fixture.User.SuspendedUntil);
         Assert.Equal(50, (await context.UserEloScores.SingleAsync()).CurrentPoints);
         Assert.Equal((int)UserEloPointReason.CheatingPenalty, (await context.UserEloPointTransactions.SingleAsync()).Reason);
+    }
+
+    [Fact]
+    public async Task ApplySubmissionPenaltyIfNeededAsync_StoresScreenshotGuardEventCounts()
+    {
+        await using var context = CreateContext();
+        var now = new DateTime(2026, 6, 26, 8, 0, 0, DateTimeKind.Utc);
+        var fixture = AddDraftProposalFixture(context, now);
+        AddScore(context, fixture.User.UserId, now, 100);
+        context.ProposalCheatingEvents.Add(CreateEvent(fixture, now, CheatingEventType.ScreenshotAttempt));
+        context.ProposalCheatingEvents.Add(CreateEvent(fixture, now, CheatingEventType.FocusLoss));
+        context.ProposalCheatingEvents.Add(CreateEvent(fixture, now, CheatingEventType.FullscreenExit));
+        await context.SaveChangesAsync();
+
+        var service = CreateService(context, now);
+
+        var result = await service.ApplySubmissionPenaltyIfNeededAsync(
+            fixture.Proposal,
+            fixture.User.UserId,
+            CancellationToken.None);
+        await context.SaveChangesAsync();
+
+        var violation = await context.FreelancerCheatingViolations.SingleAsync();
+        Assert.NotNull(result);
+        Assert.Equal(3, violation.TotalEventCount);
+        Assert.Equal(1, violation.ScreenshotAttemptCount);
+        Assert.Equal(1, violation.FocusLossCount);
+        Assert.Equal(1, violation.FullscreenExitCount);
     }
 
     [Fact]
