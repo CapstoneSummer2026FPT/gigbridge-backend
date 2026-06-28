@@ -21,4 +21,6 @@ public class ContractDtoResponse
     public DateTime? UpdatedAt { get; set; }
     public string ClientName { get; set; } = string.Empty;
     public string? FreelancerName { get; set; }
+    public bool CanReview { get; set; }
+    public bool HasReviewedByCurrentUser { get; set; }
 }

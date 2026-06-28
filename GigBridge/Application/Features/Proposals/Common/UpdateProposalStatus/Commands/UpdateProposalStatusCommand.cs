@@ -7,4 +7,4 @@ public record UpdateProposalStatusCommand(
     Guid ProposalId,
     Guid UserId,
     UpdateProposalStatusRequest Request
-) : IRequest<bool>;
+) : IRequest<UpdateProposalStatusResponse>;

@@ -1,3 +1,4 @@
+using Application.Common.Interfaces.IService;
 using FluentValidation;
 
 namespace Application.Features.JobPosts.Client.SaveDraftJobPost.Commands;
@@ -5,8 +6,12 @@ namespace Application.Features.JobPosts.Client.SaveDraftJobPost.Commands;
 public sealed class SaveDraftJobPostCommandValidator
     : AbstractValidator<SaveDraftJobPostCommand>
 {
-    public SaveDraftJobPostCommandValidator()
+    private readonly IContentModerationService _contentModerationService;
+
+    public SaveDraftJobPostCommandValidator(IContentModerationService contentModerationService)
     {
+        _contentModerationService = contentModerationService;
+
         RuleFor(x => x.JobPostId)
             .NotEmpty().WithMessage("JobPostId is required.");
 
@@ -22,6 +27,29 @@ public sealed class SaveDraftJobPostCommandValidator
                 .MaximumLength(200)
                 .When(x => !string.IsNullOrWhiteSpace(x.Request.Title))
                 .WithMessage("Title must not exceed 200 characters.");
+
+            RuleFor(x => x.Request)
+                .Custom((request, context) =>
+                {
+                    if (request is null)
+                    {
+                        return;
+                    }
+
+                    var moderationResult = _contentModerationService.ValidateJobPostContent(
+                        request.Title,
+                        request.Description);
+
+                    if (moderationResult.IsAllowed)
+                    {
+                        return;
+                    }
+
+                    foreach (var violation in GetViolationMessages(moderationResult))
+                    {
+                        context.AddFailure("JobPostContent", violation);
+                    }
+                });
 
             RuleFor(x => x.Request.BudgetMin)
                 .GreaterThanOrEqualTo(0)
@@ -71,5 +99,17 @@ public sealed class SaveDraftJobPostCommandValidator
                 .LessThanOrEqualTo(10)
                 .WithMessage("You can select up to 10 skills in total (including custom skills).");
         });
+    }
+
+    private static IEnumerable<string> GetViolationMessages(ContentModerationResult moderationResult)
+    {
+        var violations = moderationResult.Violations
+            .Where(violation => !string.IsNullOrWhiteSpace(violation))
+            .Distinct()
+            .ToArray();
+
+        return violations.Length > 0
+            ? violations
+            : new[] { ContentModerationMessages.JobPostContentViolation };
     }
 }

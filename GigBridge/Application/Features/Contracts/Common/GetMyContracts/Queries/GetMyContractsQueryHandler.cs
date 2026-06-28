@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Application.Common.Interfaces;
 using Application.Features.Contracts.Common.GetMyContracts.DTOs;
 using Domain.Entities;
+using Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -66,6 +67,16 @@ public class GetMyContractsQueryHandler : IRequestHandler<GetMyContractsQuery, L
             .OrderByDescending(c => c.CreatedAt)
             .ToListAsync(cancellationToken);
 
+        var contractIds = contracts.Select(c => c.ContractsId).ToList();
+        var reviewedContractIds = (await _context.Set<Review>()
+            .AsNoTracking()
+            .Where(review =>
+                contractIds.Contains(review.ContractsId) &&
+                review.ReviewerId == request.UserId)
+            .Select(review => review.ContractsId)
+            .ToListAsync(cancellationToken))
+            .ToHashSet();
+
         return contracts.Select(c => new ContractDtoResponse
         {
             ContractsId = c.ContractsId,
@@ -84,7 +95,10 @@ public class GetMyContractsQueryHandler : IRequestHandler<GetMyContractsQuery, L
             CreatedAt = c.CreatedAt,
             UpdatedAt = c.UpdatedAt,
             ClientName = c.ClientProfiles?.User?.FullName ?? "Client",
-            FreelancerName = c.FreelancerProfiles?.User?.FullName
+            FreelancerName = c.FreelancerProfiles?.User?.FullName,
+            HasReviewedByCurrentUser = reviewedContractIds.Contains(c.ContractsId),
+            CanReview = c.Status == (int)ContractStatus.Completed &&
+                !reviewedContractIds.Contains(c.ContractsId)
         }).ToList();
     }
 }

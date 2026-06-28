@@ -57,24 +57,38 @@ public sealed class FundContractEscrowCommandHandler :
                 fundedEscrow.Status);
         }
 
-        if (contract.Status != (int)ContractStatus.PendingEscrow)
-        {
-            throw new BadRequestException("Contract escrow can only be funded after both parties sign.");
-        }
+        var now = _dateTimeService.UtcNow;
+        ContractEscrow escrow;
 
-        var fullySignedDocument = await _context.Set<EsignDocument>()
-            .AnyAsync(
-                document =>
-                     document.ContractsId == contract.ContractsId &&
-                     document.Status == (int)ESignDocumentStatus.FullySigned,
+        if (contract.Status == (int)ContractStatus.PendingSignature)
+        {
+            await ContractEsignSignatureBridge.EnsureFullySignedContractDocumentAsync(
+                _context,
+                contract,
+                now,
                 cancellationToken);
 
-        if (!fullySignedDocument)
+            escrow = await ContractEscrowReadiness.EnsurePendingEscrowAsync(
+                _context,
+                contract,
+                now,
+                cancellationToken);
+        }
+        else if (contract.Status == (int)ContractStatus.PendingEscrow)
+        {
+            await ContractEsignSignatureBridge.EnsureFullySignedContractDocumentAsync(
+                _context,
+                contract,
+                now,
+                cancellationToken);
+
+            escrow = await GetEscrowAsync(contract.ContractsId, cancellationToken);
+        }
+        else
         {
             throw new BadRequestException("Contract escrow can only be funded after both parties sign.");
         }
 
-        var escrow = await GetEscrowAsync(contract.ContractsId, cancellationToken);
         if (escrow.Status == (int)ContractEscrowStatus.Funded)
         {
             contract.Status = (int)ContractStatus.Active;
@@ -117,8 +131,6 @@ public sealed class FundContractEscrowCommandHandler :
         {
             throw new BadRequestException("Wallet balance is insufficient to fund escrow.");
         }
-
-        var now = _dateTimeService.UtcNow;
 
         wallet.AvailableTokens -= requiredTokens;
         wallet.HeldTokens += requiredTokens;

@@ -217,6 +217,33 @@ public class AcceptProposalForNegotiationCommandHandlerTests
     {
         public TestFixture()
         {
+            var clientUser = new User
+            {
+                UserId = ClientUserId,
+                Role = (int)UserRole.Client,
+                Email = "client@example.com",
+                FullName = "Client User"
+            };
+            var freelancerUser = new User
+            {
+                UserId = FreelancerUserId,
+                Role = (int)UserRole.Freelancer,
+                Email = "freelancer@example.com",
+                FullName = "Freelancer User"
+            };
+            var clientProfile = new ClientProfile
+            {
+                ClientProfilesId = ClientProfileId,
+                UserId = ClientUserId,
+                User = clientUser
+            };
+            var freelancerProfile = new FreelancerProfile
+            {
+                FreelancerProfilesId = FreelancerProfileId,
+                UserId = FreelancerUserId,
+                User = freelancerUser
+            };
+
             JobPost = new JobPost
             {
                 JobPostsId = JobPostId,
@@ -224,7 +251,8 @@ public class AcceptProposalForNegotiationCommandHandlerTests
                 Title = "Test Job Title",
                 Description = "Description of test job",
                 Status = 1,
-                CreatedAt = Now
+                CreatedAt = Now,
+                ClientProfiles = clientProfile
             };
             Proposal = new Proposal
             {
@@ -234,7 +262,8 @@ public class AcceptProposalForNegotiationCommandHandlerTests
                 ProposedBudget = 1500m,
                 ProposedDuration = "2 weeks",
                 Status = 1, // Pending
-                JobPosts = JobPost
+                JobPosts = JobPost,
+                FreelancerProfiles = freelancerProfile
             };
             Contract = new Contract
             {
@@ -247,11 +276,9 @@ public class AcceptProposalForNegotiationCommandHandlerTests
                 CreatedAt = Now
             };
 
-            Context.AddSet(
-                new User { UserId = ClientUserId, Role = (int)UserRole.Client, Email = "client@example.com", FullName = "Client User" },
-                new User { UserId = FreelancerUserId, Role = (int)UserRole.Freelancer, Email = "freelancer@example.com", FullName = "Freelancer User" });
-            Context.AddSet(new ClientProfile { ClientProfilesId = ClientProfileId, UserId = ClientUserId });
-            Context.AddSet(new FreelancerProfile { FreelancerProfilesId = FreelancerProfileId, UserId = FreelancerUserId });
+            Context.AddSet(clientUser, freelancerUser);
+            Context.AddSet(clientProfile);
+            Context.AddSet(freelancerProfile);
             Context.AddSet(JobPost);
             Context.AddSet(Proposal);
             Contracts = Context.AddSet(Contract);
