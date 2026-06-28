@@ -111,7 +111,7 @@ public class AuthController : BaseApiController
     [HttpPost("refresh")]
     public async Task<IActionResult> Refresh([FromBody] TokenRequest request)
     {
-        var refreshToken = Request.Cookies["refreshToken"];
+         var refreshToken = Request.Cookies["refreshToken"];
         if (string.IsNullOrEmpty(refreshToken))
             return Unauthorized(ApiResponse<object>.Error(401, "Refresh token is missing. Please log in again."));
 
