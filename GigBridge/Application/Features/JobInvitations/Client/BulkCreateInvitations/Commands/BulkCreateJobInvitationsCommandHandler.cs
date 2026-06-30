@@ -1,11 +1,14 @@
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Application.Features.Auth.Shared.DTOs;
 using Application.Features.JobInvitations.Common;
 using Application.Features.JobInvitations.Common.DTOs;
+using Application.Features.JobInvitations.Common.Email;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
 namespace Application.Features.JobInvitations.Client.BulkCreateInvitations.Commands;
@@ -16,17 +19,26 @@ public sealed class BulkCreateJobInvitationsCommandHandler
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
     private readonly INotificationService _notificationService;
+    private readonly IEmailService _emailService;
+    private readonly IJobInvitationEmailRenderer _emailRenderer;
+    private readonly IConfiguration _configuration;
     private readonly ILogger<BulkCreateJobInvitationsCommandHandler> _logger;
 
     public BulkCreateJobInvitationsCommandHandler(
         IApplicationDbContext context,
         IDateTimeService dateTimeService,
         INotificationService notificationService,
+        IEmailService emailService,
+        IJobInvitationEmailRenderer emailRenderer,
+        IConfiguration configuration,
         ILogger<BulkCreateJobInvitationsCommandHandler> logger)
     {
         _context = context;
         _dateTimeService = dateTimeService;
         _notificationService = notificationService;
+        _emailService = emailService;
+        _emailRenderer = emailRenderer;
+        _configuration = configuration;
         _logger = logger;
     }
 
@@ -53,6 +65,7 @@ public sealed class BulkCreateJobInvitationsCommandHandler
             .ToDictionaryAsync(jobPost => jobPost.JobPostsId, cancellationToken);
 
         var freelancersById = await _context.Set<FreelancerProfile>()
+            .Include(profile => profile.User)
             .Where(profile => freelancerProfileIds.Contains(profile.FreelancerProfilesId))
             .ToDictionaryAsync(profile => profile.FreelancerProfilesId, cancellationToken);
 
@@ -73,8 +86,15 @@ public sealed class BulkCreateJobInvitationsCommandHandler
         var result = new BulkJobInvitationResultDto();
         var createdIds = new List<Guid>();
         var notificationPayloads = new List<(Guid FreelancerUserId, Guid InvitationId, string JobTitle)>();
+        var emailPayloads = new List<JobInvitationEmailPayload>();
         var now = _dateTimeService.UtcNow;
         var message = JobInvitationRules.CleanMessage(command.Request.Message);
+        var clientUserName = await _context.Set<User>()
+            .AsNoTracking()
+            .Where(user => user.UserId == clientProfile.UserId)
+            .Select(user => user.FullName)
+            .FirstOrDefaultAsync(cancellationToken);
+        var clientName = clientProfile.CompanyName ?? clientUserName ?? "A client";
 
         foreach (var jobPostId in jobPostIds)
         {
@@ -128,6 +148,7 @@ public sealed class BulkCreateJobInvitationsCommandHandler
                 createdIds.Add(invitation.JobInvitationsId);
                 existingPairs.Add((jobPostId, freelancerProfileId));
                 notificationPayloads.Add((freelancerProfile.UserId, invitation.JobInvitationsId, jobPost.Title));
+                emailPayloads.Add(new JobInvitationEmailPayload(freelancerProfile.User, clientName, jobPost));
             }
         }
 
@@ -145,6 +166,11 @@ public sealed class BulkCreateJobInvitationsCommandHandler
             foreach (var payload in notificationPayloads)
             {
                 await NotifyFreelancerAsync(payload.FreelancerUserId, payload.InvitationId, payload.JobTitle, cancellationToken);
+            }
+
+            foreach (var payload in emailPayloads)
+            {
+                await SendInvitationEmailAsync(payload, cancellationToken);
             }
         }
 
@@ -187,4 +213,75 @@ public sealed class BulkCreateJobInvitationsCommandHandler
             _logger.LogWarning(exception, "Failed to send job invitation notification {InvitationId}.", invitationId);
         }
     }
+
+    private async Task SendInvitationEmailAsync(
+        JobInvitationEmailPayload payload,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var frontendUrl = _configuration["FrontendBaseUrl"] ?? "http://localhost:5173";
+            var actionUrl = $"{frontendUrl.TrimEnd('/')}/jobs/{payload.JobPost.JobPostsId}";
+            var emailModel = new NewJobInvitationTemplate(
+                FreelancerName: payload.FreelancerUser.FullName,
+                JobTitle: payload.JobPost.Title,
+                ClientName: payload.ClientName,
+                Budget: FormatBudget(payload.JobPost),
+                Deadline: FormatDeadline(payload.JobPost),
+                ShortDescription: BuildShortDescription(payload.JobPost.Description),
+                ActionUrl: actionUrl);
+
+            var emailCopy = _emailRenderer.Render(emailModel);
+
+            await _emailService.SendEmailAsync(new EmailRequest
+            {
+                To = payload.FreelancerUser.Email,
+                Subject = emailCopy.Subject,
+                Body = emailCopy.HtmlBody,
+                TextBody = emailCopy.TextBody,
+                IsHtml = true
+            }, cancellationToken);
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(exception, "Failed to send job invitation email to freelancer {Email}.", payload.FreelancerUser.Email);
+        }
+    }
+
+    private static string FormatBudget(JobPost jobPost)
+    {
+        var currency = string.IsNullOrWhiteSpace(jobPost.Currency) ? "VND" : jobPost.Currency;
+
+        return (jobPost.BudgetMin, jobPost.BudgetMax) switch
+        {
+            ({ } min, { } max) when min != max => $"{min:N0} - {max:N0} {currency}",
+            ({ } min, _) => $"{min:N0} {currency}",
+            (_, { } max) => $"{max:N0} {currency}",
+            _ => "Not specified"
+        };
+    }
+
+    private static string FormatDeadline(JobPost jobPost)
+    {
+        if (jobPost.EndDate.HasValue)
+        {
+            return jobPost.EndDate.Value.ToString("yyyy-MM-dd");
+        }
+
+        return string.IsNullOrWhiteSpace(jobPost.EstimatedDuration)
+            ? "Not specified"
+            : jobPost.EstimatedDuration;
+    }
+
+    private static string BuildShortDescription(string description)
+    {
+        const int maxLength = 240;
+        var normalized = string.Join(" ", description.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+
+        return normalized.Length <= maxLength
+            ? normalized
+            : $"{normalized[..maxLength]}...";
+    }
+
+    private sealed record JobInvitationEmailPayload(User FreelancerUser, string ClientName, JobPost JobPost);
 }
