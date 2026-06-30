@@ -59,6 +59,10 @@ public partial class User
 
     public virtual ICollection<ConversationParticipant> ConversationParticipants { get; set; } = new List<ConversationParticipant>();
 
+    public virtual ICollection<ContractProductHandoff> SubmittedContractProductHandoffs { get; set; } = new List<ContractProductHandoff>();
+
+    public virtual ICollection<ContractProductHandoff> ReceivedContractProductHandoffs { get; set; } = new List<ContractProductHandoff>();
+
     public virtual ICollection<DisputeEvidence> DisputeEvidences { get; set; } = new List<DisputeEvidence>();
 
     public virtual ICollection<DisputeMessage> DisputeMessages { get; set; } = new List<DisputeMessage>();
@@ -90,6 +94,10 @@ public partial class User
     public virtual ICollection<PlatformSetting> PlatformSettings { get; set; } = new List<PlatformSetting>();
 
     public virtual ICollection<ProposalCheatingEvent> ProposalCheatingEvents { get; set; } = new List<ProposalCheatingEvent>();
+
+    public virtual ICollection<ProposalQuestionTimer> ProposalQuestionTimers { get; set; } = new List<ProposalQuestionTimer>();
+
+    public virtual ICollection<ProposalInterviewReviewSession> ProposalInterviewReviewSessions { get; set; } = new List<ProposalInterviewReviewSession>();
 
     public virtual ICollection<FreelancerCheatingViolation> FreelancerCheatingViolations { get; set; } = new List<FreelancerCheatingViolation>();
 

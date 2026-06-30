@@ -22,4 +22,6 @@ public partial class JobPostQuestion
     public virtual JobPost JobPosts { get; set; } = null!;
 
     public virtual ICollection<ProposalAnswer> ProposalAnswers { get; set; } = new List<ProposalAnswer>();
+
+    public virtual ICollection<ProposalQuestionTimer> ProposalQuestionTimers { get; set; } = new List<ProposalQuestionTimer>();
 }

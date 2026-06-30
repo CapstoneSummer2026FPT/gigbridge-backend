@@ -14,13 +14,16 @@ public class CreateProposalAnswerCommandHandler
 {
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
+    private readonly IProposalQuestionTimerService _timerService;
 
     public CreateProposalAnswerCommandHandler(
         IApplicationDbContext context,
-        IDateTimeService dateTimeService)
+        IDateTimeService dateTimeService,
+        IProposalQuestionTimerService timerService)
     {
         _context = context;
         _dateTimeService = dateTimeService;
+        _timerService = timerService;
     }
 
     public async Task<ProposalAnswerDto> Handle(
@@ -56,6 +59,11 @@ public class CreateProposalAnswerCommandHandler
         }
 
         ProposalAnswerCommandHelper.EnsureRequiredQuestionHasAnswer(question, command.Request.AnswerText);
+        await _timerService.EnsureQuestionCanBeModifiedAsync(
+            proposal,
+            question.JobPostQuestionsId,
+            command.UserId,
+            cancellationToken);
 
         var answerExists = await _context.Set<ProposalAnswer>()
             .AnyAsync(

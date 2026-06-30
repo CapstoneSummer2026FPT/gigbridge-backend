@@ -55,11 +55,20 @@ public class MilestoneWorkflowTests
 
         await Assert.ThrowsAsync<ForbiddenAccessException>(() =>
             submitHandler.Handle(
-                new SubmitMilestoneCommand(fixture.ContractId, fixture.FirstMilestoneId, fixture.ClientUserId),
+                new SubmitMilestoneCommand(
+                    fixture.ContractId,
+                    fixture.FirstMilestoneId,
+                    fixture.ClientUserId,
+                    ExternalUrl: "https://example.com/client-wrong-role"),
                 CancellationToken.None));
 
         await submitHandler.Handle(
-            new SubmitMilestoneCommand(fixture.ContractId, fixture.FirstMilestoneId, fixture.FreelancerUserId),
+            new SubmitMilestoneCommand(
+                fixture.ContractId,
+                fixture.FirstMilestoneId,
+                fixture.FreelancerUserId,
+                "Initial delivery.",
+                ExternalUrl: "https://example.com/milestone-1-v1"),
             CancellationToken.None);
 
         Assert.Equal((int)MilestoneStatus.Submitted, fixture.FirstMilestone.Status);
@@ -73,7 +82,12 @@ public class MilestoneWorkflowTests
         Assert.Null(fixture.FirstMilestone.ApprovedAt);
 
         await submitHandler.Handle(
-            new SubmitMilestoneCommand(fixture.ContractId, fixture.FirstMilestoneId, fixture.FreelancerUserId),
+            new SubmitMilestoneCommand(
+                fixture.ContractId,
+                fixture.FirstMilestoneId,
+                fixture.FreelancerUserId,
+                "Revision delivery.",
+                ExternalUrl: "https://example.com/milestone-1-v2"),
             CancellationToken.None);
 
         await Assert.ThrowsAsync<ForbiddenAccessException>(() =>
@@ -327,7 +341,7 @@ public class MilestoneWorkflowTests
     }
 
     [Fact]
-    public async Task SubmitMilestone_WithDescriptionAndFiles_SavesAttachmentsAndDescription()
+    public async Task SubmitMilestone_WithDescriptionAndFile_SavesAttachmentAndDescription()
     {
         var fixture = new MilestoneWorkflowFixture();
         var mediaService = new TestMediaService();
@@ -338,22 +352,20 @@ public class MilestoneWorkflowTests
 
         fixture.FirstMilestone.Status = (int)MilestoneStatus.InProgress;
 
-        var commandFiles = new List<SubmitMilestoneFile>
-        {
-            new SubmitMilestoneFile(new MemoryStream(new byte[] { 1, 2, 3 }), "testfile.pdf", "application/pdf", 3)
-        };
-
         var command = new SubmitMilestoneCommand(
             fixture.ContractId,
             fixture.FirstMilestoneId,
             fixture.FreelancerUserId,
             "Completed the deliverable.",
-            commandFiles);
+            new SubmitMilestoneFile(new MemoryStream(new byte[] { 1, 2, 3 }), "testfile.pdf", "application/pdf", 3));
 
         var response = await submitHandler.Handle(command, CancellationToken.None);
 
         Assert.Equal((int)MilestoneStatus.Submitted, response.Status);
         Assert.Equal("Completed the deliverable.", fixture.FirstMilestone.SubmissionDescription);
+        Assert.Single(response.Attachments);
+        Assert.Equal((int)MilestoneSubmissionSourceType.File, response.Attachments[0].SourceType);
+        Assert.Equal("application/pdf", response.Attachments[0].MimeType);
 
         var attachments = fixture.Context.Set<MilestoneAttachment>()
             .Where(a => a.MilestonesId == fixture.FirstMilestoneId)
@@ -363,5 +375,94 @@ public class MilestoneWorkflowTests
         Assert.Equal("testfile.pdf", attachments[0].FileName);
         Assert.Equal("https://test-storage.com/milestones/testfile.pdf", attachments[0].FileUrl);
         Assert.Equal(3, attachments[0].FileSize);
+        Assert.Equal((int)MilestoneSubmissionSourceType.File, attachments[0].SourceType);
+        Assert.Equal("application/pdf", attachments[0].MimeType);
+    }
+
+    [Fact]
+    public async Task SubmitMilestone_WithLink_SavesLinkAttachmentWithoutUpload()
+    {
+        var fixture = new MilestoneWorkflowFixture();
+        var submitHandler = new SubmitMilestoneCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now));
+
+        fixture.FirstMilestone.Status = (int)MilestoneStatus.InProgress;
+
+        var response = await submitHandler.Handle(
+            new SubmitMilestoneCommand(
+                fixture.ContractId,
+                fixture.FirstMilestoneId,
+                fixture.FreelancerUserId,
+                "Published build.",
+                ExternalUrl: "https://example.com/build.zip"),
+            CancellationToken.None);
+
+        Assert.Equal((int)MilestoneStatus.Submitted, response.Status);
+        Assert.Equal("Published build.", response.SubmissionDescription);
+        Assert.Single(response.Attachments);
+        Assert.Equal((int)MilestoneSubmissionSourceType.Link, response.Attachments[0].SourceType);
+        Assert.Equal("https://example.com/build.zip", response.Attachments[0].FileUrl);
+        Assert.Equal("External URL", response.Attachments[0].FileName);
+        Assert.Null(response.Attachments[0].FileSize);
+        Assert.Null(response.Attachments[0].MimeType);
+    }
+
+    [Fact]
+    public async Task SubmitMilestone_RequiresExactlyOneValidSource()
+    {
+        var fixture = new MilestoneWorkflowFixture();
+        var mediaService = new TestMediaService();
+        var submitHandler = new SubmitMilestoneCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            mediaService);
+
+        fixture.FirstMilestone.Status = (int)MilestoneStatus.InProgress;
+        var validFile = new SubmitMilestoneFile(
+            new MemoryStream(new byte[] { 1 }),
+            "deliverable.pdf",
+            "application/pdf",
+            1);
+
+        await Assert.ThrowsAsync<BadRequestException>(() =>
+            submitHandler.Handle(
+                new SubmitMilestoneCommand(
+                    fixture.ContractId,
+                    fixture.FirstMilestoneId,
+                    fixture.FreelancerUserId),
+                CancellationToken.None));
+
+        await Assert.ThrowsAsync<BadRequestException>(() =>
+            submitHandler.Handle(
+                new SubmitMilestoneCommand(
+                    fixture.ContractId,
+                    fixture.FirstMilestoneId,
+                    fixture.FreelancerUserId,
+                    File: validFile,
+                    ExternalUrl: "https://example.com/build.zip"),
+                CancellationToken.None));
+
+        await Assert.ThrowsAsync<BadRequestException>(() =>
+            submitHandler.Handle(
+                new SubmitMilestoneCommand(
+                    fixture.ContractId,
+                    fixture.FirstMilestoneId,
+                    fixture.FreelancerUserId,
+                    ExternalUrl: "ftp://example.com/build.zip"),
+                CancellationToken.None));
+
+        await Assert.ThrowsAsync<BadRequestException>(() =>
+            submitHandler.Handle(
+                new SubmitMilestoneCommand(
+                    fixture.ContractId,
+                    fixture.FirstMilestoneId,
+                    fixture.FreelancerUserId,
+                    File: new SubmitMilestoneFile(
+                        new MemoryStream(new byte[] { 1 }),
+                        "huge.zip",
+                        "application/zip",
+                        100 * 1024 * 1024 + 1)),
+                CancellationToken.None));
     }
 }

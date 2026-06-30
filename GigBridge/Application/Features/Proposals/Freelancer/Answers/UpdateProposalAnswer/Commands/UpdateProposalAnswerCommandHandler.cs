@@ -14,13 +14,16 @@ public class UpdateProposalAnswerCommandHandler
 {
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
+    private readonly IProposalQuestionTimerService _timerService;
 
     public UpdateProposalAnswerCommandHandler(
         IApplicationDbContext context,
-        IDateTimeService dateTimeService)
+        IDateTimeService dateTimeService,
+        IProposalQuestionTimerService timerService)
     {
         _context = context;
         _dateTimeService = dateTimeService;
+        _timerService = timerService;
     }
 
     public async Task<ProposalAnswerDto> Handle(
@@ -59,6 +62,11 @@ public class UpdateProposalAnswerCommandHandler
         ProposalAnswerCommandHelper.EnsureRequiredQuestionHasAnswer(
             answer.JobPostQuestions,
             command.Request.AnswerText);
+        await _timerService.EnsureQuestionCanBeModifiedAsync(
+            proposal,
+            answer.JobPostQuestionsId,
+            command.UserId,
+            cancellationToken);
 
         answer.AnswerText = ProposalAnswerCommandHelper.NormalizeAnswerText(command.Request.AnswerText);
         answer.UpdatedAt = _dateTimeService.UtcNow;

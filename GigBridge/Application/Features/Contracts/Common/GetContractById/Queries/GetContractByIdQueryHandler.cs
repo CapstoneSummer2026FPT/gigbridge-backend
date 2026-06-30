@@ -5,6 +5,7 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Features.Contracts.Common.GetContractByJobPost.DTOs;
 using Application.Features.Contracts.Common.Internal;
+using Application.Features.Contracts.ProductHandoffs.Common;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
@@ -71,7 +72,13 @@ public class GetContractByIdQueryHandler : IRequestHandler<GetContractByIdQuery,
             request.UserId,
             cancellationToken);
 
-        return ToResponse(contract, escrow, jobPost, clientUser, freelancerUser, conversationId, reviewState);
+        var currentProductHandoff = await _context.Set<ContractProductHandoff>()
+            .AsNoTracking()
+            .Where(handoff => handoff.ContractsId == contract.ContractsId && handoff.IsCurrent)
+            .OrderByDescending(handoff => handoff.Version)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return ToResponse(contract, escrow, jobPost, clientUser, freelancerUser, conversationId, reviewState, currentProductHandoff);
     }
 
     private async Task EnsureCanViewContract(Contract contract, Guid userId, CancellationToken cancellationToken)
@@ -119,7 +126,8 @@ public class GetContractByIdQueryHandler : IRequestHandler<GetContractByIdQuery,
         User? clientUser,
         User? freelancerUser,
         Guid? conversationId,
-        ContractReviewState reviewState)
+        ContractReviewState reviewState,
+        ContractProductHandoff? currentProductHandoff)
     {
         return new ContractDetailResponse
         {
@@ -157,7 +165,10 @@ public class GetContractByIdQueryHandler : IRequestHandler<GetContractByIdQuery,
             ClientEmail = clientUser?.Email,
             FreelancerName = freelancerUser?.FullName,
             FreelancerEmail = freelancerUser?.Email,
-            ConversationId = conversationId
+            ConversationId = conversationId,
+            CurrentProductHandoff = currentProductHandoff is null
+                ? null
+                : ContractProductHandoffMapper.ToResponse(currentProductHandoff)
         };
     }
 }
