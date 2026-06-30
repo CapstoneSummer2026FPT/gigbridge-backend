@@ -15,15 +15,24 @@ public class UpdateProposalStatusCommandHandler
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
     private readonly IProposalCheatingService? _proposalCheatingService;
+    private readonly IProposalQuestionTimerService? _proposalQuestionTimerService;
+    private readonly IProposalInterviewReviewService? _proposalInterviewReviewService;
+    private readonly INotificationService? _notificationService;
 
     public UpdateProposalStatusCommandHandler(
         IApplicationDbContext context,
         IDateTimeService dateTimeService,
-        IProposalCheatingService? proposalCheatingService = null)
+        IProposalCheatingService? proposalCheatingService = null,
+        IProposalQuestionTimerService? proposalQuestionTimerService = null,
+        IProposalInterviewReviewService? proposalInterviewReviewService = null,
+        INotificationService? notificationService = null)
     {
         _context = context;
         _dateTimeService = dateTimeService;
         _proposalCheatingService = proposalCheatingService;
+        _proposalQuestionTimerService = proposalQuestionTimerService;
+        _proposalInterviewReviewService = proposalInterviewReviewService;
+        _notificationService = notificationService;
     }
 
     public async Task<UpdateProposalStatusResponse> Handle(
@@ -69,6 +78,22 @@ public class UpdateProposalStatusCommandHandler
         else if (isFreelancerOwner)
         {
             var isDraftSubmission = proposal.Status == 0 && requestedStatus == 1;
+            if (isDraftSubmission && _proposalQuestionTimerService is not null)
+            {
+                await _proposalQuestionTimerService.EnsureProposalReadyForSubmissionAsync(
+                    proposal,
+                    command.UserId,
+                    cancellationToken);
+            }
+
+            if (isDraftSubmission && _proposalInterviewReviewService is not null)
+            {
+                await _proposalInterviewReviewService.CompleteActiveReviewForSubmissionAsync(
+                    proposal,
+                    command.UserId,
+                    cancellationToken);
+            }
+
             UpdateStatusByFreelancer(proposal, requestedStatus);
             var cheatingPenalty = isDraftSubmission && _proposalCheatingService is not null
                 ? await _proposalCheatingService.ApplySubmissionPenaltyIfNeededAsync(
@@ -79,6 +104,7 @@ public class UpdateProposalStatusCommandHandler
 
             proposal.UpdatedAt = _dateTimeService.UtcNow;
             await _context.SaveChangesAsync(cancellationToken);
+            await NotifyCheatingPenaltyAsync(command.UserId, cheatingPenalty, cancellationToken);
 
             return new UpdateProposalStatusResponse(true, proposal.Status, cheatingPenalty);
         }
@@ -92,6 +118,35 @@ public class UpdateProposalStatusCommandHandler
         await _context.SaveChangesAsync(cancellationToken);
 
         return new UpdateProposalStatusResponse(true, proposal.Status, null);
+    }
+
+    private async Task NotifyCheatingPenaltyAsync(
+        Guid freelancerUserId,
+        CheatingPenaltyResultDto? cheatingPenalty,
+        CancellationToken cancellationToken)
+    {
+        if (_notificationService is null || cheatingPenalty is null ||
+            !cheatingPenalty.Applied || !cheatingPenalty.IsNewViolation)
+        {
+            return;
+        }
+
+        var isSuspension = cheatingPenalty.Action == (int)CheatingViolationAction.TemporarySuspension;
+        var title = isSuspension
+            ? "Anti-cheat suspension applied"
+            : "Anti-cheat penalty applied";
+        var content = isSuspension
+            ? $"Anti-cheat suspension applied: violation {cheatingPenalty.ViolationNumber}. Your account is suspended for 7 days. 50 Elo points deducted."
+            : $"Anti-cheat penalty applied: violation {cheatingPenalty.ViolationNumber}/3. 50 Elo points deducted.";
+
+        await _notificationService.CreateNotificationAsync(
+            freelancerUserId,
+            NotificationType.SystemAlert,
+            title,
+            content,
+            cheatingPenalty.ViolationId,
+            "FreelancerCheatingViolation",
+            cancellationToken);
     }
 
     private void UpdateStatusByClient(

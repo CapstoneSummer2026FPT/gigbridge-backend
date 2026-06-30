@@ -5,6 +5,7 @@ using Application.Features.ESign.Client.GetDocumentByJobPost.Queries;
 using Application.Features.ESign.Client.SubmitSignature.Commands;
 using Application.Features.ESign.Client.SubmitSignature.DTOs;
 using Application.Features.ESign.Common.GetDocument.Queries;
+using Application.Features.ESign.Common.GetMySignedDocuments.Queries;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -52,6 +53,25 @@ public sealed class ESignController : BaseApiController
         var result = await Mediator.Send(new Application.Features.ESign.Common.GetDocumentByContract.Queries.GetESignDocumentByContractQuery(contractId, userId));
 
         return Ok(ApiResponse<ESignDocumentResponse>.Ok(result, "E-sign document retrieved"));
+    }
+
+    [HttpGet("documents/my-signed")]
+    public async Task<IActionResult> GetMySignedDocuments(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10,
+        [FromQuery] int? status = null,
+        [FromQuery] string? documentType = null,
+        [FromQuery] string? q = null)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return InvalidTokenResponse();
+        }
+
+        var result = await Mediator.Send(
+            new GetMySignedESignDocumentsQuery(userId, page, pageSize, status, documentType, q));
+
+        return Ok(ApiResponse<PaginatedList<ESignDocumentListItemResponse>>.Ok(result, "Signed e-sign documents retrieved"));
     }
 
     [HttpPost("documents/from-job/{jobPostId:guid}")]

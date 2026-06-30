@@ -41,4 +41,8 @@ public partial class Proposal
     public virtual ICollection<ProposalAttachment> ProposalAttachments { get; set; } = new List<ProposalAttachment>();
 
     public virtual ICollection<ProposalAnswer> ProposalAnswers { get; set; } = new List<ProposalAnswer>();
+
+    public virtual ICollection<ProposalQuestionTimer> ProposalQuestionTimers { get; set; } = new List<ProposalQuestionTimer>();
+
+    public virtual ProposalInterviewReviewSession? ProposalInterviewReviewSession { get; set; }
 }

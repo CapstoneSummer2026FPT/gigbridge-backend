@@ -13,15 +13,18 @@ public class UpdateUserCommandHandler : IRequestHandler<UpdateUserCommand, Admin
 {
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
+    private readonly IUserAccountStatusService _userAccountStatusService;
     private readonly IMapper _mapper;
 
     public UpdateUserCommandHandler(
         IApplicationDbContext context,
         IDateTimeService dateTimeService,
+        IUserAccountStatusService userAccountStatusService,
         IMapper mapper)
     {
         _context = context;
         _dateTimeService = dateTimeService;
+        _userAccountStatusService = userAccountStatusService;
         _mapper = mapper;
     }
 
@@ -36,19 +39,25 @@ public class UpdateUserCommandHandler : IRequestHandler<UpdateUserCommand, Admin
             return null;
         }
 
-        ApplyUpdates(user, request.Request);
+        ApplyUpdates(user, request.Request, _userAccountStatusService);
         user.UpdatedAt = _dateTimeService.UtcNow;
 
         await _context.SaveChangesAsync(cancellationToken);
         return _mapper.Map<AdminUserDto>(user);
     }
 
-    private static void ApplyUpdates(User user, UpdateUserRequest request)
+    private static void ApplyUpdates(
+        User user,
+        UpdateUserRequest request,
+        IUserAccountStatusService userAccountStatusService)
     {
         user.FullName = request.FullName ?? user.FullName;
         user.PhoneNumber = request.PhoneNumber ?? user.PhoneNumber;
         user.Avatar = request.Avatar ?? user.Avatar;
         user.PreferredLanguage = request.PreferredLanguage ?? user.PreferredLanguage;
-        user.IsActive = request.IsActive ?? user.IsActive;
+        if (request.IsActive.HasValue)
+        {
+            userAccountStatusService.SetActive(user, request.IsActive.Value);
+        }
     }
 }

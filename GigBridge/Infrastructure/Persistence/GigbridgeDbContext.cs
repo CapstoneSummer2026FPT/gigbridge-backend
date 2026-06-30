@@ -28,6 +28,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
 
     public virtual DbSet<ContractEscrow> ContractEscrows { get; set; }
 
+    public virtual DbSet<ContractProductHandoff> ContractProductHandoffs { get; set; }
+
     public virtual DbSet<Conversation> Conversations { get; set; }
 
     public virtual DbSet<ConversationParticipant> ConversationParticipants { get; set; }
@@ -99,6 +101,10 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
     public virtual DbSet<Proposal> Proposals { get; set; }
 
     public virtual DbSet<ProposalCheatingEvent> ProposalCheatingEvents { get; set; }
+
+    public virtual DbSet<ProposalInterviewReviewSession> ProposalInterviewReviewSessions { get; set; }
+
+    public virtual DbSet<ProposalQuestionTimer> ProposalQuestionTimers { get; set; }
 
     public virtual DbSet<ProposalAttachment> ProposalAttachments { get; set; }
 
@@ -342,6 +348,46 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
                 .HasForeignKey<ContractEscrow>(d => d.ContractsId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("ContractEscrows_cont_ContractsId_fkey");
+        });
+
+        modelBuilder.Entity<ContractProductHandoff>(entity =>
+        {
+            entity.HasKey(e => e.ContractProductHandoffId).HasName("ContractProductHandoffs_pkey");
+
+            entity.HasIndex(e => e.ContractsId, "IX_ContractProductHandoffs_ContractsId");
+
+            entity.HasIndex(e => new { e.ContractsId, e.IsCurrent }, "IX_ContractProductHandoffs_ContractsId_IsCurrent");
+
+            entity.HasIndex(e => new { e.ContractsId, e.Version }, "IX_ContractProductHandoffs_ContractsId_Version");
+
+            entity.Property(e => e.ContractProductHandoffId)
+                .HasDefaultValueSql("gen_random_uuid()")
+                .HasColumnName("ContractProductHandoffId");
+            entity.Property(e => e.ContractsId).HasColumnName("ContractsId");
+            entity.Property(e => e.SubmittedByUserId).HasColumnName("SubmittedByUserId");
+            entity.Property(e => e.ReceivedByUserId).HasColumnName("ReceivedByUserId");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.FileName).HasMaxLength(500);
+            entity.Property(e => e.MimeType).HasMaxLength(200);
+            entity.Property(e => e.Note).HasMaxLength(2000);
+            entity.Property(e => e.SourceType)
+                .HasComment("Enum ContractProductHandoffSourceType: 0=File, 1=Link");
+            entity.Property(e => e.Version).HasDefaultValue(1);
+            entity.Property(e => e.IsCurrent).HasDefaultValue(true);
+
+            entity.HasOne(d => d.Contract).WithMany(p => p.ContractProductHandoffs)
+                .HasForeignKey(d => d.ContractsId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("ContractProductHandoffs_cont_ContractsId_fkey");
+
+            entity.HasOne(d => d.SubmittedByUser).WithMany(p => p.SubmittedContractProductHandoffs)
+                .HasForeignKey(d => d.SubmittedByUserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("ContractProductHandoffs_usr_SubmittedByUserId_fkey");
+
+            entity.HasOne(d => d.ReceivedByUser).WithMany(p => p.ReceivedContractProductHandoffs)
+                .HasForeignKey(d => d.ReceivedByUserId)
+                .HasConstraintName("ContractProductHandoffs_usr_ReceivedByUserId_fkey");
         });
 
         modelBuilder.Entity<EscrowTransaction>(entity =>
@@ -1293,7 +1339,11 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
                 .HasColumnName("MilestoneAttachmentsId");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.FileName).HasMaxLength(500);
+            entity.Property(e => e.MimeType).HasMaxLength(200);
             entity.Property(e => e.MilestonesId).HasColumnName("MilestonesId");
+            entity.Property(e => e.SourceType)
+                .HasDefaultValue(0)
+                .HasComment("Enum MilestoneSubmissionSourceType: 0=File, 1=Link");
 
             entity.HasOne(d => d.Milestones).WithMany(p => p.MilestoneAttachments)
                 .HasForeignKey(d => d.MilestonesId)
@@ -1646,6 +1696,67 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
                 .HasForeignKey(d => d.JobPostQuestionsId)
                 .OnDelete(DeleteBehavior.SetNull)
                 .HasConstraintName("ProposalCheatingEvents_jpq_JobPostQuestionsId_fkey");
+        });
+
+        modelBuilder.Entity<ProposalInterviewReviewSession>(entity =>
+        {
+            entity.HasKey(e => e.ProposalInterviewReviewSessionsId).HasName("ProposalInterviewReviewSessions_pkey");
+
+            entity.HasIndex(e => e.ProposalsId, "IX_ProposalInterviewReviewSessions_ProposalsId")
+                .IsUnique();
+
+            entity.HasIndex(e => new { e.FreelancerUserId, e.CreatedAt }, "IX_ProposalInterviewReviewSessions_FreelancerUserId_CreatedAt")
+                .IsDescending(false, true);
+
+            entity.Property(e => e.ProposalInterviewReviewSessionsId)
+                .HasDefaultValueSql("gen_random_uuid()")
+                .HasColumnName("ProposalInterviewReviewSessionsId");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.IsLocked).HasDefaultValue(false);
+            entity.Property(e => e.ReviewableQuestionCount).HasDefaultValue(0);
+
+            entity.HasOne(d => d.Proposals).WithOne(p => p.ProposalInterviewReviewSession)
+                .HasForeignKey<ProposalInterviewReviewSession>(d => d.ProposalsId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("ProposalInterviewReviewSessions_propo_ProposalsId_fkey");
+
+            entity.HasOne(d => d.FreelancerUser).WithMany(p => p.ProposalInterviewReviewSessions)
+                .HasForeignKey(d => d.FreelancerUserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("ProposalInterviewReviewSessions_usr_FreelancerUserId_fkey");
+        });
+
+        modelBuilder.Entity<ProposalQuestionTimer>(entity =>
+        {
+            entity.HasKey(e => e.ProposalQuestionTimersId).HasName("ProposalQuestionTimers_pkey");
+
+            entity.HasIndex(e => new { e.ProposalsId, e.JobPostQuestionsId }, "IX_ProposalQuestionTimers_ProposalsId_JobPostQuestionsId")
+                .IsUnique();
+
+            entity.HasIndex(e => new { e.FreelancerUserId, e.CreatedAt }, "IX_ProposalQuestionTimers_FreelancerUserId_CreatedAt")
+                .IsDescending(false, true);
+
+            entity.Property(e => e.ProposalQuestionTimersId)
+                .HasDefaultValueSql("gen_random_uuid()")
+                .HasColumnName("ProposalQuestionTimersId");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.IsLocked).HasDefaultValue(false);
+            entity.Property(e => e.LockedReason).HasComment("Enum QuestionTimerLockedReason: 0=Completed, 1=Timeout");
+
+            entity.HasOne(d => d.Proposals).WithMany(p => p.ProposalQuestionTimers)
+                .HasForeignKey(d => d.ProposalsId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("ProposalQuestionTimers_propo_ProposalsId_fkey");
+
+            entity.HasOne(d => d.JobPostQuestions).WithMany(p => p.ProposalQuestionTimers)
+                .HasForeignKey(d => d.JobPostQuestionsId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("ProposalQuestionTimers_jpq_JobPostQuestionsId_fkey");
+
+            entity.HasOne(d => d.FreelancerUser).WithMany(p => p.ProposalQuestionTimers)
+                .HasForeignKey(d => d.FreelancerUserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("ProposalQuestionTimers_usr_FreelancerUserId_fkey");
         });
 
         modelBuilder.Entity<ProposalAttachment>(entity =>

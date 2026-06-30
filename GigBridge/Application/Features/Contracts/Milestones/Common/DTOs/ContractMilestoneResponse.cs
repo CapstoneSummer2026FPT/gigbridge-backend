@@ -9,6 +9,8 @@ public sealed record MilestoneAttachmentResponse(
     string FileName,
     string FileUrl,
     long? FileSize,
+    int SourceType,
+    string? MimeType,
     Guid? UploadedByUserId,
     DateTime CreatedAt);
 

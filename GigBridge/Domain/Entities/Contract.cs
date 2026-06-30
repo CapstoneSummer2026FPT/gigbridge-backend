@@ -56,6 +56,8 @@ public partial class Contract
 
     public virtual ICollection<NegotiationOffer> NegotiationOffers { get; set; } = new List<NegotiationOffer>();
 
+    public virtual ICollection<ContractProductHandoff> ContractProductHandoffs { get; set; } = new List<ContractProductHandoff>();
+
     public virtual Proposal? Proposals { get; set; }
 
     public virtual ICollection<Review> Reviews { get; set; } = new List<Review>();

@@ -1,3 +1,5 @@
+using Application.Features.JobPosts.Client.Common;
+
 namespace Application.Features.JobPosts.Client.GetMyJobPosts.DTOs;
 
 public sealed class GetMyJobPostDto
@@ -47,4 +49,6 @@ public sealed class GetMyJobPostDto
     public DateTime? UpdatedAt { get; set; }
 
     public int ProposalCount { get; set; }
+
+    public JobPostSetupProgressDto? SetupProgress { get; set; }
 }

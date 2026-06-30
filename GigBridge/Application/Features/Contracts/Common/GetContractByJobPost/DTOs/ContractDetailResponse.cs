@@ -1,3 +1,5 @@
+using Application.Features.Contracts.ProductHandoffs.Common.DTOs;
+
 namespace Application.Features.Contracts.Common.GetContractByJobPost.DTOs;
 
 public class ContractDetailResponse
@@ -43,4 +45,6 @@ public class ContractDetailResponse
     public string? FreelancerName { get; set; }
     public string? FreelancerEmail { get; set; }
     public Guid? ConversationId { get; set; }
+
+    public ContractProductHandoffResponse? CurrentProductHandoff { get; set; }
 }

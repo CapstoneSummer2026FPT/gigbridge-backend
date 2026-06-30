@@ -95,6 +95,23 @@ public class CompleteJobPostContractSetupCommandHandlerTests
                 CancellationToken.None));
     }
 
+    [Fact]
+    public async Task Handle_MilestoneTotalExceedsContractBudget_ThrowsBadRequest()
+    {
+        var fixture = new JobPostSetupFixture();
+        fixture.AddFullySignedDocument();
+        fixture.AddMilestone("Milestone 1", 101m);
+
+        var handler = fixture.CreateHandler();
+
+        var exception = await Assert.ThrowsAsync<BadRequestException>(() =>
+            handler.Handle(
+                new CompleteJobPostContractSetupCommand(fixture.ContractId, fixture.ClientUserId),
+                CancellationToken.None));
+
+        Assert.Contains("cannot exceed contract total budget", exception.Message);
+    }
+
     private sealed class JobPostSetupFixture
     {
         public JobPostSetupFixture(int jobPostStatus = 0)
