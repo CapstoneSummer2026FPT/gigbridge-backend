@@ -66,6 +66,7 @@ public sealed class UpdateContractDetailsCommandHandler :
             .ToList();
 
         ContractDetailsValidator.ValidateMilestoneDraft(newMilestones);
+        ContractDetailsValidator.ValidateMilestoneTotalDoesNotExceedBudget(contract, newMilestones);
 
         var existingMilestones = await _context.Set<Milestone>()
             .Where(milestone => milestone.ContractsId == contract.ContractsId)
