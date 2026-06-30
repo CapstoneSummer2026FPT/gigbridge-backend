@@ -1,3 +1,4 @@
+using Application.Features.JobPosts.Client.Common;
 using Application.Features.JobPosts.Common.DTOs;
 
 namespace Application.Features.JobPosts.Client.GetMyJobPostDetail.DTOs;
@@ -49,4 +50,6 @@ public sealed class GetMyJobPostDetailDto
     public List<AttachmentDto> Attachments { get; set; } = new();
 
     public int ProposalCount { get; set; }
+
+    public JobPostSetupProgressDto? SetupProgress { get; set; }
 }

@@ -56,5 +56,7 @@ internal static class JobPostSetupPublishGuard
                 throw new BadRequestException("Milestone amount must be positive.");
             }
         }
+
+        ContractDetailsValidator.ValidateMilestoneTotalDoesNotExceedBudget(contract, contract.Milestones.ToList());
     }
 }

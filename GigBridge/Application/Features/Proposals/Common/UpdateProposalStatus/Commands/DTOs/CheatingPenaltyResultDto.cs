@@ -2,6 +2,7 @@ namespace Application.Features.Proposals.Common.UpdateProposalStatus.Commands.DT
 
 public record CheatingPenaltyResultDto(
     bool Applied,
+    bool IsNewViolation,
     Guid ViolationId,
     int ViolationNumber,
     int EloDelta,

@@ -1,5 +1,6 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
+using Application.Features.JobPosts.Client.Common;
 using Application.Features.JobPosts.Client.GetMyJobPostDetail.DTOs;
 using Application.Features.JobPosts.Common.DTOs;
 using Domain.Entities;
@@ -96,6 +97,8 @@ public class GetMyJobPostDetailQueryHandler
         {
             throw new NotFoundException("Job post does not exist.");
         }
+
+        await JobPostSetupProgressBuilder.ApplyAsync(_context, jobPost, cancellationToken);
 
         return jobPost;
     }
