@@ -19,15 +19,18 @@ public class ProposalCheatingService : IProposalCheatingService
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
     private readonly IUserEloService _userEloService;
+    private readonly IUserAccountStatusService _userAccountStatusService;
 
     public ProposalCheatingService(
         IApplicationDbContext context,
         IDateTimeService dateTimeService,
-        IUserEloService userEloService)
+        IUserEloService userEloService,
+        IUserAccountStatusService userAccountStatusService)
     {
         _context = context;
         _dateTimeService = dateTimeService;
         _userEloService = userEloService;
+        _userAccountStatusService = userAccountStatusService;
     }
 
     public async Task<CheatingEventLogResponse> LogEventAsync(
@@ -125,18 +128,16 @@ public class ProposalCheatingService : IProposalCheatingService
         if (action == CheatingViolationAction.TemporarySuspension)
         {
             suspendedUntil = now.AddDays(SuspensionDays);
-            var user = await _context.Set<User>()
-                .FirstOrDefaultAsync(existingUser => existingUser.UserId == freelancerUserId, cancellationToken);
+            var suspendedUser = await _userAccountStatusService.SuspendAsync(
+                freelancerUserId,
+                suspendedUntil.Value,
+                "Suspended for repeated cheating during interview questions.",
+                cancellationToken);
 
-            if (user is null)
+            if (suspendedUser is null)
             {
                 throw new NotFoundException("Freelancer does not exist.");
             }
-
-            user.SuspendedAt = now;
-            user.SuspendedUntil = suspendedUntil;
-            user.SuspensionReason = "Suspended for repeated cheating during interview questions.";
-            user.UpdatedAt = now;
         }
 
         var violation = new FreelancerCheatingViolation

@@ -189,7 +189,11 @@ public class ProposalCheatingServiceTests
         DateTime now)
     {
         var clock = new FixedDateTimeService(now);
-        return new ProposalCheatingService(context, clock, new UserEloService(context, clock));
+        return new ProposalCheatingService(
+            context,
+            clock,
+            new UserEloService(context, clock),
+            new UserAccountStatusService(context, clock));
     }
 
     private static GigbridgeDbContext CreateContext()

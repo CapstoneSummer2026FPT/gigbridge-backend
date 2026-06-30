@@ -1,4 +1,6 @@
 using Application.Common.Models;
+using Application.Features.Admin.Users.ClearUserSuspension.Commands;
+using Application.Features.Admin.Users.ClearUserSuspension.DTOs;
 using Application.Features.Admin.Users.CreateNewUser.Commands;
 using Application.Features.Admin.Users.CreateNewUser.DTOs;
 using Application.Features.Admin.Users.DeleteUser.Commands;
@@ -7,6 +9,8 @@ using Application.Features.Admin.Users.GetAllUser.Queries;
 using Application.Features.Admin.Users.GetClientByEmail.Queries;
 using Application.Features.Admin.Users.GetFreelancerByEmail.Queries;
 using Application.Features.Admin.Users.Shared.DTOs;
+using Application.Features.Admin.Users.SuspendUser.Commands;
+using Application.Features.Admin.Users.SuspendUser.DTOs;
 using Application.Features.Admin.Users.ToggleUserActivity.Commands;
 using Application.Features.Admin.Users.UpdateUser.Commands;
 using Application.Features.Admin.Users.UpdateUser.DTOs;
@@ -89,6 +93,34 @@ public class AdminUserController : BaseApiController
             return NotFound(ApiResponse<object>.NotFound("User not found"));
 
         return Ok(ApiResponse<object>.NoContent("User activity toggled successfully"));
+    }
+
+    [HttpPatch("suspend")]
+    public async Task<IActionResult> Suspend([FromBody] SuspendUserRequest request)
+    {
+        if (request is null)
+            return BadRequest(ApiResponse<object>.BadRequest("Request body is required"));
+
+        var user = await Mediator.Send(new SuspendUserCommand(request));
+
+        if (user is null)
+            return NotFound(ApiResponse<object>.NotFound("User not found"));
+
+        return Ok(ApiResponse<AdminUserDto>.Ok(user, "User suspended successfully"));
+    }
+
+    [HttpPatch("clear-suspension")]
+    public async Task<IActionResult> ClearSuspension([FromBody] ClearUserSuspensionRequest request)
+    {
+        if (request is null)
+            return BadRequest(ApiResponse<object>.BadRequest("Request body is required"));
+
+        var user = await Mediator.Send(new ClearUserSuspensionCommand(request));
+
+        if (user is null)
+            return NotFound(ApiResponse<object>.NotFound("User not found"));
+
+        return Ok(ApiResponse<AdminUserDto>.Ok(user, "User suspension cleared successfully"));
     }
 
     [HttpDelete]

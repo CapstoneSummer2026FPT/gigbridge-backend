@@ -34,6 +34,7 @@ public static class DependencyInjection
             cfg.LicenseKey = configuration["AutoMapper:LicenseKey"];
         }, typeof(MappingProfile));
         services.AddScoped<ScheduleWorkflowService>();
+        services.AddScoped<IUserAccountStatusService, UserAccountStatusService>();
         services.AddScoped<IUserEloService, UserEloService>();
         services.AddScoped<IProposalCheatingService, ProposalCheatingService>();
         services.AddScoped<IProposalQuestionTimerService, ProposalQuestionTimerService>();
