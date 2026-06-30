@@ -1,3 +1,4 @@
+using Application.Common.Exceptions;
 using Application.Common.Models;
 using Application.Features.Contracts.Milestones.Client.Approve.Commands;
 using Application.Features.Contracts.Milestones.Client.RequestRevision.Commands;
@@ -16,6 +17,8 @@ namespace Project_API.Controllers.Common;
 [Authorize]
 public sealed class ContractMilestonesController : BaseApiController
 {
+    private const long MaxRequestSizeBytes = 100 * 1024 * 1024;
+
     [HttpGet]
     public async Task<IActionResult> GetMilestones(Guid contractId)
     {
@@ -45,14 +48,37 @@ public sealed class ContractMilestonesController : BaseApiController
 
     [HttpPost("{milestoneId:guid}/submit")]
     [Authorize(Roles = "Freelancer")]
-    public async Task<IActionResult> Submit(Guid contractId, Guid milestoneId)
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(MaxRequestSizeBytes)]
+    public async Task<IActionResult> Submit(
+        Guid contractId,
+        Guid milestoneId,
+        [FromForm] string? externalUrl,
+        [FromForm] string? description)
     {
         if (!TryGetCurrentUserId(out var userId))
         {
             return InvalidTokenResponse();
         }
 
-        var result = await Mediator.Send(new SubmitMilestoneCommand(contractId, milestoneId, userId));
+        if (Request.Form.Files.Count > 1)
+        {
+            throw new BadRequestException("Only one milestone file can be submitted at a time.");
+        }
+
+        SubmitMilestoneFile? commandFile = null;
+        var file = Request.Form.Files.FirstOrDefault();
+        if (file is not null)
+        {
+            commandFile = new SubmitMilestoneFile(
+                file.OpenReadStream(),
+                file.FileName,
+                file.ContentType,
+                file.Length);
+        }
+
+        var result = await Mediator.Send(
+            new SubmitMilestoneCommand(contractId, milestoneId, userId, description, commandFile, externalUrl));
 
         return Ok(ApiResponse<ContractMilestoneResponse>.Ok(result, "Milestone submitted"));
     }

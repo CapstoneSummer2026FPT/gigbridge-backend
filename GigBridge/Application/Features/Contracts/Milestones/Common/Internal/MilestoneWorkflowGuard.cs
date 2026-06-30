@@ -138,6 +138,8 @@ internal static class MilestoneWorkflowGuard
                 a.FileName,
                 a.FileUrl,
                 a.FileSize,
+                a.SourceType,
+                a.MimeType,
                 a.UploadedByUserId,
                 a.CreatedAt)))
             : new System.Collections.Generic.List<MilestoneAttachmentResponse>();

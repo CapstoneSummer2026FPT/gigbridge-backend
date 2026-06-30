@@ -36,6 +36,8 @@ public static class DependencyInjection
         services.AddScoped<ScheduleWorkflowService>();
         services.AddScoped<IUserEloService, UserEloService>();
         services.AddScoped<IProposalCheatingService, ProposalCheatingService>();
+        services.AddScoped<IProposalQuestionTimerService, ProposalQuestionTimerService>();
+        services.AddScoped<IProposalInterviewReviewService, ProposalInterviewReviewService>();
         services.AddScoped<ScheduleWorkflowService>();
 
         services.AddSingleton<DeadlineWarningService>();

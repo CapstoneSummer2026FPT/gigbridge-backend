@@ -15,6 +15,10 @@ public partial class MilestoneAttachment
 
     public long? FileSize { get; set; }
 
+    public int SourceType { get; set; }
+
+    public string? MimeType { get; set; }
+
     public Guid? UploadedByUserId { get; set; }
 
     public DateTime CreatedAt { get; set; }

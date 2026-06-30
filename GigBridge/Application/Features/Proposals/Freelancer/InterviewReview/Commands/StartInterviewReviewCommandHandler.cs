@@ -1,0 +1,26 @@
+using Application.Common.Interfaces.IService;
+using Application.Features.Proposals.Freelancer.InterviewReview.DTOs;
+using MediatR;
+
+namespace Application.Features.Proposals.Freelancer.InterviewReview.Commands;
+
+public class StartInterviewReviewCommandHandler
+    : IRequestHandler<StartInterviewReviewCommand, InterviewReviewSessionDto>
+{
+    private readonly IProposalInterviewReviewService _reviewService;
+
+    public StartInterviewReviewCommandHandler(IProposalInterviewReviewService reviewService)
+    {
+        _reviewService = reviewService;
+    }
+
+    public Task<InterviewReviewSessionDto> Handle(
+        StartInterviewReviewCommand command,
+        CancellationToken cancellationToken)
+    {
+        return _reviewService.StartReviewAsync(
+            command.ProposalId,
+            command.UserId,
+            cancellationToken);
+    }
+}

@@ -14,13 +14,16 @@ public class UpdateBulkProposalAnswersCommandHandler
 {
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
+    private readonly IProposalQuestionTimerService _timerService;
 
     public UpdateBulkProposalAnswersCommandHandler(
         IApplicationDbContext context,
-        IDateTimeService dateTimeService)
+        IDateTimeService dateTimeService,
+        IProposalQuestionTimerService timerService)
     {
         _context = context;
         _dateTimeService = dateTimeService;
+        _timerService = timerService;
     }
 
     public async Task<IEnumerable<ProposalAnswerDto>> Handle(
@@ -71,6 +74,11 @@ public class UpdateBulkProposalAnswersCommandHandler
             ProposalAnswerCommandHelper.EnsureRequiredQuestionHasAnswer(
                 questionsById[request.JobPostQuestionId],
                 request.AnswerText);
+            await _timerService.EnsureQuestionCanBeModifiedAsync(
+                proposal,
+                request.JobPostQuestionId,
+                command.UserId,
+                cancellationToken);
         }
 
         var existingAnswers = await _context.Set<ProposalAnswer>()

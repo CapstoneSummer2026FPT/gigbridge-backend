@@ -15,15 +15,21 @@ public class UpdateProposalStatusCommandHandler
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
     private readonly IProposalCheatingService? _proposalCheatingService;
+    private readonly IProposalQuestionTimerService? _proposalQuestionTimerService;
+    private readonly IProposalInterviewReviewService? _proposalInterviewReviewService;
 
     public UpdateProposalStatusCommandHandler(
         IApplicationDbContext context,
         IDateTimeService dateTimeService,
-        IProposalCheatingService? proposalCheatingService = null)
+        IProposalCheatingService? proposalCheatingService = null,
+        IProposalQuestionTimerService? proposalQuestionTimerService = null,
+        IProposalInterviewReviewService? proposalInterviewReviewService = null)
     {
         _context = context;
         _dateTimeService = dateTimeService;
         _proposalCheatingService = proposalCheatingService;
+        _proposalQuestionTimerService = proposalQuestionTimerService;
+        _proposalInterviewReviewService = proposalInterviewReviewService;
     }
 
     public async Task<UpdateProposalStatusResponse> Handle(
@@ -69,6 +75,22 @@ public class UpdateProposalStatusCommandHandler
         else if (isFreelancerOwner)
         {
             var isDraftSubmission = proposal.Status == 0 && requestedStatus == 1;
+            if (isDraftSubmission && _proposalQuestionTimerService is not null)
+            {
+                await _proposalQuestionTimerService.EnsureProposalReadyForSubmissionAsync(
+                    proposal,
+                    command.UserId,
+                    cancellationToken);
+            }
+
+            if (isDraftSubmission && _proposalInterviewReviewService is not null)
+            {
+                await _proposalInterviewReviewService.CompleteActiveReviewForSubmissionAsync(
+                    proposal,
+                    command.UserId,
+                    cancellationToken);
+            }
+
             UpdateStatusByFreelancer(proposal, requestedStatus);
             var cheatingPenalty = isDraftSubmission && _proposalCheatingService is not null
                 ? await _proposalCheatingService.ApplySubmissionPenaltyIfNeededAsync(

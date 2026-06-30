@@ -2170,6 +2170,16 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("MilestonesId");
 
+                    b.Property<string>("MimeType")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("SourceType")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasComment("Enum MilestoneSubmissionSourceType: 0=File, 1=Link");
+
                     b.Property<Guid?>("UploadedByUserId")
                         .HasColumnType("uuid");
 
@@ -2673,6 +2683,116 @@ namespace Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("ProposalCheatingEvents");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ProposalInterviewReviewSession", b =>
+                {
+                    b.Property<Guid>("ProposalInterviewReviewSessionsId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("ProposalInterviewReviewSessionsId")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("FreelancerUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsLocked")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<Guid>("ProposalsId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ReviewableQuestionCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<DateTime>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("ProposalInterviewReviewSessionsId")
+                        .HasName("ProposalInterviewReviewSessions_pkey");
+
+                    b.HasIndex(new[] { "FreelancerUserId", "CreatedAt" }, "IX_ProposalInterviewReviewSessions_FreelancerUserId_CreatedAt")
+                        .IsDescending(false, true);
+
+                    b.HasIndex(new[] { "ProposalsId" }, "IX_ProposalInterviewReviewSessions_ProposalsId")
+                        .IsUnique();
+
+                    b.ToTable("ProposalInterviewReviewSessions");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ProposalQuestionTimer", b =>
+                {
+                    b.Property<Guid>("ProposalQuestionTimersId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("ProposalQuestionTimersId")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("FreelancerUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsLocked")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<Guid>("JobPostQuestionsId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("LockedReason")
+                        .HasColumnType("integer")
+                        .HasComment("Enum QuestionTimerLockedReason: 0=Completed, 1=Timeout");
+
+                    b.Property<Guid>("ProposalsId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("ProposalQuestionTimersId")
+                        .HasName("ProposalQuestionTimers_pkey");
+
+                    b.HasIndex("JobPostQuestionsId");
+
+                    b.HasIndex(new[] { "FreelancerUserId", "CreatedAt" }, "IX_ProposalQuestionTimers_FreelancerUserId_CreatedAt")
+                        .IsDescending(false, true);
+
+                    b.HasIndex(new[] { "ProposalsId", "JobPostQuestionsId" }, "IX_ProposalQuestionTimers_ProposalsId_JobPostQuestionsId")
+                        .IsUnique();
+
+                    b.ToTable("ProposalQuestionTimers");
                 });
 
             modelBuilder.Entity("Domain.Entities.RefreshToken", b =>
@@ -4436,6 +4556,54 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("Proposals");
                 });
 
+            modelBuilder.Entity("Domain.Entities.ProposalInterviewReviewSession", b =>
+                {
+                    b.HasOne("Domain.Entities.User", "FreelancerUser")
+                        .WithMany("ProposalInterviewReviewSessions")
+                        .HasForeignKey("FreelancerUserId")
+                        .IsRequired()
+                        .HasConstraintName("ProposalInterviewReviewSessions_usr_FreelancerUserId_fkey");
+
+                    b.HasOne("Domain.Entities.Proposal", "Proposals")
+                        .WithOne("ProposalInterviewReviewSession")
+                        .HasForeignKey("Domain.Entities.ProposalInterviewReviewSession", "ProposalsId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("ProposalInterviewReviewSessions_propo_ProposalsId_fkey");
+
+                    b.Navigation("FreelancerUser");
+
+                    b.Navigation("Proposals");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ProposalQuestionTimer", b =>
+                {
+                    b.HasOne("Domain.Entities.User", "FreelancerUser")
+                        .WithMany("ProposalQuestionTimers")
+                        .HasForeignKey("FreelancerUserId")
+                        .IsRequired()
+                        .HasConstraintName("ProposalQuestionTimers_usr_FreelancerUserId_fkey");
+
+                    b.HasOne("Domain.Entities.JobPostQuestion", "JobPostQuestions")
+                        .WithMany("ProposalQuestionTimers")
+                        .HasForeignKey("JobPostQuestionsId")
+                        .IsRequired()
+                        .HasConstraintName("ProposalQuestionTimers_jpq_JobPostQuestionsId_fkey");
+
+                    b.HasOne("Domain.Entities.Proposal", "Proposals")
+                        .WithMany("ProposalQuestionTimers")
+                        .HasForeignKey("ProposalsId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("ProposalQuestionTimers_propo_ProposalsId_fkey");
+
+                    b.Navigation("FreelancerUser");
+
+                    b.Navigation("JobPostQuestions");
+
+                    b.Navigation("Proposals");
+                });
+
             modelBuilder.Entity("Domain.Entities.RefreshToken", b =>
                 {
                     b.HasOne("Domain.Entities.User", "User")
@@ -4782,6 +4950,8 @@ namespace Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Domain.Entities.JobPostQuestion", b =>
                 {
                     b.Navigation("ProposalAnswers");
+
+                    b.Navigation("ProposalQuestionTimers");
                 });
 
             modelBuilder.Entity("Domain.Entities.Major", b =>
@@ -4827,6 +4997,10 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("ProposalAnswers");
 
                     b.Navigation("ProposalAttachments");
+
+                    b.Navigation("ProposalInterviewReviewSession");
+
+                    b.Navigation("ProposalQuestionTimers");
                 });
 
             modelBuilder.Entity("Domain.Entities.Schedule", b =>
@@ -4897,6 +5071,10 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("PlatformSettings");
 
                     b.Navigation("ProposalCheatingEvents");
+
+                    b.Navigation("ProposalInterviewReviewSessions");
+
+                    b.Navigation("ProposalQuestionTimers");
 
                     b.Navigation("RefreshTokens");
 
