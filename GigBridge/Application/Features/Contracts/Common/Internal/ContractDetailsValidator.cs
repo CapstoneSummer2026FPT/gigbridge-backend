@@ -27,11 +27,21 @@ internal static class ContractDetailsValidator
         }
 
         ValidateMilestoneDraft(milestones);
+        ValidateMilestoneTotalDoesNotExceedBudget(contract, milestones);
 
         var total = milestones.Sum(milestone => milestone.Amount);
         if (total != contract.TotalBudget)
         {
             throw new BadRequestException($"Milestone total sum ({total}) must equal contract total budget ({contract.TotalBudget}).");
+        }
+    }
+
+    public static void ValidateMilestoneTotalDoesNotExceedBudget(Contract contract, IReadOnlyCollection<Milestone> milestones)
+    {
+        var total = milestones.Sum(milestone => milestone.Amount);
+        if (total > contract.TotalBudget)
+        {
+            throw new BadRequestException($"Allocated milestone budget ({total}) cannot exceed contract total budget ({contract.TotalBudget}).");
         }
     }
 }

@@ -13,7 +13,7 @@ namespace Application.Common.Services;
 public class ProposalCheatingService : IProposalCheatingService
 {
     private const int CheatingPenaltyPoints = -50;
-    private const int SuspensionThreshold = 3;
+    private const int SuspensionCheatingInterviewViolationThreshold = 3;
     private const int SuspensionDays = 7;
 
     private readonly IApplicationDbContext _context;
@@ -99,7 +99,7 @@ public class ProposalCheatingService : IProposalCheatingService
 
         if (existingViolation is not null)
         {
-            return ToPenaltyResult(existingViolation);
+            return ToPenaltyResult(existingViolation, false);
         }
 
         var events = await _context.Set<ProposalCheatingEvent>()
@@ -120,7 +120,7 @@ public class ProposalCheatingService : IProposalCheatingService
 
         var violationNumber = previousViolationCount + 1;
         var now = _dateTimeService.UtcNow;
-        var action = violationNumber >= SuspensionThreshold
+        var action = violationNumber >= SuspensionCheatingInterviewViolationThreshold
             ? CheatingViolationAction.TemporarySuspension
             : CheatingViolationAction.EloPenalty;
 
@@ -167,7 +167,7 @@ public class ProposalCheatingService : IProposalCheatingService
             CheatingPenaltyPoints,
             cancellationToken);
 
-        return ToPenaltyResult(violation);
+        return ToPenaltyResult(violation, true);
     }
 
     private async Task<Proposal> GetOwnedDraftProposalAsync(
@@ -264,14 +264,17 @@ public class ProposalCheatingService : IProposalCheatingService
             "Cheating behavior detected. Continued violations may reduce Elo points or suspend your account.");
     }
 
-    private static CheatingPenaltyResultDto ToPenaltyResult(FreelancerCheatingViolation violation)
+    private static CheatingPenaltyResultDto ToPenaltyResult(
+        FreelancerCheatingViolation violation,
+        bool isNewViolation)
     {
         var message = violation.SuspendedUntil.HasValue
-            ? "Cheating penalty applied: 50 Elo points deducted and account suspended for 7 days."
-            : "Cheating penalty applied: 50 Elo points deducted.";
+            ? $"Anti-cheat suspension applied: violation {violation.ViolationNumber}. Your account is suspended for {SuspensionDays} days. 50 Elo points deducted."
+            : $"Anti-cheat penalty applied: violation {violation.ViolationNumber}/{SuspensionCheatingInterviewViolationThreshold}. 50 Elo points deducted.";
 
         return new CheatingPenaltyResultDto(
             true,
+            isNewViolation,
             violation.FreelancerCheatingViolationsId,
             violation.ViolationNumber,
             violation.EloDelta,

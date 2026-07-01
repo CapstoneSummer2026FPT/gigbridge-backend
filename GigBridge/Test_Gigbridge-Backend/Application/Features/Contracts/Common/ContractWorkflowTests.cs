@@ -1,5 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces.IService;
+using Application.Features.Contracts.Details.Client.Update.Commands;
+using Application.Features.Contracts.Details.Client.Update.DTOs;
 using Application.Features.Contracts.Details.Client.Submit.Commands;
 using Application.Features.Contracts.Details.Freelancer.Confirm.Commands;
 using Application.Features.Contracts.Escrow.Client.Fund.Commands;
@@ -17,6 +19,29 @@ namespace Test_Gigbridge_Backend.Application.Features.Contracts.Common;
 public class ContractWorkflowTests
 {
     private const string SignatureDataUri = "data:image/png;base64,aGVsbG8=";
+
+    [Fact]
+    public async Task UpdateContractDetails_MilestoneTotalExceedsContractBudget_ThrowsBadRequest()
+    {
+        var fixture = new ContractWorkflowFixture();
+        var handler = new UpdateContractDetailsCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopChatRealtimeNotifier());
+
+        var request = new UpdateContractDetailsRequest(
+            [
+                new ContractMilestoneRequest(null, "Milestone 1", 1_000_001m, DateOnly.FromDateTime(fixture.Now.AddDays(7)), 0)
+            ]);
+
+        var exception = await Assert.ThrowsAsync<BadRequestException>(() =>
+            handler.Handle(
+                new UpdateContractDetailsCommand(fixture.ContractId, fixture.ClientUserId, request),
+                CancellationToken.None));
+
+        Assert.Contains("cannot exceed contract total budget", exception.Message);
+        Assert.Empty(fixture.Milestones.Entities);
+    }
     
     [Fact]
     public async Task SubmitAndFreelancerConfirm_CreatesFullEscrowAndMovesToPendingSignature()

@@ -178,6 +178,7 @@ public class ProposalCheatingServiceTests
 
         Assert.NotNull(result);
         Assert.Equal(3, result.ViolationNumber);
+        Assert.True(result.IsNewViolation);
         Assert.Equal((int)CheatingViolationAction.TemporarySuspension, result.Action);
         Assert.Equal(now.AddDays(7), result.SuspendedUntil);
         Assert.Equal(now.AddDays(7), fixture.User.SuspendedUntil);
