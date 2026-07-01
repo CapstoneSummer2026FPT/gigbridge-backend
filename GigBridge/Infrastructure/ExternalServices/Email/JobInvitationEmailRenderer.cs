@@ -1,44 +1,35 @@
 using System.Net;
-using System.Reflection;
 using System.Text;
 using Application.Features.JobInvitations.Common.Email;
+using Microsoft.AspNetCore.Hosting;
 
 namespace Infrastructure.Services.Email;
 
 public sealed class JobInvitationEmailRenderer : IJobInvitationEmailRenderer
 {
-    private const string LayoutResource = "ScheduleEmailTemplates/ScheduleEmail.html";
+    private const string TemplateName = "NewJobInvitationTemplate.html";
     private const string Subject = "You have received a new job invitation";
-    private static readonly Assembly Assembly = typeof(ScheduleEmailRenderer).Assembly;
+    private readonly IWebHostEnvironment _webHostEnvironment;
+
+    public JobInvitationEmailRenderer(IWebHostEnvironment webHostEnvironment)
+    {
+        _webHostEnvironment = webHostEnvironment;
+    }
 
     public RenderedJobInvitationEmail Render(NewJobInvitationTemplate model)
     {
-        var headline = "You have received a new job invitation";
-        var greeting = string.IsNullOrWhiteSpace(model.FreelancerName) ? "Hello," : $"Hello {E(model.FreelancerName)},";
-        var introduction = $"{E(model.ClientName)} invited you to view and apply for a new job on GigBridge.";
-        var formattedTime = $"Budget: {model.Budget} | Deadline: {model.Deadline}";
-        var details = Section("Short description", model.ShortDescription);
-
-        var htmlBody = ReadResource(LayoutResource)
-            .Replace("{{PREVIEW}}", E(headline))
-            .Replace("{{BADGE_BACKGROUND}}", "#ecfeff")
-            .Replace("{{ACCENT}}", "#0891b2")
-            .Replace("{{BADGE}}", "New Invitation")
-            .Replace("{{HEADLINE}}", E(headline))
-            .Replace("{{GREETING}}", greeting)
-            .Replace("{{INTRODUCTION}}", introduction)
-            .Replace("{{TITLE}}", E(model.JobTitle))
-            .Replace("{{FORMATTED_TIME}}", E(formattedTime))
-            .Replace("{{ACTOR_LABEL}}", "Client:")
-            .Replace("{{ACTOR_NAME}}", E(model.ClientName))
-            .Replace("{{DETAILS_SECTION}}", details)
-            .Replace("{{REASON_SECTION}}", "")
-            .Replace("{{ACTION_URL}}", E(model.ActionUrl))
-            .Replace("{{ACTION_LABEL}}", "View job details")
+        var htmlBody = ReadTemplate()
+            .Replace("{{FREELANCER_NAME}}", E(model.FreelancerName))
+            .Replace("{{JOB_TITLE}}", E(model.JobTitle))
+            .Replace("{{CLIENT_NAME}}", E(model.ClientName))
+            .Replace("{{BUDGET}}", E(model.Budget))
+            .Replace("{{DEADLINE}}", E(model.Deadline))
+            .Replace("{{SHORT_DESCRIPTION}}", E(model.ShortDescription).Replace("\n", "<br>"))
+            .Replace("{{JOB_DETAIL_URL}}", E(model.ActionUrl))
             .Replace("{{YEAR}}", DateTime.UtcNow.Year.ToString());
 
         var textBody = new StringBuilder()
-            .AppendLine(headline).AppendLine()
+            .AppendLine(Subject).AppendLine()
             .AppendLine(string.IsNullOrWhiteSpace(model.FreelancerName) ? "Hello," : $"Hello {model.FreelancerName},")
             .AppendLine($"{model.ClientName} invited you to view and apply for a new job on GigBridge.").AppendLine()
             .AppendLine($"Job: {model.JobTitle}")
@@ -54,17 +45,11 @@ public sealed class JobInvitationEmailRenderer : IJobInvitationEmailRenderer
         return new RenderedJobInvitationEmail(Subject, htmlBody, textBody);
     }
 
-    private static string Section(string label, string? value) => string.IsNullOrWhiteSpace(value)
-        ? ""
-        : $"<tr><td style=\"padding:0 32px 20px\"><div style=\"font-size:11px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:#9ca3af;padding-bottom:7px\">{E(label)}</div><div style=\"padding:15px;border:1px solid #eef0f2;border-radius:9px;background:#fafafa;color:#4b5563;font-size:14px;line-height:1.6\">{E(value).Replace("\n", "<br>")}</div></td></tr>";
-
     private static string E(string? value) => WebUtility.HtmlEncode(value ?? string.Empty);
 
-    private static string ReadResource(string name)
+    private string ReadTemplate()
     {
-        using var stream = Assembly.GetManifestResourceStream(name)
-            ?? throw new InvalidOperationException($"Embedded email layout '{name}' was not found.");
-        using var reader = new StreamReader(stream, Encoding.UTF8);
-        return reader.ReadToEnd();
+        var path = Path.Combine(_webHostEnvironment.ContentRootPath, "Templates", TemplateName);
+        return File.ReadAllText(path, Encoding.UTF8);
     }
 }
