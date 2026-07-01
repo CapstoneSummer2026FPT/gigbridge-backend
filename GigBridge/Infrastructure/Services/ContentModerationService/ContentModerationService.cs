@@ -3,7 +3,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Application.Common.Interfaces.IService;
 
-namespace Infrastructure.Services;
+namespace Infrastructure.Services.ContentModerationService;
 
 /// <summary>
 /// Rule-based first-layer moderation for JobPost content. This is not a complete legal classifier.
