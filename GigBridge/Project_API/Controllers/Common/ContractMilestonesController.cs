@@ -5,6 +5,7 @@ using Application.Features.Contracts.Milestones.Client.RequestRevision.Commands;
 using Application.Features.Contracts.Milestones.Client.Start.Commands;
 using Application.Features.Contracts.Milestones.Common.DTOs;
 using Application.Features.Contracts.Milestones.Common.List.Queries;
+using Application.Features.Contracts.Milestones.Freelancer.RequestUnlock.Commands;
 using Application.Features.Contracts.Milestones.Freelancer.Submit.Commands;
 using Application.Features.Contracts.Milestones.Freelancer.Withdraw.Commands;
 using Microsoft.AspNetCore.Authorization;
@@ -81,6 +82,20 @@ public sealed class ContractMilestonesController : BaseApiController
             new SubmitMilestoneCommand(contractId, milestoneId, userId, description, commandFile, externalUrl));
 
         return Ok(ApiResponse<ContractMilestoneResponse>.Ok(result, "Milestone submitted"));
+    }
+
+    [HttpPost("{milestoneId:guid}/request-unlock")]
+    [Authorize(Roles = "Freelancer")]
+    public async Task<IActionResult> RequestUnlock(Guid contractId, Guid milestoneId)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return InvalidTokenResponse();
+        }
+
+        await Mediator.Send(new RequestMilestoneUnlockCommand(contractId, milestoneId, userId));
+
+        return Ok(ApiResponse<object>.Ok(new { }, "Milestone unlock requested"));
     }
 
     [HttpPost("{milestoneId:guid}/approve")]

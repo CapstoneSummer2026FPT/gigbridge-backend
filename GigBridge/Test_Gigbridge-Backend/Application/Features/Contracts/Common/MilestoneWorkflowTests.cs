@@ -4,6 +4,7 @@ using Application.Features.Contracts.Milestones.Client.Approve.Commands;
 using Application.Features.Contracts.Milestones.Client.RequestRevision.Commands;
 using Application.Features.Contracts.Milestones.Client.Start.Commands;
 using Application.Features.Contracts.Milestones.Common.List.Queries;
+using Application.Features.Contracts.Milestones.Freelancer.RequestUnlock.Commands;
 using Application.Features.Contracts.Milestones.Freelancer.Submit.Commands;
 using Application.Features.Contracts.Milestones.Freelancer.Withdraw.Commands;
 using Domain.Entities;
@@ -101,6 +102,68 @@ public class MilestoneWorkflowTests
 
         Assert.Equal((int)MilestoneStatus.Approved, fixture.FirstMilestone.Status);
         Assert.NotNull(fixture.FirstMilestone.ApprovedAt);
+        Assert.Equal((int)MilestoneStatus.Pending, fixture.SecondMilestone.Status);
+    }
+
+    [Fact]
+    public async Task ListMilestones_DoesNotAutoStartPendingMilestones()
+    {
+        var fixture = new MilestoneWorkflowFixture();
+        var listHandler = new GetContractMilestonesQueryHandler(fixture.Context);
+
+        fixture.ApproveMilestone(fixture.FirstMilestone);
+
+        var milestones = await listHandler.Handle(
+            new GetContractMilestonesQuery(fixture.ContractId, fixture.FreelancerUserId),
+            CancellationToken.None);
+
+        Assert.Equal((int)MilestoneStatus.Pending, fixture.SecondMilestone.Status);
+        Assert.Contains(
+            milestones,
+            milestone =>
+                milestone.MilestoneId == fixture.SecondMilestoneId &&
+                milestone.Status == (int)MilestoneStatus.Pending);
+    }
+
+    [Fact]
+    public async Task StartMilestone_AllowsClientToStartAnyPendingMilestone()
+    {
+        var fixture = new MilestoneWorkflowFixture();
+        var startHandler = new StartMilestoneCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now.AddMinutes(7)));
+
+        var response = await startHandler.Handle(
+            new StartMilestoneCommand(fixture.ContractId, fixture.ThirdMilestoneId, fixture.ClientUserId),
+            CancellationToken.None);
+
+        Assert.Equal((int)MilestoneStatus.InProgress, response.Status);
+        Assert.Equal((int)MilestoneStatus.InProgress, fixture.ThirdMilestone.Status);
+        Assert.NotNull(fixture.ThirdMilestone.StartedAt);
+        Assert.Equal((int)MilestoneStatus.Pending, fixture.FirstMilestone.Status);
+        Assert.Equal((int)MilestoneStatus.Pending, fixture.SecondMilestone.Status);
+    }
+
+    [Fact]
+    public async Task RequestMilestoneUnlock_NotifiesClientWithoutStartingMilestone()
+    {
+        var fixture = new MilestoneWorkflowFixture();
+        var handler = new RequestMilestoneUnlockCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now.AddMinutes(8)),
+            new NoopNotificationService());
+
+        await handler.Handle(
+            new RequestMilestoneUnlockCommand(
+                fixture.ContractId,
+                fixture.SecondMilestoneId,
+                fixture.FreelancerUserId),
+            CancellationToken.None);
+
+        Assert.Equal((int)MilestoneStatus.Pending, fixture.SecondMilestone.Status);
+        Assert.Contains(
+            fixture.Context.Set<Message>().ToList(),
+            message => message.Content == "Freelancer requested milestone unlock: Milestone 2.");
     }
 
     [Fact]
@@ -406,6 +469,31 @@ public class MilestoneWorkflowTests
         Assert.Equal("External URL", response.Attachments[0].FileName);
         Assert.Null(response.Attachments[0].FileSize);
         Assert.Null(response.Attachments[0].MimeType);
+    }
+
+    [Fact]
+    public async Task SubmitMilestone_DoesNotAutoStartPendingMilestone()
+    {
+        var fixture = new MilestoneWorkflowFixture();
+        var submitHandler = new SubmitMilestoneCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now.AddMinutes(4)));
+
+        fixture.ApproveMilestone(fixture.FirstMilestone);
+
+        await Assert.ThrowsAsync<BadRequestException>(() =>
+            submitHandler.Handle(
+            new SubmitMilestoneCommand(
+                fixture.ContractId,
+                fixture.SecondMilestoneId,
+                fixture.FreelancerUserId,
+                "Milestone 2 delivery.",
+                ExternalUrl: "https://example.com/milestone-2"),
+            CancellationToken.None));
+
+        Assert.Equal((int)MilestoneStatus.Pending, fixture.SecondMilestone.Status);
+        Assert.Null(fixture.SecondMilestone.StartedAt);
+        Assert.Null(fixture.SecondMilestone.SubmittedAt);
     }
 
     [Fact]
