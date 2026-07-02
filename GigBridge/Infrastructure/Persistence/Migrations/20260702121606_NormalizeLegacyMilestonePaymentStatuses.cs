@@ -1,23 +1,22 @@
-using Microsoft.EntityFrameworkCore.Migrations;
+﻿using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace Infrastructure.Persistence.Migrations
 {
+    /// <inheritdoc />
     public partial class NormalizeLegacyMilestonePaymentStatuses : Migration
     {
+        /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.Sql("""
-                UPDATE "Milestones"
-                SET "Status" = 3
-                WHERE "Status" IN (4, 5);
-                """);
+
         }
 
+        /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            // Irreversible data normalization: statuses 4 and 5 are deprecated payment states.
+
         }
     }
 }
