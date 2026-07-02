@@ -57,6 +57,21 @@ public static class DependencyInjection
                 {
                     options.ChecksumKey = Environment.GetEnvironmentVariable("PAYOS_CHECKSUM_KEY");
                 }
+
+                if (string.IsNullOrWhiteSpace(options.PayoutBaseUrl))
+                {
+                    options.PayoutBaseUrl = Environment.GetEnvironmentVariable("PAYOS_PAYOUT_BASE_URL");
+                }
+
+                if (string.IsNullOrWhiteSpace(options.PayoutCreatePath))
+                {
+                    options.PayoutCreatePath = Environment.GetEnvironmentVariable("PAYOS_PAYOUT_CREATE_PATH");
+                }
+
+                if (string.IsNullOrWhiteSpace(options.PayoutStatusPath))
+                {
+                    options.PayoutStatusPath = Environment.GetEnvironmentVariable("PAYOS_PAYOUT_STATUS_PATH");
+                }
             })
             .Validate(
                 options =>
@@ -139,8 +154,13 @@ public static class DependencyInjection
         services.AddTransient<IDateTimeService, DateTimeService>();
         services.AddScoped<IContentModerationService, ContentModerationService>();
         services.AddScoped<IWalletTopUpPaymentService, PayOsWalletTopUpPaymentService>();
+        services.AddScoped<IBankAccountProtector, BankAccountProtector>();
         services.AddScoped<IPayOsPaymentLinkClient>(provider =>
             new PayOsPaymentLinkClient(provider.GetRequiredKeyedService<PayOSClient>("OrderClient")));
+        services.AddHttpClient<IPayoutProvider, PayOsPayoutProvider>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(20);
+        });
 
         // AI Service Client
         services.AddHttpClient<IAiServiceClient, AiServiceClient>();

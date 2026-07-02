@@ -9,6 +9,13 @@ using Project_API.Services.Notification;
 
 var builder = WebApplication.CreateBuilder(args);
 
+if (builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Testing"))
+{
+    builder.Logging.ClearProviders();
+    builder.Logging.AddConsole();
+    builder.Logging.AddDebug();
+}
+
 builder.Services.AddControllers();
 
 // Layer registrations (Clean Architecture)

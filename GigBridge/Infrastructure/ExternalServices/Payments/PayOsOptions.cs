@@ -15,4 +15,10 @@ public sealed class PayOsOptions
     public string? CancelUrl { get; set; }
 
     public string? WebhookUrl { get; set; }
+
+    public string? PayoutBaseUrl { get; set; }
+
+    public string? PayoutCreatePath { get; set; }
+
+    public string? PayoutStatusPath { get; set; }
 }
