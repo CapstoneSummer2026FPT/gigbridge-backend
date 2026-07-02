@@ -6,7 +6,6 @@ using Application.Features.Contracts.Milestones.Common.DTOs;
 using Application.Features.Contracts.Milestones.Common.Internal;
 using Domain.Entities;
 using Domain.Enums;
-using Domain.Services.Payments;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -114,7 +113,7 @@ public sealed class WithdrawMilestoneCommandHandler :
             throw new BadRequestException("Client escrow wallet does not exist.");
         }
 
-        var releasedTokens = TokenWalletRules.ToTokens(releasableVnd);
+        var releasedTokens = releasableVnd;
         if (clientWallet.HeldTokens < releasedTokens)
         {
             throw new BadRequestException("Client held wallet balance is insufficient for this withdrawal.");

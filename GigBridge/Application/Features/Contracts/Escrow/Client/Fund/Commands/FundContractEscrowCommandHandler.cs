@@ -5,7 +5,6 @@ using Application.Features.Contracts.Common.Internal;
 using Application.Features.Contracts.Escrow.Client.Fund.DTOs;
 using Domain.Entities;
 using Domain.Enums;
-using Domain.Services.Payments;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -52,7 +51,7 @@ public sealed class FundContractEscrowCommandHandler :
                 contract.ContractsId,
                 fundedEscrow.ContractEscrowId,
                 fundedEscrow.RequiredAmount,
-                TokenWalletRules.ToTokensCeiling(fundedEscrow.RequiredAmount),
+                fundedEscrow.RequiredAmount,
                 contract.Status,
                 fundedEscrow.Status);
         }
@@ -97,7 +96,7 @@ public sealed class FundContractEscrowCommandHandler :
                 contract.ContractsId,
                 escrow.ContractEscrowId,
                 escrow.RequiredAmount,
-                TokenWalletRules.ToTokensCeiling(escrow.RequiredAmount),
+                escrow.RequiredAmount,
                 contract.Status,
                 escrow.Status);
         }
@@ -125,8 +124,8 @@ public sealed class FundContractEscrowCommandHandler :
             throw new BadRequestException("Wallet balance is insufficient to fund escrow.");
         }
 
-        var requiredVnd = escrow.RequiredAmount;
-        var requiredTokens = TokenWalletRules.ToTokensCeiling(requiredVnd);
+        var requiredAmount = escrow.RequiredAmount;
+        var requiredTokens = requiredAmount;
         if (wallet.AvailableTokens < requiredTokens)
         {
             throw new BadRequestException("Wallet balance is insufficient to fund escrow.");
@@ -151,7 +150,7 @@ public sealed class FundContractEscrowCommandHandler :
             ContractsId = contract.ContractsId,
             ContractEscrowId = escrow.ContractEscrowId,
             TokenAmount = requiredTokens,
-            VndAmount = requiredVnd,
+            VndAmount = requiredAmount,
             Type = (int)WalletTransactionType.EscrowHold,
             Status = (int)WalletTransactionStatus.Succeeded,
             GatewayProvider = "InternalTokenWallet",
@@ -164,7 +163,7 @@ public sealed class FundContractEscrowCommandHandler :
         {
             EscrowTransactionId = Guid.NewGuid(),
             ContractEscrowId = escrow.ContractEscrowId,
-            Amount = requiredVnd,
+            Amount = requiredAmount,
             Type = (int)EscrowTransactionType.Deposit,
             Status = (int)EscrowTransactionStatus.Succeeded,
             PaymentGateway = "InternalTokenWallet",
