@@ -1,5 +1,9 @@
 using Application.Common.Models;
 using Application.Features.Contracts.Common.DTOs;
+using Application.Features.Contracts.Completion.Client.Commands;
+using Application.Features.Contracts.Completion.Client.DTOs;
+using Application.Features.Contracts.Completion.Freelancer.Commands;
+using Application.Features.Contracts.Completion.Freelancer.DTOs;
 using Application.Features.Contracts.Details.Client.Submit.Commands;
 using Application.Features.Contracts.Details.Client.Update.Commands;
 using Application.Features.Contracts.Details.Client.Update.DTOs;
@@ -160,5 +164,33 @@ public sealed class ContractsWorkflowController : BaseApiController
         var result = await Mediator.Send(new CompleteJobPostContractSetupCommand(contractId, userId));
 
         return Ok(ApiResponse<bool>.Ok(result, "Job post setup completed and published"));
+    }
+
+    [HttpPost("{contractId}/end-project")]
+    [Authorize(Roles = "Client")]
+    public async Task<IActionResult> EndProject(Guid contractId)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return InvalidTokenResponse();
+        }
+
+        var result = await Mediator.Send(new EndProjectCommand(contractId, userId));
+
+        return Ok(ApiResponse<EndProjectResponse>.Ok(result, "Project ended; final payout is ready to claim"));
+    }
+
+    [HttpPost("{contractId}/claim-final-payout")]
+    [Authorize(Roles = "Freelancer")]
+    public async Task<IActionResult> ClaimFinalPayout(Guid contractId)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return InvalidTokenResponse();
+        }
+
+        var result = await Mediator.Send(new ClaimFinalPayoutCommand(contractId, userId));
+
+        return Ok(ApiResponse<ClaimFinalPayoutResponse>.Ok(result, "Final payout claimed"));
     }
 }

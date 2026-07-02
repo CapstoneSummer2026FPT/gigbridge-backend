@@ -73,7 +73,7 @@ public class ContractWorkflowTests
                 CancellationToken.None));
 
         var escrow = Assert.Single(fixture.Escrows.Entities);
-        Assert.Equal(1_000_000m, escrow.RequiredAmount);
+        Assert.Equal(1_000m, escrow.RequiredAmount);
         Assert.Equal(1.0m, escrow.RequiredPercentage);
         Assert.Equal(0m, escrow.FundedAmount);
         Assert.Equal((int)ContractEscrowStatus.PendingFunding, escrow.Status);
@@ -124,7 +124,7 @@ public class ContractWorkflowTests
             new FundContractEscrowCommand(fixture.ContractId, fixture.ClientUserId),
             CancellationToken.None);
 
-        Assert.Equal(1_000_000m, result.RequiredAmountVnd);
+        Assert.Equal(1_000m, result.RequiredAmountVnd);
         Assert.Equal(1_000m, result.HeldTokens);
         Assert.Equal(0m, fixture.Wallets.Entities[0].AvailableTokens);
         Assert.Equal(1_000m, fixture.Wallets.Entities[0].HeldTokens);
@@ -162,7 +162,7 @@ public class ContractWorkflowTests
 
         Assert.Equal((int)ContractStatus.Active, result.ContractStatus);
         Assert.Equal((int)ContractStatus.Active, fixture.Contract.Status);
-        Assert.Equal(1_000_000m, result.RequiredAmountVnd);
+        Assert.Equal(1_000m, result.RequiredAmountVnd);
         Assert.Equal(1_000m, result.HeldTokens);
         Assert.Equal(0m, fixture.Wallets.Entities[0].AvailableTokens);
         Assert.Equal(1_000m, fixture.Wallets.Entities[0].HeldTokens);
@@ -479,7 +479,7 @@ public class ContractWorkflowTests
                 ClientProfilesId = ClientProfileId,
                 FreelancerProfilesId = FreelancerProfileId,
                 Title = "Fixed contract",
-                TotalBudget = 1_000_000m,
+                TotalBudget = 1_000m,
                 Status = (int)ContractStatus.PendingContractDetails,
                 CreatedAt = Now
             };
@@ -560,7 +560,7 @@ public class ContractWorkflowTests
                 MilestonesId = Guid.NewGuid(),
                 ContractsId = ContractId,
                 Title = "Milestone 1",
-                Amount = 400_000m,
+                Amount = 400m,
                 Status = (int)MilestoneStatus.Pending,
                 SortOrder = 0,
                 CreatedAt = Now
@@ -570,7 +570,7 @@ public class ContractWorkflowTests
                 MilestonesId = Guid.NewGuid(),
                 ContractsId = ContractId,
                 Title = "Milestone 2",
-                Amount = 600_000m,
+                Amount = 600m,
                 Status = (int)MilestoneStatus.Pending,
                 SortOrder = 1,
                 CreatedAt = Now
@@ -585,7 +585,7 @@ public class ContractWorkflowTests
             {
                 ContractEscrowId = Guid.NewGuid(),
                 ContractsId = ContractId,
-                RequiredAmount = 1_000_000m,
+                RequiredAmount = 1_000m,
                 FundedAmount = 0m,
                 RequiredPercentage = 1.0m,
                 Currency = "VND",

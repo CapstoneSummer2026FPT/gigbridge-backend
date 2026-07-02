@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using Application.Common.Exceptions;
 using Application.Common.Interfaces.IService;
 using Application.Common.Models;
 using Application.Common.Models.Ai;
@@ -30,7 +31,34 @@ public class AiServiceClient : IAiServiceClient
         CancellationToken cancellationToken = default)
     {
         var response = await _httpClient.PostAsJsonAsync("api/ai/job-posts/generate", request, cancellationToken);
-        response.EnsureSuccessStatusCode();
+        
+        if (!response.IsSuccessStatusCode)
+        {
+            try
+            {
+                var errorResponse = await response.Content.ReadFromJsonAsync<ApiResponse<object>>(
+                    cancellationToken: cancellationToken);
+                if (errorResponse != null && !string.IsNullOrWhiteSpace(errorResponse.Message))
+                {
+                    if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
+                    {
+                        throw new BadRequestException(errorResponse.Message);
+                    }
+                    throw new HttpRequestException(errorResponse.Message);
+                }
+            }
+            catch (BadRequestException)
+            {
+                throw;
+            }
+            catch
+            {
+                // Fallback to default EnsureSuccessStatusCode behavior if parsing fails
+            }
+
+            response.EnsureSuccessStatusCode();
+        }
+
         // take response from Ai server then prase it to json 
         // if not success throw HttpRequestException
         

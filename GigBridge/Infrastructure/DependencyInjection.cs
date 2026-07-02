@@ -21,6 +21,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using PayOS;
+using Resend;
 
 namespace Infrastructure;
 
@@ -122,6 +123,12 @@ public static class DependencyInjection
         services.AddScoped<IPasswordHasher, BCryptPasswordHasher>();
         services.AddScoped<IJwtService, JwtService>();
         services.AddHttpClient<IGoogleAuthService, GoogleAuthService>();
+        services.AddResend(options =>
+        {
+            options.ApiToken = configuration["Resend:ApiToken"] 
+                ?? Environment.GetEnvironmentVariable("RESEND_API_TOKEN") 
+                ?? string.Empty;
+        });
         services.AddScoped<IEmailService, EmailService>();
         services.AddScoped<IAuthEmailSender, AuthEmailSender>();
         services.AddSingleton<IScheduleEmailRenderer, ScheduleEmailRenderer>();

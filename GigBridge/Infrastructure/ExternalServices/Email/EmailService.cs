@@ -1,93 +1,83 @@
 using Application.Common.Interfaces.IService;
 using Application.Features.Auth.Shared.DTOs;
 using Microsoft.Extensions.Configuration;
-using System.Net;
-using System.Net.Mail;
-using System.Net.Mime;
-using System.Text;
+using Resend;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Infrastructure.Services.Email;
 
 public class EmailService : IEmailService
 {
+    private readonly IResend _resend;
     private readonly IConfiguration _configuration;
 
-    public EmailService(IConfiguration configuration)
+    public EmailService(IResend resend, IConfiguration configuration)
     {
+        _resend = resend;
         _configuration = configuration;
     }
 
     public async Task SendEmailAsync(EmailRequest emailRequestDTO, CancellationToken cancellationToken = default)
     {
-        var host = _configuration["Smtp:Host"] ?? "smtp.gmail.com";
-        var port = GetSmtpPort();
-        var userName = GetRequiredSetting("Smtp:User", "SMTP_USER");
-        var password = GetRequiredSetting("Smtp:Password", "SMTP_PASSWORD");
-        var from = _configuration["Smtp:From"] ?? userName;
-        var fromName = _configuration["Smtp:FromName"] ?? "GigBridge";
+        var fromEmail = _configuration["Resend:From"] ?? "onboarding@resend.dev";
+        var fromName = _configuration["Resend:FromName"] ?? "GigBridge";
 
-        using var client = new SmtpClient(host, port)
-        {
-            Credentials = new NetworkCredential(userName, password),
-            EnableSsl = true
-        };
+        var message = new EmailMessage();
+        
+        // Construct From: "FromName <fromEmail>" or just "fromEmail"
+        message.From = string.IsNullOrWhiteSpace(fromName) ? fromEmail : $"{fromName} <{fromEmail}>";
+        
+        message.To.Add(emailRequestDTO.To);
+        message.Subject = emailRequestDTO.Subject;
 
-        using var message = new MailMessage
+        if (emailRequestDTO.IsHtml)
         {
-            From = new MailAddress(from, fromName, Encoding.UTF8),
-            Subject = emailRequestDTO.Subject,
-            Body = emailRequestDTO.Body,
-            IsBodyHtml = emailRequestDTO.IsHtml,
-            SubjectEncoding = Encoding.UTF8,
-            BodyEncoding = Encoding.UTF8
-        };
-
-        if (emailRequestDTO.IsHtml && !string.IsNullOrWhiteSpace(emailRequestDTO.TextBody))
+            message.HtmlBody = emailRequestDTO.Body;
+            if (!string.IsNullOrWhiteSpace(emailRequestDTO.TextBody))
+            {
+                message.TextBody = emailRequestDTO.TextBody;
+            }
+        }
+        else
         {
-            message.AlternateViews.Add(AlternateView.CreateAlternateViewFromString(
-                emailRequestDTO.TextBody, Encoding.UTF8, MediaTypeNames.Text.Plain));
-            message.AlternateViews.Add(AlternateView.CreateAlternateViewFromString(
-                emailRequestDTO.Body, Encoding.UTF8, MediaTypeNames.Text.Html));
+            message.TextBody = emailRequestDTO.Body;
         }
 
-        message.To.Add(emailRequestDTO.To);
         if (!string.IsNullOrWhiteSpace(emailRequestDTO.MessageId))
         {
-            message.Headers.Add("Message-ID", emailRequestDTO.MessageId);
+            message.Headers ??= new Dictionary<string, string>();
+            message.Headers["Message-ID"] = emailRequestDTO.MessageId;
         }
-        AddAttachments(message, emailRequestDTO.Attachments);
 
-        await client.SendMailAsync(message, cancellationToken);
-    }
-
-    private int GetSmtpPort()
-    {
-        var configuredPort = _configuration["Smtp:Port"];
-        return int.TryParse(configuredPort, out var port) ? port : 587;
-    }
-
-    private string GetRequiredSetting(string configurationKey, string environmentVariable)
-    {
-        var value = _configuration[configurationKey] ?? Environment.GetEnvironmentVariable(environmentVariable);
-
-        if (string.IsNullOrWhiteSpace(value))
+        var attachments = await LoadAttachmentsAsync(emailRequestDTO.Attachments, cancellationToken);
+        if (attachments != null)
         {
-            throw new InvalidOperationException($"{configurationKey} is required to send email.");
+            message.Attachments ??= new List<EmailAttachment>();
+            message.Attachments.AddRange(attachments);
         }
 
-        return value;
+        await _resend.EmailSendAsync(message, cancellationToken);
     }
 
-    private static void AddAttachments(MailMessage message, IEnumerable<string>? attachments)
+    private static async Task<List<EmailAttachment>?> LoadAttachmentsAsync(IEnumerable<string>? attachments, CancellationToken cancellationToken)
     {
         if (attachments is null)
         {
-            return;
+            return null;
         }
 
+        var list = new List<EmailAttachment>();
         foreach (var filePath in attachments.Where(File.Exists))
         {
-            message.Attachments.Add(new Attachment(filePath));
+            var attachment = await EmailAttachment.FromAsync(filePath, cancellationToken);
+            list.Add(attachment);
         }
+
+        return list.Count > 0 ? list : null;
     }
 }
