@@ -214,20 +214,6 @@ public sealed class WithdrawMilestoneCommandHandler :
             now,
             cancellationToken);
 
-        if (ShouldCompleteContract(contract, milestones))
-        {
-            contract.Status = (int)ContractStatus.Completed;
-            contract.CompletedAt = now;
-            contract.UpdatedAt = now;
-
-            await ContractConversationEvents.AddSystemMessageAsync(
-                _context,
-                contract.ContractsId,
-                "Contract completed. Reviews are now open.",
-                now,
-                cancellationToken);
-        }
-
         await _context.SaveChangesAsync(cancellationToken);
 
         return new WithdrawMilestoneResponse(
@@ -241,25 +227,4 @@ public sealed class WithdrawMilestoneCommandHandler :
             escrow.Status);
     }
 
-    private static bool ShouldCompleteContract(Contract contract, IReadOnlyCollection<Milestone> milestones)
-    {
-        return contract.Status == (int)ContractStatus.Active &&
-            milestones.Count > 0 &&
-            milestones.All(IsMilestoneReleasedToBaselineCap);
-    }
-
-    private static bool IsMilestoneReleasedToBaselineCap(Milestone milestone)
-    {
-        if (milestone.Status != (int)MilestoneStatus.Approved)
-        {
-            return false;
-        }
-
-        var releaseCap = decimal.Round(
-            milestone.Amount * NormalFreelancerReleasePercentage,
-            2,
-            MidpointRounding.AwayFromZero);
-
-        return milestone.ReleasedAmount >= releaseCap;
-    }
 }
