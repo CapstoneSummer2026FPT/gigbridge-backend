@@ -53,6 +53,15 @@ public class GetJobPostQuestionsQueryHandler
         GetJobPostQuestionsQuery request,
         CancellationToken cancellationToken)
     {
+        var user = await _context.Set<User>()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(u => u.UserId == request.UserId, cancellationToken);
+
+        if (user is not null && user.Role == (int)UserRole.Admin)
+        {
+            return;
+        }
+
         if (string.Equals(request.Role, nameof(UserRole.Client), StringComparison.OrdinalIgnoreCase))
         {
             var clientProfile = await _context.Set<ClientProfile>()

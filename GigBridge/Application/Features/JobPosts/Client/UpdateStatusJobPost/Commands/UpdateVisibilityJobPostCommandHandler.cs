@@ -1,4 +1,4 @@
-﻿using Application.Common.Exceptions;
+using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Domain.Entities;
@@ -45,6 +45,11 @@ public class UpdateVisibilityJobPostCommandHandler
         if (jobPost is null)
         {
             throw new NotFoundException("Job post does not exist or you do not have permission to update it.");
+        }
+
+        if (jobPost.Visibility == 3)
+        {
+            throw new BadRequestException("This job post has been locked by an admin and cannot be updated.");
         }
 
         jobPost.Visibility = command.Request.Visibility;
