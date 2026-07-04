@@ -47,6 +47,39 @@ public sealed class HardDeleteProposalCommandHandler :
         _context.Set<ProposalAnswer>().RemoveRange(proposal.ProposalAnswers);
         _context.Set<ProposalAttachment>().RemoveRange(proposal.ProposalAttachments);
 
+        // Null out nullable foreign keys in other entities pointing to this proposal
+        var contracts = await _context.Set<Contract>()
+            .Where(c => c.ProposalsId == request.ProposalId)
+            .ToListAsync(cancellationToken);
+        foreach (var c in contracts)
+        {
+            c.ProposalsId = null;
+        }
+
+        var conversations = await _context.Set<Conversation>()
+            .Where(c => c.ProposalsId == request.ProposalId)
+            .ToListAsync(cancellationToken);
+        foreach (var c in conversations)
+        {
+            c.ProposalsId = null;
+        }
+
+        var invitations = await _context.Set<JobInvitation>()
+            .Where(ji => ji.ProposalsId == request.ProposalId)
+            .ToListAsync(cancellationToken);
+        foreach (var ji in invitations)
+        {
+            ji.ProposalsId = null;
+        }
+
+        var offers = await _context.Set<NegotiationOffer>()
+            .Where(no => no.ProposalsId == request.ProposalId)
+            .ToListAsync(cancellationToken);
+        foreach (var no in offers)
+        {
+            no.ProposalsId = null;
+        }
+
         var cheatingEvents = await _context.Set<ProposalCheatingEvent>()
             .Where(e => e.ProposalsId == request.ProposalId)
             .ToListAsync(cancellationToken);

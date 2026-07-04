@@ -55,6 +55,11 @@ public sealed class SaveDraftJobPostCommandHandler
             throw new NotFoundException("Job post does not exist or you do not have permission to update it.");
         }
 
+        if (jobPost.Visibility == 3)
+        {
+            throw new BadRequestException("This job post has been locked by an admin and cannot be updated.");
+        }
+
         if (jobPost.Status != DraftStatus)
         {
             throw new BadRequestException("Only draft job posts can be saved as draft.");
