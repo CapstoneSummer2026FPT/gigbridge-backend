@@ -3,23 +3,39 @@ using Application.Common.Interfaces;
 using Application.Features.JobPosts.Common.DTOs;
 using Application.Features.JobPosts.Public.GetJobPostDetail.DTOs;
 using Domain.Entities;
+using Domain.Enums;
 using Domain.Services;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
-namespace Application.Features.JobPosts.Public.GetJobPostDetail.Queries;
+namespace Application.Features.Admin.JobPosts.GetDetail.Queries;
 
-public class GetJobPostDetailQueryHandler : IRequestHandler<GetJobPostDetailQuery, JobPostDetailDto>
+public sealed record GetAdminJobPostDetailQuery(
+    Guid AdminUserId,
+    Guid JobPostId) : IRequest<JobPostDetailDto>;
+
+public sealed class GetAdminJobPostDetailQueryHandler :
+    IRequestHandler<GetAdminJobPostDetailQuery, JobPostDetailDto>
 {
     private readonly IApplicationDbContext _context;
 
-    public GetJobPostDetailQueryHandler(IApplicationDbContext context)
+    public GetAdminJobPostDetailQueryHandler(IApplicationDbContext context)
     {
         _context = context;
     }
 
-    public async Task<JobPostDetailDto> Handle(GetJobPostDetailQuery request, CancellationToken cancellationToken)
+    public async Task<JobPostDetailDto> Handle(
+        GetAdminJobPostDetailQuery request,
+        CancellationToken cancellationToken)
     {
+        var admin = await _context.Set<User>()
+            .FirstOrDefaultAsync(user => user.UserId == request.AdminUserId, cancellationToken);
+
+        if (admin is null || admin.Role != (int)UserRole.Admin)
+        {
+            throw new ForbiddenAccessException("Only admins can access detailed job post information.");
+        }
+
         var jobPost = await _context.Set<JobPost>()
             .AsNoTracking()
             .Include(jobPost => jobPost.ClientProfiles)
@@ -32,11 +48,7 @@ public class GetJobPostDetailQueryHandler : IRequestHandler<GetJobPostDetailQuer
             .Include(jobPost => jobPost.MajorCategory)
                 .ThenInclude(majorCategory => majorCategory!.Category)
             .Include(jobPost => jobPost.JobPostAttachments)
-            .FirstOrDefaultAsync(jobPost =>
-                jobPost.JobPostsId == request.JobPostsId &&
-                jobPost.Status == 1 &&
-                (jobPost.Visibility == null || jobPost.Visibility == 0),
-                cancellationToken);
+            .FirstOrDefaultAsync(jobPost => jobPost.JobPostsId == request.JobPostId, cancellationToken);
 
         if (jobPost is null)
         {

@@ -22,4 +22,24 @@ public class AdminProposalsController : BaseApiController {
         var result = await Mediator.Send(query);
         return Ok(ApiResponse<IEnumerable<ProposalDto>>.Ok(result, "Success"));
     }
+    [HttpGet("admin/{proposalId:guid}")]
+    public async Task<IActionResult> GetProposal(Guid proposalId) {
+        if (!TryGetCurrentUserId(out var adminUserId)) {
+            return InvalidTokenResponse();
+        }
+
+        var result = await Mediator.Send(new Application.Features.Admin.Proposals.GetDetail.Queries.GetAdminProposalDetailQuery(adminUserId, proposalId));
+        return Ok(ApiResponse<ProposalDto>.Ok(result, "Success"));
+    }
+
+    [HttpDelete("admin/{proposalId:guid}")]
+    public async Task<IActionResult> DeleteProposal(Guid proposalId) {
+        if (!TryGetCurrentUserId(out var adminUserId)) {
+            return InvalidTokenResponse();
+        }
+
+        var result = await Mediator.Send(new Application.Features.Admin.Proposals.Delete.Commands.HardDeleteProposalCommand(adminUserId, proposalId));
+        return Ok(ApiResponse<bool>.Ok(result, "Proposal deleted successfully"));
+    }
 }
+
