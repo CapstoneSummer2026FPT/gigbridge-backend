@@ -25,7 +25,7 @@ namespace Project_API.Controllers.Common.JobPosts;
 public class JobPostQuestionsController : BaseApiController
 {
     [HttpGet]
-    [Authorize(Roles = "Client,Freelancer")]
+    [Authorize(Roles = "Client,Freelancer,Admin")]
     public async Task<IActionResult> GetQuestions(Guid jobPostId)
     {
         if (!TryGetCurrentUserId(out var userId))
@@ -143,6 +143,11 @@ public class JobPostQuestionsController : BaseApiController
 
     private string GetCurrentRole()
     {
+        if (User.IsInRole("Admin"))
+        {
+            return "Admin";
+        }
+
         if (User.IsInRole(nameof(UserRole.Client)))
         {
             return nameof(UserRole.Client);

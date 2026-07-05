@@ -138,11 +138,18 @@ public static class DependencyInjection
         services.AddScoped<IPasswordHasher, BCryptPasswordHasher>();
         services.AddScoped<IJwtService, JwtService>();
         services.AddHttpClient<IGoogleAuthService, GoogleAuthService>();
+
+        var resendApiToken = configuration["Resend:ApiToken"]
+            ?? Environment.GetEnvironmentVariable("RESEND_API_TOKEN");
+        if (string.IsNullOrWhiteSpace(resendApiToken))
+        {
+            throw new InvalidOperationException(
+                "Resend configuration is missing. Set Resend:ApiToken in appsettings or environment variable RESEND_API_TOKEN.");
+        }
+
         services.AddResend(options =>
         {
-            options.ApiToken = configuration["Resend:ApiToken"] 
-                ?? Environment.GetEnvironmentVariable("RESEND_API_TOKEN") 
-                ?? string.Empty;
+            options.ApiToken = resendApiToken;
         });
         services.AddScoped<IEmailService, EmailService>();
         services.AddScoped<IAuthEmailSender, AuthEmailSender>();

@@ -27,6 +27,8 @@ public class GetAllJobPostsQueryHandler : IRequestHandler<GetAllJobPostsQuery, I
                 .ThenInclude(majorCategory => majorCategory!.Major)
             .Include(jobPost => jobPost.MajorCategory)
                 .ThenInclude(majorCategory => majorCategory!.Category)
+            .Include(jobPost => jobPost.ClientProfiles)
+                .ThenInclude(clientProfile => clientProfile.User)
             .AsQueryable();
 
         query = ApplyFilters(query, request);
