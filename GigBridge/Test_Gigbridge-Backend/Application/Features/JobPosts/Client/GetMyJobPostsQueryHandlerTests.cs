@@ -156,7 +156,7 @@ public class GetMyJobPostsQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ReturnsSetupProgressForResumeFlow()
+    public async Task Handle_ReturnsProjectRequestSetupProgressForResumeFlow()
     {
         var context = new InMemoryApplicationDbContext();
         var userId = Guid.NewGuid();
@@ -209,10 +209,10 @@ public class GetMyJobPostsQueryHandlerTests
             CancellationToken.None)).ToDictionary(jobPost => jobPost.JobPostsId);
 
         AssertProgress(result[detailsJob.JobPostsId].SetupProgress, JobPostSetupStepNames.Details, false, null, null, null, false, false);
-        AssertProgress(result[esignJob.JobPostsId].SetupProgress, JobPostSetupStepNames.ESign, true, esignContractId, null, null, false, false);
-        AssertProgress(result[pendingDocumentJob.JobPostsId].SetupProgress, JobPostSetupStepNames.ESign, true, pendingContractId, pendingDocumentId, (int)ESignDocumentStatus.PendingSignatures, false, false);
-        AssertProgress(result[milestonesJob.JobPostsId].SetupProgress, JobPostSetupStepNames.Milestones, true, milestonesContractId, signedDocumentId, (int)ESignDocumentStatus.FullySigned, false, false);
-        AssertProgress(result[readyJob.JobPostsId].SetupProgress, JobPostSetupStepNames.ReadyToPublish, true, readyContractId, readyDocumentId, (int)ESignDocumentStatus.FullySigned, true, true);
+        AssertProgress(result[esignJob.JobPostsId].SetupProgress, JobPostSetupStepNames.ReadyToPublish, true, null, null, null, false, true);
+        AssertProgress(result[pendingDocumentJob.JobPostsId].SetupProgress, JobPostSetupStepNames.ReadyToPublish, true, null, null, null, false, true);
+        AssertProgress(result[milestonesJob.JobPostsId].SetupProgress, JobPostSetupStepNames.ReadyToPublish, true, null, null, null, false, true);
+        AssertProgress(result[readyJob.JobPostsId].SetupProgress, JobPostSetupStepNames.ReadyToPublish, true, null, null, null, false, true);
         AssertProgress(result[publishedJob.JobPostsId].SetupProgress, JobPostSetupStepNames.Published, true, null, null, null, false, false);
     }
 
@@ -224,6 +224,7 @@ public class GetMyJobPostsQueryHandlerTests
             ClientProfilesId = clientProfileId,
             Title = title,
             Description = $"{title} description",
+            MajorCategoryId = Guid.NewGuid(),
             Status = 0,
             Visibility = 0,
             CreatedAt = createdAt

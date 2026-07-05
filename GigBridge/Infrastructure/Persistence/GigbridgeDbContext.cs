@@ -106,6 +106,10 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
 
     public virtual DbSet<Proposal> Proposals { get; set; }
 
+    public virtual DbSet<ProposalWorkBreakdownItem> ProposalWorkBreakdownItems { get; set; }
+
+    public virtual DbSet<ProposalMilestonePlan> ProposalMilestonePlans { get; set; }
+
     public virtual DbSet<ProposalCheatingEvent> ProposalCheatingEvents { get; set; }
 
     public virtual DbSet<ProposalInterviewReviewSession> ProposalInterviewReviewSessions { get; set; }
@@ -1725,6 +1729,11 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.JobPostsId).HasColumnName("JobPostsId");
             entity.Property(e => e.ProposedDuration).HasMaxLength(100);
             entity.Property(e => e.ProposedBudget).HasPrecision(18, 2);
+            entity.Property(e => e.AnalysisSummary).HasColumnType("text");
+            entity.Property(e => e.SolutionApproach).HasColumnType("text");
+            entity.Property(e => e.Deliverables).HasColumnType("text");
+            entity.Property(e => e.Assumptions).HasColumnType("text");
+            entity.Property(e => e.OutOfScope).HasColumnType("text");
             entity.Property(e => e.Status).HasComment("Enum ProposalStatus: 0=Pending, 1=Shortlisted, 2=Accepted, 3=Rejected, 4=Withdrawn");
 
             entity.HasOne(d => d.FreelancerProfiles).WithMany(p => p.Proposals)
@@ -1736,6 +1745,33 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
                 .HasForeignKey(d => d.JobPostsId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("Proposals_jp_JobPostsId_fkey");
+        });
+
+        modelBuilder.Entity<ProposalWorkBreakdownItem>(entity =>
+        {
+            entity.HasKey(e => e.ProposalWorkBreakdownItemsId).HasName("ProposalWorkBreakdownItems_pkey");
+            entity.HasIndex(e => new { e.ProposalsId, e.OrderIndex }, "IX_ProposalWorkBreakdownItems_Proposal_Order");
+            entity.Property(e => e.ProposalWorkBreakdownItemsId).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.Title).HasMaxLength(200);
+            entity.Property(e => e.EstimatedDuration).HasMaxLength(100);
+            entity.HasOne(e => e.Proposals).WithMany(e => e.ProposalWorkBreakdownItems)
+                .HasForeignKey(e => e.ProposalsId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("ProposalWorkBreakdownItems_ProposalsId_fkey");
+        });
+
+        modelBuilder.Entity<ProposalMilestonePlan>(entity =>
+        {
+            entity.HasKey(e => e.ProposalMilestonePlansId).HasName("ProposalMilestonePlans_pkey");
+            entity.HasIndex(e => new { e.ProposalsId, e.OrderIndex }, "IX_ProposalMilestonePlans_Proposal_Order");
+            entity.Property(e => e.ProposalMilestonePlansId).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.Title).HasMaxLength(200);
+            entity.Property(e => e.Amount).HasPrecision(18, 2);
+            entity.Property(e => e.EstimatedDuration).HasMaxLength(100);
+            entity.HasOne(e => e.Proposals).WithMany(e => e.ProposalMilestonePlans)
+                .HasForeignKey(e => e.ProposalsId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("ProposalMilestonePlans_ProposalsId_fkey");
         });
 
         modelBuilder.Entity<ProposalCheatingEvent>(entity =>

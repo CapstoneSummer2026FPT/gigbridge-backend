@@ -18,6 +18,20 @@ public class ProposalDetailDto
 
     public string? ProposedDuration { get; set; }
 
+    public string? AnalysisSummary { get; set; }
+
+    public string? SolutionApproach { get; set; }
+
+    public string? Deliverables { get; set; }
+
+    public string? Assumptions { get; set; }
+
+    public string? OutOfScope { get; set; }
+
+    public IReadOnlyCollection<ProposalWorkBreakdownItemDto> WorkBreakdownItems { get; set; } = [];
+
+    public IReadOnlyCollection<ProposalMilestonePlanDto> MilestonePlans { get; set; } = [];
+
     /// <summary>
     /// Enum ProposalStatus: 0=Draft, 1=Pending, 2=Shortlisted, 3=Accepted, 4=Rejected, 5=Withdrawn
     /// </summary>
