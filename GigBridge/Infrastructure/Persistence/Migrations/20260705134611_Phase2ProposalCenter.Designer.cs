@@ -3,6 +3,7 @@ using System;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(GigbridgeDbContext))]
-    partial class GigbridgeDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260705134611_Phase2ProposalCenter")]
+    partial class Phase2ProposalCenter
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -2216,9 +2219,6 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnName("MilestonesId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
-                    b.Property<string>("AcceptanceCriteria")
-                        .HasColumnType("text");
-
                     b.Property<decimal>("Amount")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
@@ -2235,17 +2235,8 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasDefaultValueSql("now()");
 
-                    b.Property<string>("Deliverables")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Description")
-                        .HasColumnType("text");
-
                     b.Property<DateOnly?>("DueDate")
                         .HasColumnType("date");
-
-                    b.Property<string>("EstimatedDuration")
-                        .HasColumnType("text");
 
                     b.Property<DateTime?>("LastReleasedAt")
                         .HasColumnType("timestamp with time zone");
@@ -2350,66 +2341,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.ToTable("MilestoneAttachments");
                 });
 
-            modelBuilder.Entity("Domain.Entities.NegotiationMilestoneDraft", b =>
-                {
-                    b.Property<Guid>("NegotiationMilestoneDraftId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasDefaultValueSql("gen_random_uuid()");
-
-                    b.Property<string>("AcceptanceCriteria")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<decimal>("Amount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<Guid>("ConversationsId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasDefaultValueSql("now()");
-
-                    b.Property<string>("Deliverables")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Description")
-                        .HasColumnType("text");
-
-                    b.Property<DateOnly?>("DueDate")
-                        .HasColumnType("date");
-
-                    b.Property<string>("EstimatedDuration")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<int>("OrderIndex")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid?>("SourceProposalMilestonePlanId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("NegotiationMilestoneDraftId")
-                        .HasName("NegotiationMilestoneDrafts_pkey");
-
-                    b.HasIndex(new[] { "ConversationsId", "OrderIndex" }, "IX_NegotiationMilestoneDrafts_Conversation_Order")
-                        .IsUnique();
-
-                    b.ToTable("NegotiationMilestoneDrafts");
-                });
-
             modelBuilder.Entity("Domain.Entities.NegotiationOffer", b =>
                 {
                     b.Property<Guid>("NegotiationOfferId")
@@ -2497,55 +2428,6 @@ namespace Infrastructure.Persistence.Migrations
                         .HasFilter("\"Status\" = 0");
 
                     b.ToTable("NegotiationOffers");
-                });
-
-            modelBuilder.Entity("Domain.Entities.NegotiationOfferMilestone", b =>
-                {
-                    b.Property<Guid>("NegotiationOfferMilestoneId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasDefaultValueSql("gen_random_uuid()");
-
-                    b.Property<string>("AcceptanceCriteria")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<decimal>("Amount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<string>("Deliverables")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Description")
-                        .HasColumnType("text");
-
-                    b.Property<DateOnly?>("DueDate")
-                        .HasColumnType("date");
-
-                    b.Property<string>("EstimatedDuration")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<Guid>("NegotiationOfferId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("OrderIndex")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.HasKey("NegotiationOfferMilestoneId")
-                        .HasName("NegotiationOfferMilestones_pkey");
-
-                    b.HasIndex(new[] { "NegotiationOfferId", "OrderIndex" }, "IX_NegotiationOfferMilestones_Offer_Order")
-                        .IsUnique();
-
-                    b.ToTable("NegotiationOfferMilestones");
                 });
 
             modelBuilder.Entity("Domain.Entities.Notification", b =>
@@ -5031,18 +4913,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("UploadedByUser");
                 });
 
-            modelBuilder.Entity("Domain.Entities.NegotiationMilestoneDraft", b =>
-                {
-                    b.HasOne("Domain.Entities.Conversation", "Conversations")
-                        .WithMany("NegotiationMilestoneDrafts")
-                        .HasForeignKey("ConversationsId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("NegotiationMilestoneDrafts_ConversationsId_fkey");
-
-                    b.Navigation("Conversations");
-                });
-
             modelBuilder.Entity("Domain.Entities.NegotiationOffer", b =>
                 {
                     b.HasOne("Domain.Entities.ClientProfile", "ClientProfiles")
@@ -5091,18 +4961,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("JobPosts");
 
                     b.Navigation("Proposals");
-                });
-
-            modelBuilder.Entity("Domain.Entities.NegotiationOfferMilestone", b =>
-                {
-                    b.HasOne("Domain.Entities.NegotiationOffer", "NegotiationOffer")
-                        .WithMany("NegotiationOfferMilestones")
-                        .HasForeignKey("NegotiationOfferId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("NegotiationOfferMilestones_NegotiationOfferId_fkey");
-
-                    b.Navigation("NegotiationOffer");
                 });
 
             modelBuilder.Entity("Domain.Entities.Notification", b =>
@@ -5638,8 +5496,6 @@ namespace Infrastructure.Persistence.Migrations
                 {
                     b.Navigation("Messages");
 
-                    b.Navigation("NegotiationMilestoneDrafts");
-
                     b.Navigation("NegotiationOffers");
 
                     b.Navigation("Participants");
@@ -5746,11 +5602,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("MilestoneAttachments");
 
                     b.Navigation("PaymentProofs");
-                });
-
-            modelBuilder.Entity("Domain.Entities.NegotiationOffer", b =>
-                {
-                    b.Navigation("NegotiationOfferMilestones");
                 });
 
             modelBuilder.Entity("Domain.Entities.Proposal", b =>

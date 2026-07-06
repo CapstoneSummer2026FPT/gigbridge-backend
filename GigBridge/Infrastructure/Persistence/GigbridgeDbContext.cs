@@ -92,6 +92,10 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
 
     public virtual DbSet<NegotiationOffer> NegotiationOffers { get; set; }
 
+    public virtual DbSet<NegotiationMilestoneDraft> NegotiationMilestoneDrafts { get; set; }
+
+    public virtual DbSet<NegotiationOfferMilestone> NegotiationOfferMilestones { get; set; }
+
     public virtual DbSet<Milestone> Milestones { get; set; }
 
     public virtual DbSet<MilestoneAttachment> MilestoneAttachments { get; set; }
@@ -1767,11 +1771,42 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.ProposalMilestonePlansId).HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.Title).HasMaxLength(200);
             entity.Property(e => e.Amount).HasPrecision(18, 2);
+            entity.Property(e => e.Title).HasMaxLength(200);
+            entity.Property(e => e.EstimatedDuration).HasMaxLength(100);
             entity.Property(e => e.EstimatedDuration).HasMaxLength(100);
             entity.HasOne(e => e.Proposals).WithMany(e => e.ProposalMilestonePlans)
                 .HasForeignKey(e => e.ProposalsId)
                 .OnDelete(DeleteBehavior.Cascade)
                 .HasConstraintName("ProposalMilestonePlans_ProposalsId_fkey");
+        });
+
+        modelBuilder.Entity<NegotiationMilestoneDraft>(entity =>
+        {
+            entity.HasKey(e => e.NegotiationMilestoneDraftId).HasName("NegotiationMilestoneDrafts_pkey");
+            entity.HasIndex(e => new { e.ConversationsId, e.OrderIndex }, "IX_NegotiationMilestoneDrafts_Conversation_Order").IsUnique();
+            entity.Property(e => e.NegotiationMilestoneDraftId).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.Title).HasMaxLength(200);
+            entity.Property(e => e.EstimatedDuration).HasMaxLength(100);
+            entity.Property(e => e.Amount).HasPrecision(18, 2);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.HasOne(e => e.Conversations).WithMany(e => e.NegotiationMilestoneDrafts)
+                .HasForeignKey(e => e.ConversationsId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("NegotiationMilestoneDrafts_ConversationsId_fkey");
+        });
+
+        modelBuilder.Entity<NegotiationOfferMilestone>(entity =>
+        {
+            entity.HasKey(e => e.NegotiationOfferMilestoneId).HasName("NegotiationOfferMilestones_pkey");
+            entity.HasIndex(e => new { e.NegotiationOfferId, e.OrderIndex }, "IX_NegotiationOfferMilestones_Offer_Order").IsUnique();
+            entity.Property(e => e.NegotiationOfferMilestoneId).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.Title).HasMaxLength(200);
+            entity.Property(e => e.EstimatedDuration).HasMaxLength(100);
+            entity.Property(e => e.Amount).HasPrecision(18, 2);
+            entity.HasOne(e => e.NegotiationOffer).WithMany(e => e.NegotiationOfferMilestones)
+                .HasForeignKey(e => e.NegotiationOfferId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("NegotiationOfferMilestones_NegotiationOfferId_fkey");
         });
 
         modelBuilder.Entity<ProposalCheatingEvent>(entity =>

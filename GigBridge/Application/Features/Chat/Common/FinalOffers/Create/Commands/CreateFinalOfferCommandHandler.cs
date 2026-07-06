@@ -31,8 +31,6 @@ public class CreateFinalOfferCommandHandler : IRequestHandler<CreateFinalOfferCo
         CancellationToken cancellationToken)
     {
         var request = command.Request;
-        ValidateRequest(request.FinalPrice, request.StartDate, request.EndDate);
-
         var conversation = await _context.Set<Conversation>()
             .FirstOrDefaultAsync(
                 conversation => conversation.ConversationsId == request.ConversationId,
@@ -67,6 +65,8 @@ public class CreateFinalOfferCommandHandler : IRequestHandler<CreateFinalOfferCo
             throw new ForbiddenAccessException("Only the client participant can create a final offer.");
         }
 
+        ValidateRequest(request.FinalPrice, request.StartDate, request.EndDate, request.Milestones);
+
         var contract = await GetContract(conversation.ContractsId, cancellationToken);
 
         if (contract.Status != (int)ContractStatus.Draft &&
@@ -74,15 +74,6 @@ public class CreateFinalOfferCommandHandler : IRequestHandler<CreateFinalOfferCo
             contract.Status != (int)ContractStatus.InNegotiation)
         {
             throw new BadRequestException("Final offers can only be created while the contract is being negotiated.");
-        }
-
-        var milestones = await _context.Set<Milestone>()
-            .Where(milestone => milestone.ContractsId == contract.ContractsId)
-            .ToListAsync(cancellationToken);
-
-        if (milestones.Count == 0)
-        {
-            throw new BadRequestException("Contract milestones must be set up before creating the final offer.");
         }
 
         var clientProfile = await _context.Set<ClientProfile>()
@@ -147,6 +138,44 @@ public class CreateFinalOfferCommandHandler : IRequestHandler<CreateFinalOfferCo
 
         _context.Set<NegotiationOffer>().Add(offer);
 
+        var existingDrafts = await _context.Set<NegotiationMilestoneDraft>()
+            .Where(item => item.ConversationsId == request.ConversationId)
+            .ToListAsync(cancellationToken);
+        _context.Set<NegotiationMilestoneDraft>().RemoveRange(existingDrafts);
+
+        foreach (var milestone in request.Milestones!.OrderBy(item => item.OrderIndex))
+        {
+            var draftId = Guid.NewGuid();
+            _context.Set<NegotiationMilestoneDraft>().Add(new NegotiationMilestoneDraft
+            {
+                NegotiationMilestoneDraftId = draftId,
+                ConversationsId = request.ConversationId,
+                Title = milestone.Title!.Trim(),
+                Description = Clean(milestone.Description),
+                Amount = milestone.Amount,
+                EstimatedDuration = Clean(milestone.EstimatedDuration),
+                DueDate = milestone.DueDate,
+                Deliverables = milestone.Deliverables!.Trim(),
+                AcceptanceCriteria = milestone.AcceptanceCriteria!.Trim(),
+                OrderIndex = milestone.OrderIndex,
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+            _context.Set<NegotiationOfferMilestone>().Add(new NegotiationOfferMilestone
+            {
+                NegotiationOfferMilestoneId = Guid.NewGuid(),
+                NegotiationOfferId = offer.NegotiationOfferId,
+                Title = milestone.Title.Trim(),
+                Description = Clean(milestone.Description),
+                Amount = milestone.Amount,
+                EstimatedDuration = Clean(milestone.EstimatedDuration),
+                DueDate = milestone.DueDate,
+                Deliverables = milestone.Deliverables.Trim(),
+                AcceptanceCriteria = milestone.AcceptanceCriteria.Trim(),
+                OrderIndex = milestone.OrderIndex
+            });
+        }
+
         var message = AddConversationMessage(
             conversation,
             command.UserId,
@@ -201,7 +230,8 @@ public class CreateFinalOfferCommandHandler : IRequestHandler<CreateFinalOfferCo
     private static void ValidateRequest(
         decimal finalPrice,
         DateOnly? startDate,
-        DateOnly? endDate)
+        DateOnly? endDate,
+        IReadOnlyCollection<Application.Features.Chat.Common.Negotiations.MilestonePlans.DTOs.NegotiationMilestoneDto>? milestones)
     {
         if (finalPrice <= 0)
         {
@@ -214,7 +244,32 @@ public class CreateFinalOfferCommandHandler : IRequestHandler<CreateFinalOfferCo
         {
             throw new BadRequestException("Start date must be before or equal to end date.");
         }
+
+        if (milestones is null || milestones.Count == 0)
+        {
+            throw new BadRequestException("At least one milestone is required for a final offer.");
+        }
+
+        if (milestones.Select(item => item.OrderIndex).Distinct().Count() != milestones.Count)
+        {
+            throw new BadRequestException("Milestone order indexes must be unique.");
+        }
+
+        if (milestones.Any(item => string.IsNullOrWhiteSpace(item.Title) ||
+                                   string.IsNullOrWhiteSpace(item.Deliverables) ||
+                                   string.IsNullOrWhiteSpace(item.AcceptanceCriteria) ||
+                                   item.Amount <= 0))
+        {
+            throw new BadRequestException("Each milestone requires a title, positive amount, deliverables, and acceptance criteria.");
+        }
+
+        if (milestones.Sum(item => item.Amount) != finalPrice)
+        {
+            throw new BadRequestException("Milestone total must equal the final price.");
+        }
     }
+
+    private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private Message AddConversationMessage(
         Conversation conversation,

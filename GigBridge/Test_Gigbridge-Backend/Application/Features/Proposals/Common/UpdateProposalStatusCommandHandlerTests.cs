@@ -169,9 +169,28 @@ public class UpdateProposalStatusCommandHandlerTests
             ProposalsId = proposalId,
             JobPostsId = jobPostId,
             FreelancerProfilesId = freelancerProfileId,
+            CoverLetter = "I will analyze the requirements and deliver the agreed scope with clear milestones.",
+            AnalysisSummary = "The project requires a reliable implementation with explicit constraints, risks, and measurable outcomes.",
+            SolutionApproach = "I will deliver the solution incrementally, validate each component, and document all important decisions.",
+            ProposedBudget = 500m,
             Status = 0,
             JobPosts = jobPost
         };
+        proposal.ProposalWorkBreakdownItems.Add(new ProposalWorkBreakdownItem
+        {
+            ProposalWorkBreakdownItemsId = Guid.NewGuid(),
+            ProposalsId = proposalId,
+            Title = "Implementation"
+        });
+        proposal.ProposalMilestonePlans.Add(new ProposalMilestonePlan
+        {
+            ProposalMilestonePlansId = Guid.NewGuid(),
+            ProposalsId = proposalId,
+            Title = "Delivery",
+            Amount = 500m,
+            Deliverables = "Production-ready implementation",
+            AcceptanceCriteria = "All agreed acceptance tests pass"
+        });
 
         context.AddSet(new FreelancerProfile
         {
@@ -213,6 +232,95 @@ public class UpdateProposalStatusCommandHandlerTests
         Assert.Contains("violation 3", notificationService.Notifications[0].Content);
         Assert.Contains("suspended for 7 days", notificationService.Notifications[0].Content);
         Assert.Equal(violationId, notificationService.Notifications[0].ReferenceId);
+    }
+
+    [Fact]
+    public async Task Handle_SubmitDraftWithoutWorkBreakdown_ThrowsBadRequest()
+    {
+        var (handler, proposal, userId) = CreateDraftSubmissionHandler();
+        proposal.ProposalWorkBreakdownItems.Clear();
+
+        var exception = await Assert.ThrowsAsync<BadRequestException>(() => handler.Handle(
+            new UpdateProposalStatusCommand(
+                proposal.ProposalsId,
+                userId,
+                new UpdateProposalStatusRequest { Status = 1 }),
+            CancellationToken.None));
+
+        Assert.Contains("work breakdown", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(0, proposal.Status);
+    }
+
+    [Fact]
+    public async Task Handle_SubmitDraftWithMismatchedMilestoneTotal_ThrowsBadRequest()
+    {
+        var (handler, proposal, userId) = CreateDraftSubmissionHandler();
+        proposal.ProposalMilestonePlans.Single().Amount = 400m;
+
+        var exception = await Assert.ThrowsAsync<BadRequestException>(() => handler.Handle(
+            new UpdateProposalStatusCommand(
+                proposal.ProposalsId,
+                userId,
+                new UpdateProposalStatusRequest { Status = 1 }),
+            CancellationToken.None));
+
+        Assert.Contains("must equal", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(0, proposal.Status);
+    }
+
+    private static (UpdateProposalStatusCommandHandler Handler, Proposal Proposal, Guid UserId) CreateDraftSubmissionHandler()
+    {
+        var now = new DateTime(2026, 7, 5, 10, 0, 0, DateTimeKind.Utc);
+        var context = new InMemoryApplicationDbContext();
+        var userId = Guid.NewGuid();
+        var freelancerProfileId = Guid.NewGuid();
+        var jobPost = new JobPost
+        {
+            JobPostsId = Guid.NewGuid(),
+            ClientProfilesId = Guid.NewGuid(),
+            Title = "Project request",
+            Description = "Build the requested product.",
+            Status = 1,
+            CreatedAt = now
+        };
+        var proposal = new Proposal
+        {
+            ProposalsId = Guid.NewGuid(),
+            JobPostsId = jobPost.JobPostsId,
+            FreelancerProfilesId = freelancerProfileId,
+            CoverLetter = "I will analyze the requirements and deliver the agreed scope with clear milestones.",
+            AnalysisSummary = "The project requires a reliable implementation with explicit constraints, risks, and measurable outcomes.",
+            SolutionApproach = "I will deliver the solution incrementally, validate each component, and document all important decisions.",
+            ProposedBudget = 500m,
+            Status = 0,
+            JobPosts = jobPost
+        };
+        proposal.ProposalWorkBreakdownItems.Add(new ProposalWorkBreakdownItem
+        {
+            ProposalWorkBreakdownItemsId = Guid.NewGuid(),
+            ProposalsId = proposal.ProposalsId,
+            Title = "Implementation"
+        });
+        proposal.ProposalMilestonePlans.Add(new ProposalMilestonePlan
+        {
+            ProposalMilestonePlansId = Guid.NewGuid(),
+            ProposalsId = proposal.ProposalsId,
+            Title = "Delivery",
+            Amount = 500m,
+            Deliverables = "Production-ready implementation",
+            AcceptanceCriteria = "All agreed acceptance tests pass"
+        });
+
+        context.AddSet(new FreelancerProfile
+        {
+            FreelancerProfilesId = freelancerProfileId,
+            UserId = userId
+        });
+        context.AddSet(jobPost);
+        context.AddSet(proposal);
+        context.AddSet<ClientProfile>();
+
+        return (new UpdateProposalStatusCommandHandler(context, new FixedDateTimeService(now)), proposal, userId);
     }
 
     private sealed class FixedDateTimeService : IDateTimeService

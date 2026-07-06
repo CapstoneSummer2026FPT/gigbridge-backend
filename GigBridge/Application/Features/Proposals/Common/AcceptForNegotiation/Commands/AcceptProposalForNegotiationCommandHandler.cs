@@ -7,6 +7,7 @@ using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Features.Auth.Shared.DTOs;
 using Application.Features.Proposals.Common.Email;
+using Application.Features.Proposals.Common;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
@@ -62,6 +63,7 @@ public class AcceptProposalForNegotiationCommandHandler : IRequestHandler<Accept
             .Include(p => p.JobPosts)
             .Include(p => p.FreelancerProfiles)
                 .ThenInclude(fp => fp.User)
+            .Include(p => p.ProposalMilestonePlans)
             .FirstOrDefaultAsync(p => p.ProposalsId == command.ProposalId, cancellationToken);
 
         if (proposal is null)
@@ -123,6 +125,9 @@ public class AcceptProposalForNegotiationCommandHandler : IRequestHandler<Accept
                 contract.UpdatedAt = now;
             }
 
+            await ProposalMilestoneHandoff.SeedConversationDraftAsync(
+                _context, conversationId, proposal, now, cancellationToken);
+
             await _context.SaveChangesAsync(cancellationToken);
             await NotifyConversationUpdated(conversationId, existingConversation.LastMessageAt, cancellationToken);
         }
@@ -148,6 +153,9 @@ public class AcceptProposalForNegotiationCommandHandler : IRequestHandler<Accept
 
             contract.Status = (int)ContractStatus.InNegotiation;
             contract.UpdatedAt = now;
+
+            await ProposalMilestoneHandoff.SeedConversationDraftAsync(
+                _context, conversationId, proposal, now, cancellationToken);
 
             await _context.SaveChangesAsync(cancellationToken);
             await NotifyConversationUpdated(conversationId, conversation.LastMessageAt, cancellationToken);

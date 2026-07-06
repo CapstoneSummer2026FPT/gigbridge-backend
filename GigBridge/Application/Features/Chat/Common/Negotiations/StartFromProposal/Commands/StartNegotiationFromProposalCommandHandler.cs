@@ -1,6 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Application.Features.Proposals.Common;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
@@ -39,6 +40,7 @@ public class StartNegotiationFromProposalCommandHandler
 
         var proposal = await _context.Set<Proposal>()
             .Include(proposal => proposal.JobPosts)
+            .Include(proposal => proposal.ProposalMilestonePlans)
             .FirstOrDefaultAsync(
                 proposal => proposal.ProposalsId == command.ProposalId,
                 cancellationToken);
@@ -110,6 +112,13 @@ public class StartNegotiationFromProposalCommandHandler
                 contract.UpdatedAt = now;
             }
 
+            await ProposalMilestoneHandoff.SeedConversationDraftAsync(
+                _context,
+                existingConversation.ConversationsId,
+                proposal,
+                now,
+                cancellationToken);
+
             await _context.SaveChangesAsync(cancellationToken);
             await NotifyConversationUpdated(
                 existingConversation.ConversationsId,
@@ -137,6 +146,13 @@ public class StartNegotiationFromProposalCommandHandler
 
         contract.Status = (int)ContractStatus.InNegotiation;
         contract.UpdatedAt = now;
+
+        await ProposalMilestoneHandoff.SeedConversationDraftAsync(
+            _context,
+            conversation.ConversationsId,
+            proposal,
+            now,
+            cancellationToken);
 
         await _context.SaveChangesAsync(cancellationToken);
         await NotifyConversationUpdated(

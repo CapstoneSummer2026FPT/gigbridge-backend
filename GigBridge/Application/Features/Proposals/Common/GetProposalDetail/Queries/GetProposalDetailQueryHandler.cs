@@ -25,6 +25,8 @@ public class GetProposalDetailQueryHandler
             .Include(p => p.JobPosts)
             .Include(p => p.FreelancerProfiles)
                 .ThenInclude(fp => fp.User)
+            .Include(p => p.ProposalWorkBreakdownItems)
+            .Include(p => p.ProposalMilestonePlans)
             .FirstOrDefaultAsync(
                 p => p.ProposalsId == request.ProposalId,
                 cancellationToken);
@@ -63,6 +65,19 @@ public class GetProposalDetailQueryHandler
             CoverLetter = proposal.CoverLetter,
             ProposedBudget = proposal.ProposedBudget,
             ProposedDuration = proposal.ProposedDuration,
+            AnalysisSummary = proposal.AnalysisSummary,
+            SolutionApproach = proposal.SolutionApproach,
+            Deliverables = proposal.Deliverables,
+            Assumptions = proposal.Assumptions,
+            OutOfScope = proposal.OutOfScope,
+            WorkBreakdownItems = proposal.ProposalWorkBreakdownItems
+                .OrderBy(item => item.OrderIndex)
+                .Select(ProposalPlanMapper.ToDto)
+                .ToList(),
+            MilestonePlans = proposal.ProposalMilestonePlans
+                .OrderBy(item => item.OrderIndex)
+                .Select(ProposalPlanMapper.ToDto)
+                .ToList(),
             Status = proposal.Status,
             SubmittedAt = proposal.SubmittedAt,
             UpdatedAt = proposal.UpdatedAt,

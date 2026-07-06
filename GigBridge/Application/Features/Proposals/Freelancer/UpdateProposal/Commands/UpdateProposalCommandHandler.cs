@@ -1,6 +1,7 @@
 ﻿using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Application.Features.Proposals.Common;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -35,6 +36,8 @@ public class UpdateProposalCommandHandler : IRequestHandler<UpdateProposalComman
         }
 
         var proposal = await _context.Set<Proposal>()
+            .Include(item => item.ProposalWorkBreakdownItems)
+            .Include(item => item.ProposalMilestonePlans)
             .FirstOrDefaultAsync(
                 proposal =>
                     proposal.ProposalsId == command.ProposalId &&
@@ -60,6 +63,22 @@ public class UpdateProposalCommandHandler : IRequestHandler<UpdateProposalComman
         proposal.ProposedDuration = string.IsNullOrWhiteSpace(command.Request.ProposedDuration)
             ? null
             : command.Request.ProposedDuration.Trim();
+
+        proposal.AnalysisSummary = ProposalPlanMapper.Clean(command.Request.AnalysisSummary);
+        proposal.SolutionApproach = ProposalPlanMapper.Clean(command.Request.SolutionApproach);
+        proposal.Deliverables = ProposalPlanMapper.Clean(command.Request.Deliverables);
+        proposal.Assumptions = ProposalPlanMapper.Clean(command.Request.Assumptions);
+        proposal.OutOfScope = ProposalPlanMapper.Clean(command.Request.OutOfScope);
+
+        _context.Set<ProposalWorkBreakdownItem>().RemoveRange(proposal.ProposalWorkBreakdownItems);
+        _context.Set<ProposalMilestonePlan>().RemoveRange(proposal.ProposalMilestonePlans);
+
+        proposal.ProposalWorkBreakdownItems = (command.Request.WorkBreakdownItems ?? [])
+            .Select((item, index) => ProposalPlanMapper.ToEntity(proposal.ProposalsId, item, index))
+            .ToList();
+        proposal.ProposalMilestonePlans = (command.Request.MilestonePlans ?? [])
+            .Select((item, index) => ProposalPlanMapper.ToEntity(proposal.ProposalsId, item, index))
+            .ToList();
 
         proposal.UpdatedAt = _dateTimeService.UtcNow;
 

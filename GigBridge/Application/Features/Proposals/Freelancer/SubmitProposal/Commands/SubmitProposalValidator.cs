@@ -10,11 +10,11 @@ public class SubmitProposalValidator : AbstractValidator<SubmitProposalCommand>
             .NotEmpty().WithMessage("JobPostsId is required.");
 
         RuleFor(x => x.Request.CoverLetter)
-            .NotEmpty().WithMessage("CoverLetter is required.")
-            .MinimumLength(50).WithMessage("CoverLetter must be at least 50 characters.");
+            .MaximumLength(4000).WithMessage("CoverLetter must not exceed 4000 characters.")
+            .When(x => !string.IsNullOrWhiteSpace(x.Request.CoverLetter));
 
         RuleFor(x => x.Request.ProposedBudget)
-            .NotNull().WithMessage("ProposedBudget is required.")
-            .GreaterThan(0).WithMessage("ProposedBudget must be greater than 0.");
+            .GreaterThan(0).WithMessage("ProposedBudget must be greater than 0.")
+            .When(x => x.Request.ProposedBudget.HasValue);
     }
 }
