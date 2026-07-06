@@ -1,5 +1,7 @@
 using Application.Common.Models;
 using Application.Features.Wallets.Common.DTOs;
+using Application.Features.Wallets.Common.FinancialOverview.DTOs;
+using Application.Features.Wallets.Common.FinancialOverview.Queries;
 using Application.Features.Wallets.Common.GetMine.Queries;
 using Application.Features.Wallets.Common.GetTransactions.Queries;
 using Application.Features.Wallets.Common.TopUps.Confirm.Commands;
@@ -39,6 +41,21 @@ public sealed class WalletController : BaseApiController
         var result = await Mediator.Send(new GetWalletTransactionsQuery(userId, limit));
 
         return Ok(ApiResponse<IReadOnlyList<WalletTransactionResponse>>.Ok(result, "Success"));
+    }
+
+    [HttpGet("financial-overview")]
+    [Authorize(Roles = "Client,Freelancer")]
+    public async Task<IActionResult> GetFinancialOverview(
+        [FromQuery] FinancialOverviewPeriod period = FinancialOverviewPeriod.Month)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return InvalidTokenResponse();
+        }
+
+        var result = await Mediator.Send(new GetFinancialOverviewQuery(userId, period));
+
+        return Ok(ApiResponse<FinancialOverviewResponse>.Ok(result, "Success"));
     }
 
     [HttpPost("top-ups")]
