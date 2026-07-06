@@ -47,7 +47,7 @@ public sealed class GetFinancialOverviewQueryHandler :
 
         var isClient = role.Value == (int)UserRole.Client;
         var timeZone = GetVietnamTimeZone();
-        var (periodStartUtc, periodEndUtc, localPeriodStart) = GetPeriodBounds(
+        var (periodStartUtc, periodEndUtc, localPeriodStart, localPeriodEnd) = GetPeriodBounds(
             request.Period,
             _dateTimeService.UtcNow,
             timeZone);
@@ -139,6 +139,7 @@ public sealed class GetFinancialOverviewQueryHandler :
             transactions,
             request.Period,
             localPeriodStart,
+            localPeriodEnd,
             timeZone,
             serviceFeePrefix);
         var recentTransactions = transactions
@@ -185,31 +186,32 @@ public sealed class GetFinancialOverviewQueryHandler :
         IReadOnlyCollection<FinancialTransactionRecord> transactions,
         FinancialOverviewPeriod period,
         DateTime localPeriodStart,
+        DateTime localPeriodEnd,
         TimeZoneInfo timeZone,
         string serviceFeePrefix)
     {
-        var bucketStarts = period switch
+        IReadOnlyList<DateTime> bucketStarts = period switch
         {
             FinancialOverviewPeriod.Day => Enumerable.Range(0, 24)
-                .Select(hour => localPeriodStart.AddHours(hour)),
-            FinancialOverviewPeriod.Month => Enumerable.Range(
-                    0,
-                    DateTime.DaysInMonth(localPeriodStart.Year, localPeriodStart.Month))
-                .Select(day => localPeriodStart.AddDays(day)),
+                .Select(hour => localPeriodStart.AddHours(hour))
+                .ToList(),
+            FinancialOverviewPeriod.Month => Enumerable.Range(0, Math.Max(
+                    1,
+                    (int)Math.Ceiling((localPeriodEnd - localPeriodStart).TotalDays)))
+                .Select(day => localPeriodStart.AddDays(day))
+                .Where(bucketStart => bucketStart < localPeriodEnd)
+                .ToList(),
             FinancialOverviewPeriod.Year => Enumerable.Range(0, 12)
-                .Select(month => localPeriodStart.AddMonths(month)),
+                .Select(month => localPeriodEnd.AddMonths(month - 12))
+                .ToList(),
             _ => throw new BadRequestException("Unsupported financial overview period.")
         };
 
-        return bucketStarts.Select(bucketStart =>
+        return bucketStarts.Select((bucketStart, index) =>
         {
-            var bucketEnd = period switch
-            {
-                FinancialOverviewPeriod.Day => bucketStart.AddHours(1),
-                FinancialOverviewPeriod.Month => bucketStart.AddDays(1),
-                FinancialOverviewPeriod.Year => bucketStart.AddMonths(1),
-                _ => bucketStart
-            };
+            var bucketEnd = index + 1 < bucketStarts.Count
+                ? bucketStarts[index + 1]
+                : localPeriodEnd;
             var bucketTransactions = transactions.Where(transaction =>
             {
                 var localOccurredAt = TimeZoneInfo.ConvertTimeFromUtc(
@@ -221,7 +223,7 @@ public sealed class GetFinancialOverviewQueryHandler :
             {
                 FinancialOverviewPeriod.Day => bucketStart.ToString("HH:mm"),
                 FinancialOverviewPeriod.Month => bucketStart.ToString("dd MMM"),
-                FinancialOverviewPeriod.Year => bucketStart.ToString("MMM"),
+                FinancialOverviewPeriod.Year => bucketStart.ToString("MMM yyyy"),
                 _ => string.Empty
             };
 
@@ -276,26 +278,23 @@ public sealed class GetFinancialOverviewQueryHandler :
             transaction.IdempotencyKey?.StartsWith(serviceFeePrefix, StringComparison.Ordinal) == true;
     }
 
-    private static (DateTime StartUtc, DateTime EndUtc, DateTime LocalStart) GetPeriodBounds(
+    private static (
+        DateTime StartUtc,
+        DateTime EndUtc,
+        DateTime LocalStart,
+        DateTime LocalEnd) GetPeriodBounds(
         FinancialOverviewPeriod period,
         DateTime utcNow,
         TimeZoneInfo timeZone)
     {
         var normalizedUtcNow = DateTime.SpecifyKind(utcNow, DateTimeKind.Utc);
-        var localNow = TimeZoneInfo.ConvertTimeFromUtc(normalizedUtcNow, timeZone);
+        var localEnd = TimeZoneInfo.ConvertTimeFromUtc(normalizedUtcNow, timeZone);
         var localStart = period switch
         {
-            FinancialOverviewPeriod.Day => localNow.Date,
-            FinancialOverviewPeriod.Month => new DateTime(localNow.Year, localNow.Month, 1),
-            FinancialOverviewPeriod.Year => new DateTime(localNow.Year, 1, 1),
+            FinancialOverviewPeriod.Day => localEnd.AddDays(-1),
+            FinancialOverviewPeriod.Month => localEnd.AddMonths(-1),
+            FinancialOverviewPeriod.Year => localEnd.AddYears(-1),
             _ => throw new BadRequestException("Unsupported financial overview period.")
-        };
-        var localEnd = period switch
-        {
-            FinancialOverviewPeriod.Day => localStart.AddDays(1),
-            FinancialOverviewPeriod.Month => localStart.AddMonths(1),
-            FinancialOverviewPeriod.Year => localStart.AddYears(1),
-            _ => localStart
         };
 
         return (
@@ -305,7 +304,8 @@ public sealed class GetFinancialOverviewQueryHandler :
             TimeZoneInfo.ConvertTimeToUtc(
                 DateTime.SpecifyKind(localEnd, DateTimeKind.Unspecified),
                 timeZone),
-            localStart);
+            localStart,
+            localEnd);
     }
 
     private static TimeZoneInfo GetVietnamTimeZone()
