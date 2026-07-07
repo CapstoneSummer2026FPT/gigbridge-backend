@@ -1,6 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Application.Features.Proposals.Common;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -40,17 +41,31 @@ public class SubmitProposalCommandHandler : IRequestHandler<SubmitProposalComman
         EnsureJobPostAcceptsProposals(jobPost);
         await EnsureProposalHasNotBeenSubmittedAsync(command, freelancerProfile.FreelancerProfilesId, cancellationToken);
 
+        var proposalId = Guid.NewGuid();
         var proposal = new Proposal
         {
-            ProposalsId = Guid.NewGuid(),
+            ProposalsId = proposalId,
             JobPostsId = command.Request.JobPostsId,
             FreelancerProfilesId = freelancerProfile.FreelancerProfilesId,
             CoverLetter = command.Request.CoverLetter?.Trim(),
             ProposedBudget = command.Request.ProposedBudget,
-            ProposedDuration = command.Request.ProposedDuration,
+            ProposedDuration = ProposalPlanMapper.Clean(command.Request.ProposedDuration),
+            AnalysisSummary = ProposalPlanMapper.Clean(command.Request.AnalysisSummary),
+            SolutionApproach = ProposalPlanMapper.Clean(command.Request.SolutionApproach),
+            Deliverables = ProposalPlanMapper.Clean(command.Request.Deliverables),
+            Assumptions = ProposalPlanMapper.Clean(command.Request.Assumptions),
+            OutOfScope = ProposalPlanMapper.Clean(command.Request.OutOfScope),
             Status = 0,
-            SubmittedAt = _dateTimeService.UtcNow
+            SubmittedAt = null,
+            UpdatedAt = _dateTimeService.UtcNow
         };
+
+        proposal.ProposalWorkBreakdownItems = (command.Request.WorkBreakdownItems ?? [])
+            .Select((item, index) => ProposalPlanMapper.ToEntity(proposalId, item, index))
+            .ToList();
+        proposal.ProposalMilestonePlans = (command.Request.MilestonePlans ?? [])
+            .Select((item, index) => ProposalPlanMapper.ToEntity(proposalId, item, index))
+            .ToList();
 
         _context.Set<Proposal>().Add(proposal);
         await _context.SaveChangesAsync(cancellationToken);

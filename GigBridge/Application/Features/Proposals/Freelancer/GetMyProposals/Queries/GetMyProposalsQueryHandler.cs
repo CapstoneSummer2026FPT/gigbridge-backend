@@ -31,6 +31,8 @@ public class GetMyProposalsQueryHandler : IRequestHandler<GetMyProposalsQuery, I
         var proposals = await _context.Set<Proposal>()
             .AsNoTracking()
             .Include(proposal => proposal.JobPosts)
+            .Include(proposal => proposal.ProposalWorkBreakdownItems)
+            .Include(proposal => proposal.ProposalMilestonePlans)
             .Where(proposal => proposal.FreelancerProfilesId == freelancerProfile.FreelancerProfilesId)
             .OrderByDescending(proposal => proposal.SubmittedAt)
             .Skip((NormalizePageIndex(request.PageIndex) - 1) * NormalizePageSize(request.PageSize))

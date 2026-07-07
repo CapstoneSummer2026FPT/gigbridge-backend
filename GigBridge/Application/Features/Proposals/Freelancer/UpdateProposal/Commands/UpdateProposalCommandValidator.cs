@@ -24,10 +24,9 @@ public class UpdateProposalCommandValidator : AbstractValidator<UpdateProposalCo
             .WithMessage("CoverLetter must not exceed 4000 characters.");
 
         RuleFor(x => x.Request.ProposedBudget)
-            .NotNull()
-            .WithMessage("ProposedBudget is required.")
             .GreaterThan(0)
-            .WithMessage("ProposedBudget must be greater than 0.");
+            .WithMessage("ProposedBudget must be greater than 0.")
+            .When(x => x.Request.ProposedBudget.HasValue);
 
         RuleFor(x => x.Request.ProposedDuration)
             .MaximumLength(100)

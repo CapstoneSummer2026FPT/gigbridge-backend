@@ -47,6 +47,8 @@ public class GetProposalsByJobPostQueryHandler : IRequestHandler<GetProposalsByJ
             .Include(proposal => proposal.JobPosts)
             .Include(proposal => proposal.FreelancerProfiles)
                 .ThenInclude(freelancerProfile => freelancerProfile.User)
+            .Include(proposal => proposal.ProposalWorkBreakdownItems)
+            .Include(proposal => proposal.ProposalMilestonePlans)
             .Where(proposal => proposal.JobPostsId == request.JobPostsId && proposal.Status != 0)
             .OrderByDescending(proposal => proposal.SubmittedAt)
             .Skip((NormalizePageIndex(request.PageIndex) - 1) * NormalizePageSize(request.PageSize))

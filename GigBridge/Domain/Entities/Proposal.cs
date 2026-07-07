@@ -17,6 +17,16 @@ public partial class Proposal
 
     public string? ProposedDuration { get; set; }
 
+    public string? AnalysisSummary { get; set; }
+
+    public string? SolutionApproach { get; set; }
+
+    public string? Deliverables { get; set; }
+
+    public string? Assumptions { get; set; }
+
+    public string? OutOfScope { get; set; }
+
     /// <summary>
     /// Enum ProposalStatus: 0=Draft, 1=Pending, 2=Shortlisted, 3=Accepted, 4=Rejected, 5=Withdrawn
     /// </summary>
@@ -43,6 +53,10 @@ public partial class Proposal
     public virtual ICollection<ProposalAnswer> ProposalAnswers { get; set; } = new List<ProposalAnswer>();
 
     public virtual ICollection<ProposalQuestionTimer> ProposalQuestionTimers { get; set; } = new List<ProposalQuestionTimer>();
+
+    public virtual ICollection<ProposalWorkBreakdownItem> ProposalWorkBreakdownItems { get; set; } = new List<ProposalWorkBreakdownItem>();
+
+    public virtual ICollection<ProposalMilestonePlan> ProposalMilestonePlans { get; set; } = new List<ProposalMilestonePlan>();
 
     public virtual ProposalInterviewReviewSession? ProposalInterviewReviewSession { get; set; }
 }

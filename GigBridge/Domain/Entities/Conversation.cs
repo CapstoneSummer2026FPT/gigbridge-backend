@@ -56,6 +56,8 @@ public partial class Conversation
 
     public virtual ICollection<NegotiationOffer> NegotiationOffers { get; set; } = new List<NegotiationOffer>();
 
+    public virtual ICollection<NegotiationMilestoneDraft> NegotiationMilestoneDrafts { get; set; } = new List<NegotiationMilestoneDraft>();
+
     public virtual ICollection<ConversationParticipant> Participants { get; set; } = new List<ConversationParticipant>();
 
     public virtual Proposal? Proposals { get; set; }

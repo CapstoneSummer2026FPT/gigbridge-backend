@@ -57,8 +57,12 @@ public sealed class UpdateContractDetailsCommandHandler :
                 MilestonesId = milestone.MilestoneId ?? Guid.NewGuid(),
                 ContractsId = contract.ContractsId,
                 Title = milestone.Title,
+                Description = milestone.Description,
                 Amount = milestone.Amount,
+                EstimatedDuration = milestone.EstimatedDuration,
                 DueDate = milestone.DueDate,
+                Deliverables = milestone.Deliverables,
+                AcceptanceCriteria = milestone.AcceptanceCriteria,
                 SortOrder = milestone.SortOrder ?? index,
                 Status = (int)MilestoneStatus.Pending,
                 CreatedAt = now

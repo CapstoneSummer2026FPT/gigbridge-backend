@@ -5,6 +5,7 @@ using Application.Features.Chat.Common.FinalOffers.Create.DTOs;
 using Application.Features.Chat.Common.FinalOffers.Respond.Commands;
 using Application.Features.Chat.Common.FinalOffers.Respond.DTOs;
 using Application.Features.Chat.Common.Negotiations.StartFromProposal.Commands;
+using Application.Features.Chat.Common.Negotiations.MilestonePlans.DTOs;
 using Domain.Entities;
 using Domain.Enums;
 using Test_Gigbridge_Backend.TestSupport;
@@ -107,7 +108,6 @@ public class NegotiationFlowCommandHandlerTests
     {
         var fixture = new NegotiationFixture();
         fixture.AddConversationWithParticipants();
-        fixture.AddMilestones(600m, 900m);
         var handler = new CreateFinalOfferCommandHandler(
             fixture.Context,
             new FixedDateTimeService(fixture.Now),
@@ -122,7 +122,8 @@ public class NegotiationFlowCommandHandlerTests
                     "Build the first production release.",
                     DateOnly.FromDateTime(fixture.Now.AddDays(1)),
                     DateOnly.FromDateTime(fixture.Now.AddDays(30)),
-                    "Please confirm the final scope.")),
+                    "Please confirm the final scope.",
+                    CreatePlan(600m, 900m))),
             CancellationToken.None);
 
         var offer = Assert.Single(fixture.Offers.Entities);
@@ -159,23 +160,22 @@ public class NegotiationFlowCommandHandlerTests
                         null)),
                 CancellationToken.None));
 
-        Assert.Equal("Contract milestones must be set up before creating the final offer.", ex.Message);
+        Assert.Equal("At least one milestone is required for a final offer.", ex.Message);
         Assert.Empty(fixture.Offers.Entities);
         Assert.Empty(fixture.Messages.Entities);
     }
 
     [Fact]
-    public async Task CreateFinalOffer_AllowsFinalPriceDifferentFromMilestoneTotal()
+    public async Task CreateFinalOffer_RejectsFinalPriceDifferentFromMilestoneTotal()
     {
         var fixture = new NegotiationFixture();
         fixture.AddConversationWithParticipants();
-        fixture.AddMilestones(500m, 500m);
         var handler = new CreateFinalOfferCommandHandler(
             fixture.Context,
             new FixedDateTimeService(fixture.Now),
             new NoopChatRealtimeNotifier());
 
-        var offerId = await handler.Handle(
+        var exception = await Assert.ThrowsAsync<BadRequestException>(() => handler.Handle(
             new CreateFinalOfferCommand(
                 fixture.ClientUserId,
                 new CreateFinalOfferRequest(
@@ -184,14 +184,12 @@ public class NegotiationFlowCommandHandlerTests
                     "Build the first production release.",
                     null,
                     null,
-                    null)),
-            CancellationToken.None);
+                    null,
+                    CreatePlan(500m, 500m))),
+            CancellationToken.None));
 
-        var offer = Assert.Single(fixture.Offers.Entities);
-        Assert.Equal(offer.NegotiationOfferId, offerId);
-        Assert.Equal((int)NegotiationOfferStatus.PendingFreelancerConfirmation, offer.Status);
-        Assert.Equal(1500m, offer.FinalPrice);
-        Assert.Single(fixture.Messages.Entities);
+        Assert.Contains("must equal", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(fixture.Offers.Entities);
     }
 
     [Fact]
@@ -223,7 +221,6 @@ public class NegotiationFlowCommandHandlerTests
     {
         var fixture = new NegotiationFixture();
         fixture.AddConversationWithParticipants();
-        fixture.AddMilestones(600m, 900m);
         var waitlistedProposal = new Proposal
         {
             ProposalsId = Guid.NewGuid(),
@@ -234,21 +231,7 @@ public class NegotiationFlowCommandHandlerTests
             JobPosts = fixture.JobPost
         };
         fixture.Context.Set<Proposal>().Add(waitlistedProposal);
-        fixture.Offers.Add(new NegotiationOffer
-        {
-            NegotiationOfferId = fixture.OfferId,
-            ConversationsId = fixture.ConversationId,
-            JobPostsId = fixture.JobPostId,
-            ContractsId = fixture.ContractId,
-            ProposalsId = fixture.ProposalId,
-            ClientProfilesId = fixture.ClientProfileId,
-            FreelancerProfilesId = fixture.FreelancerProfileId,
-            FinalPrice = 1500m,
-            StartDate = DateOnly.FromDateTime(fixture.Now.AddDays(1)),
-            EndDate = DateOnly.FromDateTime(fixture.Now.AddDays(30)),
-            Status = (int)NegotiationOfferStatus.PendingFreelancerConfirmation,
-            CreatedAt = fixture.Now
-        });
+        fixture.AddOfferWithSnapshot(1500m, 600m, 900m);
 
         var handler = new RespondFinalOfferCommandHandler(
             fixture.Context,
@@ -281,24 +264,11 @@ public class NegotiationFlowCommandHandlerTests
     }
 
     [Fact]
-    public async Task RespondFinalOffer_AcceptNormalizesMilestonesWhenFinalBudgetDiffers()
+    public async Task RespondFinalOffer_AcceptMaterializesImmutableSnapshot()
     {
         var fixture = new NegotiationFixture();
         fixture.AddConversationWithParticipants();
-        fixture.AddMilestones(500m, 500m);
-        fixture.Offers.Add(new NegotiationOffer
-        {
-            NegotiationOfferId = fixture.OfferId,
-            ConversationsId = fixture.ConversationId,
-            JobPostsId = fixture.JobPostId,
-            ContractsId = fixture.ContractId,
-            ProposalsId = fixture.ProposalId,
-            ClientProfilesId = fixture.ClientProfileId,
-            FreelancerProfilesId = fixture.FreelancerProfileId,
-            FinalPrice = 1200m,
-            Status = (int)NegotiationOfferStatus.PendingFreelancerConfirmation,
-            CreatedAt = fixture.Now
-        });
+        fixture.AddOfferWithSnapshot(1200m, 600m, 600m);
 
         var handler = new RespondFinalOfferCommandHandler(
             fixture.Context,
@@ -319,6 +289,7 @@ public class NegotiationFlowCommandHandlerTests
         Assert.Equal((int)ContractStatus.PendingSignature, result.ContractStatus);
         Assert.Equal(1200m, fixture.Milestones.Entities.Sum(milestone => milestone.Amount));
         Assert.All(fixture.Milestones.Entities, milestone => Assert.Equal(600m, milestone.Amount));
+        Assert.All(fixture.Milestones.Entities, milestone => Assert.False(string.IsNullOrWhiteSpace(milestone.AcceptanceCriteria)));
         var escrow = Assert.Single(fixture.Escrows.Entities);
         Assert.Equal(1200m, escrow.RequiredAmount);
     }
@@ -372,6 +343,8 @@ public class NegotiationFlowCommandHandlerTests
             Offers = Context.AddSet<NegotiationOffer>();
             Escrows = Context.AddSet<ContractEscrow>();
             Milestones = Context.AddSet<Milestone>();
+            OfferMilestones = Context.AddSet<NegotiationOfferMilestone>();
+            NegotiationDrafts = Context.AddSet<NegotiationMilestoneDraft>();
         }
 
         public InMemoryApplicationDbContext Context { get; } = new();
@@ -392,6 +365,8 @@ public class NegotiationFlowCommandHandlerTests
         public TestDbSet<NegotiationOffer> Offers { get; }
         public TestDbSet<ContractEscrow> Escrows { get; }
         public TestDbSet<Milestone> Milestones { get; }
+        public TestDbSet<NegotiationOfferMilestone> OfferMilestones { get; }
+        public TestDbSet<NegotiationMilestoneDraft> NegotiationDrafts { get; }
         public JobPost JobPost { get; }
         public Proposal Proposal { get; }
         public Contract Contract { get; }
@@ -418,6 +393,41 @@ public class NegotiationFlowCommandHandlerTests
                 SortOrder = 1,
                 CreatedAt = Now
             });
+        }
+
+        public void AddOfferWithSnapshot(decimal finalPrice, params decimal[] amounts)
+        {
+            var offer = new NegotiationOffer
+            {
+                NegotiationOfferId = OfferId,
+                ConversationsId = ConversationId,
+                JobPostsId = JobPostId,
+                ContractsId = ContractId,
+                ProposalsId = ProposalId,
+                ClientProfilesId = ClientProfileId,
+                FreelancerProfilesId = FreelancerProfileId,
+                FinalPrice = finalPrice,
+                StartDate = DateOnly.FromDateTime(Now.AddDays(1)),
+                EndDate = DateOnly.FromDateTime(Now.AddDays(30)),
+                Status = (int)NegotiationOfferStatus.PendingFreelancerConfirmation,
+                CreatedAt = Now
+            };
+            foreach (var (amount, index) in amounts.Select((amount, index) => (amount, index)))
+            {
+                var snapshot = new NegotiationOfferMilestone
+                {
+                    NegotiationOfferMilestoneId = Guid.NewGuid(),
+                    NegotiationOfferId = OfferId,
+                    Title = $"Milestone {index + 1}",
+                    Amount = amount,
+                    Deliverables = $"Deliverable {index + 1}",
+                    AcceptanceCriteria = $"Acceptance criteria {index + 1}",
+                    OrderIndex = index
+                };
+                offer.NegotiationOfferMilestones.Add(snapshot);
+                OfferMilestones.Add(snapshot);
+            }
+            Offers.Add(offer);
         }
 
         public void AddConversationWithParticipants()
@@ -450,6 +460,18 @@ public class NegotiationFlowCommandHandlerTests
                 JoinedAt = Now
             });
         }
+    }
+
+    private static IReadOnlyCollection<NegotiationMilestoneDto> CreatePlan(params decimal[] amounts)
+    {
+        return amounts.Select((amount, index) => new NegotiationMilestoneDto
+        {
+            Title = $"Milestone {index + 1}",
+            Amount = amount,
+            Deliverables = $"Deliverable {index + 1}",
+            AcceptanceCriteria = $"Acceptance criteria {index + 1}",
+            OrderIndex = index
+        }).ToList();
     }
 
     private sealed class FixedDateTimeService : IDateTimeService

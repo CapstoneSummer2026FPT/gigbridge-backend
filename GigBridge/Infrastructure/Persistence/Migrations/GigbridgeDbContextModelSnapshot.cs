@@ -78,6 +78,72 @@ namespace Infrastructure.Persistence.Migrations
                     b.ToTable("AdminAuditLogs");
                 });
 
+            modelBuilder.Entity("Domain.Entities.BankAccount", b =>
+                {
+                    b.Property<Guid>("BankAccountId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<string>("AccountName")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("AccountNumberEncrypted")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("AccountNumberMasked")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<string>("BankCode")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("BankName")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsDefault")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer")
+                        .HasComment("Enum BankAccountStatus: 0=Active, 1=Disabled");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("BankAccountId")
+                        .HasName("BankAccounts_pkey");
+
+                    b.HasIndex(new[] { "UserId" }, "IX_BankAccounts_UserId");
+
+                    b.HasIndex(new[] { "UserId", "IsDefault" }, "IX_BankAccounts_UserId_IsDefault");
+
+                    b.HasIndex(new[] { "UserId", "Status" }, "IX_BankAccounts_UserId_Status");
+
+                    b.ToTable("BankAccounts");
+                });
+
             modelBuilder.Entity("Domain.Entities.BroadcastNotification", b =>
                 {
                     b.Property<Guid>("BroadcastNotificationId")
@@ -2150,6 +2216,9 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnName("MilestonesId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
+                    b.Property<string>("AcceptanceCriteria")
+                        .HasColumnType("text");
+
                     b.Property<decimal>("Amount")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
@@ -2166,8 +2235,17 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasDefaultValueSql("now()");
 
+                    b.Property<string>("Deliverables")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
                     b.Property<DateOnly?>("DueDate")
                         .HasColumnType("date");
+
+                    b.Property<string>("EstimatedDuration")
+                        .HasColumnType("text");
 
                     b.Property<DateTime?>("LastReleasedAt")
                         .HasColumnType("timestamp with time zone");
@@ -2272,6 +2350,66 @@ namespace Infrastructure.Persistence.Migrations
                     b.ToTable("MilestoneAttachments");
                 });
 
+            modelBuilder.Entity("Domain.Entities.NegotiationMilestoneDraft", b =>
+                {
+                    b.Property<Guid>("NegotiationMilestoneDraftId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<string>("AcceptanceCriteria")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid>("ConversationsId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("Deliverables")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<DateOnly?>("DueDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("EstimatedDuration")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("OrderIndex")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("SourceProposalMilestonePlanId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("NegotiationMilestoneDraftId")
+                        .HasName("NegotiationMilestoneDrafts_pkey");
+
+                    b.HasIndex(new[] { "ConversationsId", "OrderIndex" }, "IX_NegotiationMilestoneDrafts_Conversation_Order")
+                        .IsUnique();
+
+                    b.ToTable("NegotiationMilestoneDrafts");
+                });
+
             modelBuilder.Entity("Domain.Entities.NegotiationOffer", b =>
                 {
                     b.Property<Guid>("NegotiationOfferId")
@@ -2359,6 +2497,55 @@ namespace Infrastructure.Persistence.Migrations
                         .HasFilter("\"Status\" = 0");
 
                     b.ToTable("NegotiationOffers");
+                });
+
+            modelBuilder.Entity("Domain.Entities.NegotiationOfferMilestone", b =>
+                {
+                    b.Property<Guid>("NegotiationOfferMilestoneId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<string>("AcceptanceCriteria")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("Deliverables")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<DateOnly?>("DueDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("EstimatedDuration")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("NegotiationOfferId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("OrderIndex")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("NegotiationOfferMilestoneId")
+                        .HasName("NegotiationOfferMilestones_pkey");
+
+                    b.HasIndex(new[] { "NegotiationOfferId", "OrderIndex" }, "IX_NegotiationOfferMilestones_Offer_Order")
+                        .IsUnique();
+
+                    b.ToTable("NegotiationOfferMilestones");
                 });
 
             modelBuilder.Entity("Domain.Entities.Notification", b =>
@@ -2492,6 +2679,111 @@ namespace Infrastructure.Persistence.Migrations
                     b.ToTable("PaymentProofs");
                 });
 
+            modelBuilder.Entity("Domain.Entities.PayoutOutbox", b =>
+                {
+                    b.Property<Guid>("PayoutOutboxId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTime>("NextAttemptAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PayoutKey")
+                        .IsRequired()
+                        .HasMaxLength(250)
+                        .HasColumnType("character varying(250)");
+
+                    b.Property<DateTime?>("ProcessedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer")
+                        .HasComment("Enum PayoutOutboxStatus: 0=Pending, 1=Processing, 2=Delivered, 3=DeadLettered, 4=Cancelled");
+
+                    b.Property<Guid>("WalletWithdrawalId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("PayoutOutboxId")
+                        .HasName("PayoutOutboxes_pkey");
+
+                    b.HasIndex(new[] { "PayoutKey" }, "IX_PayoutOutboxes_PayoutKey")
+                        .IsUnique();
+
+                    b.HasIndex(new[] { "Status", "NextAttemptAt" }, "IX_PayoutOutboxes_Status_NextAttemptAt");
+
+                    b.HasIndex(new[] { "WalletWithdrawalId" }, "IX_PayoutOutboxes_WalletWithdrawalId");
+
+                    b.ToTable("PayoutOutboxes");
+                });
+
+            modelBuilder.Entity("Domain.Entities.PayoutWebhookLog", b =>
+                {
+                    b.Property<Guid>("PayoutWebhookLogId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<string>("Error")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("EventId")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("ProcessedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("ProcessingStatus")
+                        .HasColumnType("integer")
+                        .HasComment("Enum PayoutWebhookProcessingStatus: 0=Pending, 1=Processed, 2=Rejected, 3=Failed");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("RawPayload")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTime>("ReceivedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("SignatureHash")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<Guid?>("WalletWithdrawalId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("PayoutWebhookLogId")
+                        .HasName("PayoutWebhookLogs_pkey");
+
+                    b.HasIndex(new[] { "Provider", "EventId" }, "IX_PayoutWebhookLogs_Provider_EventId");
+
+                    b.HasIndex(new[] { "Provider", "SignatureHash" }, "IX_PayoutWebhookLogs_Provider_SignatureHash");
+
+                    b.HasIndex(new[] { "WalletWithdrawalId" }, "IX_PayoutWebhookLogs_WalletWithdrawalId");
+
+                    b.ToTable("PayoutWebhookLogs");
+                });
+
             modelBuilder.Entity("Domain.Entities.PlatformSetting", b =>
                 {
                     b.Property<Guid>("PlatformSettingsId")
@@ -2571,7 +2863,16 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnName("ProposalsId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
+                    b.Property<string>("AnalysisSummary")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Assumptions")
+                        .HasColumnType("text");
+
                     b.Property<string>("CoverLetter")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Deliverables")
                         .HasColumnType("text");
 
                     b.Property<Guid>("FreelancerProfilesId")
@@ -2588,6 +2889,9 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("JobPostsId");
 
+                    b.Property<string>("OutOfScope")
+                        .HasColumnType("text");
+
                     b.Property<decimal?>("ProposedBudget")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
@@ -2595,6 +2899,9 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<string>("ProposedDuration")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<string>("SolutionApproach")
+                        .HasColumnType("text");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer")
@@ -2817,6 +3124,49 @@ namespace Infrastructure.Persistence.Migrations
                     b.ToTable("ProposalInterviewReviewSessions");
                 });
 
+            modelBuilder.Entity("Domain.Entities.ProposalMilestonePlan", b =>
+                {
+                    b.Property<Guid>("ProposalMilestonePlansId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<string>("AcceptanceCriteria")
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("Deliverables")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<string>("EstimatedDuration")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("OrderIndex")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("ProposalsId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("ProposalMilestonePlansId")
+                        .HasName("ProposalMilestonePlans_pkey");
+
+                    b.HasIndex(new[] { "ProposalsId", "OrderIndex" }, "IX_ProposalMilestonePlans_Proposal_Order");
+
+                    b.ToTable("ProposalMilestonePlans");
+                });
+
             modelBuilder.Entity("Domain.Entities.ProposalQuestionTimer", b =>
                 {
                     b.Property<Guid>("ProposalQuestionTimersId")
@@ -2872,6 +3222,42 @@ namespace Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("ProposalQuestionTimers");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ProposalWorkBreakdownItem", b =>
+                {
+                    b.Property<Guid>("ProposalWorkBreakdownItemsId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<string>("Deliverables")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<string>("EstimatedDuration")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("OrderIndex")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("ProposalsId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("ProposalWorkBreakdownItemsId")
+                        .HasName("ProposalWorkBreakdownItems_pkey");
+
+                    b.HasIndex(new[] { "ProposalsId", "OrderIndex" }, "IX_ProposalWorkBreakdownItems_Proposal_Order");
+
+                    b.ToTable("ProposalWorkBreakdownItems");
                 });
 
             modelBuilder.Entity("Domain.Entities.RefreshToken", b =>
@@ -3637,6 +4023,12 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("numeric(18,4)")
                         .HasDefaultValue(0m);
 
+                    b.Property<decimal>("PendingWithdrawalTokens")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)")
+                        .HasDefaultValue(0m);
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -3655,6 +4047,8 @@ namespace Infrastructure.Persistence.Migrations
                             t.HasCheckConstraint("CK_UserWallets_AvailableTokens_NonNegative", "\"AvailableTokens\" >= 0");
 
                             t.HasCheckConstraint("CK_UserWallets_HeldTokens_NonNegative", "\"HeldTokens\" >= 0");
+
+                            t.HasCheckConstraint("CK_UserWallets_PendingWithdrawalTokens_NonNegative", "\"PendingWithdrawalTokens\" >= 0");
                         });
                 });
 
@@ -3719,7 +4113,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.Property<int>("Type")
                         .HasColumnType("integer")
-                        .HasComment("Enum WalletTransactionType: 0=AdminCredit, 1=TopUp, 2=EscrowHold, 3=EscrowRelease, 4=EscrowRefund, 5=Adjustment");
+                        .HasComment("Enum WalletTransactionType: 0=AdminCredit, 1=TopUp, 2=EscrowHold, 3=EscrowRelease, 4=EscrowRefund, 5=Adjustment, 6=WithdrawalLock, 7=WithdrawalSuccess, 8=WithdrawalRefund, 9=WithdrawalFee");
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid")
@@ -3759,6 +4153,153 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "UserWalletsId" }, "IX_WalletTransactions_UserWalletsId");
 
                     b.ToTable("WalletTransactions");
+                });
+
+            modelBuilder.Entity("Domain.Entities.WalletWithdrawal", b =>
+                {
+                    b.Property<Guid>("WalletWithdrawalId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<Guid?>("BankAccountId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("BankAccountName")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("BankAccountNumberEncrypted")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("BankAccountNumberMasked")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<string>("BankCode")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("BankName")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("FailureReason")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<decimal>("FeeVnd")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<string>("IdempotencyKey")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("LastSyncError")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTime?>("LastSyncedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Metadata")
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("NetVndAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTime?>("ProcessingStartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ProviderOrderCode")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ProviderPayoutId")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("ProviderRawStatus")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("ProviderTransactionCode")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer")
+                        .HasComment("Enum WithdrawalStatus: 0=Pending, 1=Processing, 2=SyncRequired, 3=Success, 4=Failed, 5=Cancelled");
+
+                    b.Property<decimal>("TokenAmount")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserWalletsId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("VndAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.HasKey("WalletWithdrawalId")
+                        .HasName("WalletWithdrawals_pkey");
+
+                    b.HasIndex(new[] { "BankAccountId" }, "IX_WalletWithdrawals_BankAccountId");
+
+                    b.HasIndex(new[] { "ProviderOrderCode" }, "IX_WalletWithdrawals_ProviderOrderCode")
+                        .IsUnique();
+
+                    b.HasIndex(new[] { "Provider", "ProviderPayoutId" }, "IX_WalletWithdrawals_Provider_ProviderPayoutId")
+                        .IsUnique();
+
+                    b.HasIndex(new[] { "Status" }, "IX_WalletWithdrawals_Status");
+
+                    b.HasIndex(new[] { "UserId", "CreatedAt" }, "IX_WalletWithdrawals_UserId_CreatedAt")
+                        .IsDescending(false, true);
+
+                    b.HasIndex(new[] { "UserId", "IdempotencyKey" }, "IX_WalletWithdrawals_UserId_IdempotencyKey")
+                        .IsUnique();
+
+                    b.HasIndex(new[] { "UserWalletsId" }, "IX_WalletWithdrawals_UserWalletsId");
+
+                    b.ToTable("WalletWithdrawals", t =>
+                        {
+                            t.HasCheckConstraint("CK_WalletWithdrawals_NetVndAmount_Positive", "\"NetVndAmount\" > 0");
+
+                            t.HasCheckConstraint("CK_WalletWithdrawals_TokenAmount_Positive", "\"TokenAmount\" > 0");
+
+                            t.HasCheckConstraint("CK_WalletWithdrawals_VndAmount_Positive", "\"VndAmount\" > 0");
+                        });
                 });
 
             modelBuilder.Entity("Domain.Entities.WorkExperience", b =>
@@ -3814,6 +4355,17 @@ namespace Infrastructure.Persistence.Migrations
                         .HasConstraintName("AdminAuditLogs_usr_AdminId_fkey");
 
                     b.Navigation("Admin");
+                });
+
+            modelBuilder.Entity("Domain.Entities.BankAccount", b =>
+                {
+                    b.HasOne("Domain.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .IsRequired()
+                        .HasConstraintName("BankAccounts_usr_UserId_fkey");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Domain.Entities.BroadcastNotification", b =>
@@ -4479,6 +5031,18 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("UploadedByUser");
                 });
 
+            modelBuilder.Entity("Domain.Entities.NegotiationMilestoneDraft", b =>
+                {
+                    b.HasOne("Domain.Entities.Conversation", "Conversations")
+                        .WithMany("NegotiationMilestoneDrafts")
+                        .HasForeignKey("ConversationsId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("NegotiationMilestoneDrafts_ConversationsId_fkey");
+
+                    b.Navigation("Conversations");
+                });
+
             modelBuilder.Entity("Domain.Entities.NegotiationOffer", b =>
                 {
                     b.HasOne("Domain.Entities.ClientProfile", "ClientProfiles")
@@ -4529,6 +5093,18 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("Proposals");
                 });
 
+            modelBuilder.Entity("Domain.Entities.NegotiationOfferMilestone", b =>
+                {
+                    b.HasOne("Domain.Entities.NegotiationOffer", "NegotiationOffer")
+                        .WithMany("NegotiationOfferMilestones")
+                        .HasForeignKey("NegotiationOfferId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("NegotiationOfferMilestones_NegotiationOfferId_fkey");
+
+                    b.Navigation("NegotiationOffer");
+                });
+
             modelBuilder.Entity("Domain.Entities.Notification", b =>
                 {
                     b.HasOne("Domain.Entities.User", "User")
@@ -4557,6 +5133,28 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("Milestones");
 
                     b.Navigation("UploadedBy");
+                });
+
+            modelBuilder.Entity("Domain.Entities.PayoutOutbox", b =>
+                {
+                    b.HasOne("Domain.Entities.WalletWithdrawal", "WalletWithdrawal")
+                        .WithMany()
+                        .HasForeignKey("WalletWithdrawalId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("PayoutOutboxes_wwd_WalletWithdrawalId_fkey");
+
+                    b.Navigation("WalletWithdrawal");
+                });
+
+            modelBuilder.Entity("Domain.Entities.PayoutWebhookLog", b =>
+                {
+                    b.HasOne("Domain.Entities.WalletWithdrawal", "WalletWithdrawal")
+                        .WithMany()
+                        .HasForeignKey("WalletWithdrawalId")
+                        .HasConstraintName("PayoutWebhookLogs_wwd_WalletWithdrawalId_fkey");
+
+                    b.Navigation("WalletWithdrawal");
                 });
 
             modelBuilder.Entity("Domain.Entities.PlatformSetting", b =>
@@ -4681,6 +5279,18 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("Proposals");
                 });
 
+            modelBuilder.Entity("Domain.Entities.ProposalMilestonePlan", b =>
+                {
+                    b.HasOne("Domain.Entities.Proposal", "Proposals")
+                        .WithMany("ProposalMilestonePlans")
+                        .HasForeignKey("ProposalsId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("ProposalMilestonePlans_ProposalsId_fkey");
+
+                    b.Navigation("Proposals");
+                });
+
             modelBuilder.Entity("Domain.Entities.ProposalQuestionTimer", b =>
                 {
                     b.HasOne("Domain.Entities.User", "FreelancerUser")
@@ -4705,6 +5315,18 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("FreelancerUser");
 
                     b.Navigation("JobPostQuestions");
+
+                    b.Navigation("Proposals");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ProposalWorkBreakdownItem", b =>
+                {
+                    b.HasOne("Domain.Entities.Proposal", "Proposals")
+                        .WithMany("ProposalWorkBreakdownItems")
+                        .HasForeignKey("ProposalsId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("ProposalWorkBreakdownItems_ProposalsId_fkey");
 
                     b.Navigation("Proposals");
                 });
@@ -4921,6 +5543,32 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("UserWallet");
                 });
 
+            modelBuilder.Entity("Domain.Entities.WalletWithdrawal", b =>
+                {
+                    b.HasOne("Domain.Entities.BankAccount", "BankAccount")
+                        .WithMany("WalletWithdrawals")
+                        .HasForeignKey("BankAccountId")
+                        .HasConstraintName("WalletWithdrawals_bnk_BankAccountId_fkey");
+
+                    b.HasOne("Domain.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .IsRequired()
+                        .HasConstraintName("WalletWithdrawals_usr_UserId_fkey");
+
+                    b.HasOne("Domain.Entities.UserWallet", "UserWallet")
+                        .WithMany("WalletWithdrawals")
+                        .HasForeignKey("UserWalletsId")
+                        .IsRequired()
+                        .HasConstraintName("WalletWithdrawals_uWal_UserWalletsId_fkey");
+
+                    b.Navigation("BankAccount");
+
+                    b.Navigation("User");
+
+                    b.Navigation("UserWallet");
+                });
+
             modelBuilder.Entity("Domain.Entities.WorkExperience", b =>
                 {
                     b.HasOne("Domain.Entities.FreelancerProfile", "Freelancer")
@@ -4930,6 +5578,11 @@ namespace Infrastructure.Persistence.Migrations
                         .HasConstraintName("WorkExperiences_fl_FreelancerId_fkey");
 
                     b.Navigation("Freelancer");
+                });
+
+            modelBuilder.Entity("Domain.Entities.BankAccount", b =>
+                {
+                    b.Navigation("WalletWithdrawals");
                 });
 
             modelBuilder.Entity("Domain.Entities.BroadcastNotification", b =>
@@ -4984,6 +5637,8 @@ namespace Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Domain.Entities.Conversation", b =>
                 {
                     b.Navigation("Messages");
+
+                    b.Navigation("NegotiationMilestoneDrafts");
 
                     b.Navigation("NegotiationOffers");
 
@@ -5093,6 +5748,11 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("PaymentProofs");
                 });
 
+            modelBuilder.Entity("Domain.Entities.NegotiationOffer", b =>
+                {
+                    b.Navigation("NegotiationOfferMilestones");
+                });
+
             modelBuilder.Entity("Domain.Entities.Proposal", b =>
                 {
                     b.Navigation("Contract");
@@ -5107,7 +5767,11 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.Navigation("ProposalInterviewReviewSession");
 
+                    b.Navigation("ProposalMilestonePlans");
+
                     b.Navigation("ProposalQuestionTimers");
+
+                    b.Navigation("ProposalWorkBreakdownItems");
                 });
 
             modelBuilder.Entity("Domain.Entities.Schedule", b =>
@@ -5217,6 +5881,8 @@ namespace Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Domain.Entities.UserWallet", b =>
                 {
                     b.Navigation("WalletTransactions");
+
+                    b.Navigation("WalletWithdrawals");
                 });
 #pragma warning restore 612, 618
         }

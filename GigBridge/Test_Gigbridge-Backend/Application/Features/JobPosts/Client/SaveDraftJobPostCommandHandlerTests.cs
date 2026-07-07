@@ -3,7 +3,6 @@ using Application.Common.Interfaces.IService;
 using Application.Features.JobPosts.Client.SaveDraftJobPost.Commands;
 using Application.Features.JobPosts.Client.SaveDraftJobPost.DTOs;
 using Domain.Entities;
-using Domain.Enums;
 using Infrastructure.Services;
 using Test_Gigbridge_Backend.TestSupport;
 
@@ -12,7 +11,7 @@ namespace Test_Gigbridge_Backend.Application.Features.JobPosts.Client;
 public class SaveDraftJobPostCommandHandlerTests
 {
     [Fact]
-    public async Task Handle_WhenContractDoesNotExist_CreatesPendingFreelancerSelectionContract()
+    public async Task Handle_WhenContractDoesNotExist_DoesNotCreateContract()
     {
         var now = new DateTime(2026, 6, 15, 10, 0, 0, DateTimeKind.Utc);
         var context = new InMemoryApplicationDbContext();
@@ -45,23 +44,15 @@ public class SaveDraftJobPostCommandHandlerTests
             new SaveDraftJobPostCommand(jobPostId, userId, CreateValidRequest(now)),
             CancellationToken.None);
 
-        var contract = Assert.Single(contracts.Entities);
-        Assert.Equal(jobPostId, contract.JobPostsId);
-        Assert.Equal(clientProfileId, contract.ClientProfilesId);
-        Assert.Null(contract.FreelancerProfilesId);
-        Assert.Null(contract.ProposalsId);
-        Assert.Equal("Saved draft", contract.Title);
-        Assert.Equal("Draft body", contract.Description);
-        Assert.Equal(200m, contract.TotalBudget);
-        Assert.Equal((int)ContractStatus.PendingFreelancerSelection, contract.Status);
-        Assert.Equal(now, contract.CreatedAt);
-        Assert.Equal(now, contract.UpdatedAt);
+        Assert.Empty(contracts.Entities);
+        Assert.Equal("Saved draft", jobPost.Title);
+        Assert.Equal("Draft body", jobPost.Description);
         Assert.Equal(now, jobPost.UpdatedAt);
         Assert.Equal(1, context.SaveChangesCount);
     }
 
     [Fact]
-    public async Task Handle_WhenContractExists_UpdatesContractWithoutCreatingDuplicate()
+    public async Task Handle_WhenContractExists_DoesNotUpdateContractOrCreateDuplicate()
     {
         var now = new DateTime(2026, 6, 15, 10, 0, 0, DateTimeKind.Utc);
         var context = new InMemoryApplicationDbContext();
@@ -93,7 +84,7 @@ public class SaveDraftJobPostCommandHandlerTests
             Title = "Old contract",
             Description = "Old contract body",
             TotalBudget = 50m,
-            Status = (int)ContractStatus.PendingFreelancerSelection,
+            Status = 0,
             CreatedAt = originalCreatedAt
         });
 
@@ -108,11 +99,11 @@ public class SaveDraftJobPostCommandHandlerTests
 
         var contract = Assert.Single(contracts.Entities);
         Assert.Equal(contractId, contract.ContractsId);
-        Assert.Equal("Saved draft", contract.Title);
-        Assert.Equal("Draft body", contract.Description);
-        Assert.Equal(200m, contract.TotalBudget);
+        Assert.Equal("Old contract", contract.Title);
+        Assert.Equal("Old contract body", contract.Description);
+        Assert.Equal(50m, contract.TotalBudget);
         Assert.Equal(originalCreatedAt, contract.CreatedAt);
-        Assert.Equal(now, contract.UpdatedAt);
+        Assert.Null(contract.UpdatedAt);
         Assert.Equal(1, context.SaveChangesCount);
     }
 

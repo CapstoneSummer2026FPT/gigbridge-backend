@@ -32,6 +32,7 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
         CancellationToken cancellationToken)
     {
         var offer = await _context.Set<NegotiationOffer>()
+            .Include(item => item.NegotiationOfferMilestones)
             .FirstOrDefaultAsync(
                 offer => offer.NegotiationOfferId == command.Request.NegotiationOfferId,
                 cancellationToken);
@@ -259,16 +260,40 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
             throw new BadRequestException("The contract draft can no longer accept a final offer.");
         }
 
-        var milestones = await _context.Set<Milestone>()
-            .Where(milestone => milestone.ContractsId == contract.ContractsId)
-            .ToListAsync(cancellationToken);
-
-        if (milestones.Count == 0)
+        if (offer.NegotiationOfferMilestones.Count == 0)
         {
-            throw new BadRequestException("Contract milestones must be set up before accepting the final budget.");
+            throw new BadRequestException("The final offer does not contain a milestone snapshot.");
         }
 
-        NormalizeMilestoneAmounts(milestones, offer.FinalPrice);
+        if (offer.NegotiationOfferMilestones.Sum(item => item.Amount) != offer.FinalPrice)
+        {
+            throw new BadRequestException("The final offer milestone total does not match its final price.");
+        }
+
+        var existingMilestones = await _context.Set<Milestone>()
+            .Where(milestone => milestone.ContractsId == contract.ContractsId)
+            .ToListAsync(cancellationToken);
+        _context.Set<Milestone>().RemoveRange(existingMilestones);
+
+        foreach (var snapshot in offer.NegotiationOfferMilestones.OrderBy(item => item.OrderIndex))
+        {
+            _context.Set<Milestone>().Add(new Milestone
+            {
+                MilestonesId = Guid.NewGuid(),
+                ContractsId = contract.ContractsId,
+                Title = snapshot.Title,
+                Description = snapshot.Description,
+                Amount = snapshot.Amount,
+                EstimatedDuration = snapshot.EstimatedDuration,
+                DueDate = snapshot.DueDate,
+                Deliverables = snapshot.Deliverables,
+                AcceptanceCriteria = snapshot.AcceptanceCriteria,
+                Status = (int)MilestoneStatus.Pending,
+                SortOrder = snapshot.OrderIndex,
+                ReleasedAmount = 0m,
+                CreatedAt = now
+            });
+        }
 
         await ServiceFeeWorkflow.ChargeAsync(
             _context,
@@ -364,40 +389,6 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
             contract.ContractsId,
             contract.Status,
             "Final offer accepted. Contract is ready for signatures.");
-    }
-
-    private static void NormalizeMilestoneAmounts(
-        IReadOnlyList<Milestone> milestones,
-        decimal finalPrice)
-    {
-        var currentTotal = milestones.Sum(milestone => milestone.Amount);
-        if (currentTotal == finalPrice)
-        {
-            return;
-        }
-
-        if (currentTotal <= 0)
-        {
-            throw new BadRequestException("Contract milestones must have a positive total before accepting the final budget.");
-        }
-
-        var remaining = finalPrice;
-        for (var index = 0; index < milestones.Count; index++)
-        {
-            var milestone = milestones[index];
-            if (index == milestones.Count - 1)
-            {
-                milestone.Amount = remaining;
-                break;
-            }
-
-            var normalizedAmount = Math.Round(
-                milestone.Amount * finalPrice / currentTotal,
-                2,
-                MidpointRounding.AwayFromZero);
-            milestone.Amount = normalizedAmount;
-            remaining -= normalizedAmount;
-        }
     }
 
     private string ChangeOfferStatus(

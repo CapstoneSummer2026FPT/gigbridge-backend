@@ -2,6 +2,7 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Features.Proposals.Common.UpdateProposalStatus.Commands.DTOs;
+using Application.Features.Proposals.Common;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
@@ -41,6 +42,8 @@ public class UpdateProposalStatusCommandHandler
     {
         var proposal = await _context.Set<Proposal>()
             .Include(proposal => proposal.JobPosts)
+            .Include(proposal => proposal.ProposalWorkBreakdownItems)
+            .Include(proposal => proposal.ProposalMilestonePlans)
             .FirstOrDefaultAsync(
                 proposal => proposal.ProposalsId == command.ProposalId,
                 cancellationToken);
@@ -78,6 +81,11 @@ public class UpdateProposalStatusCommandHandler
         else if (isFreelancerOwner)
         {
             var isDraftSubmission = proposal.Status == 0 && requestedStatus == 1;
+            if (isDraftSubmission)
+            {
+                ProposalSubmissionGuard.EnsureCanSubmit(proposal);
+                proposal.SubmittedAt = _dateTimeService.UtcNow;
+            }
             if (isDraftSubmission && _proposalQuestionTimerService is not null)
             {
                 await _proposalQuestionTimerService.EnsureProposalReadyForSubmissionAsync(
