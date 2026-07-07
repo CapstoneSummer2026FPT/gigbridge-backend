@@ -3,6 +3,7 @@ using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.Contracts.Completion.Client.DTOs;
+using Application.Features.Wallets.Common;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
@@ -76,6 +77,16 @@ public sealed class EndProjectCommandHandler : IRequestHandler<EndProjectCommand
             throw new BadRequestException("Escrow funding must match the contract milestone total.");
 
         var now = _dateTimeService.UtcNow;
+        await ServiceFeeWorkflow.ChargeAsync(
+            _context,
+            command.UserId,
+            contract.ContractsId,
+            milestoneTotal,
+            $"{ServiceFeeWorkflow.EndProjectFeePrefix}{contract.ContractsId:N}",
+            $"1% service fee for ending the project: {contract.Title}.",
+            now,
+            cancellationToken);
+
         contract.Status = (int)ContractStatus.Completed;
         contract.CompletedAt = now;
         contract.UpdatedAt = now;
