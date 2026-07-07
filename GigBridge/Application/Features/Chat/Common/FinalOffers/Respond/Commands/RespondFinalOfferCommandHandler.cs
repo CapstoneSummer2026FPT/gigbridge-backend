@@ -3,6 +3,7 @@ using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Features.Chat.Common.FinalOffers.Respond.DTOs;
 using Application.Features.Chat.Common.Messages.Send.DTOs;
+using Application.Features.Wallets.Common;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
@@ -85,7 +86,7 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
         switch (command.Request.Response)
         {
             case FinalOfferResponse.Accept:
-                response = await AcceptOffer(offer, conversation, now, cancellationToken);
+                response = await AcceptOffer(offer, conversation, command.UserId, now, cancellationToken);
                 eventName = "ContractDraftUpdated";
                 break;
             case FinalOfferResponse.RequestChange:
@@ -224,6 +225,7 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
     private async Task<RespondFinalOfferResponse> AcceptOffer(
         NegotiationOffer offer,
         Conversation conversation,
+        Guid userId,
         DateTime now,
         CancellationToken cancellationToken)
     {
@@ -267,6 +269,16 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
         }
 
         NormalizeMilestoneAmounts(milestones, offer.FinalPrice);
+
+        await ServiceFeeWorkflow.ChargeAsync(
+            _context,
+            userId,
+            contract.ContractsId,
+            offer.FinalPrice,
+            $"{ServiceFeeWorkflow.AcceptJobFeePrefix}{offer.NegotiationOfferId:N}",
+            $"1% service fee for accepting the job: {contract.Title}.",
+            now,
+            cancellationToken);
 
         offer.Status = (int)NegotiationOfferStatus.Accepted;
         offer.RespondedAt = now;
