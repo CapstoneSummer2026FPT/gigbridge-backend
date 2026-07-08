@@ -42,14 +42,15 @@ public class SubmitProposalCommandHandler : IRequestHandler<SubmitProposalComman
         await EnsureProposalHasNotBeenSubmittedAsync(command, freelancerProfile.FreelancerProfilesId, cancellationToken);
 
         var proposalId = Guid.NewGuid();
+        var milestonePlans = (command.Request.MilestonePlans ?? []).ToList();
         var proposal = new Proposal
         {
             ProposalsId = proposalId,
             JobPostsId = command.Request.JobPostsId,
             FreelancerProfilesId = freelancerProfile.FreelancerProfilesId,
             CoverLetter = command.Request.CoverLetter?.Trim(),
-            ProposedBudget = command.Request.ProposedBudget,
-            ProposedDuration = ProposalPlanMapper.Clean(command.Request.ProposedDuration),
+            ProposedBudget = ProposalTotalsCalculator.ResolveBudget(command.Request.ProposedBudget, milestonePlans),
+            ProposedDuration = ProposalTotalsCalculator.ResolveDuration(command.Request.ProposedDuration, milestonePlans),
             AnalysisSummary = ProposalPlanMapper.Clean(command.Request.AnalysisSummary),
             SolutionApproach = ProposalPlanMapper.Clean(command.Request.SolutionApproach),
             Deliverables = ProposalPlanMapper.Clean(command.Request.Deliverables),
@@ -63,7 +64,7 @@ public class SubmitProposalCommandHandler : IRequestHandler<SubmitProposalComman
         proposal.ProposalWorkBreakdownItems = (command.Request.WorkBreakdownItems ?? [])
             .Select((item, index) => ProposalPlanMapper.ToEntity(proposalId, item, index))
             .ToList();
-        proposal.ProposalMilestonePlans = (command.Request.MilestonePlans ?? [])
+        proposal.ProposalMilestonePlans = milestonePlans
             .Select((item, index) => ProposalPlanMapper.ToEntity(proposalId, item, index))
             .ToList();
 

@@ -3,6 +3,7 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Features.Chat.Common.Messages.Send.DTOs;
+using Application.Features.Proposals.Common;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
@@ -233,9 +234,9 @@ public class CreateFinalOfferCommandHandler : IRequestHandler<CreateFinalOfferCo
         DateOnly? endDate,
         IReadOnlyCollection<Application.Features.Chat.Common.Negotiations.MilestonePlans.DTOs.NegotiationMilestoneDto>? milestones)
     {
-        if (finalPrice <= 0)
+        if (!ProposalTotalsCalculator.IsValidAmount(finalPrice))
         {
-            throw new BadRequestException("Final price must be greater than zero.");
+            throw new BadRequestException("Final price must be greater than zero, use at most 2 decimal places, and fit decimal(18,2).");
         }
 
         if (startDate.HasValue &&
@@ -258,7 +259,7 @@ public class CreateFinalOfferCommandHandler : IRequestHandler<CreateFinalOfferCo
         if (milestones.Any(item => string.IsNullOrWhiteSpace(item.Title) ||
                                    string.IsNullOrWhiteSpace(item.Deliverables) ||
                                    string.IsNullOrWhiteSpace(item.AcceptanceCriteria) ||
-                                   item.Amount <= 0))
+                                   !ProposalTotalsCalculator.IsValidAmount(item.Amount)))
         {
             throw new BadRequestException("Each milestone requires a title, positive amount, deliverables, and acceptance criteria.");
         }

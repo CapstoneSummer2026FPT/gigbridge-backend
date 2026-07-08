@@ -6,8 +6,11 @@ using Application.Features.Chat.Common.FinalOffers.Respond.Commands;
 using Application.Features.Chat.Common.FinalOffers.Respond.DTOs;
 using Application.Features.Chat.Common.Negotiations.StartFromProposal.Commands;
 using Application.Features.Chat.Common.Negotiations.MilestonePlans.DTOs;
+using Application.Features.Proposals.Common.AcceptForNegotiation.Commands;
 using Domain.Entities;
 using Domain.Enums;
+using MediatR;
+using NSubstitute;
 using Test_Gigbridge_Backend.TestSupport;
 
 namespace Test_Gigbridge_Backend.Application.Features.Proposals.Common;
@@ -15,92 +18,24 @@ namespace Test_Gigbridge_Backend.Application.Features.Proposals.Common;
 public class NegotiationFlowCommandHandlerTests
 {
     [Fact]
-    public async Task StartNegotiationFromProposal_CreatesJobNegotiationConversationWithParticipants()
+    public async Task StartNegotiationFromProposal_ForwardsToCanonicalProposalWorkflow()
     {
-        var fixture = new NegotiationFixture();
-        var handler = new StartNegotiationFromProposalCommandHandler(
-            fixture.Context,
-            new FixedDateTimeService(fixture.Now),
-            new NoopChatRealtimeNotifier());
+        var sender = Substitute.For<ISender>();
+        var proposalId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var expectedConversationId = Guid.NewGuid();
+        sender.Send(Arg.Any<AcceptProposalForNegotiationCommand>(), Arg.Any<CancellationToken>())
+            .Returns(expectedConversationId);
+        var handler = new StartNegotiationFromProposalCommandHandler(sender);
 
         var conversationId = await handler.Handle(
-            new StartNegotiationFromProposalCommand(fixture.ProposalId, fixture.ClientUserId),
+            new StartNegotiationFromProposalCommand(proposalId, userId),
             CancellationToken.None);
 
-        var conversation = Assert.Single(fixture.Conversations.Entities);
-        Assert.Equal(conversation.ConversationsId, conversationId);
-        Assert.Equal((int)ConversationType.JobNegotiation, conversation.ConversationType);
-        Assert.Equal(fixture.JobPostId, conversation.JobPostsId);
-        Assert.Equal(fixture.ProposalId, conversation.ProposalsId);
-        Assert.Equal(fixture.ContractId, conversation.ContractsId);
-
-        Assert.Equal((int)ContractStatus.InNegotiation, fixture.Contract.Status);
-        Assert.Contains(fixture.Participants.Entities, participant =>
-            participant.ConversationsId == conversationId &&
-            participant.UserId == fixture.ClientUserId &&
-            participant.ParticipantRole == (int)ParticipantRole.Client);
-        Assert.Contains(fixture.Participants.Entities, participant =>
-            participant.ConversationsId == conversationId &&
-            participant.UserId == fixture.FreelancerUserId &&
-            participant.ParticipantRole == (int)ParticipantRole.Freelancer);
-    }
-
-    [Fact]
-    public async Task StartNegotiationFromProposal_ReturnsExistingConversationForSameProposal()
-    {
-        var fixture = new NegotiationFixture();
-        var existingConversationId = Guid.NewGuid();
-        fixture.Conversations.Add(new Conversation
-        {
-            ConversationsId = existingConversationId,
-            ConversationType = (int)ConversationType.JobNegotiation,
-            JobPostsId = fixture.JobPostId,
-            ProposalsId = fixture.ProposalId,
-            ContractsId = fixture.ContractId,
-            CreatedByUserId = fixture.ClientUserId,
-            Status = (int)ConversationStatus.Active,
-            CreatedAt = fixture.Now
-        });
-
-        var handler = new StartNegotiationFromProposalCommandHandler(
-            fixture.Context,
-            new FixedDateTimeService(fixture.Now),
-            new NoopChatRealtimeNotifier());
-
-        var conversationId = await handler.Handle(
-            new StartNegotiationFromProposalCommand(fixture.ProposalId, fixture.ClientUserId),
-            CancellationToken.None);
-
-        Assert.Equal(existingConversationId, conversationId);
-        Assert.Single(fixture.Conversations.Entities);
-    }
-
-    [Fact]
-    public async Task StartNegotiationFromProposal_CreatesDraftContractWhenJobPostHasNoContract()
-    {
-        var fixture = new NegotiationFixture(includeContract: false);
-        fixture.JobPost.BudgetMin = null;
-        fixture.JobPost.BudgetMax = 1800m;
-        var handler = new StartNegotiationFromProposalCommandHandler(
-            fixture.Context,
-            new FixedDateTimeService(fixture.Now),
-            new NoopChatRealtimeNotifier());
-
-        var conversationId = await handler.Handle(
-            new StartNegotiationFromProposalCommand(fixture.ProposalId, fixture.ClientUserId),
-            CancellationToken.None);
-
-        var contract = Assert.Single(fixture.Contracts.Entities);
-        Assert.Equal(fixture.JobPostId, contract.JobPostsId);
-        Assert.Equal(fixture.ClientProfileId, contract.ClientProfilesId);
-        Assert.Equal(fixture.JobPost.Title, contract.Title);
-        Assert.Equal(fixture.JobPost.Description, contract.Description);
-        Assert.Equal(1800m, contract.TotalBudget);
-        Assert.Equal((int)ContractStatus.InNegotiation, contract.Status);
-
-        var conversation = Assert.Single(fixture.Conversations.Entities);
-        Assert.Equal(conversation.ConversationsId, conversationId);
-        Assert.Equal(contract.ContractsId, conversation.ContractsId);
+        Assert.Equal(expectedConversationId, conversationId);
+        await sender.Received(1).Send(
+            Arg.Is<AcceptProposalForNegotiationCommand>(command => command.ProposalId == proposalId && command.UserId == userId),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]

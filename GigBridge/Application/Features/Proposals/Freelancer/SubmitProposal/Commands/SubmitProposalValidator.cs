@@ -14,7 +14,14 @@ public class SubmitProposalValidator : AbstractValidator<SubmitProposalCommand>
             .When(x => !string.IsNullOrWhiteSpace(x.Request.CoverLetter));
 
         RuleFor(x => x.Request.ProposedBudget)
-            .GreaterThan(0).WithMessage("ProposedBudget must be greater than 0.")
+            .Must(value => value.HasValue && global::Application.Features.Proposals.Common.ProposalTotalsCalculator.IsValidAmount(value.Value))
+            .WithMessage("ProposedBudget must be greater than 0, use at most 2 decimal places, and fit decimal(18,2).")
             .When(x => x.Request.ProposedBudget.HasValue);
+
+        RuleFor(x => x.Request.ProposedDuration)
+            .MaximumLength(100)
+            .Must(value => global::Application.Features.Proposals.Common.ProposalTotalsCalculator.IsValidDuration(value))
+            .WithMessage("ProposedDuration must be a positive whole number in days, weeks, or months.")
+            .When(x => !string.IsNullOrWhiteSpace(x.Request.ProposedDuration));
     }
 }
