@@ -23,7 +23,7 @@ public class EmailService : IEmailService
     }
 
     public async Task SendEmailAsync(EmailRequest emailRequestDTO, CancellationToken cancellationToken = default)
-    {
+   {
         var fromEmail = _configuration["Resend:From"] ?? "onboarding@resend.dev";
         var fromName = _configuration["Resend:FromName"] ?? "GigBridge";
 
