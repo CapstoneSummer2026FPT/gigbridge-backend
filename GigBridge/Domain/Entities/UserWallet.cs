@@ -13,6 +13,8 @@ public partial class UserWallet
 
     public decimal HeldTokens { get; set; }
 
+    public decimal PendingWithdrawalTokens { get; set; }
+
     public DateTime CreatedAt { get; set; }
 
     public DateTime? UpdatedAt { get; set; }
@@ -20,4 +22,6 @@ public partial class UserWallet
     public virtual User User { get; set; } = null!;
 
     public virtual ICollection<WalletTransaction> WalletTransactions { get; set; } = new List<WalletTransaction>();
+
+    public virtual ICollection<WalletWithdrawal> WalletWithdrawals { get; set; } = new List<WalletWithdrawal>();
 }

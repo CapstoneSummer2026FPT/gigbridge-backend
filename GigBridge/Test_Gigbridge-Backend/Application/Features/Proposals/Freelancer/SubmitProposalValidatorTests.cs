@@ -29,25 +29,25 @@ public class SubmitProposalValidatorTests
     }
 
     [Fact]
-    public void Validate_ReturnsErrorWhenCoverLetterIsTooShort()
+    public void Validate_AllowsShortCoverLetterWhileSavingDraft()
     {
         var request = CreateValidRequest() with { CoverLetter = "Short cover letter." };
         var command = new SubmitProposalCommand(request, Guid.NewGuid());
 
         var result = _validator.Validate(command);
 
-        Assert.Contains(result.Errors, error => error.PropertyName == "Request.CoverLetter");
+        Assert.DoesNotContain(result.Errors, error => error.PropertyName == "Request.CoverLetter");
     }
 
     [Fact]
-    public void Validate_ReturnsErrorWhenProposedBudgetIsMissing()
+    public void Validate_AllowsMissingBudgetWhileSavingDraft()
     {
         var request = CreateValidRequest() with { ProposedBudget = null };
         var command = new SubmitProposalCommand(request, Guid.NewGuid());
 
         var result = _validator.Validate(command);
 
-        Assert.Contains(result.Errors, error => error.PropertyName == "Request.ProposedBudget");
+        Assert.DoesNotContain(result.Errors, error => error.PropertyName == "Request.ProposedBudget");
     }
 
     [Fact]

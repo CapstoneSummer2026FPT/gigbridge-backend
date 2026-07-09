@@ -34,6 +34,9 @@ internal static class JobPostProjection
             Status: jobPost.Status,
             Visibility: jobPost.Visibility,
             EloPoints: jobPost.ClientProfiles?.User?.UserEloScore?.CurrentPoints ?? UserEloCalculator.DefaultPoints,
+            ClientProfilesId: jobPost.ClientProfilesId,
+            ClientFullName: jobPost.ClientProfiles?.User?.FullName
+                            ?? jobPost.ClientProfiles?.CompanyName,
             Skills: officialSkills,
             CustomSkillNames: jobPost.CustomSkillNames.ToList(),
             SkillNames: officialSkills

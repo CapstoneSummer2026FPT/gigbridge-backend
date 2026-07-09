@@ -11,9 +11,17 @@ public partial class Milestone
 
     public string Title { get; set; } = null!;
 
+    public string? Description { get; set; }
+
     public decimal Amount { get; set; }
 
     public DateOnly? DueDate { get; set; }
+
+    public string? EstimatedDuration { get; set; }
+
+    public string? Deliverables { get; set; }
+
+    public string? AcceptanceCriteria { get; set; }
 
     /// <summary>
     /// Enum MilestoneStatus: 0=Pending, 1=InProgress, 2=Submitted, 3=Approved, 4=PaymentProofUploaded, 5=PaymentConfirmed, 6=Disputed

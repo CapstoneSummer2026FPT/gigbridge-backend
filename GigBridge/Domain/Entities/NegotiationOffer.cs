@@ -50,4 +50,6 @@ public partial class NegotiationOffer
     public virtual JobPost JobPosts { get; set; } = null!;
 
     public virtual Proposal? Proposals { get; set; }
+
+    public virtual ICollection<NegotiationOfferMilestone> NegotiationOfferMilestones { get; set; } = new List<NegotiationOfferMilestone>();
 }

@@ -7,6 +7,7 @@ using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Features.Auth.Shared.DTOs;
 using Application.Features.Proposals.Common.Email;
+using Application.Features.Proposals.Common;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
@@ -62,6 +63,7 @@ public class AcceptProposalForNegotiationCommandHandler : IRequestHandler<Accept
             .Include(p => p.JobPosts)
             .Include(p => p.FreelancerProfiles)
                 .ThenInclude(fp => fp.User)
+            .Include(p => p.ProposalMilestonePlans)
             .FirstOrDefaultAsync(p => p.ProposalsId == command.ProposalId, cancellationToken);
 
         if (proposal is null)
@@ -79,10 +81,12 @@ public class AcceptProposalForNegotiationCommandHandler : IRequestHandler<Accept
             throw new BadRequestException("Job post is no longer open for negotiations.");
         }
 
-        if (proposal.Status != 1 && proposal.Status != 2) // 1=Pending, 2=Shortlisted
+        if (proposal.Status != 1 && proposal.Status != 2 && proposal.Status != 3) // Accepted may reopen its existing negotiation.
         {
-            throw new BadRequestException("Proposal must be Pending or Shortlisted to start negotiation.");
+            throw new BadRequestException("Proposal must be Pending, Shortlisted, or Accepted to open negotiation.");
         }
+
+        var shouldNotifyNegotiationStart = proposal.Status is 1 or 2;
 
         var now = _dateTimeService.UtcNow;
 
@@ -123,6 +127,9 @@ public class AcceptProposalForNegotiationCommandHandler : IRequestHandler<Accept
                 contract.UpdatedAt = now;
             }
 
+            await ProposalMilestoneHandoff.SeedConversationDraftAsync(
+                _context, conversationId, proposal, now, cancellationToken);
+
             await _context.SaveChangesAsync(cancellationToken);
             await NotifyConversationUpdated(conversationId, existingConversation.LastMessageAt, cancellationToken);
         }
@@ -149,11 +156,14 @@ public class AcceptProposalForNegotiationCommandHandler : IRequestHandler<Accept
             contract.Status = (int)ContractStatus.InNegotiation;
             contract.UpdatedAt = now;
 
+            await ProposalMilestoneHandoff.SeedConversationDraftAsync(
+                _context, conversationId, proposal, now, cancellationToken);
+
             await _context.SaveChangesAsync(cancellationToken);
             await NotifyConversationUpdated(conversationId, conversation.LastMessageAt, cancellationToken);
         }
 
-        if (isFirstTime)
+        if (isFirstTime && shouldNotifyNegotiationStart)
         {
             if (proposal.Status == 1) // Pending
             {

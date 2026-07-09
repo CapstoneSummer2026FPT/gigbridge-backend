@@ -1,7 +1,6 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
-using Application.Features.Contracts.Common.Internal;
 using Application.Features.JobPosts.Client.Common;
 using Application.Features.JobPosts.Client.SaveDraftJobPost.DTOs;
 using Domain.Entities;
@@ -55,6 +54,11 @@ public sealed class SaveDraftJobPostCommandHandler
             throw new NotFoundException("Job post does not exist or you do not have permission to update it.");
         }
 
+        if (jobPost.Visibility == 3)
+        {
+            throw new BadRequestException("This job post has been locked by an admin and cannot be updated.");
+        }
+
         if (jobPost.Status != DraftStatus)
         {
             throw new BadRequestException("Only draft job posts can be saved as draft.");
@@ -75,11 +79,6 @@ public sealed class SaveDraftJobPostCommandHandler
         ApplyDraftFields(jobPost, command.Request, normalizedSkills);
         await ReplaceJobPostSkills(jobPost.JobPostsId, normalizedSkills.SkillIds, cancellationToken);
         await ReplaceQuestionsIfProvided(jobPost.JobPostsId, command.Request.Questions, cancellationToken);
-        await JobPostDraftContractHelper.EnsureDraftContractForJobPostAsync(
-            _context,
-            jobPost,
-            _dateTimeService.UtcNow,
-            cancellationToken);
 
         await _context.SaveChangesAsync(cancellationToken);
 

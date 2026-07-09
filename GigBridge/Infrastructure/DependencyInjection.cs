@@ -57,6 +57,21 @@ public static class DependencyInjection
                 {
                     options.ChecksumKey = Environment.GetEnvironmentVariable("PAYOS_CHECKSUM_KEY");
                 }
+
+                if (string.IsNullOrWhiteSpace(options.PayoutBaseUrl))
+                {
+                    options.PayoutBaseUrl = Environment.GetEnvironmentVariable("PAYOS_PAYOUT_BASE_URL");
+                }
+
+                if (string.IsNullOrWhiteSpace(options.PayoutCreatePath))
+                {
+                    options.PayoutCreatePath = Environment.GetEnvironmentVariable("PAYOS_PAYOUT_CREATE_PATH");
+                }
+
+                if (string.IsNullOrWhiteSpace(options.PayoutStatusPath))
+                {
+                    options.PayoutStatusPath = Environment.GetEnvironmentVariable("PAYOS_PAYOUT_STATUS_PATH");
+                }
             })
             .Validate(
                 options =>
@@ -123,11 +138,18 @@ public static class DependencyInjection
         services.AddScoped<IPasswordHasher, BCryptPasswordHasher>();
         services.AddScoped<IJwtService, JwtService>();
         services.AddHttpClient<IGoogleAuthService, GoogleAuthService>();
+
+        var resendApiToken = configuration["Resend:ApiToken"]
+            ?? Environment.GetEnvironmentVariable("RESEND_API_TOKEN");
+        if (string.IsNullOrWhiteSpace(resendApiToken))
+        {
+            throw new InvalidOperationException(
+                "Resend configuration is missing. Set Resend:ApiToken in appsettings or environment variable RESEND_API_TOKEN.");
+        }
+
         services.AddResend(options =>
         {
-            options.ApiToken = configuration["Resend:ApiToken"] 
-                ?? Environment.GetEnvironmentVariable("RESEND_API_TOKEN") 
-                ?? string.Empty;
+            options.ApiToken = resendApiToken;
         });
         services.AddScoped<IEmailService, EmailService>();
         services.AddScoped<IAuthEmailSender, AuthEmailSender>();
@@ -139,8 +161,13 @@ public static class DependencyInjection
         services.AddTransient<IDateTimeService, DateTimeService>();
         services.AddScoped<IContentModerationService, ContentModerationService>();
         services.AddScoped<IWalletTopUpPaymentService, PayOsWalletTopUpPaymentService>();
+        services.AddScoped<IBankAccountProtector, BankAccountProtector>();
         services.AddScoped<IPayOsPaymentLinkClient>(provider =>
             new PayOsPaymentLinkClient(provider.GetRequiredKeyedService<PayOSClient>("OrderClient")));
+        services.AddHttpClient<IPayoutProvider, PayOsPayoutProvider>(client =>
+        {
+            client.Timeout = TimeSpan.FromSeconds(20);
+        });
 
         // AI Service Client
         services.AddHttpClient<IAiServiceClient, AiServiceClient>();

@@ -7,6 +7,7 @@ namespace Application.Features.JobPosts.Public.GetJobPostDetail.DTOs;
 public record JobPostDetailDto(
     Guid JobPostsId,
     Guid ClientProfilesId,
+    string? ClientFullName,
     string Title,
     string Description,
     Guid? MajorCategoryId,
@@ -19,6 +20,8 @@ public record JobPostDetailDto(
     string? Currency,
     string? EstimatedDuration,
     string? Location,
+    int Status,
+    int? Visibility,
     DateTime? EndDate,
     DateTime CreatedAt,
     int EloPoints,

@@ -19,6 +19,8 @@ public record JobPostSummaryDto(
     int Status,
     int? Visibility,
     int EloPoints,
+    Guid ClientProfilesId,
+    string? ClientFullName,
     List<JobPostSkillDto> Skills,
     List<string> CustomSkillNames,
     List<string> SkillNames

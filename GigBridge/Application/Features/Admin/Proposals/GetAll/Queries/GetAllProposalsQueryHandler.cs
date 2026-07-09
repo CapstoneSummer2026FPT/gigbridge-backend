@@ -23,6 +23,8 @@ public class GetAllProposalsQueryHandler : IRequestHandler<GetAllProposalsQuery,
             .Include(proposal => proposal.JobPosts)
             .Include(proposal => proposal.FreelancerProfiles)
                 .ThenInclude(freelancerProfile => freelancerProfile.User)
+            .Include(proposal => proposal.ProposalWorkBreakdownItems)
+            .Include(proposal => proposal.ProposalMilestonePlans)
             .OrderByDescending(proposal => proposal.SubmittedAt)
             .Skip((NormalizePageIndex(request.PageIndex) - 1) * NormalizePageSize(request.PageSize))
             .Take(NormalizePageSize(request.PageSize))
