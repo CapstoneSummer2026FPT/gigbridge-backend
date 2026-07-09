@@ -54,10 +54,7 @@ public class AiServiceClientTests
 
         var request = new JobPostGenerationRequestDto
         {
-            ClientPrompt = "Looking for a React developer",
-            AllowedMajors = new List<MajorOptionDto>(),
-            AllowedCategories = new List<CategoryOptionDto>(),
-            AvailableSkills = new List<SkillOptionDto>()
+            ClientPrompt = "Looking for a React developer"
         };
 
         // Act
@@ -90,10 +87,7 @@ public class AiServiceClientTests
 
         var request = new JobPostGenerationRequestDto
         {
-            ClientPrompt = "We need a skilled drug dealer...",
-            AllowedMajors = new List<MajorOptionDto>(),
-            AllowedCategories = new List<CategoryOptionDto>(),
-            AvailableSkills = new List<SkillOptionDto>()
+            ClientPrompt = "We need a skilled drug dealer..."
         };
 
         // Act & Assert
