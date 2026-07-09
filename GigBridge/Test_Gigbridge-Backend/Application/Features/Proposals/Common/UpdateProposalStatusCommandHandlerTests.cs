@@ -188,6 +188,7 @@ public class UpdateProposalStatusCommandHandlerTests
             ProposalsId = proposalId,
             Title = "Delivery",
             Amount = 500m,
+            EstimatedDuration = "1 week",
             Deliverables = "Production-ready implementation",
             AcceptanceCriteria = "All agreed acceptance tests pass"
         });
@@ -252,10 +253,29 @@ public class UpdateProposalStatusCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_SubmitDraftWithMismatchedMilestoneTotal_ThrowsBadRequest()
+    public async Task Handle_SubmitDraftWithBudgetOverride_AllowsMilestoneTotalMismatch()
     {
         var (handler, proposal, userId) = CreateDraftSubmissionHandler();
         proposal.ProposalMilestonePlans.Single().Amount = 400m;
+
+        var result = await handler.Handle(
+            new UpdateProposalStatusCommand(
+                proposal.ProposalsId,
+                userId,
+                new UpdateProposalStatusRequest { Status = 1 }),
+            CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Equal(1, proposal.Status);
+        Assert.Equal(500m, proposal.ProposedBudget);
+        Assert.Equal(400m, proposal.ProposalMilestonePlans.Single().Amount);
+    }
+
+    [Fact]
+    public async Task Handle_SubmitDraftWithoutMilestoneDuration_ThrowsBadRequest()
+    {
+        var (handler, proposal, userId) = CreateDraftSubmissionHandler();
+        proposal.ProposalMilestonePlans.Single().EstimatedDuration = null;
 
         var exception = await Assert.ThrowsAsync<BadRequestException>(() => handler.Handle(
             new UpdateProposalStatusCommand(
@@ -264,7 +284,7 @@ public class UpdateProposalStatusCommandHandlerTests
                 new UpdateProposalStatusRequest { Status = 1 }),
             CancellationToken.None));
 
-        Assert.Contains("must equal", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("duration", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(0, proposal.Status);
     }
 
@@ -307,6 +327,7 @@ public class UpdateProposalStatusCommandHandlerTests
             ProposalsId = proposal.ProposalsId,
             Title = "Delivery",
             Amount = 500m,
+            EstimatedDuration = "1 week",
             Deliverables = "Production-ready implementation",
             AcceptanceCriteria = "All agreed acceptance tests pass"
         });

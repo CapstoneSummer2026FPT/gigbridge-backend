@@ -2,6 +2,7 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Features.Chat.Common.Negotiations.MilestonePlans.DTOs;
+using Application.Features.Proposals.Common;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
@@ -39,6 +40,11 @@ public sealed class UpdateNegotiationMilestonePlanCommandHandler
             item => item.ConversationsId == command.ConversationId && item.DeletedAt == null,
             cancellationToken);
         if (!conversationExists) throw new NotFoundException("Conversation does not exist.");
+
+        if (command.Request.Milestones.Any(item => !ProposalTotalsCalculator.IsValidDraftAmount(item.Amount)))
+        {
+            throw new BadRequestException("Milestone amounts cannot be negative, may use at most 2 decimal places, and must fit decimal(18,2).");
+        }
 
         var existing = await _context.Set<NegotiationMilestoneDraft>()
             .Where(item => item.ConversationsId == command.ConversationId)

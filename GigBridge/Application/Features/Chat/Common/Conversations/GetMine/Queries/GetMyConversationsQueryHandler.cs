@@ -40,6 +40,8 @@ public class GetMyConversationsQueryHandler
                 conversation.DeletedAt == null)
             .Include(conversation => conversation.JobPosts)
                 .ThenInclude(jobPost => jobPost!.MajorCategory)
+                    .ThenInclude(majorCategory => majorCategory!.Category)
+            .Include(conversation => conversation.Proposals)
             .OrderByDescending(conversation => conversation.LastMessageAt ?? conversation.CreatedAt)
             .ToListAsync(cancellationToken);
 
@@ -129,7 +131,13 @@ public class GetMyConversationsQueryHandler
                     otherParticipant?.User?.FreelancerProfile?.Title,
                     latestOffer?.NegotiationOfferId,
                     latestOffer?.FinalPrice,
-                    latestOffer?.Status
+                    latestOffer?.Status,
+                    conversation.JobPosts?.BudgetMin,
+                    conversation.JobPosts?.BudgetMax,
+                    conversation.JobPosts?.Currency,
+                    conversation.JobPosts?.MajorCategory?.Category?.Name,
+                    conversation.Proposals?.ProposedBudget,
+                    conversation.Proposals?.ProposedDuration
                 );
             })
             .ToList();

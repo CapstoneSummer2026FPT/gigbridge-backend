@@ -38,15 +38,10 @@ internal static class ProposalSubmissionGuard
                 string.IsNullOrWhiteSpace(item.Title) ||
                 string.IsNullOrWhiteSpace(item.Deliverables) ||
                 string.IsNullOrWhiteSpace(item.AcceptanceCriteria) ||
+                !ProposalTotalsCalculator.IsValidDuration(item.EstimatedDuration) ||
                 item.Amount <= 0))
         {
-            throw new BadRequestException("Each milestone requires a title, positive amount, deliverables, and acceptance criteria before submission.");
-        }
-
-        var milestoneTotal = proposal.ProposalMilestonePlans.Sum(item => item.Amount);
-        if (milestoneTotal != proposal.ProposedBudget.Value)
-        {
-            throw new BadRequestException("Milestone total must equal the proposed budget before submission.");
+            throw new BadRequestException("Each milestone requires a title, positive amount, positive whole-number duration, deliverables, and acceptance criteria before submission.");
         }
     }
 }

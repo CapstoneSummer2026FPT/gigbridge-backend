@@ -54,15 +54,14 @@ public class UpdateProposalCommandHandler : IRequestHandler<UpdateProposalComman
             throw new Exception("Only pending proposal can be updated.");
         }
 
+        var milestonePlans = (command.Request.MilestonePlans ?? []).ToList();
+
         proposal.CoverLetter = string.IsNullOrWhiteSpace(command.Request.CoverLetter)
             ? null
             : command.Request.CoverLetter.Trim();
 
-        proposal.ProposedBudget = command.Request.ProposedBudget;
-
-        proposal.ProposedDuration = string.IsNullOrWhiteSpace(command.Request.ProposedDuration)
-            ? null
-            : command.Request.ProposedDuration.Trim();
+        proposal.ProposedBudget = ProposalTotalsCalculator.ResolveBudget(command.Request.ProposedBudget, milestonePlans);
+        proposal.ProposedDuration = ProposalTotalsCalculator.ResolveDuration(command.Request.ProposedDuration, milestonePlans);
 
         proposal.AnalysisSummary = ProposalPlanMapper.Clean(command.Request.AnalysisSummary);
         proposal.SolutionApproach = ProposalPlanMapper.Clean(command.Request.SolutionApproach);
@@ -76,7 +75,7 @@ public class UpdateProposalCommandHandler : IRequestHandler<UpdateProposalComman
         proposal.ProposalWorkBreakdownItems = (command.Request.WorkBreakdownItems ?? [])
             .Select((item, index) => ProposalPlanMapper.ToEntity(proposal.ProposalsId, item, index))
             .ToList();
-        proposal.ProposalMilestonePlans = (command.Request.MilestonePlans ?? [])
+        proposal.ProposalMilestonePlans = milestonePlans
             .Select((item, index) => ProposalPlanMapper.ToEntity(proposal.ProposalsId, item, index))
             .ToList();
 

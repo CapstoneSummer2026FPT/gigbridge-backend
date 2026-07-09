@@ -81,10 +81,12 @@ public class AcceptProposalForNegotiationCommandHandler : IRequestHandler<Accept
             throw new BadRequestException("Job post is no longer open for negotiations.");
         }
 
-        if (proposal.Status != 1 && proposal.Status != 2) // 1=Pending, 2=Shortlisted
+        if (proposal.Status != 1 && proposal.Status != 2 && proposal.Status != 3) // Accepted may reopen its existing negotiation.
         {
-            throw new BadRequestException("Proposal must be Pending or Shortlisted to start negotiation.");
+            throw new BadRequestException("Proposal must be Pending, Shortlisted, or Accepted to open negotiation.");
         }
+
+        var shouldNotifyNegotiationStart = proposal.Status is 1 or 2;
 
         var now = _dateTimeService.UtcNow;
 
@@ -161,7 +163,7 @@ public class AcceptProposalForNegotiationCommandHandler : IRequestHandler<Accept
             await NotifyConversationUpdated(conversationId, conversation.LastMessageAt, cancellationToken);
         }
 
-        if (isFirstTime)
+        if (isFirstTime && shouldNotifyNegotiationStart)
         {
             if (proposal.Status == 1) // Pending
             {
