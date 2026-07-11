@@ -98,6 +98,7 @@ public class GetAllFreelancersQueryHandler
                 item.StartDate <= now &&
                 item.EndDate > now &&
                 item.SubscriptionPlans.IsActive == true &&
+                item.SubscriptionPlans.Price > 0 &&
                 (item.SubscriptionPlans.TargetRole == null ||
                  item.SubscriptionPlans.TargetRole == (int)UserRole.Freelancer))
             .GroupBy(item => item.UserId)

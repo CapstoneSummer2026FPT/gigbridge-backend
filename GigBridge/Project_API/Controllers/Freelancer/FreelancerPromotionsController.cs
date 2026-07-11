@@ -2,7 +2,6 @@ using Application.Common.Models;
 using Application.Features.Premium.Freelancer.Promotions.DTOs;
 using Application.Features.Premium.Freelancer.Promotions.GetCurrent;
 using Application.Features.Premium.Freelancer.Promotions.GetHistory;
-using Application.Features.Premium.Freelancer.Promotions.GetPackages;
 using Application.Features.Premium.Freelancer.Promotions.Purchase;
 using Application.Features.Premium.Freelancer.Promotions.Boost;
 using Application.Features.Premium.Freelancer.Promotions.GetDraft;
@@ -20,11 +19,6 @@ namespace Project_API.Controllers.Freelancer;
 [Route("api/freelancer/premium/promotions")]
 public sealed class FreelancerPromotionsController : BaseApiController
 {
-    [HttpGet("packages")]
-    public async Task<IActionResult> Packages(CancellationToken ct) =>
-        Ok(ApiResponse<IReadOnlyList<PromotionPackageDto>>.Ok(
-            await Mediator.Send(new GetPromotionPackagesQuery(), ct), "Success"));
-
     [HttpGet("draft")]
     public async Task<IActionResult> Draft(CancellationToken ct)
     {
