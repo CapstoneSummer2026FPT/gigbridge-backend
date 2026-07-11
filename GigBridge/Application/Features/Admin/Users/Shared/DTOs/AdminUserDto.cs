@@ -17,6 +17,8 @@ public class AdminUserDto
     public string? Provider { get; init; }
     public int OpenReportCount { get; set; }
     public bool IsCurrentlyReported { get; set; }
+    public bool IsPremium { get; set; }
+    public DateTime? PremiumUntil { get; set; }
     public DateTime CreatedAt { get; init; }
     public DateTime? UpdatedAt { get; init; }
 }

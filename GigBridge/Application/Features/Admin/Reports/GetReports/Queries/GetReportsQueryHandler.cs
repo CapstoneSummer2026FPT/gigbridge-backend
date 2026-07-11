@@ -26,6 +26,7 @@ public class GetReportsQueryHandler : IRequestHandler<GetReportsQuery, ReportsRe
             .Include(report => report.Reporter)
             .Include(report => report.ResolvedByAdmin)
             .AsQueryable();
+        var now = DateTime.UtcNow;
 
         if (request.Status.HasValue)
         {
@@ -68,9 +69,27 @@ public class GetReportsQueryHandler : IRequestHandler<GetReportsQuery, ReportsRe
                          EF.Functions.Like(user.Email, keyword)))));
         }
 
+        if (request.IsPremium.HasValue)
+        {
+            query = query.Where(report =>
+                _context.Set<Subscription>().Any(subscription =>
+                    subscription.UserId == report.ReporterId &&
+                    subscription.Status == SubscriptionStatus.Active &&
+                    subscription.StartDate <= now &&
+                    subscription.EndDate > now) == request.IsPremium.Value);
+        }
+
         var total = await query.CountAsync(cancellationToken);
         var reports = await query
-            .OrderByDescending(report => report.CreatedAt)
+            .OrderByDescending(report =>
+                _context.Set<Subscription>().Any(subscription =>
+                    subscription.UserId == report.ReporterId &&
+                    subscription.Status == SubscriptionStatus.Active &&
+                    subscription.StartDate <= now &&
+                    subscription.EndDate > now))
+            .ThenBy(report => report.Status)
+            .ThenByDescending(report => report.CreatedAt)
+            .ThenBy(report => report.ReportsId)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(cancellationToken);

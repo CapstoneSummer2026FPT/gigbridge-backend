@@ -9,6 +9,8 @@ using Application.Features.Admin.Users.GetAllUser.Queries;
 using Application.Features.Admin.Users.GetClientByEmail.Queries;
 using Application.Features.Admin.Users.GetFreelancerByEmail.Queries;
 using Application.Features.Admin.Users.Shared.DTOs;
+using Application.Features.Admin.Users.Premium.Grant.Commands;
+using Application.Features.Admin.Users.Premium.Revoke.Commands;
 using Application.Features.Admin.Users.SuspendUser.Commands;
 using Application.Features.Admin.Users.SuspendUser.DTOs;
 using Application.Features.Admin.Users.ToggleUserActivity.Commands;
@@ -121,6 +123,20 @@ public class AdminUserController : BaseApiController
             return NotFound(ApiResponse<object>.NotFound("User not found"));
 
         return Ok(ApiResponse<AdminUserDto>.Ok(user, "User suspension cleared successfully"));
+    }
+
+    [HttpPost("{userId:guid}/premium")]
+    public async Task<IActionResult> GrantPremium(Guid userId)
+    {
+        var changed = await Mediator.Send(new GrantUserPremiumCommand(userId));
+        return Ok(ApiResponse<object>.Ok(new { changed }, changed ? "Premium granted" : "User is already Premium"));
+    }
+
+    [HttpDelete("{userId:guid}/premium")]
+    public async Task<IActionResult> RevokePremium(Guid userId)
+    {
+        var changed = await Mediator.Send(new RevokeUserPremiumCommand(userId));
+        return Ok(ApiResponse<object>.Ok(new { changed }, changed ? "Premium revoked" : "User is not Premium"));
     }
 
     [HttpDelete]

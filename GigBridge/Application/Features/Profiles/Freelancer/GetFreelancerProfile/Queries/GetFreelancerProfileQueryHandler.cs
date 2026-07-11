@@ -6,6 +6,7 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Features.Profiles.FreelancerProfile.GetFreelancerProfile.DTOs;
+using Application.Features.Premium.Common;
 using Domain.Entities;
 using Domain.Enums;
 using Domain.Services;
@@ -20,13 +21,16 @@ public class GetFreelancerProfileQueryHandler
 {
     private readonly IApplicationDbContext _context;
     private readonly ICurrentUserService _currentUserService;
+    private readonly IPremiumAccessService _premiumAccessService;
 
     public GetFreelancerProfileQueryHandler(
         IApplicationDbContext context,
-        ICurrentUserService currentUserService)
+        ICurrentUserService currentUserService,
+        IPremiumAccessService premiumAccessService)
     {
         _context = context;
         _currentUserService = currentUserService;
+        _premiumAccessService = premiumAccessService;
     }
 
     public async Task<FreelancerProfileDetailDto> Handle(
@@ -54,6 +58,19 @@ public class GetFreelancerProfileQueryHandler
             .Where(r => r.RevieweeId == request.UserId)
             .AverageAsync(r => (double?)r.Rating, cancellationToken) ?? 0.0;
 
+        var premium = await _premiumAccessService.GetPremiumBenefitsAsync(request.UserId, cancellationToken);
+        PremiumTierResult? tier = null;
+        if (premium.IsPremium)
+        {
+            var tierSetting = await _context.Set<PlatformSetting>()
+                .AsNoTracking()
+                .Where(item => item.Key == PremiumTierCalculator.SettingKey)
+                .Select(item => item.Value)
+                .FirstOrDefaultAsync(cancellationToken);
+            tier = PremiumTierCalculator.Calculate(
+                freelancerProfile.User.UserEloScore?.CurrentPoints ?? UserEloCalculator.DefaultPoints,
+                tierSetting);
+        }
         var detailDto = new FreelancerProfileDetailDto
         {
             FreelancerProfilesId = freelancerProfile.FreelancerProfilesId,
@@ -71,6 +88,12 @@ public class GetFreelancerProfileQueryHandler
             UserAvatar = freelancerProfile.User.Avatar,
             Rating = Math.Round(avgRating, 1),
             EloPoints = freelancerProfile.User.UserEloScore?.CurrentPoints ?? UserEloCalculator.DefaultPoints,
+            IsPremium = premium.IsPremium,
+            IsIdentityVerified = premium.IsIdentityVerified,
+            ShowProVerifiedBadge = premium.ShowProVerifiedBadge,
+            PremiumUntil = premium.PremiumUntil,
+            TierName = tier?.Name,
+            TierProgress = tier?.Progress ?? 0m,
 
             Skills = freelancerProfile.FreelancerSkills.Select(fs => new FreelancerSkillDto
             {

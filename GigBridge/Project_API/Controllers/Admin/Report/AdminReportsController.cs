@@ -26,9 +26,10 @@ public class AdminReportsController : BaseApiController
         [FromQuery] ReportType? type = null,
         [FromQuery] string? reportedEntityType = null,
         [FromQuery] Guid? reportedEntityId = null,
-        [FromQuery] string? search = null)
+        [FromQuery] string? search = null,
+        [FromQuery] bool? isPremium = null)
     {
-        var result = await Mediator.Send(new GetReportsQuery(page, pageSize, status, type, reportedEntityType, reportedEntityId, search));
+        var result = await Mediator.Send(new GetReportsQuery(page, pageSize, status, type, reportedEntityType, reportedEntityId, search, isPremium));
         return Ok(ApiResponse<ReportsResponse>.Ok(result, "Reports retrieved successfully."));
     }
 
