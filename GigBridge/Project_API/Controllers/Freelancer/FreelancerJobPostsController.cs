@@ -1,6 +1,8 @@
 using Application.Common.Models;
+using Application.Features.JobPosts.Freelancer.GetMyAppliedJobPostDetail.Queries;
 using Application.Features.JobPosts.Freelancer.GetMyAppliedJobPosts.Queries;
 using Application.Features.JobPosts.Public.GetAvailableJobPosts.DTOs;
+using Application.Features.JobPosts.Public.GetJobPostDetail.DTOs;
 using Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -30,5 +32,17 @@ public class FreelancerJobPostsController : BaseApiController
 
         var result = await Mediator.Send(query);
         return Ok(ApiResponse<IEnumerable<JobPostSummaryDto>>.Ok(result, "Success"));
+    }
+
+    [HttpGet("my-applications/{jobPostId}")]
+    public async Task<IActionResult> GetMyAppliedJobPostDetail(Guid jobPostId)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return InvalidTokenResponse();
+        }
+
+        var result = await Mediator.Send(new GetMyAppliedJobPostDetailQuery(userId, jobPostId));
+        return Ok(ApiResponse<JobPostDetailDto>.Ok(result, "Success"));
     }
 }

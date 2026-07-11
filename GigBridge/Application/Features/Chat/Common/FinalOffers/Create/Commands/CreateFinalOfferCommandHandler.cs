@@ -3,6 +3,7 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Features.Chat.Common.Messages.Send.DTOs;
+using Application.Features.JobPosts.Common;
 using Application.Features.Proposals.Common;
 using Domain.Entities;
 using Domain.Enums;
@@ -65,6 +66,11 @@ public class CreateFinalOfferCommandHandler : IRequestHandler<CreateFinalOfferCo
         {
             throw new ForbiddenAccessException("Only the client participant can create a final offer.");
         }
+
+        await JobPostNegotiationGuard.EnsureEligibleForNegotiationAsync(
+            _context,
+            conversation.JobPostsId.Value,
+            cancellationToken);
 
         ValidateRequest(request.FinalPrice, request.StartDate, request.EndDate, request.Milestones);
 

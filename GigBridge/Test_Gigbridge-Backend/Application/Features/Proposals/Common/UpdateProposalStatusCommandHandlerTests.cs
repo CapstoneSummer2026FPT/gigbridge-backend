@@ -272,6 +272,23 @@ public class UpdateProposalStatusCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_WithdrawShortlistedProposal_ThrowsBadRequest()
+    {
+        var (handler, proposal, userId) = CreateDraftSubmissionHandler();
+        proposal.Status = 2;
+
+        var exception = await Assert.ThrowsAsync<BadRequestException>(() => handler.Handle(
+            new UpdateProposalStatusCommand(
+                proposal.ProposalsId,
+                userId,
+                new UpdateProposalStatusRequest { Status = 5 }),
+            CancellationToken.None));
+
+        Assert.Contains("withdraw a pending proposal", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(2, proposal.Status);
+    }
+
+    [Fact]
     public async Task Handle_SubmitDraftWithoutMilestoneDuration_ThrowsBadRequest()
     {
         var (handler, proposal, userId) = CreateDraftSubmissionHandler();
@@ -286,6 +303,66 @@ public class UpdateProposalStatusCommandHandlerTests
 
         Assert.Contains("duration", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(0, proposal.Status);
+    }
+
+    [Fact]
+    public async Task Handle_SubmitDraftWhenJobPostClosed_ThrowsBadRequest()
+    {
+        var (handler, proposal, userId) = CreateDraftSubmissionHandler();
+        proposal.JobPosts.Status = 2;
+
+        var exception = await Assert.ThrowsAsync<BadRequestException>(() => handler.Handle(
+            new UpdateProposalStatusCommand(
+                proposal.ProposalsId,
+                userId,
+                new UpdateProposalStatusRequest { Status = 1 }),
+            CancellationToken.None));
+
+        Assert.Contains("not accepting proposals", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(0, proposal.Status);
+    }
+
+    [Fact]
+    public async Task Handle_ClientShortlistWhenJobPostClosed_ThrowsBadRequest()
+    {
+        var now = new DateTime(2026, 7, 5, 10, 0, 0, DateTimeKind.Utc);
+        var context = new InMemoryApplicationDbContext();
+        var clientUserId = Guid.NewGuid();
+        var clientProfileId = Guid.NewGuid();
+        var jobPost = new JobPost
+        {
+            JobPostsId = Guid.NewGuid(),
+            ClientProfilesId = clientProfileId,
+            Title = "Closed project request",
+            Description = "This job is no longer open.",
+            Status = 2,
+            CreatedAt = now
+        };
+        var proposal = new Proposal
+        {
+            ProposalsId = Guid.NewGuid(),
+            JobPostsId = jobPost.JobPostsId,
+            FreelancerProfilesId = Guid.NewGuid(),
+            ProposedBudget = 500m,
+            Status = 1,
+            JobPosts = jobPost
+        };
+
+        context.AddSet(new ClientProfile { ClientProfilesId = clientProfileId, UserId = clientUserId });
+        context.AddSet(jobPost);
+        context.AddSet(proposal);
+
+        var handler = new UpdateProposalStatusCommandHandler(context, new FixedDateTimeService(now));
+
+        var exception = await Assert.ThrowsAsync<BadRequestException>(() => handler.Handle(
+            new UpdateProposalStatusCommand(
+                proposal.ProposalsId,
+                clientUserId,
+                new UpdateProposalStatusRequest { Status = 2 }),
+            CancellationToken.None));
+
+        Assert.Contains("no longer open", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(1, proposal.Status);
     }
 
     private static (UpdateProposalStatusCommandHandler Handler, Proposal Proposal, Guid UserId) CreateDraftSubmissionHandler()

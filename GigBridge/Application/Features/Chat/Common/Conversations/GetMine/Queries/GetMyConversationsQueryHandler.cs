@@ -2,6 +2,7 @@ using Application.Common.Interfaces;
 using Application.Features.Chat.Common.Conversations.GetMine.DTOs;
 using Application.Features.Chat.Common.Messages.GetConversationMessages.DTOs;
 using Application.Features.Chat.Common.Messages.Send.DTOs;
+using Application.Features.JobPosts.Common;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -137,7 +138,13 @@ public class GetMyConversationsQueryHandler
                     conversation.JobPosts?.Currency,
                     conversation.JobPosts?.MajorCategory?.Category?.Name,
                     conversation.Proposals?.ProposedBudget,
-                    conversation.Proposals?.ProposedDuration
+                    conversation.Proposals?.ProposedDuration,
+                    conversation.JobPosts?.Status,
+                    conversation.JobPosts?.Visibility,
+                    conversation.JobPosts is not null &&
+                        JobPostNegotiationGuard.IsEligibleForNegotiation(
+                            conversation.JobPosts.Status,
+                            conversation.JobPosts.Visibility)
                 );
             })
             .ToList();

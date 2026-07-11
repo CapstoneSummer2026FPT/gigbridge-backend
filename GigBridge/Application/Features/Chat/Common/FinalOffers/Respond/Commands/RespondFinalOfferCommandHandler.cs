@@ -3,6 +3,7 @@ using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Features.Chat.Common.FinalOffers.Respond.DTOs;
 using Application.Features.Chat.Common.Messages.Send.DTOs;
+using Application.Features.JobPosts.Common;
 using Application.Features.Wallets.Common;
 using Domain.Entities;
 using Domain.Enums;
@@ -69,6 +70,11 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
         {
             throw new ForbiddenAccessException("You are not the freelancer selected for this final offer.");
         }
+
+        await JobPostNegotiationGuard.EnsureEligibleForNegotiationAsync(
+            _context,
+            offer.JobPostsId,
+            cancellationToken);
 
         var conversation = await _context.Set<Conversation>()
             .FirstOrDefaultAsync(
