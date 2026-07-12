@@ -481,8 +481,8 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<string>("Currency")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
-                        .HasMaxLength(5)
-                        .HasColumnType("character varying(5)")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
                         .HasDefaultValueSql("'VND'::character varying");
 
                     b.Property<decimal>("FundedAmount")
@@ -1475,6 +1475,158 @@ namespace Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("FreelancerProfiles");
+                });
+
+            modelBuilder.Entity("Domain.Entities.FreelancerProfilePromotion", b =>
+                {
+                    b.Property<Guid>("FreelancerProfilePromotionsId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateTime?>("ActivatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("BoostWeight")
+                        .HasPrecision(10, 4)
+                        .HasColumnType("numeric(10,4)");
+
+                    b.Property<DateTime?>("CancelledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("ClickCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<int>("DurationDays")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("EndTime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("ExpiredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("FreelancerProfileId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ImpressionCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("JobTitle")
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<string>("PackageId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("PackageName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("PhotoUrl")
+                        .IsRequired()
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
+
+                    b.Property<string>("PurchaseIdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Quote")
+                        .HasMaxLength(240)
+                        .HasColumnType("character varying(240)");
+
+                    b.Property<bool>("ShowJobTitle")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("ShowQuote")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("StartTime")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TargetClickCount")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("TokenCost")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<Guid?>("WalletTransactionId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("FreelancerProfilePromotionsId")
+                        .HasName("FreelancerProfilePromotions_pkey");
+
+                    b.HasIndex("WalletTransactionId")
+                        .IsUnique();
+
+                    b.HasIndex("FreelancerProfileId", "PurchaseIdempotencyKey")
+                        .IsUnique();
+
+                    b.HasIndex(new[] { "EndTime" }, "IX_FreelancerProfilePromotions_End");
+
+                    b.HasIndex(new[] { "FreelancerProfileId", "Status", "StartTime" }, "IX_FreelancerProfilePromotions_Queue");
+
+                    b.HasIndex(new[] { "FreelancerProfileId" }, "UX_FreelancerProfilePromotions_OneActive")
+                        .IsUnique()
+                        .HasFilter("\"Status\" = 1");
+
+                    b.ToTable("FreelancerProfilePromotions");
+                });
+
+            modelBuilder.Entity("Domain.Entities.FreelancerRankProtection", b =>
+                {
+                    b.Property<Guid>("FreelancerRankProtectionsId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateTime?>("CancelledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("FreelancerProfileId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsVacationModeEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime>("RankProtectionEndsAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RankProtectionReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime>("RankProtectionStartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("FreelancerRankProtectionsId")
+                        .HasName("FreelancerRankProtections_pkey");
+
+                    b.HasIndex(new[] { "RankProtectionEndsAt" }, "IX_FreelancerRankProtections_End");
+
+                    b.HasIndex(new[] { "FreelancerProfileId", "IsVacationModeEnabled" }, "IX_FreelancerRankProtections_Profile_Active");
+
+                    b.ToTable("FreelancerRankProtections");
                 });
 
             modelBuilder.Entity("Domain.Entities.FreelancerSkill", b =>
@@ -2592,7 +2744,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.Property<int>("Type")
                         .HasColumnType("integer")
-                        .HasComment("Enum NotificationType: 0=NewJob, 1=ProposalReceived, 2=ProposalStatusChanged, 3=ContractStarted, 4=MilestoneUpdated, 5=PaymentProofUploaded, 6=PaymentConfirmed, 7=ChatMessage, 8=DisputeUpdate, 9=ReviewReceived, 10=SystemAlert, 11=AIInterviewInvite, 12=SubscriptionExpiring");
+                        .HasComment("Enum NotificationType: 0=NewJob, 1=ProposalReceived, 2=ProposalStatusChanged, 3=ContractStarted, 4=MilestoneUpdated, 5=PaymentProofUploaded, 6=PaymentConfirmed, 7=ChatMessage, 8=DisputeUpdate, 9=ReviewReceived, 10=SystemAlert, 11=AIInterviewInvite, 12=SubscriptionExpiring, 13=Schedule, 14=SubscriptionActivated, 15=SubscriptionCancelled, 16=PromotionActivated, 17=PromotionExpired, 18=RankProtectionActivated, 19=RankProtectionExpired");
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid")
@@ -4036,6 +4188,12 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("UserId");
 
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1);
+
                     b.HasKey("UserWalletsId")
                         .HasName("UserWallets_pkey");
 
@@ -4113,7 +4271,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.Property<int>("Type")
                         .HasColumnType("integer")
-                        .HasComment("Enum WalletTransactionType: 0=AdminCredit, 1=TopUp, 2=EscrowHold, 3=EscrowRelease, 4=EscrowRefund, 5=Adjustment, 6=WithdrawalLock, 7=WithdrawalSuccess, 8=WithdrawalRefund, 9=WithdrawalFee");
+                        .HasComment("Enum WalletTransactionType: 0=AdminCredit, 1=TopUp, 2=EscrowHold, 3=EscrowRelease, 4=EscrowRefund, 5=Adjustment, 6=WithdrawalLock, 7=WithdrawalSuccess, 8=WithdrawalRefund, 9=WithdrawalFee, 10=SubscriptionPurchase, 11=PromotionPurchase");
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid")
@@ -4780,6 +4938,36 @@ namespace Infrastructure.Persistence.Migrations
                         .HasConstraintName("FreelancerProfiles_usr_UserId_fkey");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Domain.Entities.FreelancerProfilePromotion", b =>
+                {
+                    b.HasOne("Domain.Entities.FreelancerProfile", "FreelancerProfile")
+                        .WithMany("Promotions")
+                        .HasForeignKey("FreelancerProfileId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Domain.Entities.WalletTransaction", "WalletTransaction")
+                        .WithOne()
+                        .HasForeignKey("Domain.Entities.FreelancerProfilePromotion", "WalletTransactionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("FreelancerProfile");
+
+                    b.Navigation("WalletTransaction");
+                });
+
+            modelBuilder.Entity("Domain.Entities.FreelancerRankProtection", b =>
+                {
+                    b.HasOne("Domain.Entities.FreelancerProfile", "FreelancerProfile")
+                        .WithMany("RankProtections")
+                        .HasForeignKey("FreelancerProfileId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FreelancerRankProtections_FreelancerProfileId_fkey");
+
+                    b.Navigation("FreelancerProfile");
                 });
 
             modelBuilder.Entity("Domain.Entities.FreelancerSkill", b =>
@@ -5679,7 +5867,11 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.Navigation("PortfolioItems");
 
+                    b.Navigation("Promotions");
+
                     b.Navigation("Proposals");
+
+                    b.Navigation("RankProtections");
 
                     b.Navigation("SavedFreelancers");
 

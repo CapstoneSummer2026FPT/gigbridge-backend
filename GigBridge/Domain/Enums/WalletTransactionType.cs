@@ -11,5 +11,7 @@ public enum WalletTransactionType
     WithdrawalLock = 6,
     WithdrawalSuccess = 7,
     WithdrawalRefund = 8,
-    WithdrawalFee = 9
+    WithdrawalFee = 9,
+    SubscriptionPurchase = 10,
+    PromotionPurchase = 11
 }

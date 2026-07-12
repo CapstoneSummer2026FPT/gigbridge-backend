@@ -29,6 +29,8 @@ public partial class FreelancerProfile
     public virtual ICollection<Contract> Contracts { get; set; } = new List<Contract>();
 
     public virtual ICollection<FreelancerSkill> FreelancerSkills { get; set; } = new List<FreelancerSkill>();
+    public virtual ICollection<FreelancerRankProtection> RankProtections { get; set; } = new List<FreelancerRankProtection>();
+    public virtual ICollection<FreelancerProfilePromotion> Promotions { get; set; } = new List<FreelancerProfilePromotion>();
 
     public virtual ICollection<PortfolioItem> PortfolioItems { get; set; } = new List<PortfolioItem>();
 

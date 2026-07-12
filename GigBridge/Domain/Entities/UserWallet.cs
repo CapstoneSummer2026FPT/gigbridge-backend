@@ -19,6 +19,8 @@ public partial class UserWallet
 
     public DateTime? UpdatedAt { get; set; }
 
+    public int Version { get; set; } = 1;
+
     public virtual User User { get; set; } = null!;
 
     public virtual ICollection<WalletTransaction> WalletTransactions { get; set; } = new List<WalletTransaction>();

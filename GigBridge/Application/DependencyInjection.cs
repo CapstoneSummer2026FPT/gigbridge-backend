@@ -58,6 +58,7 @@ public static class DependencyInjection
         services.AddScoped<ScheduleWorkflowService>();
         services.AddScoped<IUserAccountStatusService, UserAccountStatusService>();
         services.AddScoped<IUserEloService, UserEloService>();
+        services.AddScoped<IPremiumAccessService, PremiumAccessService>();
         services.AddScoped<IProposalCheatingService, ProposalCheatingService>();
         services.AddScoped<IProposalQuestionTimerService, ProposalQuestionTimerService>();
         services.AddScoped<IProposalInterviewReviewService, ProposalInterviewReviewService>();
