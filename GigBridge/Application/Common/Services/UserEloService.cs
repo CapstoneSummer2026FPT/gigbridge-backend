@@ -48,7 +48,11 @@ public class UserEloService : IUserEloService
         var score = await EnsureScoreAsync(user.UserId, now, cancellationToken);
 
         var previousLastActivityAt = score.LastActivityAt;
-        var inactivityPenalty = UserEloCalculator.CalculateInactivityPenalty(previousLastActivityAt, now);
+        var protectedDuration = user.Role == (int)UserRole.Freelancer
+            ? await GetProtectedDurationAsync(user.UserId, previousLastActivityAt, now, cancellationToken)
+            : TimeSpan.Zero;
+        var effectiveInactiveFrom = previousLastActivityAt + protectedDuration;
+        var inactivityPenalty = UserEloCalculator.CalculateInactivityPenalty(effectiveInactiveFrom, now);
         if (inactivityPenalty < 0 && ShouldApplyInactivityPenalty(score, previousLastActivityAt))
         {
             await ApplyDeltaAsync(
@@ -62,6 +66,7 @@ public class UserEloService : IUserEloService
                 {
                     inactiveFrom = previousLastActivityAt,
                     inactiveUntil = now,
+                    protectedDays = protectedDuration.TotalDays,
                     requestedDelta = inactivityPenalty
                 },
                 now,
@@ -313,6 +318,39 @@ public class UserEloService : IUserEloService
         var transactions = _context.Set<UserEloPointTransaction>();
         return transactions.Local.Any(transaction => transaction.IdempotencyKey == idempotencyKey)
             || await transactions.AnyAsync(transaction => transaction.IdempotencyKey == idempotencyKey, cancellationToken);
+    }
+
+    private async Task<TimeSpan> GetProtectedDurationAsync(
+        Guid userId,
+        DateTime inactiveFrom,
+        DateTime inactiveUntil,
+        CancellationToken cancellationToken)
+    {
+        var windows = await _context.Set<FreelancerRankProtection>()
+            .AsNoTracking()
+            .Where(item =>
+                item.FreelancerProfile.UserId == userId &&
+                item.RankProtectionStartedAt < inactiveUntil &&
+                item.RankProtectionEndsAt > inactiveFrom)
+            .Select(item => new
+            {
+                item.RankProtectionStartedAt,
+                item.RankProtectionEndsAt,
+                item.CancelledAt
+            })
+            .ToListAsync(cancellationToken);
+
+        var ticks = windows.Sum(window =>
+        {
+            var start = window.RankProtectionStartedAt > inactiveFrom
+                ? window.RankProtectionStartedAt : inactiveFrom;
+            var recordedEnd = window.CancelledAt.HasValue &&
+                              window.CancelledAt.Value < window.RankProtectionEndsAt
+                ? window.CancelledAt.Value : window.RankProtectionEndsAt;
+            var end = recordedEnd < inactiveUntil ? recordedEnd : inactiveUntil;
+            return end > start ? (end - start).Ticks : 0;
+        });
+        return TimeSpan.FromTicks(Math.Min(ticks, (inactiveUntil - inactiveFrom).Ticks));
     }
 
     private static bool IsEligibleRole(int role)

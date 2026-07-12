@@ -20,6 +20,12 @@ public class FreelancerProfileDetailDto
     public string? UserAvatar { get; set; }
     public double Rating { get; set; }
     public int EloPoints { get; set; }
+    public bool IsPremium { get; set; }
+    public bool IsIdentityVerified { get; set; }
+    public bool ShowProVerifiedBadge { get; set; }
+    public DateTime? PremiumUntil { get; set; }
+    public string? TierName { get; set; }
+    public decimal TierProgress { get; set; }
 
     public List<FreelancerSkillDto> Skills { get; set; } = new();
     public List<PortfolioItemDto> PortfolioItems { get; set; } = new();

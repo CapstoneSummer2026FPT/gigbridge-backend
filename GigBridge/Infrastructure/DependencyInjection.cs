@@ -161,6 +161,7 @@ public static class DependencyInjection
         services.AddTransient<IDateTimeService, DateTimeService>();
         services.AddScoped<IContentModerationService, ContentModerationService>();
         services.AddScoped<IWalletTopUpPaymentService, PayOsWalletTopUpPaymentService>();
+        services.AddScoped<IWalletLedgerService, WalletLedgerService>();
         services.AddScoped<IBankAccountProtector, BankAccountProtector>();
         services.AddScoped<IPayOsPaymentLinkClient>(provider =>
             new PayOsPaymentLinkClient(provider.GetRequiredKeyedService<PayOSClient>("OrderClient")));
@@ -238,6 +239,7 @@ public static class DependencyInjection
 
         services.AddScoped<IGoogleMeetOAuthService, GoogleMeetOAuthService>();
         services.AddHostedService<GoogleMeetProvisioningWorker>();
+        services.AddHostedService<PremiumExpiryWorker>();
 
         // Data Protection for encrypted tokens
         services.AddDataProtection();

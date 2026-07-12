@@ -11,4 +11,5 @@ public record GetReportsQuery(
     ReportType? Type = null,
     string? ReportedEntityType = null,
     Guid? ReportedEntityId = null,
-    string? Search = null) : IRequest<ReportsResponse>;
+    string? Search = null,
+    bool? IsPremium = null) : IRequest<ReportsResponse>;
