@@ -7,8 +7,10 @@ public sealed record WalletResponse(
     Guid UserId,
     decimal AvailableTokens,
     decimal HeldTokens,
+    decimal PendingWithdrawalTokens,
     decimal AvailableVnd,
-    decimal HeldVnd)
+    decimal HeldVnd,
+    decimal PendingWithdrawalVnd)
 {
     public static WalletResponse FromEntity(Domain.Entities.UserWallet wallet)
     {
@@ -17,7 +19,9 @@ public sealed record WalletResponse(
             wallet.UserId,
             wallet.AvailableTokens,
             wallet.HeldTokens,
+            wallet.PendingWithdrawalTokens,
             TokenWalletRules.ToVnd(wallet.AvailableTokens),
-            TokenWalletRules.ToVnd(wallet.HeldTokens));
+            TokenWalletRules.ToVnd(wallet.HeldTokens),
+            TokenWalletRules.ToVnd(wallet.PendingWithdrawalTokens));
     }
 }

@@ -46,6 +46,8 @@ public class GetJobPostDetailQueryHandler : IRequestHandler<GetJobPostDetailQuer
         return new JobPostDetailDto(
             JobPostsId: jobPost.JobPostsId,
             ClientProfilesId: jobPost.ClientProfilesId,
+            ClientFullName: jobPost.ClientProfiles?.User?.FullName
+                            ?? jobPost.ClientProfiles?.CompanyName,
             Title: jobPost.Title,
             Description: jobPost.Description,
             MajorCategoryId: jobPost.MajorCategoryId,
@@ -58,6 +60,8 @@ public class GetJobPostDetailQueryHandler : IRequestHandler<GetJobPostDetailQuer
             Currency: jobPost.Currency,
             EstimatedDuration: jobPost.EstimatedDuration,
             Location: jobPost.Location,
+            Status: jobPost.Status,
+            Visibility: jobPost.Visibility,
             EndDate: jobPost.EndDate,
             CreatedAt: jobPost.CreatedAt,
             EloPoints: jobPost.ClientProfiles?.User?.UserEloScore?.CurrentPoints ?? UserEloCalculator.DefaultPoints,

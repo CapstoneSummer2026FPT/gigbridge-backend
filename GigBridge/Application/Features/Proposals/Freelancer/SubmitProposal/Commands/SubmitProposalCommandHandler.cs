@@ -1,6 +1,8 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Application.Features.JobPosts.Common;
+using Application.Features.Proposals.Common;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -40,17 +42,32 @@ public class SubmitProposalCommandHandler : IRequestHandler<SubmitProposalComman
         EnsureJobPostAcceptsProposals(jobPost);
         await EnsureProposalHasNotBeenSubmittedAsync(command, freelancerProfile.FreelancerProfilesId, cancellationToken);
 
+        var proposalId = Guid.NewGuid();
+        var milestonePlans = (command.Request.MilestonePlans ?? []).ToList();
         var proposal = new Proposal
         {
-            ProposalsId = Guid.NewGuid(),
+            ProposalsId = proposalId,
             JobPostsId = command.Request.JobPostsId,
             FreelancerProfilesId = freelancerProfile.FreelancerProfilesId,
             CoverLetter = command.Request.CoverLetter?.Trim(),
-            ProposedBudget = command.Request.ProposedBudget,
-            ProposedDuration = command.Request.ProposedDuration,
+            ProposedBudget = ProposalTotalsCalculator.ResolveBudget(command.Request.ProposedBudget, milestonePlans),
+            ProposedDuration = ProposalTotalsCalculator.ResolveDuration(command.Request.ProposedDuration, milestonePlans),
+            AnalysisSummary = ProposalPlanMapper.Clean(command.Request.AnalysisSummary),
+            SolutionApproach = ProposalPlanMapper.Clean(command.Request.SolutionApproach),
+            Deliverables = ProposalPlanMapper.Clean(command.Request.Deliverables),
+            Assumptions = ProposalPlanMapper.Clean(command.Request.Assumptions),
+            OutOfScope = ProposalPlanMapper.Clean(command.Request.OutOfScope),
             Status = 0,
-            SubmittedAt = _dateTimeService.UtcNow
+            SubmittedAt = null,
+            UpdatedAt = _dateTimeService.UtcNow
         };
+
+        proposal.ProposalWorkBreakdownItems = (command.Request.WorkBreakdownItems ?? [])
+            .Select((item, index) => ProposalPlanMapper.ToEntity(proposalId, item, index))
+            .ToList();
+        proposal.ProposalMilestonePlans = milestonePlans
+            .Select((item, index) => ProposalPlanMapper.ToEntity(proposalId, item, index))
+            .ToList();
 
         _context.Set<Proposal>().Add(proposal);
         await _context.SaveChangesAsync(cancellationToken);
@@ -60,7 +77,12 @@ public class SubmitProposalCommandHandler : IRequestHandler<SubmitProposalComman
 
     private void EnsureJobPostAcceptsProposals(JobPost jobPost)
     {
-        if (jobPost.Status != 1)
+        if (jobPost.Visibility == JobPostNegotiationGuard.AdminLockedVisibility)
+        {
+            throw new BadRequestException("This job post has been locked by an admin and is not accepting proposals.");
+        }
+
+        if (jobPost.Status != JobPostNegotiationGuard.OpenStatus)
         {
             throw new BadRequestException("This job post is not accepting proposals.");
         }

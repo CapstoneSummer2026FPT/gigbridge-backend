@@ -1,5 +1,6 @@
 ﻿using Application.Common.Exceptions;
 using Application.Common.Interfaces;
+using Application.Features.Proposals.Common;
 using Application.Features.Proposals.Common.DTOs;
 using Domain.Entities;
 using MediatR;
@@ -35,6 +36,8 @@ public class GetMyProposalByJobPostQueryHandler
             .Include(proposal => proposal.JobPosts)
             .Include(proposal => proposal.FreelancerProfiles)
                 .ThenInclude(freelancerProfile => freelancerProfile.User)
+            .Include(proposal => proposal.ProposalWorkBreakdownItems)
+            .Include(proposal => proposal.ProposalMilestonePlans)
             .FirstOrDefaultAsync(
                 proposal =>
                     proposal.JobPostsId == request.JobPostId &&
@@ -56,6 +59,19 @@ public class GetMyProposalByJobPostQueryHandler
             CoverLetter = proposal.CoverLetter,
             ProposedBudget = proposal.ProposedBudget,
             ProposedDuration = proposal.ProposedDuration,
+            AnalysisSummary = proposal.AnalysisSummary,
+            SolutionApproach = proposal.SolutionApproach,
+            Deliverables = proposal.Deliverables,
+            Assumptions = proposal.Assumptions,
+            OutOfScope = proposal.OutOfScope,
+            WorkBreakdownItems = proposal.ProposalWorkBreakdownItems
+                .OrderBy(item => item.OrderIndex)
+                .Select(ProposalPlanMapper.ToDto)
+                .ToList(),
+            MilestonePlans = proposal.ProposalMilestonePlans
+                .OrderBy(item => item.OrderIndex)
+                .Select(ProposalPlanMapper.ToDto)
+                .ToList(),
             Status = proposal.Status,
             SubmittedAt = proposal.SubmittedAt,
             UpdatedAt = proposal.UpdatedAt,

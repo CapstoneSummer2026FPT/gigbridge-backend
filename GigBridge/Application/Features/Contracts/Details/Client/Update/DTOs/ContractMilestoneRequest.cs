@@ -5,4 +5,8 @@ public sealed record ContractMilestoneRequest(
     string Title,
     decimal Amount,
     DateOnly? DueDate,
-    int? SortOrder);
+    int? SortOrder,
+    string? Description = null,
+    string? EstimatedDuration = null,
+    string? Deliverables = null,
+    string? AcceptanceCriteria = null);

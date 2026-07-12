@@ -33,10 +33,28 @@ internal sealed class InMemoryApplicationDbContext : IApplicationDbContext
 
     public int SaveChangesCount { get; private set; }
 
+    public Task<IApplicationDbContextTransaction> BeginTransactionAsync(CancellationToken cancellationToken)
+    {
+        return Task.FromResult<IApplicationDbContextTransaction>(new NoopApplicationDbContextTransaction());
+    }
+
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken)
     {
         SaveChangesCount++;
         return Task.FromResult(1);
+    }
+}
+
+internal sealed class NoopApplicationDbContextTransaction : IApplicationDbContextTransaction
+{
+    public Task CommitAsync(CancellationToken cancellationToken)
+    {
+        return Task.CompletedTask;
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        return ValueTask.CompletedTask;
     }
 }
 

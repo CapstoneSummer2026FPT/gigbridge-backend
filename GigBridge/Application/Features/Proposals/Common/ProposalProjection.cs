@@ -24,7 +24,22 @@ internal static class ProposalProjection
             ProposedDuration = proposal.ProposedDuration ?? string.Empty,
             Status = proposal.Status,
             SubmittedAt = proposal.SubmittedAt ?? DateTime.MinValue,
-            ReviewedAt = proposal.UpdatedAt
+            ReviewedAt = proposal.UpdatedAt,
+            AnalysisSummaryPreview = CreatePreview(proposal.AnalysisSummary),
+            WorkItemCount = proposal.ProposalWorkBreakdownItems.Count,
+            MilestoneCount = proposal.ProposalMilestonePlans.Count,
+            MilestoneTotal = proposal.ProposalMilestonePlans.Sum(item => item.Amount),
+            FirstMilestoneAmount = proposal.ProposalMilestonePlans
+                .OrderBy(item => item.OrderIndex)
+                .Select(item => (decimal?)item.Amount)
+                .FirstOrDefault()
         };
+    }
+
+    private static string CreatePreview(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+        var trimmed = value.Trim();
+        return trimmed.Length <= 180 ? trimmed : $"{trimmed[..177]}...";
     }
 }

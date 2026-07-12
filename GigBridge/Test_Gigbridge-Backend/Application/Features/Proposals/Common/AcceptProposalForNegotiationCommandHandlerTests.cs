@@ -70,6 +70,12 @@ public class AcceptProposalForNegotiationCommandHandlerTests
         Assert.Contains(fixture.Participants.Entities, p => p.UserId == fixture.ClientUserId && p.ParticipantRole == (int)ParticipantRole.Client);
         Assert.Contains(fixture.Participants.Entities, p => p.UserId == fixture.FreelancerUserId && p.ParticipantRole == (int)ParticipantRole.Freelancer);
 
+        // Proposal payment plan seeds this conversation's draft, not executable contract milestones.
+        Assert.Empty(fixture.Milestones.Entities);
+        Assert.Equal(2, fixture.NegotiationDrafts.Entities.Count);
+        Assert.Equal(1500m, fixture.NegotiationDrafts.Entities.Sum(milestone => milestone.Amount));
+        Assert.Empty(fixture.EscrowTransactions.Entities);
+
         // Assert realtime notification called
         await _notificationService.Received(1).CreateNotificationAsync(
             fixture.FreelancerUserId,
@@ -187,12 +193,14 @@ public class AcceptProposalForNegotiationCommandHandlerTests
         await Assert.ThrowsAsync<BadRequestException>(() => handler.Handle(command, CancellationToken.None));
     }
 
-    [Fact]
-    public async Task Handle_InvalidProposalStatus_ThrowsBadRequestException()
+    [Theory]
+    [InlineData(4)] // Rejected
+    [InlineData(5)] // Withdrawn
+    public async Task Handle_RejectedOrWithdrawnProposal_ThrowsBadRequestException(int invalidStatus)
     {
         // Arrange
         var fixture = new TestFixture();
-        fixture.Proposal.Status = 3; // Accepted
+        fixture.Proposal.Status = invalidStatus;
         var handler = CreateHandler(fixture);
         var command = new AcceptProposalForNegotiationCommand(fixture.ProposalId, fixture.ClientUserId);
 
@@ -265,6 +273,22 @@ public class AcceptProposalForNegotiationCommandHandlerTests
                 JobPosts = JobPost,
                 FreelancerProfiles = freelancerProfile
             };
+            Proposal.ProposalMilestonePlans.Add(new ProposalMilestonePlan
+            {
+                ProposalMilestonePlansId = Guid.NewGuid(),
+                ProposalsId = ProposalId,
+                Title = "Foundation",
+                Amount = 600m,
+                OrderIndex = 0
+            });
+            Proposal.ProposalMilestonePlans.Add(new ProposalMilestonePlan
+            {
+                ProposalMilestonePlansId = Guid.NewGuid(),
+                ProposalsId = ProposalId,
+                Title = "Final delivery",
+                Amount = 900m,
+                OrderIndex = 1
+            });
             Contract = new Contract
             {
                 ContractsId = ContractId,
@@ -284,6 +308,9 @@ public class AcceptProposalForNegotiationCommandHandlerTests
             Contracts = Context.AddSet(Contract);
             Conversations = Context.AddSet<Conversation>();
             Participants = Context.AddSet<ConversationParticipant>();
+            Milestones = Context.AddSet<Milestone>();
+            NegotiationDrafts = Context.AddSet<NegotiationMilestoneDraft>();
+            EscrowTransactions = Context.AddSet<EscrowTransaction>();
         }
 
         public InMemoryApplicationDbContext Context { get; } = new();
@@ -298,6 +325,9 @@ public class AcceptProposalForNegotiationCommandHandlerTests
         public TestDbSet<Contract> Contracts { get; }
         public TestDbSet<Conversation> Conversations { get; }
         public TestDbSet<ConversationParticipant> Participants { get; }
+        public TestDbSet<Milestone> Milestones { get; }
+        public TestDbSet<NegotiationMilestoneDraft> NegotiationDrafts { get; }
+        public TestDbSet<EscrowTransaction> EscrowTransactions { get; }
         public JobPost JobPost { get; }
         public Proposal Proposal { get; }
         public Contract Contract { get; }

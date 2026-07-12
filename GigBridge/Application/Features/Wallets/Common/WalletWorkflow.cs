@@ -26,6 +26,7 @@ internal static class WalletWorkflow
             UserId = userId,
             AvailableTokens = 0m,
             HeldTokens = 0m,
+            PendingWithdrawalTokens = 0m,
             CreatedAt = now
         };
 

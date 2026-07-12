@@ -4,10 +4,18 @@ using Infrastructure;
 using Project_API.Extensions;
 using Project_API.Hubs;
 using Project_API.Middleware;
+using Project_API.Services;
 using Project_API.Services.Chat;
 using Project_API.Services.Notification;
 
 var builder = WebApplication.CreateBuilder(args);
+
+if (builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Testing"))
+{
+    builder.Logging.ClearProviders();
+    builder.Logging.AddConsole();
+    builder.Logging.AddDebug();
+}
 
 builder.Services.AddControllers();
 
@@ -20,7 +28,7 @@ builder.Services.AddJwtAuthentication(builder.Configuration);
 builder.Services.AddSwaggerWithBearerAuth();
 builder.Services.AddCorsPolicy();
 builder.Services.AddHttpContextAccessor();
-builder.Services.AddScoped<ICurrentUserService, Project_API.Services.CurrentUserService>();
+builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddScoped<IChatRealtimeNotifier, SignalRChatRealtimeNotifier>();
 builder.Services.AddScoped<INotificationSender, SignalRNotificationSender>();
 builder.Services.AddSignalR();

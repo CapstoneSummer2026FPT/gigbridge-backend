@@ -1,7 +1,9 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Application.Features.JobPosts.Common;
 using Application.Features.Proposals.Common.UpdateProposalStatus.Commands.DTOs;
+using Application.Features.Proposals.Common;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
@@ -41,6 +43,8 @@ public class UpdateProposalStatusCommandHandler
     {
         var proposal = await _context.Set<Proposal>()
             .Include(proposal => proposal.JobPosts)
+            .Include(proposal => proposal.ProposalWorkBreakdownItems)
+            .Include(proposal => proposal.ProposalMilestonePlans)
             .FirstOrDefaultAsync(
                 proposal => proposal.ProposalsId == command.ProposalId,
                 cancellationToken);
@@ -52,7 +56,7 @@ public class UpdateProposalStatusCommandHandler
 
         if (proposal.Status == 3 || proposal.Status == 4 || proposal.Status == 5)
         {
-            throw new Exception("Only draft, pending or shortlisted proposal can be updated.");
+            throw new BadRequestException("Only draft, pending or shortlisted proposal can be updated.");
         }
 
         var requestedStatus = command.Request.Status;
@@ -73,11 +77,18 @@ public class UpdateProposalStatusCommandHandler
 
         if (isClientOwner)
         {
+            JobPostNegotiationGuard.EnsureEligibleForNegotiation(proposal.JobPosts);
             UpdateStatusByClient(proposal, requestedStatus);
         }
         else if (isFreelancerOwner)
         {
             var isDraftSubmission = proposal.Status == 0 && requestedStatus == 1;
+            if (isDraftSubmission)
+            {
+                EnsureJobPostAcceptsProposalSubmission(proposal.JobPosts);
+                ProposalSubmissionGuard.EnsureCanSubmit(proposal);
+                proposal.SubmittedAt = _dateTimeService.UtcNow;
+            }
             if (isDraftSubmission && _proposalQuestionTimerService is not null)
             {
                 await _proposalQuestionTimerService.EnsureProposalReadyForSubmissionAsync(
@@ -149,6 +160,24 @@ public class UpdateProposalStatusCommandHandler
             cancellationToken);
     }
 
+    private void EnsureJobPostAcceptsProposalSubmission(JobPost jobPost)
+    {
+        if (jobPost.Visibility == JobPostNegotiationGuard.AdminLockedVisibility)
+        {
+            throw new BadRequestException("This job post has been locked by an admin and is not accepting proposals.");
+        }
+
+        if (jobPost.Status != JobPostNegotiationGuard.OpenStatus)
+        {
+            throw new BadRequestException("This job post is not accepting proposals.");
+        }
+
+        if (jobPost.EndDate.HasValue && jobPost.EndDate.Value <= _dateTimeService.UtcNow)
+        {
+            throw new BadRequestException("This job post application deadline has passed.");
+        }
+    }
+
     private void UpdateStatusByClient(
     Proposal proposal,
     int requestedStatus)
@@ -179,14 +208,15 @@ public class UpdateProposalStatusCommandHandler
             return;
         }
 
-        // Pending/Shortlisted -> Withdrawn: Freelancer withdraw proposal
-        if ((proposal.Status == 1 || proposal.Status == 2) && requestedStatus == 5)
+        // Pending -> Withdrawn: once the client has shortlisted/accepted the proposal for negotiation,
+        // the freelancer can no longer withdraw it from the active hiring flow.
+        if (proposal.Status == 1 && requestedStatus == 5)
         {
             proposal.Status = 5;
             return;
         }
 
-        throw new UnauthorizedAccessException(
-            "Freelancer can only submit a draft proposal or withdraw a pending/shortlisted proposal.");
+        throw new BadRequestException(
+            "Freelancer can only submit a draft proposal or withdraw a pending proposal.");
     }
 }

@@ -164,7 +164,7 @@ public class GetMyJobPostDetailQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ReturnsSetupProgressForResumeFlow()
+    public async Task Handle_ReturnsProjectRequestSetupProgressForResumeFlow()
     {
         var context = new InMemoryApplicationDbContext();
         var userId = Guid.NewGuid();
@@ -209,13 +209,13 @@ public class GetMyJobPostDetailQueryHandlerTests
             CancellationToken.None);
 
         Assert.NotNull(dto.SetupProgress);
-        Assert.Equal(JobPostSetupStepNames.Milestones, dto.SetupProgress.NextIncompleteStep);
+        Assert.Equal(JobPostSetupStepNames.ReadyToPublish, dto.SetupProgress.NextIncompleteStep);
         Assert.True(dto.SetupProgress.IsDetailsComplete);
-        Assert.Equal(contractId, dto.SetupProgress.ContractId);
-        Assert.Equal(documentId, dto.SetupProgress.ESignDocumentId);
-        Assert.Equal((int)ESignDocumentStatus.FullySigned, dto.SetupProgress.ESignStatus);
+        Assert.Null(dto.SetupProgress.ContractId);
+        Assert.Null(dto.SetupProgress.ESignDocumentId);
+        Assert.Null(dto.SetupProgress.ESignStatus);
         Assert.False(dto.SetupProgress.HasMilestones);
-        Assert.False(dto.SetupProgress.CanPublish);
+        Assert.True(dto.SetupProgress.CanPublish);
     }
 
     [Fact]
@@ -278,6 +278,7 @@ public class GetMyJobPostDetailQueryHandlerTests
             ClientProfilesId = clientProfileId,
             Title = title,
             Description = $"{title} description",
+            MajorCategoryId = Guid.NewGuid(),
             Status = 0,
             Visibility = 0,
             CreatedAt = createdAt

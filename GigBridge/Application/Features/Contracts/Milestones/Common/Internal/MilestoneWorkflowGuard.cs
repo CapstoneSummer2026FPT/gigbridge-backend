@@ -148,8 +148,12 @@ internal static class MilestoneWorkflowGuard
             milestone.MilestonesId,
             milestone.ContractsId,
             milestone.Title,
+            milestone.Description,
             milestone.Amount,
+            milestone.EstimatedDuration,
             milestone.DueDate,
+            milestone.Deliverables,
+            milestone.AcceptanceCriteria,
             milestone.Status,
             milestone.SortOrder,
             milestone.StartedAt,
@@ -159,5 +163,13 @@ internal static class MilestoneWorkflowGuard
             milestone.LastReleasedAt,
             milestone.SubmissionDescription,
             attachments);
+    }
+
+    public static IOrderedQueryable<Milestone> OrderMilestones(IQueryable<Milestone> milestones)
+    {
+        return milestones
+            .OrderBy(milestone => milestone.SortOrder ?? int.MaxValue)
+            .ThenBy(milestone => milestone.CreatedAt)
+            .ThenBy(milestone => milestone.MilestonesId);
     }
 }

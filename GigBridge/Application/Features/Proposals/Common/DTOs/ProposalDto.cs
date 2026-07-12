@@ -15,4 +15,9 @@ public class ProposalDto
     public int Status { get; set; }
     public DateTime SubmittedAt { get; set; }
     public DateTime? ReviewedAt { get; set; }
+    public string AnalysisSummaryPreview { get; set; } = string.Empty;
+    public int WorkItemCount { get; set; }
+    public int MilestoneCount { get; set; }
+    public decimal MilestoneTotal { get; set; }
+    public decimal? FirstMilestoneAmount { get; set; }
 }

@@ -10,6 +10,31 @@ internal static class JobPostSetupPublishGuard
 {
     public const int DraftStatus = 0;
     public const int OpenStatus = 1;
+    private const string DefaultDraftTitle = "Untitled Job Post";
+
+    public static void EnsureProjectRequestCanPublish(JobPost jobPost)
+    {
+        if (jobPost.Status != DraftStatus && jobPost.Status != OpenStatus)
+        {
+            throw new BadRequestException("Project request must be in Draft or Open status to publish.");
+        }
+
+        if (string.IsNullOrWhiteSpace(jobPost.Title) ||
+            string.Equals(jobPost.Title.Trim(), DefaultDraftTitle, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new BadRequestException("Project request title is required before publishing.");
+        }
+
+        if (string.IsNullOrWhiteSpace(jobPost.Description))
+        {
+            throw new BadRequestException("Project requirement details are required before publishing.");
+        }
+
+        if (!jobPost.MajorCategoryId.HasValue)
+        {
+            throw new BadRequestException("Project request category is required before publishing.");
+        }
+    }
 
     public static async Task EnsureCanPublishAsync(
         IApplicationDbContext context,
