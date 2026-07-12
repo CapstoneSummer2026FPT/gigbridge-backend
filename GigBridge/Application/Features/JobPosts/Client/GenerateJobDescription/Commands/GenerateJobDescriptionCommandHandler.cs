@@ -35,61 +35,16 @@ public class GenerateJobDescriptionCommandHandler
         GenerateJobDescriptionCommand command,
         CancellationToken cancellationToken)
     {
-        // 1. Fetch active majors
-        var dbMajors = await _context.Set<Major>()
-            .Where(m => m.IsActive)
-            .ToListAsync(cancellationToken);
-
-        var majors = dbMajors
-            .Select(m => new MajorOptionDto
-            {
-                MajorId = m.MajorsId.ToString(),
-                Name = m.Name
-            })
-            .ToList();
-
-        // 2. Fetch active categories with their major relationships
-        var dbCategories = await _context.Set<Category>()
-            .Include(c => c.MajorCategories)
-            .Where(c => c.IsActive)
-            .ToListAsync(cancellationToken);
-
-        var subcategories = dbCategories
-            .SelectMany(c => c.MajorCategories.Select(mc => new CategoryOptionDto
-            {
-                CategoryId = c.CategoriesId.ToString(),
-                MajorId = mc.MajorId.ToString(),
-                Name = c.Name
-            }))
-            .ToList();
-
-        // 3. Fetch active skills
-        var dbSkills = await _context.Set<Skill>()
-            .Where(s => s.IsActive)
-            .ToListAsync(cancellationToken);
-
-        var skills = dbSkills
-            .Select(s => new SkillOptionDto
-            {
-                SkillId = s.SkillsId.ToString(),
-                Name = s.Name
-            })
-            .ToList();
-
-        // 4. Build AI request
+        // 1. Build AI request (only containing the prompt)
         var aiRequest = new JobPostGenerationRequestDto
         {
-            ClientPrompt = command.ClientPrompt,
-            AllowedMajors = majors,
-            AllowedCategories = subcategories,
-            AvailableSkills = skills
+            ClientPrompt = command.ClientPrompt
         };
 
-        // 5. Invoke AI service client
+        // 2. Invoke AI service client
         var aiResponse = await _aiServiceClient.GenerateJobDescriptionAsync(aiRequest, cancellationToken);
 
-        // 6. Map skills (system + custom)
-        var finalSkills = new List<GeneratedSkillDto>();
+        // 3. Map selected Major and Category IDs
         Guid? selectedCategoryId = null;
         Guid? selectedMajorId = null;
         Guid? selectedMajorCategoryId = null;
@@ -104,6 +59,26 @@ public class GenerateJobDescriptionCommandHandler
             selectedMajorId = majorId;
         }
 
+        // 4. Fetch Major and Category names dynamically from the DB
+        string? selectedMajorName = null;
+        if (selectedMajorId.HasValue)
+        {
+            var major = await _context.Set<Major>()
+                .AsNoTracking()
+                .FirstOrDefaultAsync(m => m.MajorsId == selectedMajorId.Value, cancellationToken);
+            selectedMajorName = major?.Name;
+        }
+
+        string? selectedCategoryName = null;
+        if (selectedCategoryId.HasValue)
+        {
+            var category = await _context.Set<Category>()
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.CategoriesId == selectedCategoryId.Value, cancellationToken);
+            selectedCategoryName = category?.Name;
+        }
+
+        // 5. Fetch MajorCategory relationship if both are present
         if (selectedCategoryId.HasValue && selectedMajorId.HasValue)
         {
             var majorCategory = await _context.Set<MajorCategory>()
@@ -118,24 +93,30 @@ public class GenerateJobDescriptionCommandHandler
             }
         }
 
-        // Add matching system skills
+        // 6. Fetch only matching system skills from DB
+        var parsedSystemSkillIds = new List<Guid>();
         foreach (var sysSkillIdStr in aiResponse.SystemSkillIds)
         {
             if (Guid.TryParse(sysSkillIdStr, out var sysSkillId))
             {
-                var skill = dbSkills.FirstOrDefault(s => s.SkillsId == sysSkillId);
-                if (skill != null && finalSkills.All(s => s.SkillsId != skill.SkillsId))
-                {
-                    finalSkills.Add(new GeneratedSkillDto
-                    {
-                        SkillsId = skill.SkillsId,
-                        Name = skill.Name
-                    });
-                }
+                parsedSystemSkillIds.Add(sysSkillId);
             }
         }
 
-        // Process custom skills without persisting to database
+        var matchedSystemSkills = await _context.Set<Skill>()
+            .AsNoTracking()
+            .Where(s => parsedSystemSkillIds.Contains(s.SkillsId))
+            .ToListAsync(cancellationToken);
+
+        var finalSkills = matchedSystemSkills
+            .Select(s => new GeneratedSkillDto
+            {
+                SkillsId = s.SkillsId,
+                Name = s.Name
+            })
+            .ToList();
+
+        // 7. Process custom skills (checking if they map to existing system skills)
         var finalCustomSkills = new List<string>();
 
         if (aiResponse.CustomSkills != null)
@@ -169,14 +150,6 @@ public class GenerateJobDescriptionCommandHandler
                 }
             }
         }
-
-        var selectedMajorName = selectedMajorId.HasValue
-            ? dbMajors.FirstOrDefault(m => m.MajorsId == selectedMajorId.Value)?.Name
-            : null;
-
-        var selectedCategoryName = selectedCategoryId.HasValue
-            ? dbCategories.FirstOrDefault(c => c.CategoriesId == selectedCategoryId.Value)?.Name
-            : null;
 
         return new GenerateJobDescriptionResponse
         {
