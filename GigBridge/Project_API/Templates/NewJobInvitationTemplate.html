@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>New Job Invitation - GigBridge</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f6f9;
+            margin: 0;
+            padding: 0;
+            color: #333;
+        }
+        .container {
+            max-width: 600px;
+            margin: 40px auto;
+            background-color: #ffffff;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+            border: 1px solid #eef2f6;
+        }
+        .header {
+            background: linear-gradient(135deg, #0f172a, #1e293b);
+            color: #ffffff;
+            padding: 35px 30px;
+            text-align: center;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 26px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+        .content {
+            padding: 40px 35px;
+            line-height: 1.6;
+            font-size: 15px;
+            color: #475569;
+        }
+        .job-card {
+            margin: 28px 0;
+            background-color: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-left: 4px solid #0891b2;
+            border-radius: 10px;
+            padding: 22px;
+        }
+        .job-title {
+            margin: 0 0 14px;
+            color: #0f172a;
+            font-size: 20px;
+            font-weight: 800;
+        }
+        .meta-row {
+            margin: 8px 0;
+            color: #475569;
+        }
+        .meta-label {
+            color: #0f172a;
+            font-weight: 700;
+        }
+        .description {
+            margin-top: 18px;
+            padding-top: 16px;
+            border-top: 1px solid #e2e8f0;
+            color: #64748b;
+        }
+        .button-wrap {
+            text-align: center;
+            margin: 34px 0 20px;
+        }
+        .button {
+            display: inline-block;
+            background-color: #0891b2;
+            color: #ffffff;
+            text-decoration: none;
+            padding: 14px 28px;
+            border-radius: 8px;
+            font-weight: 800;
+        }
+        .fallback-link {
+            margin-top: 16px;
+            font-size: 12px;
+            color: #94a3b8;
+            word-break: break-all;
+            text-align: center;
+        }
+        .fallback-link a {
+            color: #64748b;
+        }
+        .footer {
+            background-color: #f8fafc;
+            padding: 25px;
+            text-align: center;
+            font-size: 12px;
+            color: #94a3b8;
+            border-top: 1px solid #f1f5f9;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>GigBridge</h1>
+        </div>
+        <div class="content">
+            <p>Hello <strong>{{FREELANCER_NAME}}</strong>,</p>
+            <p><strong>{{CLIENT_NAME}}</strong> invited you to view and apply for a new job on GigBridge.</p>
+
+            <div class="job-card">
+                <h2 class="job-title">{{JOB_TITLE}}</h2>
+                <p class="meta-row"><span class="meta-label">Client:</span> {{CLIENT_NAME}}</p>
+                <p class="meta-row"><span class="meta-label">Budget:</span> {{BUDGET}}</p>
+                <p class="meta-row"><span class="meta-label">Deadline:</span> {{DEADLINE}}</p>
+                <div class="description">
+                    <span class="meta-label">Short description:</span>
+                    <p>{{SHORT_DESCRIPTION}}</p>
+                </div>
+            </div>
+
+            <div class="button-wrap">
+                <a class="button" href="{{JOB_DETAIL_URL}}">View job details</a>
+            </div>
+            <div class="fallback-link">
+                If the button does not work, copy this link:<br />
+                <a href="{{JOB_DETAIL_URL}}">{{JOB_DETAIL_URL}}</a>
+            </div>
+        </div>
+        <div class="footer">
+            <p>This is an automatic email from GigBridge. Please do not reply.</p>
+            <p>&copy; {{YEAR}} GigBridge AI. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>

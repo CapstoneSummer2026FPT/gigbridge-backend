@@ -6,6 +6,7 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Features.Auth.Shared.DTOs;
+using Application.Features.JobPosts.Common;
 using Application.Features.Proposals.Common.Email;
 using Application.Features.Proposals.Common;
 using Domain.Entities;
@@ -76,10 +77,7 @@ public class AcceptProposalForNegotiationCommandHandler : IRequestHandler<Accept
             throw new ForbiddenAccessException("You do not own this job post.");
         }
 
-        if (proposal.JobPosts.Status != 1)
-        {
-            throw new BadRequestException("Job post is no longer open for negotiations.");
-        }
+        JobPostNegotiationGuard.EnsureEligibleForNegotiation(proposal.JobPosts);
 
         if (proposal.Status != 1 && proposal.Status != 2 && proposal.Status != 3) // Accepted may reopen its existing negotiation.
         {

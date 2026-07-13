@@ -2,6 +2,7 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Features.Chat.Common.Negotiations.MilestonePlans.DTOs;
+using Application.Features.JobPosts.Common;
 using Application.Features.Proposals.Common;
 using Domain.Entities;
 using Domain.Enums;
@@ -36,10 +37,25 @@ public sealed class UpdateNegotiationMilestonePlanCommandHandler
 
         if (!isClient) throw new ForbiddenAccessException("Only the client can edit the negotiation milestone plan.");
 
-        var conversationExists = await _context.Set<Conversation>().AnyAsync(
+        var conversation = await _context.Set<Conversation>().AsNoTracking().FirstOrDefaultAsync(
             item => item.ConversationsId == command.ConversationId && item.DeletedAt == null,
             cancellationToken);
-        if (!conversationExists) throw new NotFoundException("Conversation does not exist.");
+        if (conversation is null) throw new NotFoundException("Conversation does not exist.");
+
+        if (conversation.ConversationType != (int)ConversationType.JobNegotiation)
+        {
+            throw new BadRequestException("Negotiation milestone plans can only be edited in job negotiation conversations.");
+        }
+
+        if (!conversation.JobPostsId.HasValue)
+        {
+            throw new BadRequestException("Job negotiation conversation must be attached to a job post.");
+        }
+
+        await JobPostNegotiationGuard.EnsureEligibleForNegotiationAsync(
+            _context,
+            conversation.JobPostsId.Value,
+            cancellationToken);
 
         if (command.Request.Milestones.Any(item => !ProposalTotalsCalculator.IsValidDraftAmount(item.Amount)))
         {
