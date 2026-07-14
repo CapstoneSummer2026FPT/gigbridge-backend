@@ -1,6 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Features.Contracts.Common.Internal;
+using Application.Features.Wallets.Common;
 using Domain.Entities;
 using Domain.Enums;
 using Domain.Services.Payments;
@@ -120,6 +121,7 @@ public sealed class AdminOverrideMilestoneCommandHandler :
                     UserWalletsId = Guid.NewGuid(),
                     UserId = freelancerUserId,
                     AvailableTokens = 0m,
+                    WithdrawableTokens = 0m,
                     HeldTokens = 0m,
                     CreatedAt = now
                 };
@@ -129,8 +131,7 @@ public sealed class AdminOverrideMilestoneCommandHandler :
             // Move tokens
             clientWallet.HeldTokens -= releasedTokens;
             clientWallet.UpdatedAt = now;
-            freelancerWallet.AvailableTokens += releasedTokens;
-            freelancerWallet.UpdatedAt = now;
+            WalletWorkflow.CreditWithdrawable(freelancerWallet, releasedTokens, now);
 
             milestone.ReleasedAmount += releasableVnd;
             milestone.LastReleasedAt = now;

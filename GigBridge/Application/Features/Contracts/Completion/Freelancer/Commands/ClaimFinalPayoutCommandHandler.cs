@@ -3,6 +3,7 @@ using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.Contracts.Completion.Freelancer.DTOs;
+using Application.Features.Wallets.Common;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
@@ -105,15 +106,14 @@ public sealed class ClaimFinalPayoutCommandHandler : IRequestHandler<ClaimFinalP
             freelancerWallet = new UserWallet
             {
                 UserWalletsId = Guid.NewGuid(), UserId = freelancer.UserId,
-                AvailableTokens = 0m, HeldTokens = 0m, CreatedAt = now
+                AvailableTokens = 0m, WithdrawableTokens = 0m, HeldTokens = 0m, CreatedAt = now
             };
             _context.Set<UserWallet>().Add(freelancerWallet);
         }
 
         clientWallet.HeldTokens -= releaseTokens;
         clientWallet.UpdatedAt = now;
-        freelancerWallet.AvailableTokens += releaseTokens;
-        freelancerWallet.UpdatedAt = now;
+        WalletWorkflow.CreditWithdrawable(freelancerWallet, releaseTokens, now);
 
         foreach (var item in remaining)
         {

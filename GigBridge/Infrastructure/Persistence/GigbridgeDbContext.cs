@@ -2343,6 +2343,9 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.AvailableTokens)
                 .HasPrecision(18, 4)
                 .HasDefaultValue(0m);
+            entity.Property(e => e.WithdrawableTokens)
+                .HasPrecision(18, 4)
+                .HasDefaultValue(0m);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.HeldTokens)
                 .HasPrecision(18, 4)
@@ -2355,6 +2358,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.ToTable(t =>
             {
                 t.HasCheckConstraint("CK_UserWallets_AvailableTokens_NonNegative", "\"AvailableTokens\" >= 0");
+                t.HasCheckConstraint("CK_UserWallets_WithdrawableTokens_NonNegative", "\"WithdrawableTokens\" >= 0");
+                t.HasCheckConstraint("CK_UserWallets_WithdrawableTokens_MaxAvailable", "\"WithdrawableTokens\" <= \"AvailableTokens\"");
                 t.HasCheckConstraint("CK_UserWallets_HeldTokens_NonNegative", "\"HeldTokens\" >= 0");
                 t.HasCheckConstraint("CK_UserWallets_PendingWithdrawalTokens_NonNegative", "\"PendingWithdrawalTokens\" >= 0");
             });

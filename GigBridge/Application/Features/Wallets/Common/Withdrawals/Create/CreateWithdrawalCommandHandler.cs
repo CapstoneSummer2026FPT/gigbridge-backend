@@ -115,9 +115,9 @@ public sealed class CreateWithdrawalCommandHandler :
             .AsNoTracking()
             .FirstOrDefaultAsync(wallet => wallet.UserId == command.UserId, cancellationToken);
 
-        if (wallet is null || wallet.AvailableTokens < tokenAmount)
+        if (wallet is null || wallet.AvailableTokens < tokenAmount || wallet.WithdrawableTokens < tokenAmount)
         {
-            throw new BadRequestException("Wallet balance is insufficient for withdrawal.");
+            throw new BadRequestException("Withdrawable project earnings are insufficient for withdrawal.");
         }
 
         var vndAmount = TokenWalletRules.ToVnd(tokenAmount);
@@ -132,7 +132,7 @@ public sealed class CreateWithdrawalCommandHandler :
         var locked = await TryLockWalletAsync(wallet.UserWalletsId, tokenAmount, now, cancellationToken);
         if (!locked)
         {
-            throw new BadRequestException("Wallet balance is insufficient for withdrawal.");
+            throw new BadRequestException("Withdrawable project earnings are insufficient for withdrawal.");
         }
 
         var withdrawal = new WalletWithdrawal
@@ -201,10 +201,14 @@ public sealed class CreateWithdrawalCommandHandler :
         try
         {
             var updated = await _context.Set<UserWallet>()
-                .Where(wallet => wallet.UserWalletsId == walletId && wallet.AvailableTokens >= tokenAmount)
+                .Where(wallet =>
+                    wallet.UserWalletsId == walletId &&
+                    wallet.AvailableTokens >= tokenAmount &&
+                    wallet.WithdrawableTokens >= tokenAmount)
                 .ExecuteUpdateAsync(
                     setters => setters
                         .SetProperty(wallet => wallet.AvailableTokens, wallet => wallet.AvailableTokens - tokenAmount)
+                        .SetProperty(wallet => wallet.WithdrawableTokens, wallet => wallet.WithdrawableTokens - tokenAmount)
                         .SetProperty(wallet => wallet.PendingWithdrawalTokens, wallet => wallet.PendingWithdrawalTokens + tokenAmount)
                         .SetProperty(wallet => wallet.UpdatedAt, now),
                     cancellationToken);
@@ -216,12 +220,13 @@ public sealed class CreateWithdrawalCommandHandler :
             var wallet = await _context.Set<UserWallet>()
                 .FirstOrDefaultAsync(wallet => wallet.UserWalletsId == walletId, cancellationToken);
 
-            if (wallet is null || wallet.AvailableTokens < tokenAmount)
+            if (wallet is null || wallet.AvailableTokens < tokenAmount || wallet.WithdrawableTokens < tokenAmount)
             {
                 return false;
             }
 
             wallet.AvailableTokens -= tokenAmount;
+            wallet.WithdrawableTokens -= tokenAmount;
             wallet.PendingWithdrawalTokens += tokenAmount;
             wallet.UpdatedAt = now;
             return true;

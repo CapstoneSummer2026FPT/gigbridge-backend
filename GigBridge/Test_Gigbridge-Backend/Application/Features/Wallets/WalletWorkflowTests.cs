@@ -1,6 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces.IService;
 using Application.Common.Options;
+using Application.Features.Wallets.Common;
 using Application.Features.Admin.AdminCredit.Commands;
 using Application.Features.Admin.AdminCredit.DTOs;
 using Application.Features.Wallets.Common.BankAccounts.Create;
@@ -40,6 +41,7 @@ public class WalletWorkflowTests
 
         var wallet = Assert.Single(fixture.Wallets.Entities);
         Assert.Equal(120.5m, wallet.AvailableTokens);
+        Assert.Equal(0m, wallet.WithdrawableTokens);
         Assert.Equal(0m, wallet.HeldTokens);
         Assert.Single(fixture.Transactions.Entities);
         Assert.Equal((int)WalletTransactionStatus.Succeeded, duplicate.Status);
@@ -101,6 +103,7 @@ public class WalletWorkflowTests
 
         var wallet = Assert.Single(fixture.Wallets.Entities);
         Assert.Equal(50m, wallet.AvailableTokens);
+        Assert.Equal(0m, wallet.WithdrawableTokens);
         Assert.Single(fixture.Transactions.Entities);
         Assert.Equal((int)WalletTransactionStatus.Succeeded, fixture.Transactions.Entities[0].Status);
     }
@@ -429,12 +432,34 @@ public class WalletWorkflowTests
         Assert.Equal((int)WithdrawalStatus.Pending, result.Status);
         var wallet = Assert.Single(fixture.Wallets.Entities.Where(wallet => wallet.UserId == fixture.FreelancerUserId));
         Assert.Equal(70m, wallet.AvailableTokens);
+        Assert.Equal(70m, wallet.WithdrawableTokens);
         Assert.Equal(30m, wallet.PendingWithdrawalTokens);
         Assert.Single(fixture.Withdrawals.Entities);
         Assert.Single(fixture.PayoutOutboxes.Entities);
         Assert.Contains(fixture.Transactions.Entities, transaction =>
             transaction.Type == (int)WalletTransactionType.WithdrawalLock &&
             transaction.Status == (int)WalletTransactionStatus.Succeeded);
+    }
+
+    [Fact]
+    public async Task Withdrawal_CreateRequiresProjectEarnings()
+    {
+        var fixture = new WalletFixture();
+        fixture.SeedFreelancerWallet(100m, 0m);
+        fixture.SeedBankAccount();
+        var handler = fixture.CreateWithdrawalHandler();
+
+        await Assert.ThrowsAsync<BadRequestException>(() =>
+            handler.Handle(
+                new CreateWithdrawalCommand(
+                    fixture.FreelancerUserId,
+                    new CreateWithdrawalRequest(30m, null, "withdrawal-no-earnings")),
+                CancellationToken.None));
+
+        var wallet = Assert.Single(fixture.Wallets.Entities.Where(wallet => wallet.UserId == fixture.FreelancerUserId));
+        Assert.Equal(100m, wallet.AvailableTokens);
+        Assert.Equal(0m, wallet.WithdrawableTokens);
+        Assert.Empty(fixture.Withdrawals.Entities);
     }
 
     [Fact]
@@ -475,6 +500,7 @@ public class WalletWorkflowTests
 
         var wallet = Assert.Single(fixture.Wallets.Entities.Where(wallet => wallet.UserId == fixture.FreelancerUserId));
         Assert.Equal(5m, wallet.AvailableTokens);
+        Assert.Equal(5m, wallet.WithdrawableTokens);
         Assert.Equal(0m, wallet.PendingWithdrawalTokens);
         Assert.Empty(fixture.Withdrawals.Entities);
     }
@@ -501,6 +527,7 @@ public class WalletWorkflowTests
 
         var wallet = Assert.Single(fixture.Wallets.Entities.Where(wallet => wallet.UserId == fixture.FreelancerUserId));
         Assert.Equal(60m, wallet.AvailableTokens);
+        Assert.Equal(60m, wallet.WithdrawableTokens);
         Assert.Equal(0m, wallet.PendingWithdrawalTokens);
         Assert.Equal((int)WithdrawalStatus.Success, duplicate.Status);
         Assert.Single(fixture.Transactions.Entities.Where(transaction =>
@@ -530,6 +557,7 @@ public class WalletWorkflowTests
 
         var wallet = Assert.Single(fixture.Wallets.Entities.Where(wallet => wallet.UserId == fixture.FreelancerUserId));
         Assert.Equal(100m, wallet.AvailableTokens);
+        Assert.Equal(100m, wallet.WithdrawableTokens);
         Assert.Equal(0m, wallet.PendingWithdrawalTokens);
         Assert.Equal((int)WithdrawalStatus.Failed, result.Status);
         Assert.Single(fixture.Transactions.Entities.Where(transaction =>
@@ -559,6 +587,7 @@ public class WalletWorkflowTests
 
         var wallet = Assert.Single(fixture.Wallets.Entities.Where(wallet => wallet.UserId == fixture.FreelancerUserId));
         Assert.Equal(75m, wallet.AvailableTokens);
+        Assert.Equal(75m, wallet.WithdrawableTokens);
         Assert.Equal(25m, wallet.PendingWithdrawalTokens);
         Assert.Equal((int)WithdrawalStatus.SyncRequired, result.Status);
         Assert.Contains("Status is ambiguous", result.LastSyncError);
@@ -625,12 +654,35 @@ public class WalletWorkflowTests
         var wallet = Assert.Single(fixture.Wallets.Entities.Where(wallet => wallet.UserId == fixture.FreelancerUserId));
         var storedWithdrawal = Assert.Single(fixture.Withdrawals.Entities);
         Assert.Equal(65m, wallet.AvailableTokens);
+        Assert.Equal(65m, wallet.WithdrawableTokens);
         Assert.Equal(0m, wallet.PendingWithdrawalTokens);
         Assert.Equal((int)WithdrawalStatus.Success, storedWithdrawal.Status);
         Assert.Single(fixture.WebhookLogs.Entities);
         Assert.Single(fixture.Transactions.Entities.Where(transaction =>
             transaction.Type == (int)WalletTransactionType.WithdrawalSuccess));
     }
+
+    [Fact]
+    public void WalletDebitAvailable_UsesNonWithdrawableBeforeProjectEarnings()
+    {
+        var wallet = new UserWallet
+        {
+            UserWalletsId = Guid.NewGuid(),
+            UserId = Guid.NewGuid(),
+            AvailableTokens = 100m,
+            WithdrawableTokens = 40m
+        };
+
+        WalletWorkflow.DebitAvailable(wallet, 50m, fixtureNow, "insufficient");
+        Assert.Equal(50m, wallet.AvailableTokens);
+        Assert.Equal(40m, wallet.WithdrawableTokens);
+
+        WalletWorkflow.DebitAvailable(wallet, 30m, fixtureNow, "insufficient");
+        Assert.Equal(20m, wallet.AvailableTokens);
+        Assert.Equal(20m, wallet.WithdrawableTokens);
+    }
+
+    private static readonly DateTime fixtureNow = new(2026, 6, 11, 10, 0, 0, DateTimeKind.Utc);
 
     private sealed class WalletFixture
     {
@@ -681,13 +733,14 @@ public class WalletWorkflowTests
         public TestDbSet<PayoutOutbox> PayoutOutboxes { get; }
         public TestDbSet<PayoutWebhookLog> WebhookLogs { get; }
 
-        public void SeedFreelancerWallet(decimal availableTokens)
+        public void SeedFreelancerWallet(decimal availableTokens, decimal? withdrawableTokens = null)
         {
             Wallets.Add(new UserWallet
             {
                 UserWalletsId = Guid.NewGuid(),
                 UserId = FreelancerUserId,
                 AvailableTokens = availableTokens,
+                WithdrawableTokens = withdrawableTokens ?? availableTokens,
                 HeldTokens = 0m,
                 PendingWithdrawalTokens = 0m,
                 CreatedAt = Now

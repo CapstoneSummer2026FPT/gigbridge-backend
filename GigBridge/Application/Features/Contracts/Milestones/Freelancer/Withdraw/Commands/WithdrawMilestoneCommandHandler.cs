@@ -4,6 +4,7 @@ using Application.Common.Interfaces.IService;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.Contracts.Milestones.Common.DTOs;
 using Application.Features.Contracts.Milestones.Common.Internal;
+using Application.Features.Wallets.Common;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
@@ -130,6 +131,7 @@ public sealed class WithdrawMilestoneCommandHandler :
                 UserWalletsId = Guid.NewGuid(),
                 UserId = command.UserId,
                 AvailableTokens = 0m,
+                WithdrawableTokens = 0m,
                 HeldTokens = 0m,
                 CreatedAt = now
             };
@@ -138,8 +140,7 @@ public sealed class WithdrawMilestoneCommandHandler :
 
         clientWallet.HeldTokens -= releasedTokens;
         clientWallet.UpdatedAt = now;
-        freelancerWallet.AvailableTokens += releasedTokens;
-        freelancerWallet.UpdatedAt = now;
+        WalletWorkflow.CreditWithdrawable(freelancerWallet, releasedTokens, now);
 
         milestone.ReleasedAmount += releasableVnd;
         milestone.LastReleasedAt = now;

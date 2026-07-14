@@ -1,10 +1,11 @@
 using Application.Common.Interfaces;
+using Application.Common.Exceptions;
 using Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.Wallets.Common;
 
-internal static class WalletWorkflow
+public static class WalletWorkflow
 {
     public static async Task<UserWallet> GetOrCreateWalletAsync(
         IApplicationDbContext context,
@@ -25,6 +26,7 @@ internal static class WalletWorkflow
             UserWalletsId = Guid.NewGuid(),
             UserId = userId,
             AvailableTokens = 0m,
+            WithdrawableTokens = 0m,
             HeldTokens = 0m,
             PendingWithdrawalTokens = 0m,
             CreatedAt = now
@@ -32,5 +34,31 @@ internal static class WalletWorkflow
 
         context.Set<UserWallet>().Add(wallet);
         return wallet;
+    }
+
+    public static void CreditWithdrawable(UserWallet wallet, decimal tokenAmount, DateTime now)
+    {
+        wallet.AvailableTokens += tokenAmount;
+        wallet.WithdrawableTokens += tokenAmount;
+        wallet.UpdatedAt = now;
+    }
+
+    public static void DebitAvailable(UserWallet wallet, decimal tokenAmount, DateTime now, string errorMessage)
+    {
+        if (wallet.AvailableTokens < tokenAmount)
+        {
+            throw new BadRequestException(errorMessage);
+        }
+
+        var nonWithdrawableTokens = Math.Max(0m, wallet.AvailableTokens - wallet.WithdrawableTokens);
+        var withdrawableDebit = Math.Max(0m, tokenAmount - nonWithdrawableTokens);
+        if (wallet.WithdrawableTokens < withdrawableDebit)
+        {
+            throw new BadRequestException(errorMessage);
+        }
+
+        wallet.AvailableTokens -= tokenAmount;
+        wallet.WithdrawableTokens -= withdrawableDebit;
+        wallet.UpdatedAt = now;
     }
 }

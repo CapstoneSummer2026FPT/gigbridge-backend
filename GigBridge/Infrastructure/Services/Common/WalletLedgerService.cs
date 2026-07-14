@@ -84,6 +84,12 @@ public sealed class WalletLedgerService : IWalletLedgerService
                             x.AvailableTokens >= tokenAmount)
                 .ExecuteUpdateAsync(setters => setters
                     .SetProperty(x => x.AvailableTokens, x => x.AvailableTokens - tokenAmount)
+                    .SetProperty(
+                        x => x.WithdrawableTokens,
+                        x => x.WithdrawableTokens -
+                            (tokenAmount > x.AvailableTokens - x.WithdrawableTokens
+                                ? tokenAmount - (x.AvailableTokens - x.WithdrawableTokens)
+                                : 0m))
                     .SetProperty(x => x.Version, x => x.Version + 1)
                     .SetProperty(x => x.UpdatedAt, now), cancellationToken);
 

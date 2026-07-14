@@ -1,6 +1,6 @@
 using Application.Features.JobPosts.Client.CreateJobPost.Commands;
 using Application.Features.JobPosts.Client.CreateJobPost.DTOs;
-using Infrastructure.Services;
+using Infrastructure.Services.ContentModerationService;
 
 namespace Test_Gigbridge_Backend.Application.Features.JobPosts.Client;
 

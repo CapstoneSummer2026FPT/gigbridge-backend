@@ -147,6 +147,7 @@ internal static class WithdrawalWorkflow
         var now = dateTimeService.UtcNow;
         wallet.PendingWithdrawalTokens -= withdrawal.TokenAmount;
         wallet.AvailableTokens += withdrawal.TokenAmount;
+        wallet.WithdrawableTokens += withdrawal.TokenAmount;
         wallet.UpdatedAt = now;
 
         if (providerResult is not null)
