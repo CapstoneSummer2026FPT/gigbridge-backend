@@ -4,7 +4,6 @@ using Application.Features.Contracts.Common.Internal;
 using Application.Features.Wallets.Common;
 using Domain.Entities;
 using Domain.Enums;
-using Domain.Services.Payments;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -95,7 +94,7 @@ public sealed class AdminOverrideMilestoneCommandHandler :
                 throw new BadRequestException("Escrow balance is insufficient for this release.");
             }
 
-            var releasedTokens = TokenWalletRules.ToTokens(releasableVnd);
+            var releasedTokens = releasableVnd;
             if (clientWallet.HeldTokens < releasedTokens)
             {
                 throw new BadRequestException("Client held wallet balance is insufficient for this release.");
@@ -220,7 +219,7 @@ public sealed class AdminOverrideMilestoneCommandHandler :
                 throw new BadRequestException("Escrow balance is insufficient for this refund.");
             }
 
-            var refundedTokens = TokenWalletRules.ToTokens(refundableVnd);
+            var refundedTokens = refundableVnd;
             if (clientWallet.HeldTokens < refundedTokens)
             {
                 throw new BadRequestException("Client held wallet balance is insufficient for this refund.");

@@ -5,16 +5,17 @@ using Application.Features.Wallets.Common;
 using Application.Features.Admin.AdminCredit.Commands;
 using Application.Features.Admin.AdminCredit.DTOs;
 using Application.Features.Wallets.Common.BankAccounts.Create;
+using Application.Features.Wallets.Common.BankAccounts.Get;
 using Application.Features.Wallets.Common.DTOs;
 using Application.Features.Wallets.Common.TopUps.Confirm.Commands;
 using Application.Features.Wallets.Common.TopUps.Create.Commands;
 using Application.Features.Wallets.Common.TopUps.Sync.Commands;
 using Application.Features.Wallets.Common.Withdrawals.Create;
 using Application.Features.Wallets.Common.Withdrawals.Sync;
-using Application.Features.Wallets.Common.Withdrawals.Webhook;
 using Domain.Entities;
 using Domain.Enums;
 using Microsoft.Extensions.Options;
+using System.Security.Cryptography;
 using Test_Gigbridge_Backend.TestSupport;
 
 namespace Test_Gigbridge_Backend.Application.Features.Wallets;
@@ -400,12 +401,13 @@ public class WalletWorkflowTests
         var handler = new CreateBankAccountCommandHandler(
             fixture.Context,
             new FixedDateTimeService(fixture.Now),
-            protector);
+            protector,
+            new FakeSupportedBankDirectory());
 
         var result = await handler.Handle(
             new CreateBankAccountCommand(
                 fixture.FreelancerUserId,
-                new CreateBankAccountRequest("VCB", "Vietcombank", "1234 5678 9012", "NGUYEN VAN A", true)),
+                new CreateBankAccountRequest("970436", "VCB", "Vietcombank", "1234 5678 9012", "NGUYEN VAN A", true)),
             CancellationToken.None);
 
         var account = Assert.Single(fixture.BankAccounts.Entities);
@@ -413,6 +415,26 @@ public class WalletWorkflowTests
         Assert.Equal("protected:123456789012", account.AccountNumberEncrypted);
         Assert.NotEqual("123456789012", account.AccountNumberEncrypted);
         Assert.True(account.IsDefault);
+    }
+
+    [Fact]
+    public async Task BankAccount_GetDisablesAccountWhenEncryptionKeyIsInvalid()
+    {
+        var fixture = new WalletFixture();
+        var account = fixture.SeedBankAccount();
+        account.IsDefault = true;
+        var handler = new GetBankAccountsQueryHandler(
+            fixture.Context,
+            new InvalidBankAccountProtector(),
+            new FixedDateTimeService(fixture.Now));
+
+        var result = await handler.Handle(
+            new GetBankAccountsQuery(fixture.FreelancerUserId),
+            CancellationToken.None);
+
+        var response = Assert.Single(result);
+        Assert.Equal((int)BankAccountStatus.Disabled, response.Status);
+        Assert.False(response.IsDefault);
     }
 
     [Fact]
@@ -517,8 +539,7 @@ public class WalletWorkflowTests
                 "payout-1",
                 "bank-ref-1",
                 "SUCCESS",
-                null,
-                "{}")
+                null)
         };
         var handler = fixture.CreateSyncHandler(provider);
 
@@ -546,8 +567,7 @@ public class WalletWorkflowTests
                 "payout-1",
                 null,
                 "FAILED",
-                "Invalid bank account",
-                "{}")
+                "Invalid bank account")
         };
         var handler = fixture.CreateSyncHandler(provider);
 
@@ -576,8 +596,7 @@ public class WalletWorkflowTests
                 null,
                 null,
                 "UNKNOWN_PROVIDER_STATUS",
-                "Status is ambiguous",
-                "{}")
+                "Status is ambiguous")
         };
         var handler = fixture.CreateSyncHandler(provider);
 
@@ -591,75 +610,6 @@ public class WalletWorkflowTests
         Assert.Equal(25m, wallet.PendingWithdrawalTokens);
         Assert.Equal((int)WithdrawalStatus.SyncRequired, result.Status);
         Assert.Contains("Status is ambiguous", result.LastSyncError);
-    }
-
-    [Fact]
-    public async Task Withdrawal_WebhookInvalidSignatureIsRejectedAndLogged()
-    {
-        var fixture = new WalletFixture();
-        var provider = new FakePayoutProvider
-        {
-            WebhookResult = new PayoutWebhookVerificationResult(
-                false,
-                "event-1",
-                null,
-                null,
-                PayoutProviderOutcome.SyncRequired,
-                null,
-                null,
-                "invalid",
-                "{\"eventId\":\"event-1\"}")
-        };
-        var handler = new HandlePayoutWebhookCommandHandler(
-            fixture.Context,
-            new FixedDateTimeService(fixture.Now),
-            provider);
-
-        await Assert.ThrowsAsync<BadRequestException>(() =>
-            handler.Handle(
-                new HandlePayoutWebhookCommand("{\"eventId\":\"event-1\"}", "bad-signature"),
-                CancellationToken.None));
-
-        var log = Assert.Single(fixture.WebhookLogs.Entities);
-        Assert.Equal((int)PayoutWebhookProcessingStatus.Rejected, log.ProcessingStatus);
-    }
-
-    [Fact]
-    public async Task Withdrawal_WebhookSuccessFinalizesOnceWhenDuplicated()
-    {
-        var fixture = new WalletFixture();
-        var withdrawal = await fixture.CreatePendingWithdrawalAsync(35m, "withdrawal-webhook-success");
-        var rawPayload = $"{{\"eventId\":\"event-success-1\",\"orderCode\":\"{withdrawal.ProviderOrderCode}\",\"status\":\"SUCCESS\"}}";
-        var provider = new FakePayoutProvider
-        {
-            WebhookResult = new PayoutWebhookVerificationResult(
-                true,
-                "event-success-1",
-                withdrawal.ProviderOrderCode,
-                "payout-webhook-1",
-                PayoutProviderOutcome.Succeeded,
-                "bank-webhook-ref-1",
-                "SUCCESS",
-                null,
-                rawPayload)
-        };
-        var handler = new HandlePayoutWebhookCommandHandler(
-            fixture.Context,
-            new FixedDateTimeService(fixture.Now.AddMinutes(5)),
-            provider);
-
-        await handler.Handle(new HandlePayoutWebhookCommand(rawPayload, "valid-signature"), CancellationToken.None);
-        await handler.Handle(new HandlePayoutWebhookCommand(rawPayload, "valid-signature"), CancellationToken.None);
-
-        var wallet = Assert.Single(fixture.Wallets.Entities.Where(wallet => wallet.UserId == fixture.FreelancerUserId));
-        var storedWithdrawal = Assert.Single(fixture.Withdrawals.Entities);
-        Assert.Equal(65m, wallet.AvailableTokens);
-        Assert.Equal(65m, wallet.WithdrawableTokens);
-        Assert.Equal(0m, wallet.PendingWithdrawalTokens);
-        Assert.Equal((int)WithdrawalStatus.Success, storedWithdrawal.Status);
-        Assert.Single(fixture.WebhookLogs.Entities);
-        Assert.Single(fixture.Transactions.Entities.Where(transaction =>
-            transaction.Type == (int)WalletTransactionType.WithdrawalSuccess));
     }
 
     [Fact]
@@ -718,7 +668,6 @@ public class WalletWorkflowTests
             BankAccounts = Context.AddSet<BankAccount>();
             Withdrawals = Context.AddSet<WalletWithdrawal>();
             PayoutOutboxes = Context.AddSet<PayoutOutbox>();
-            WebhookLogs = Context.AddSet<PayoutWebhookLog>();
         }
 
         public InMemoryApplicationDbContext Context { get; } = new();
@@ -731,7 +680,6 @@ public class WalletWorkflowTests
         public TestDbSet<BankAccount> BankAccounts { get; }
         public TestDbSet<WalletWithdrawal> Withdrawals { get; }
         public TestDbSet<PayoutOutbox> PayoutOutboxes { get; }
-        public TestDbSet<PayoutWebhookLog> WebhookLogs { get; }
 
         public void SeedFreelancerWallet(decimal availableTokens, decimal? withdrawableTokens = null)
         {
@@ -753,6 +701,7 @@ public class WalletWorkflowTests
             {
                 BankAccountId = Guid.NewGuid(),
                 UserId = FreelancerUserId,
+                BankBin = "970436",
                 BankCode = "VCB",
                 BankName = "Vietcombank",
                 AccountNumberEncrypted = "protected:123456789012",
@@ -774,11 +723,13 @@ public class WalletWorkflowTests
                 new FixedDateTimeService(Now),
                 Options.Create(new WalletWithdrawalOptions
                 {
+                    Enabled = true,
                     MinTokens = 1m,
                     MaxTokens = 1_000m,
                     DailyMaxTokens = 2_000m,
                     Provider = "PayOS"
-                }));
+                }),
+                new FakeBankAccountProtector());
         }
 
         public SyncWithdrawalCommandHandler CreateSyncHandler(FakePayoutProvider provider)
@@ -860,6 +811,14 @@ public class WalletWorkflowTests
         }
     }
 
+    private sealed class InvalidBankAccountProtector : IBankAccountProtector
+    {
+        public string Protect(string accountNumber) => accountNumber;
+
+        public string Unprotect(string protectedAccountNumber) =>
+            throw new CryptographicException("The key is no longer available.");
+    }
+
     private sealed class FakePayoutProvider : IPayoutProvider
     {
         public string ProviderName => "PayOS";
@@ -869,19 +828,7 @@ public class WalletWorkflowTests
             null,
             null,
             "PENDING",
-            null,
-            "{}");
-
-        public PayoutWebhookVerificationResult WebhookResult { get; set; } = new(
-            true,
-            "event-1",
-            null,
-            null,
-            PayoutProviderOutcome.Pending,
-            null,
-            "PENDING",
-            null,
-            "{}");
+            null);
 
         public Task<PayoutProviderResult> CreatePayoutAsync(
             PayoutCreateRequest request,
@@ -896,13 +843,13 @@ public class WalletWorkflowTests
         {
             return Task.FromResult(StatusResult);
         }
+    }
 
-        public Task<PayoutWebhookVerificationResult> VerifyWebhookAsync(
-            PayoutWebhookVerificationRequest request,
-            CancellationToken cancellationToken)
-        {
-            return Task.FromResult(WebhookResult);
-        }
+    private sealed class FakeSupportedBankDirectory : ISupportedBankDirectory
+    {
+        public Task<IReadOnlyList<SupportedBank>> GetBanksAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<SupportedBank>>(
+                [new SupportedBank("970436", "VCB", "Vietcombank", "Vietcombank", null)]);
     }
 
     private sealed class FixedDateTimeService : IDateTimeService

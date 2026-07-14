@@ -15,11 +15,13 @@ using Application.Features.Wallets.Common.Withdrawals.Create;
 using Application.Features.Wallets.Common.Withdrawals.Get;
 using Application.Features.Wallets.Common.Withdrawals.GetDetail;
 using Application.Features.Wallets.Common.Withdrawals.Sync;
-using Application.Features.Wallets.Common.Withdrawals.Webhook;
+using Application.Common.Interfaces.IService;
+using Application.Common.Options;
 using Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.Text.Json;
+using Domain.Services.Payments;
+using Microsoft.Extensions.Options;
 
 namespace Project_API.Controllers.Common;
 
@@ -28,6 +30,17 @@ namespace Project_API.Controllers.Common;
 [Authorize]
 public sealed class WalletController : BaseApiController
 {
+    private readonly WalletWithdrawalOptions _withdrawalOptions;
+    private readonly ISupportedBankDirectory _bankDirectory;
+
+    public WalletController(
+        IOptions<WalletWithdrawalOptions> withdrawalOptions,
+        ISupportedBankDirectory bankDirectory)
+    {
+        _withdrawalOptions = withdrawalOptions.Value;
+        _bankDirectory = bankDirectory;
+    }
+
     [HttpGet]
     public async Task<IActionResult> GetMyWallet()
     {
@@ -115,6 +128,31 @@ public sealed class WalletController : BaseApiController
 
         var result = await Mediator.Send(new GetBankAccountsQuery(userId));
         return Ok(ApiResponse<IReadOnlyList<BankAccountResponse>>.Ok(result, "Success"));
+    }
+
+    [HttpGet("withdrawal-settings")]
+    [Authorize(Roles = nameof(UserRole.Freelancer))]
+    public IActionResult GetWithdrawalSettings()
+    {
+        var result = new WithdrawalSettingsResponse(
+            _withdrawalOptions.Enabled,
+            TokenWalletRules.VndPerToken,
+            _withdrawalOptions.FixedFeeVnd,
+            _withdrawalOptions.MinTokens,
+            _withdrawalOptions.MaxTokens,
+            _withdrawalOptions.DailyMaxTokens,
+            _withdrawalOptions.Provider);
+        return Ok(ApiResponse<WithdrawalSettingsResponse>.Ok(result, "Success"));
+    }
+
+    [HttpGet("supported-banks")]
+    [Authorize(Roles = nameof(UserRole.Freelancer))]
+    public async Task<IActionResult> GetSupportedBanks()
+    {
+        var banks = await _bankDirectory.GetBanksAsync(HttpContext.RequestAborted);
+        var result = banks.Select(bank => new SupportedBankResponse(
+            bank.Bin, bank.Code, bank.ShortName, bank.Name, bank.Logo)).ToArray();
+        return Ok(ApiResponse<IReadOnlyList<SupportedBankResponse>>.Ok(result, "Success"));
     }
 
     [HttpPost("bank-accounts")]
@@ -210,16 +248,4 @@ public sealed class WalletController : BaseApiController
         return Ok(ApiResponse<WithdrawalResponse>.Ok(result, "Withdrawal status synced"));
     }
 
-    [HttpPost("withdrawals/payos/callback")]
-    [AllowAnonymous]
-    public async Task<IActionResult> ConfirmPayOsWithdrawal([FromBody] JsonElement request)
-    {
-        var signature =
-            Request.Headers["x-payos-signature"].FirstOrDefault() ??
-            Request.Headers["payos-signature"].FirstOrDefault() ??
-            Request.Headers["signature"].FirstOrDefault();
-
-        var result = await Mediator.Send(new HandlePayoutWebhookCommand(request.GetRawText(), signature));
-        return Ok(ApiResponse<PayoutWebhookResponse>.Ok(result, "Withdrawal callback processed"));
-    }
 }

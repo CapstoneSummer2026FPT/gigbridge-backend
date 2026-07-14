@@ -49,17 +49,4 @@ public sealed class AdminWithdrawalsController : BaseApiController
         return Ok(ApiResponse<WithdrawalResponse>.Ok(result, "Withdrawal retry scheduled"));
     }
 
-    [HttpPost("{withdrawalId:guid}/mark-failed")]
-    public async Task<IActionResult> MarkWithdrawalFailed(
-        Guid withdrawalId,
-        [FromBody] AdminMarkWithdrawalFailedRequest request)
-    {
-        if (!TryGetCurrentUserId(out var adminUserId))
-        {
-            return InvalidTokenResponse();
-        }
-
-        var result = await Mediator.Send(new AdminMarkWithdrawalFailedCommand(adminUserId, withdrawalId, request));
-        return Ok(ApiResponse<WithdrawalResponse>.Ok(result, "Withdrawal marked as failed"));
-    }
 }

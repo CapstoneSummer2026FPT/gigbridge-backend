@@ -6,6 +6,7 @@ using Domain.Entities;
 using Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Cryptography;
 
 namespace Application.Features.Wallets.Common.BankAccounts.Update;
 
@@ -15,15 +16,18 @@ public sealed class UpdateBankAccountCommandHandler :
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
     private readonly IBankAccountProtector _bankAccountProtector;
+    private readonly ISupportedBankDirectory _bankDirectory;
 
     public UpdateBankAccountCommandHandler(
         IApplicationDbContext context,
         IDateTimeService dateTimeService,
-        IBankAccountProtector bankAccountProtector)
+        IBankAccountProtector bankAccountProtector,
+        ISupportedBankDirectory bankDirectory)
     {
         _context = context;
         _dateTimeService = dateTimeService;
         _bankAccountProtector = bankAccountProtector;
+        _bankDirectory = bankDirectory;
     }
 
     public async Task<BankAccountResponse> Handle(
@@ -52,21 +56,39 @@ public sealed class UpdateBankAccountCommandHandler :
                         withdrawal.Status == (int)WithdrawalStatus.SyncRequired),
                 cancellationToken);
 
-        if (hasPendingWithdrawal && !string.IsNullOrWhiteSpace(command.Request.AccountNumber))
+        var changesRouting = !string.IsNullOrWhiteSpace(command.Request.BankBin) ||
+            !string.IsNullOrWhiteSpace(command.Request.BankCode) ||
+            !string.IsNullOrWhiteSpace(command.Request.BankName) ||
+            !string.IsNullOrWhiteSpace(command.Request.AccountNumber);
+        if (hasPendingWithdrawal && changesRouting)
         {
-            throw new ConflictException("Bank account number cannot be changed while a withdrawal is pending.");
+            throw new ConflictException("Bank routing details cannot be changed while a withdrawal is pending.");
         }
 
         var now = _dateTimeService.UtcNow;
-
-        if (!string.IsNullOrWhiteSpace(command.Request.BankCode))
+        var accountNumberIsValid = true;
+        try
         {
-            account.BankCode = BankAccountWorkflow.NormalizeText(command.Request.BankCode, "Bank code", 30);
+            _bankAccountProtector.Unprotect(account.AccountNumberEncrypted);
+        }
+        catch (CryptographicException)
+        {
+            accountNumberIsValid = false;
         }
 
-        if (!string.IsNullOrWhiteSpace(command.Request.BankName))
+        if (!string.IsNullOrWhiteSpace(command.Request.BankBin) ||
+            !string.IsNullOrWhiteSpace(command.Request.BankCode) ||
+            !string.IsNullOrWhiteSpace(command.Request.BankName))
         {
-            account.BankName = BankAccountWorkflow.NormalizeText(command.Request.BankName, "Bank name", 120);
+            var bank = await BankAccountWorkflow.ResolveBankAsync(
+                _bankDirectory,
+                command.Request.BankBin ?? account.BankBin ?? string.Empty,
+                command.Request.BankCode ?? account.BankCode,
+                command.Request.BankName ?? account.BankName,
+                cancellationToken);
+            account.BankBin = bank.Bin;
+            account.BankCode = bank.Code;
+            account.BankName = bank.Name;
         }
 
         if (!string.IsNullOrWhiteSpace(command.Request.AccountName))
@@ -79,6 +101,21 @@ public sealed class UpdateBankAccountCommandHandler :
             var normalized = BankAccountWorkflow.NormalizeAccountNumber(command.Request.AccountNumber);
             account.AccountNumberEncrypted = _bankAccountProtector.Protect(normalized);
             account.AccountNumberMasked = BankAccountWorkflow.MaskAccountNumber(normalized);
+            accountNumberIsValid = true;
+        }
+
+        var bankBinIsValid = account.BankBin?.Length == 6 && account.BankBin.All(char.IsDigit);
+        account.Status = accountNumberIsValid && bankBinIsValid
+            ? (int)BankAccountStatus.Active
+            : (int)BankAccountStatus.Disabled;
+        if (account.Status == (int)BankAccountStatus.Disabled)
+        {
+            account.IsDefault = false;
+        }
+
+        if (command.Request.IsDefault == true && account.Status == (int)BankAccountStatus.Disabled)
+        {
+            throw new BadRequestException("A disabled bank account cannot be set as default.");
         }
 
         if (command.Request.IsDefault == true)
@@ -100,6 +137,11 @@ public sealed class UpdateBankAccountCommandHandler :
             account.IsDefault = true;
         }
         else if (command.Request.IsDefault == false)
+        {
+            account.IsDefault = false;
+        }
+
+        if (account.Status == (int)BankAccountStatus.Disabled)
         {
             account.IsDefault = false;
         }
