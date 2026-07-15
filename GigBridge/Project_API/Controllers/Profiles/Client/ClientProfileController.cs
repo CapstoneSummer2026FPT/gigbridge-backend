@@ -4,6 +4,7 @@ using Application.Common.Models;
 using Application.Features.Profiles.ClientProfile.GetClientProfile.DTOs;
 using Application.Features.Profiles.ClientProfile.CreateClientProfile.DTOs;
 using Application.Features.Profiles.ClientProfile.GetClientProfile.Queries;
+using Application.Features.Profiles.ClientProfile.GetMyClientProfile.Queries;
 using Application.Features.Profiles.ClientProfile.UpdateClientProfile.Commands;
 using Application.Features.Profiles.ClientProfile.UpdateClientProfile.DTOs;
 using Microsoft.AspNetCore.Authorization;
@@ -17,6 +18,14 @@ namespace Project_API.Controllers.Profiles.Client;
 [Route("api/profile")]
 public class ClientProfileController : BaseApiController
 {
+    [HttpGet("client/me")]
+    public async Task<IActionResult> GetMyClientProfile()
+    {
+        var query = new GetMyClientProfileQuery();
+        var result = await Mediator.Send(query);
+        return Ok(ApiResponse<ClientProfileDetailDto>.Ok(result, "Success"));
+    }
+
     [HttpPut("client")]
     public async Task<IActionResult> UpdateClientProfile([FromBody] UpdateClientProfileDto dto)
     {
