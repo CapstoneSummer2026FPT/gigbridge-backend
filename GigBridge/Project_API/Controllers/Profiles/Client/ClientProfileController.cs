@@ -1,0 +1,40 @@
+using System;
+using System.Threading.Tasks;
+using Application.Common.Models;
+using Application.Features.Profiles.ClientProfile.GetClientProfile.DTOs;
+using Application.Features.Profiles.ClientProfile.CreateClientProfile.DTOs;
+using Application.Features.Profiles.ClientProfile.GetClientProfile.Queries;
+using Application.Features.Profiles.ClientProfile.UpdateClientProfile.Commands;
+using Application.Features.Profiles.ClientProfile.UpdateClientProfile.DTOs;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Project_API.Controllers.Common;
+
+namespace Project_API.Controllers.Profiles.Client;
+
+[Authorize]
+[ApiController]
+[Route("api/profile")]
+public class ClientProfileController : BaseApiController
+{
+    [HttpPut("client")]
+    public async Task<IActionResult> UpdateClientProfile([FromBody] UpdateClientProfileDto dto)
+    {
+        if (dto == null)
+        {
+            return BadRequest(ApiResponse<object>.BadRequest("Profile data is required"));
+        }
+
+        var command = new UpdateClientProfileCommand(dto);
+        var result = await Mediator.Send(command);
+        return Ok(ApiResponse<ClientProfileResponseDto>.Ok(result, "Client profile updated successfully"));
+    }
+
+    [HttpGet("client/{userId}")]
+    public async Task<IActionResult> GetClientProfile(Guid userId)
+    {
+        var query = new GetClientProfileQuery(userId);
+        var result = await Mediator.Send(query);
+        return Ok(ApiResponse<ClientProfileDetailDto>.Ok(result, "Success"));
+    }
+}
