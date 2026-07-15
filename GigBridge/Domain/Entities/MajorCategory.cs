@@ -15,4 +15,6 @@ public partial class MajorCategory
     public virtual Category Category { get; set; } = null!;
 
     public virtual ICollection<JobPost> JobPosts { get; set; } = new List<JobPost>();
+
+    public virtual ICollection<FreelancerProfileCategory> FreelancerProfileCategories { get; set; } = new List<FreelancerProfileCategory>();
 }

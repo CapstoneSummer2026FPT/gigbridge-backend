@@ -27,13 +27,14 @@ public class UpdateFreelancerProfileCommandHandlerTests
 
         context.AddSet(user);
         var profiles = context.AddSet<FreelancerProfile>();
+        var (majorId, categoryId) = AddTaxonomy(context);
 
         var handler = new UpdateFreelancerProfileCommandHandler(
             context,
             new FixedCurrentUserService(userId),
             CreateMapper());
 
-        var result = await handler.Handle(new UpdateFreelancerProfileCommand(CreateValidDto()), CancellationToken.None);
+        var result = await handler.Handle(new UpdateFreelancerProfileCommand(CreateValidDto(majorId, categoryId)), CancellationToken.None);
 
         var profile = Assert.Single(profiles.Entities);
         Assert.Equal(profile.FreelancerProfilesId, result.FreelancerProfilesId);
@@ -43,6 +44,8 @@ public class UpdateFreelancerProfileCommandHandlerTests
         Assert.Equal(0, profile.Availability);
         Assert.Equal("Ho Chi Minh City", profile.Location);
         Assert.Equal(100, profile.ProfileCompletionScore);
+        Assert.Equal(majorId, profile.MajorId);
+        Assert.Equal(categoryId, Assert.Single(result.Categories).CategoryId);
         Assert.True(user.IsSetup);
         Assert.NotNull(profile.UpdatedAt);
         Assert.Equal(1, context.SaveChangesCount);
@@ -75,13 +78,14 @@ public class UpdateFreelancerProfileCommandHandlerTests
 
         context.AddSet(user);
         context.AddSet(profile);
+        var (majorId, categoryId) = AddTaxonomy(context);
 
         var handler = new UpdateFreelancerProfileCommandHandler(
             context,
             new FixedCurrentUserService(userId),
             CreateMapper());
 
-        var result = await handler.Handle(new UpdateFreelancerProfileCommand(CreateValidDto()), CancellationToken.None);
+        var result = await handler.Handle(new UpdateFreelancerProfileCommand(CreateValidDto(majorId, categoryId)), CancellationToken.None);
 
         Assert.Equal(profile.FreelancerProfilesId, result.FreelancerProfilesId);
         Assert.Equal("Backend Developer", profile.Title);
@@ -90,17 +94,52 @@ public class UpdateFreelancerProfileCommandHandlerTests
         Assert.Equal("Ho Chi Minh City", profile.Location);
         Assert.Equal(100, profile.ProfileCompletionScore);
         Assert.True(user.IsSetup);
+        Assert.Equal(categoryId, Assert.Single(profile.FreelancerProfileCategories).MajorCategory.CategoryId);
     }
 
-    private static UpdateFreelancerProfileDto CreateValidDto()
+    private static UpdateFreelancerProfileDto CreateValidDto(Guid majorId, Guid categoryId)
     {
         return new UpdateFreelancerProfileDto
         {
             Title = " Backend Developer ",
             Bio = " Experienced .NET developer. ",
             Availability = 0,
-            Location = " Ho Chi Minh City "
+            Location = " Ho Chi Minh City ",
+            MajorId = majorId,
+            CategoryIds = new[] { categoryId }
         };
+    }
+
+    private static (Guid MajorId, Guid CategoryId) AddTaxonomy(InMemoryApplicationDbContext context)
+    {
+        var major = new Major
+        {
+            MajorsId = Guid.NewGuid(),
+            Name = "Software Development",
+            Slug = "software-development",
+            IsActive = true
+        };
+        var category = new Category
+        {
+            CategoriesId = Guid.NewGuid(),
+            Name = "Backend Development",
+            Slug = "backend-development",
+            IsActive = true
+        };
+        var mapping = new MajorCategory
+        {
+            MajorCategoriesId = Guid.NewGuid(),
+            MajorId = major.MajorsId,
+            CategoryId = category.CategoriesId,
+            Major = major,
+            Category = category
+        };
+
+        context.AddSet(major);
+        context.AddSet(category);
+        context.AddSet(mapping);
+        context.AddSet<FreelancerProfileCategory>();
+        return (major.MajorsId, category.CategoriesId);
     }
 
     private static IMapper CreateMapper()

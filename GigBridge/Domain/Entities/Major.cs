@@ -17,4 +17,6 @@ public partial class Major
     public DateTime CreatedAt { get; set; }
 
     public virtual ICollection<MajorCategory> MajorCategories { get; set; } = new List<MajorCategory>();
+
+    public virtual ICollection<FreelancerProfile> FreelancerProfiles { get; set; } = new List<FreelancerProfile>();
 }

@@ -7,6 +7,7 @@ using Application.Features.FAQCategories.Shared.DTOs;
 using Application.Features.FAQs.Shared.DTOs;
 using Application.Features.Profiles.FreelancerProfile.CreateFreelancerProfile.DTOs;
 using Application.Features.Profiles.ClientProfile.CreateClientProfile.DTOs;
+using Application.Features.Profiles.FreelancerProfile.Common.DTOs;
 using Domain.Services;
 
 namespace Application.Common.Mappings;
@@ -33,7 +34,12 @@ public class MappingProfile : Profile
             .ForMember(dest => dest.FaqCategoryId, opt => opt.MapFrom(src => src.FaqcategoriesId))
             .ForMember(dest => dest.FaqCategoryName, opt => opt.MapFrom(src => src.Faqcategories != null ? src.Faqcategories.Name : null));
 
-        CreateMap<FreelancerProfile, FreelancerProfileResponseDto>();
+        CreateMap<FreelancerProfileCategory, FreelancerProfileCategoryDto>()
+            .ForMember(dest => dest.CategoryId, opt => opt.MapFrom(src => src.MajorCategory.CategoryId))
+            .ForMember(dest => dest.Name, opt => opt.MapFrom(src => src.MajorCategory.Category.Name));
+        CreateMap<FreelancerProfile, FreelancerProfileResponseDto>()
+            .ForMember(dest => dest.MajorName, opt => opt.MapFrom(src => src.Major != null ? src.Major.Name : null))
+            .ForMember(dest => dest.Categories, opt => opt.MapFrom(src => src.FreelancerProfileCategories));
         CreateMap<ClientProfile, ClientProfileResponseDto>();
     }
 }

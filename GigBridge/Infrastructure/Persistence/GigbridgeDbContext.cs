@@ -71,6 +71,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
     public virtual DbSet<FreelancerProfile> FreelancerProfiles { get; set; }
 
+    public virtual DbSet<FreelancerProfileCategory> FreelancerProfileCategories { get; set; }
+
     public virtual DbSet<FreelancerCheatingViolation> FreelancerCheatingViolations { get; set; }
 
     public virtual DbSet<FreelancerSkill> FreelancerSkills { get; set; }
@@ -830,6 +832,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
             entity.HasIndex(e => e.UserId, "IX_FreelancerProfiles_UserId").IsUnique();
 
+            entity.HasIndex(e => e.MajorId, "IX_FreelancerProfiles_MajorId");
+
             entity.Property(e => e.FreelancerProfilesId)
                 .HasDefaultValueSql("gen_random_uuid()")
                 .HasColumnName("FreelancerProfilesId");
@@ -841,10 +845,50 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.Property(e => e.Title).HasMaxLength(300);
             entity.Property(e => e.UserId).HasColumnName("UserId");
 
+            entity.Property(e => e.MajorId).HasColumnName("MajorId");
+
             entity.HasOne(d => d.User).WithOne(p => p.FreelancerProfile)
                 .HasForeignKey<FreelancerProfile>(d => d.UserId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("FreelancerProfiles_usr_UserId_fkey");
+
+            entity.HasOne(e => e.Major)
+                .WithMany(e => e.FreelancerProfiles)
+                .HasForeignKey(e => e.MajorId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FreelancerProfiles_major_MajorId_fkey");
+        });
+
+        modelBuilder.Entity<FreelancerProfileCategory>(entity =>
+        {
+            entity.HasKey(e => e.FreelancerProfileCategoriesId)
+                .HasName("FreelancerProfileCategories_pkey");
+
+            entity.Property(e => e.FreelancerProfileCategoriesId)
+                .HasDefaultValueSql("gen_random_uuid()")
+                .HasColumnName("FreelancerProfileCategoriesId");
+            entity.Property(e => e.FreelancerProfileId).HasColumnName("FreelancerProfileId");
+            entity.Property(e => e.MajorCategoryId).HasColumnName("MajorCategoryId");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+
+            entity.HasIndex(e => e.FreelancerProfileId, "IX_FreelancerProfileCategories_FreelancerProfileId");
+            entity.HasIndex(e => e.MajorCategoryId, "IX_FreelancerProfileCategories_MajorCategoryId");
+            entity.HasIndex(
+                    e => new { e.FreelancerProfileId, e.MajorCategoryId },
+                    "FreelancerProfileCategories_Profile_MajorCategory_key")
+                .IsUnique();
+
+            entity.HasOne(e => e.FreelancerProfile)
+                .WithMany(e => e.FreelancerProfileCategories)
+                .HasForeignKey(e => e.FreelancerProfileId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FreelancerProfileCategories_profile_FreelancerProfileId_fkey");
+
+            entity.HasOne(e => e.MajorCategory)
+                .WithMany(e => e.FreelancerProfileCategories)
+                .HasForeignKey(e => e.MajorCategoryId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("FreelancerProfileCategories_majorCategory_MajorCategoryId_fkey");
         });
 
         modelBuilder.Entity<FreelancerCheatingViolation>(entity =>
