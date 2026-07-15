@@ -14,33 +14,45 @@ namespace Project_API.Controllers.Disputes;
 public sealed class ContractDisputesController : BaseApiController
 {
     private const long MaxEvidenceFileSizeBytes = 100 * 1024 * 1024;
+    private const long MaxRequestSizeBytes = MaxEvidenceFileSizeBytes + (1024 * 1024);
 
     /// <summary>
     /// Tạo dispute mới cho contract.
     /// </summary>
     [HttpPost]
     [Consumes("multipart/form-data")]
-    [RequestSizeLimit(MaxEvidenceFileSizeBytes)]
+    [RequestSizeLimit(MaxRequestSizeBytes)]
     public async Task<IActionResult> Create(
         Guid contractId,
         [FromForm] string reason,
         [FromForm] Guid? milestoneId = null,
-        [FromForm] string? evidenceDescription = null)
+        [FromForm] string? evidenceDescription = null,
+        IFormFile? evidence = null)
     {
         if (!TryGetCurrentUserId(out var userId))
         {
             return InvalidTokenResponse();
         }
 
+        if (Request.Form.Files.Count > 1)
+        {
+            throw new BadRequestException("Only one evidence file can be uploaded at a time.");
+        }
+
+        if (Request.Form.Files.Count == 1 && evidence is null)
+        {
+            throw new BadRequestException("The uploaded file must use the 'evidence' form field.");
+        }
+
+        using var evidenceStream = evidence?.OpenReadStream();
         CreateDisputeFile? evidenceFile = null;
-        var file = Request.Form.Files.FirstOrDefault();
-        if (file is not null)
+        if (evidence is not null && evidenceStream is not null)
         {
             evidenceFile = new CreateDisputeFile(
-                file.OpenReadStream(),
-                file.FileName,
-                file.ContentType,
-                file.Length);
+                evidenceStream,
+                evidence.FileName,
+                evidence.ContentType,
+                evidence.Length);
         }
 
         var result = await Mediator.Send(new CreateDisputeCommand(
@@ -51,7 +63,9 @@ public sealed class ContractDisputesController : BaseApiController
             evidenceFile,
             evidenceDescription));
 
-        return Ok(ApiResponse<DisputeResponse>.CreatedAt(result, "Dispute created successfully"));
+        return StatusCode(
+            StatusCodes.Status201Created,
+            ApiResponse<DisputeResponse>.CreatedAt(result, "Dispute created successfully"));
     }
 
     /// <summary>
@@ -102,5 +116,25 @@ public sealed class ContractDisputesController : BaseApiController
         var result = await Mediator.Send(new GetDisputeByIdQuery(contractId, disputeId, userId));
 
         return Ok(ApiResponse<DisputeResponse>.Ok(result, "Success"));
+    }
+
+    [HttpGet("{disputeId:guid}/evidence/{evidenceId:guid}/download")]
+    public async Task<IActionResult> DownloadEvidence(
+        Guid contractId,
+        Guid disputeId,
+        Guid evidenceId)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return InvalidTokenResponse();
+        }
+
+        var result = await Mediator.Send(new GetDisputeEvidenceDownloadQuery(
+            contractId,
+            disputeId,
+            evidenceId,
+            userId));
+
+        return Ok(ApiResponse<DisputeEvidenceDownloadResponse>.Ok(result, "Success"));
     }
 }
