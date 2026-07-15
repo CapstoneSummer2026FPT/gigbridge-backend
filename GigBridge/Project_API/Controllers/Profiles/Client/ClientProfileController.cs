@@ -10,6 +10,7 @@ using Application.Features.Profiles.ClientProfile.UpdateClientProfile.DTOs;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Project_API.Controllers.Common;
+using Domain.Enums;
 
 namespace Project_API.Controllers.Profiles.Client;
 
@@ -19,6 +20,7 @@ namespace Project_API.Controllers.Profiles.Client;
 public class ClientProfileController : BaseApiController
 {
     [HttpGet("client/me")]
+    [Authorize(Roles = nameof(UserRole.Client))]
     public async Task<IActionResult> GetMyClientProfile()
     {
         var query = new GetMyClientProfileQuery();
@@ -27,6 +29,7 @@ public class ClientProfileController : BaseApiController
     }
 
     [HttpPut("client")]
+    [Authorize(Roles = nameof(UserRole.Client))]
     public async Task<IActionResult> UpdateClientProfile([FromBody] UpdateClientProfileDto dto)
     {
         if (dto == null)

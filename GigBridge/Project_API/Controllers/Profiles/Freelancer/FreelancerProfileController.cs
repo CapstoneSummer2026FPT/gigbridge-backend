@@ -12,6 +12,7 @@ using Application.Features.Profiles.FreelancerProfile.UpdateFreelancerProfile.DT
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Project_API.Controllers.Common;
+using Domain.Enums;
 
 namespace Project_API.Controllers.Profiles.Freelancer;
 
@@ -21,6 +22,7 @@ namespace Project_API.Controllers.Profiles.Freelancer;
 public class FreelancerProfileController : BaseApiController
 {
     [HttpPut("freelancer")]
+    [Authorize(Roles = nameof(UserRole.Freelancer))]
     public async Task<IActionResult> UpdateFreelancerProfile([FromBody] UpdateFreelancerProfileDto dto)
     {
         if (dto == null)
@@ -34,6 +36,7 @@ public class FreelancerProfileController : BaseApiController
     }
 
     [HttpGet("freelancer/me")]
+    [Authorize(Roles = nameof(UserRole.Freelancer))]
     public async Task<IActionResult> GetMyFreelancerProfile()
     {
         var query = new GetMyFreelancerProfileQuery();

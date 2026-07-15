@@ -28,5 +28,9 @@ public class UpdateFreelancerProfileCommandValidator : AbstractValidator<UpdateF
             .NotEmpty().WithMessage("At least one category is required.")
             .Must(categoryIds => categoryIds is not null && categoryIds.Distinct().Count() == categoryIds.Count)
             .WithMessage("Duplicate categories are not allowed.");
+
+        RuleFor(v => v.Dto.SkillIds)
+            .Must(skillIds => skillIds is null || skillIds.Distinct().Count() == skillIds.Count)
+            .WithMessage("Duplicate skills are not allowed.");
     }
 }

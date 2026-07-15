@@ -62,25 +62,87 @@ internal static class FreelancerProfileTaxonomy
         IReadOnlyList<MajorCategory> mappings,
         DateTime now)
     {
-        if (profile.FreelancerProfileCategories.Count > 0)
+        var requestedMappings = mappings.ToDictionary(mapping => mapping.MajorCategoriesId);
+        var selectionsToRemove = profile.FreelancerProfileCategories
+            .Where(selection => !requestedMappings.ContainsKey(selection.MajorCategoryId))
+            .ToList();
+
+        if (selectionsToRemove.Count > 0)
         {
-            context.Set<FreelancerProfileCategory>().RemoveRange(profile.FreelancerProfileCategories);
-            profile.FreelancerProfileCategories.Clear();
+            context.Set<FreelancerProfileCategory>().RemoveRange(selectionsToRemove);
+            foreach (var selection in selectionsToRemove)
+            {
+                profile.FreelancerProfileCategories.Remove(selection);
+            }
         }
 
         profile.MajorId = majorId;
         profile.Major = mappings[0].Major;
 
-        foreach (var mapping in mappings)
+        var existingMappingIds = profile.FreelancerProfileCategories
+            .Select(selection => selection.MajorCategoryId)
+            .ToHashSet();
+
+        foreach (var mapping in mappings.Where(mapping => !existingMappingIds.Contains(mapping.MajorCategoriesId)))
         {
-            profile.FreelancerProfileCategories.Add(new FreelancerProfileCategory
+            var selection = new FreelancerProfileCategory
             {
                 FreelancerProfileCategoriesId = Guid.NewGuid(),
                 FreelancerProfileId = profile.FreelancerProfilesId,
                 MajorCategoryId = mapping.MajorCategoriesId,
                 MajorCategory = mapping,
                 CreatedAt = now
-            });
+            };
+            profile.FreelancerProfileCategories.Add(selection);
+            context.Set<FreelancerProfileCategory>().Add(selection);
+        }
+    }
+
+    public static async Task SynchronizeSelectionsAsync(
+        IApplicationDbContext context,
+        Domain.Entities.FreelancerProfile profile,
+        Guid majorId,
+        IReadOnlyList<MajorCategory> mappings,
+        DateTime now,
+        CancellationToken cancellationToken)
+    {
+        var requestedMappingIds = mappings
+            .Select(mapping => mapping.MajorCategoriesId)
+            .ToHashSet();
+        var existingSelections = await context.Set<FreelancerProfileCategory>()
+            .Include(selection => selection.MajorCategory)
+                .ThenInclude(mapping => mapping.Category)
+            .Where(selection => selection.FreelancerProfileId == profile.FreelancerProfilesId)
+            .ToListAsync(cancellationToken);
+        var selectionsToRemove = existingSelections
+            .Where(selection => !requestedMappingIds.Contains(selection.MajorCategoryId))
+            .ToList();
+        if (selectionsToRemove.Count > 0)
+        {
+            context.Set<FreelancerProfileCategory>().RemoveRange(selectionsToRemove);
+            foreach (var selection in selectionsToRemove)
+            {
+                profile.FreelancerProfileCategories.Remove(selection);
+            }
+        }
+
+        profile.MajorId = majorId;
+        profile.Major = mappings[0].Major;
+        var existingMappingIdSet = existingSelections
+            .Select(selection => selection.MajorCategoryId)
+            .ToHashSet();
+        foreach (var mapping in mappings.Where(mapping => !existingMappingIdSet.Contains(mapping.MajorCategoriesId)))
+        {
+            var selection = new FreelancerProfileCategory
+            {
+                FreelancerProfileCategoriesId = Guid.NewGuid(),
+                FreelancerProfileId = profile.FreelancerProfilesId,
+                MajorCategoryId = mapping.MajorCategoriesId,
+                MajorCategory = mapping,
+                CreatedAt = now
+            };
+            profile.FreelancerProfileCategories.Add(selection);
+            context.Set<FreelancerProfileCategory>().Add(selection);
         }
     }
 
