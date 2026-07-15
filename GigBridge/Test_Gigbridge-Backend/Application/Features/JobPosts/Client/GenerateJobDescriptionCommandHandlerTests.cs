@@ -96,6 +96,37 @@ public class GenerateJobDescriptionCommandHandlerTests
         {
             return Task.FromResult(ResponseToReturn);
         }
+
+        public Task<AiInterviewQuestionResponseDto> StartInterviewAsync(
+            AiInterviewStartRequestDto request,
+            CancellationToken cancellationToken = default)
+        {
+            throw new NotSupportedException();
+        }
+
+        public Task<AiInterviewDraftResponseDto> TranscribeInterviewAudioAsync(
+            string sessionId,
+            Stream audioStream,
+            string fileName,
+            string contentType,
+            string language,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task<AiInterviewQuestionResponseDto> ConfirmInterviewAnswerAsync(
+            AiInterviewConfirmRequestDto request,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task<AiInterviewQuestionAudioResponseDto> GetInterviewQuestionAudioAsync(
+            string sessionId,
+            int questionIndex,
+            string audioAccessToken,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task<AiInterviewAudioStreamDto> StreamInterviewQuestionAudioAsync(
+            string sessionId,
+            int questionIndex,
+            string audioAccessToken,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     private class FakeDateTimeService : IDateTimeService
