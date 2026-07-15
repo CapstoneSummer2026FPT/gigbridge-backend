@@ -1,6 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Application.Features.JobPosts.Common;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
@@ -52,10 +53,7 @@ public class OpenNegotiationFromInviteCommandHandler
             throw new ForbiddenAccessException("You do not own this job post.");
         }
 
-        if (jobPost.Status != 1)
-        {
-            throw new BadRequestException("Job post is no longer open for negotiations.");
-        }
+        JobPostNegotiationGuard.EnsureEligibleForNegotiation(jobPost);
 
         var freelancerProfile = await _context.Set<FreelancerProfile>()
             .FirstOrDefaultAsync(

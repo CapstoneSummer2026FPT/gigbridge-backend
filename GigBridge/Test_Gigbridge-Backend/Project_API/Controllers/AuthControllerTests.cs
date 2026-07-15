@@ -28,7 +28,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
-using Project_API.Controllers;
+using Project_API.Controllers.Auth;
 using Xunit;
 using Domain.Enums;
 

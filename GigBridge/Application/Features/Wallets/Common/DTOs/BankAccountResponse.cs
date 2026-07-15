@@ -3,6 +3,7 @@ namespace Application.Features.Wallets.Common.DTOs;
 public sealed record BankAccountResponse(
     Guid BankAccountId,
     Guid UserId,
+    string? BankBin,
     string BankCode,
     string BankName,
     string AccountNumberMasked,
@@ -17,6 +18,7 @@ public sealed record BankAccountResponse(
         return new BankAccountResponse(
             bankAccount.BankAccountId,
             bankAccount.UserId,
+            bankAccount.BankBin,
             bankAccount.BankCode,
             bankAccount.BankName,
             bankAccount.AccountNumberMasked,

@@ -22,6 +22,7 @@ public static class DependencyInjection
         services.Configure<WalletWithdrawalOptions>(options =>
         {
             var section = configuration.GetSection(WalletWithdrawalOptions.SectionName);
+            options.Enabled = bool.TryParse(section["Enabled"], out var enabled) && enabled;
             options.MinTokens = ReadDecimal(section["MinTokens"], options.MinTokens);
             options.MaxTokens = ReadDecimal(section["MaxTokens"], options.MaxTokens);
             options.DailyMaxTokens = ReadDecimal(section["DailyMaxTokens"], options.DailyMaxTokens);
@@ -58,6 +59,7 @@ public static class DependencyInjection
         services.AddScoped<ScheduleWorkflowService>();
         services.AddScoped<IUserAccountStatusService, UserAccountStatusService>();
         services.AddScoped<IUserEloService, UserEloService>();
+        services.AddScoped<IPremiumAccessService, PremiumAccessService>();
         services.AddScoped<IProposalCheatingService, ProposalCheatingService>();
         services.AddScoped<IProposalQuestionTimerService, ProposalQuestionTimerService>();
         services.AddScoped<IProposalInterviewReviewService, ProposalInterviewReviewService>();

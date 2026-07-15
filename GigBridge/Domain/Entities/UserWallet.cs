@@ -11,6 +11,8 @@ public partial class UserWallet
 
     public decimal AvailableTokens { get; set; }
 
+    public decimal WithdrawableTokens { get; set; }
+
     public decimal HeldTokens { get; set; }
 
     public decimal PendingWithdrawalTokens { get; set; }
@@ -18,6 +20,8 @@ public partial class UserWallet
     public DateTime CreatedAt { get; set; }
 
     public DateTime? UpdatedAt { get; set; }
+
+    public int Version { get; set; } = 1;
 
     public virtual User User { get; set; } = null!;
 

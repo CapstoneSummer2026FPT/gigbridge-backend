@@ -15,15 +15,18 @@ public sealed class CreateBankAccountCommandHandler :
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
     private readonly IBankAccountProtector _bankAccountProtector;
+    private readonly ISupportedBankDirectory _bankDirectory;
 
     public CreateBankAccountCommandHandler(
         IApplicationDbContext context,
         IDateTimeService dateTimeService,
-        IBankAccountProtector bankAccountProtector)
+        IBankAccountProtector bankAccountProtector,
+        ISupportedBankDirectory bankDirectory)
     {
         _context = context;
         _dateTimeService = dateTimeService;
         _bankAccountProtector = bankAccountProtector;
+        _bankDirectory = bankDirectory;
     }
 
     public async Task<BankAccountResponse> Handle(
@@ -46,6 +49,12 @@ public sealed class CreateBankAccountCommandHandler :
 
         var now = _dateTimeService.UtcNow;
         var normalizedAccountNumber = BankAccountWorkflow.NormalizeAccountNumber(command.Request.AccountNumber);
+        var bank = await BankAccountWorkflow.ResolveBankAsync(
+            _bankDirectory,
+            command.Request.BankBin,
+            command.Request.BankCode,
+            command.Request.BankName,
+            cancellationToken);
         var shouldSetDefault = command.Request.IsDefault ||
             !await _context.Set<BankAccount>().AnyAsync(
                 account =>
@@ -71,8 +80,9 @@ public sealed class CreateBankAccountCommandHandler :
         {
             BankAccountId = Guid.NewGuid(),
             UserId = command.UserId,
-            BankCode = BankAccountWorkflow.NormalizeText(command.Request.BankCode, "Bank code", 30),
-            BankName = BankAccountWorkflow.NormalizeText(command.Request.BankName, "Bank name", 120),
+            BankBin = bank.Bin,
+            BankCode = bank.Code,
+            BankName = bank.Name,
             AccountNumberEncrypted = _bankAccountProtector.Protect(normalizedAccountNumber),
             AccountNumberMasked = BankAccountWorkflow.MaskAccountNumber(normalizedAccountNumber),
             AccountName = BankAccountWorkflow.NormalizeText(command.Request.AccountName, "Account name", 120),

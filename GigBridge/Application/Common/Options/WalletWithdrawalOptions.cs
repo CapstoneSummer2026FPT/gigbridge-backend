@@ -4,6 +4,8 @@ public sealed class WalletWithdrawalOptions
 {
     public const string SectionName = "WalletWithdrawals";
 
+    public bool Enabled { get; set; }
+
     public decimal MinTokens { get; set; } = 10m;
 
     public decimal MaxTokens { get; set; } = 100_000m;

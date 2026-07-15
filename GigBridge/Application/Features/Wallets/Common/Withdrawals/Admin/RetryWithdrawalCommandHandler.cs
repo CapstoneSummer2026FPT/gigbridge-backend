@@ -38,9 +38,10 @@ public sealed class RetryWithdrawalCommandHandler :
             throw new NotFoundException("Withdrawal does not exist.");
         }
 
-        if (WithdrawalWorkflow.IsTerminal(withdrawal.Status))
+        if (withdrawal.Status != (int)WithdrawalStatus.SyncRequired ||
+            !string.IsNullOrWhiteSpace(withdrawal.ProviderPayoutId))
         {
-            throw new ConflictException("Terminal withdrawal cannot be retried.");
+            throw new ConflictException("This withdrawal must be synced instead of retried.");
         }
 
         var now = _dateTimeService.UtcNow;

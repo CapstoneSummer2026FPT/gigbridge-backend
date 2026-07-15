@@ -2,10 +2,11 @@ using Application.Common.Interfaces;
 using Domain.Entities;
 using Domain.Enums;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 
 namespace Infrastructure.Persistence;
 
-public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
+public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDataProtectionKeyContext
 {
     public GigbridgeDbContext(DbContextOptions<GigbridgeDbContext> options)
         : base(options)
@@ -15,6 +16,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
     public virtual DbSet<AdminAuditLog> AdminAuditLogs { get; set; }
 
     public virtual DbSet<BankAccount> BankAccounts { get; set; }
+
+    public DbSet<DataProtectionKey> DataProtectionKeys { get; set; }
 
     public virtual DbSet<Category> Categories { get; set; }
 
@@ -105,6 +108,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
     public virtual DbSet<PaymentProof> PaymentProofs { get; set; }
 
     public virtual DbSet<PlatformSetting> PlatformSettings { get; set; }
+    public virtual DbSet<FreelancerRankProtection> FreelancerRankProtections { get; set; }
+    public virtual DbSet<FreelancerProfilePromotion> FreelancerProfilePromotions { get; set; }
 
     public virtual DbSet<PortfolioItem> PortfolioItems { get; set; }
 
@@ -195,6 +200,7 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
 
             entity.Property(e => e.BankAccountId).HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.BankCode).HasMaxLength(30);
+            entity.Property(e => e.BankBin).HasMaxLength(6);
             entity.Property(e => e.BankName).HasMaxLength(120);
             entity.Property(e => e.AccountNumberEncrypted).HasColumnType("text");
             entity.Property(e => e.AccountNumberMasked).HasMaxLength(60);
@@ -372,7 +378,7 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.ContractsId).HasColumnName("ContractsId");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.Currency)
-                .HasMaxLength(5)
+                .HasMaxLength(20)
                 .HasDefaultValueSql("'VND'::character varying");
             entity.Property(e => e.FundedAmount).HasPrecision(18, 2);
             entity.Property(e => e.ReleasedAmount)
@@ -1474,7 +1480,7 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.Metadata).HasColumnType("jsonb");
             entity.Property(e => e.ReferenceType).HasMaxLength(50);
             entity.Property(e => e.Title).HasMaxLength(300);
-            entity.Property(e => e.Type).HasComment("Enum NotificationType: 0=NewJob, 1=ProposalReceived, 2=ProposalStatusChanged, 3=ContractStarted, 4=MilestoneUpdated, 5=PaymentProofUploaded, 6=PaymentConfirmed, 7=ChatMessage, 8=DisputeUpdate, 9=ReviewReceived, 10=SystemAlert, 11=AIInterviewInvite, 12=SubscriptionExpiring");
+            entity.Property(e => e.Type).HasComment("Enum NotificationType: 0=NewJob, 1=ProposalReceived, 2=ProposalStatusChanged, 3=ContractStarted, 4=MilestoneUpdated, 5=PaymentProofUploaded, 6=PaymentConfirmed, 7=ChatMessage, 8=DisputeUpdate, 9=ReviewReceived, 10=SystemAlert, 11=AIInterviewInvite, 12=SubscriptionExpiring, 13=Schedule, 14=SubscriptionActivated, 15=SubscriptionCancelled, 16=PromotionActivated, 17=PromotionExpired, 18=RankProtectionActivated, 19=RankProtectionExpired");
             entity.Property(e => e.UserId).HasColumnName("UserId");
 
             entity.HasOne(d => d.User).WithMany(p => p.Notifications)
@@ -1688,6 +1694,58 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.HasOne(d => d.UpdatedByAdmin).WithMany(p => p.PlatformSettings)
                 .HasForeignKey(d => d.UpdatedByAdminId)
                 .HasConstraintName("PlatformSettings_UpdatedByAdminId_fkey");
+        });
+
+        modelBuilder.Entity<FreelancerRankProtection>(entity =>
+        {
+            entity.HasKey(e => e.FreelancerRankProtectionsId)
+                .HasName("FreelancerRankProtections_pkey");
+            entity.HasIndex(e => new { e.FreelancerProfileId, e.IsVacationModeEnabled },
+                "IX_FreelancerRankProtections_Profile_Active");
+            entity.HasIndex(e => e.RankProtectionEndsAt,
+                "IX_FreelancerRankProtections_End");
+            entity.Property(e => e.FreelancerRankProtectionsId)
+                .HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.RankProtectionReason).HasMaxLength(500);
+            entity.HasOne(e => e.FreelancerProfile)
+                .WithMany(e => e.RankProtections)
+                .HasForeignKey(e => e.FreelancerProfileId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("FreelancerRankProtections_FreelancerProfileId_fkey");
+        });
+
+        modelBuilder.Entity<FreelancerProfilePromotion>(entity =>
+        {
+            entity.HasKey(e => e.FreelancerProfilePromotionsId)
+                .HasName("FreelancerProfilePromotions_pkey");
+            entity.Property(e => e.FreelancerProfilePromotionsId)
+                .HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.PackageId).HasMaxLength(100);
+            entity.Property(e => e.PackageName).HasMaxLength(200);
+            entity.Property(e => e.PurchaseIdempotencyKey).HasMaxLength(200);
+            entity.HasIndex(e => new { e.FreelancerProfileId, e.PurchaseIdempotencyKey }).IsUnique();
+            entity.Property(e => e.PhotoUrl).HasMaxLength(2048);
+            entity.Property(e => e.DisplayName).HasMaxLength(120);
+            entity.Property(e => e.Quote).HasMaxLength(240);
+            entity.Property(e => e.JobTitle).HasMaxLength(160);
+            entity.Property(e => e.TokenCost).HasPrecision(18, 4);
+            entity.Property(e => e.BoostWeight).HasPrecision(10, 4);
+            entity.HasIndex(e => new { e.FreelancerProfileId, e.Status, e.StartTime },
+                "IX_FreelancerProfilePromotions_Queue");
+            entity.HasIndex(e => e.EndTime, "IX_FreelancerProfilePromotions_End");
+            entity.HasIndex(e => e.WalletTransactionId).IsUnique();
+            entity.HasIndex(e => e.FreelancerProfileId,
+                    "UX_FreelancerProfilePromotions_OneActive")
+                .IsUnique()
+                .HasFilter("\"Status\" = 1");
+            entity.HasOne(e => e.FreelancerProfile)
+                .WithMany(e => e.Promotions)
+                .HasForeignKey(e => e.FreelancerProfileId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.WalletTransaction)
+                .WithOne()
+                .HasForeignKey<FreelancerProfilePromotion>(e => e.WalletTransactionId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<PortfolioItem>(entity =>
@@ -2283,7 +2341,13 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.UserWalletsId)
                 .HasDefaultValueSql("gen_random_uuid()")
                 .HasColumnName("UserWalletsId");
+            entity.Property(e => e.Version)
+                .HasDefaultValue(1)
+                .IsConcurrencyToken();
             entity.Property(e => e.AvailableTokens)
+                .HasPrecision(18, 4)
+                .HasDefaultValue(0m);
+            entity.Property(e => e.WithdrawableTokens)
                 .HasPrecision(18, 4)
                 .HasDefaultValue(0m);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
@@ -2298,6 +2362,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.ToTable(t =>
             {
                 t.HasCheckConstraint("CK_UserWallets_AvailableTokens_NonNegative", "\"AvailableTokens\" >= 0");
+                t.HasCheckConstraint("CK_UserWallets_WithdrawableTokens_NonNegative", "\"WithdrawableTokens\" >= 0");
+                t.HasCheckConstraint("CK_UserWallets_WithdrawableTokens_MaxAvailable", "\"WithdrawableTokens\" <= \"AvailableTokens\"");
                 t.HasCheckConstraint("CK_UserWallets_HeldTokens_NonNegative", "\"HeldTokens\" >= 0");
                 t.HasCheckConstraint("CK_UserWallets_PendingWithdrawalTokens_NonNegative", "\"PendingWithdrawalTokens\" >= 0");
             });
@@ -2322,6 +2388,7 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
 
             entity.Property(e => e.WalletWithdrawalId).HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.BankCode).HasMaxLength(30);
+            entity.Property(e => e.BankBin).HasMaxLength(6);
             entity.Property(e => e.BankName).HasMaxLength(120);
             entity.Property(e => e.BankAccountNumberEncrypted).HasColumnType("text");
             entity.Property(e => e.BankAccountNumberMasked).HasMaxLength(60);
@@ -2406,7 +2473,7 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
                 .HasComment("Enum WalletTransactionStatus: 0=Pending, 1=Succeeded, 2=Failed, 3=Cancelled");
             entity.Property(e => e.TokenAmount).HasPrecision(18, 4);
             entity.Property(e => e.Type)
-                .HasComment("Enum WalletTransactionType: 0=AdminCredit, 1=TopUp, 2=EscrowHold, 3=EscrowRelease, 4=EscrowRefund, 5=Adjustment, 6=WithdrawalLock, 7=WithdrawalSuccess, 8=WithdrawalRefund, 9=WithdrawalFee");
+                .HasComment("Enum WalletTransactionType: 0=AdminCredit, 1=TopUp, 2=EscrowHold, 3=EscrowRelease, 4=EscrowRefund, 5=Adjustment, 6=WithdrawalLock, 7=WithdrawalSuccess, 8=WithdrawalRefund, 9=WithdrawalFee, 10=SubscriptionPurchase, 11=PromotionPurchase");
             entity.Property(e => e.UserId).HasColumnName("UserId");
             entity.Property(e => e.UserWalletsId).HasColumnName("UserWalletsId");
             entity.Property(e => e.VndAmount).HasPrecision(18, 2);

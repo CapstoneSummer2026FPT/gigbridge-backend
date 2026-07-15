@@ -4,7 +4,7 @@ using Application.Features.JobPosts.Client.CreateJobPost.Commands;
 using Application.Features.JobPosts.Client.CreateJobPost.DTOs;
 using Domain.Entities;
 using Domain.Enums;
-using Infrastructure.Services;
+using Infrastructure.Services.ContentModerationService;
 using Test_Gigbridge_Backend.TestSupport;
 
 namespace Test_Gigbridge_Backend.Application.Features.JobPosts.Client;

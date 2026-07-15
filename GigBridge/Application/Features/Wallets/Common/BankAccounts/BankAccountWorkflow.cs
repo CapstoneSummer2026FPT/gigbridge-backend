@@ -1,9 +1,38 @@
 using Application.Common.Exceptions;
+using Application.Common.Interfaces.IService;
 
 namespace Application.Features.Wallets.Common.BankAccounts;
 
 internal static class BankAccountWorkflow
 {
+    public static async Task<SupportedBank> ResolveBankAsync(
+        ISupportedBankDirectory directory,
+        string bankBin,
+        string bankCode,
+        string bankName,
+        CancellationToken cancellationToken)
+    {
+        var normalizedBin = bankBin.Trim();
+        if (normalizedBin.Length != 6 || normalizedBin.Any(character => !char.IsDigit(character)))
+        {
+            throw new BadRequestException("Bank BIN must contain exactly 6 digits.");
+        }
+
+        var banks = await directory.GetBanksAsync(cancellationToken);
+        var matched = banks.FirstOrDefault(bank => bank.Bin == normalizedBin);
+        if (banks.Count > 0 && matched is null)
+        {
+            throw new BadRequestException("Bank BIN is not supported.");
+        }
+
+        return matched ?? new SupportedBank(
+            normalizedBin,
+            NormalizeText(bankCode, "Bank code", 30).ToUpperInvariant(),
+            NormalizeText(bankCode, "Bank code", 30).ToUpperInvariant(),
+            NormalizeText(bankName, "Bank name", 120),
+            null);
+    }
+
     public static string NormalizeAccountNumber(string accountNumber)
     {
         var normalized = new string(

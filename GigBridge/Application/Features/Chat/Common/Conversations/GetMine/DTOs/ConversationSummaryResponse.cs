@@ -29,5 +29,8 @@ public record ConversationSummaryResponse(
     string? JobCurrency,
     string? JobCategoryName,
     decimal? ProposalBudget,
-    string? ProposalDuration);
+    string? ProposalDuration,
+    int? JobStatus,
+    int? JobVisibility,
+    bool CanNegotiate);
 

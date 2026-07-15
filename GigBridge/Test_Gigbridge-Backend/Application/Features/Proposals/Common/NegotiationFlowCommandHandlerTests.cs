@@ -4,6 +4,7 @@ using Application.Features.Chat.Common.FinalOffers.Create.Commands;
 using Application.Features.Chat.Common.FinalOffers.Create.DTOs;
 using Application.Features.Chat.Common.FinalOffers.Respond.Commands;
 using Application.Features.Chat.Common.FinalOffers.Respond.DTOs;
+using Application.Features.Chat.Common.Negotiations.MilestonePlans.Commands;
 using Application.Features.Chat.Common.Negotiations.StartFromProposal.Commands;
 using Application.Features.Chat.Common.Negotiations.MilestonePlans.DTOs;
 using Application.Features.Proposals.Common.AcceptForNegotiation.Commands;
@@ -101,6 +102,36 @@ public class NegotiationFlowCommandHandlerTests
     }
 
     [Fact]
+    public async Task CreateFinalOffer_RejectsWhenJobPostIsClosed()
+    {
+        var fixture = new NegotiationFixture();
+        fixture.JobPost.Status = 2;
+        fixture.AddConversationWithParticipants();
+        var handler = new CreateFinalOfferCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopChatRealtimeNotifier());
+
+        var exception = await Assert.ThrowsAsync<BadRequestException>(() =>
+            handler.Handle(
+                new CreateFinalOfferCommand(
+                    fixture.ClientUserId,
+                    new CreateFinalOfferRequest(
+                        fixture.ConversationId,
+                        1500m,
+                        "Build the first production release.",
+                        null,
+                        null,
+                        null,
+                        CreatePlan(600m, 900m))),
+                CancellationToken.None));
+
+        Assert.Contains("no longer open", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(fixture.Offers.Entities);
+        Assert.Empty(fixture.Messages.Entities);
+    }
+
+    [Fact]
     public async Task CreateFinalOffer_RejectsFinalPriceDifferentFromMilestoneTotal()
     {
         var fixture = new NegotiationFixture();
@@ -152,6 +183,28 @@ public class NegotiationFlowCommandHandlerTests
     }
 
     [Fact]
+    public async Task UpdateNegotiationMilestonePlan_RejectsWhenJobPostIsClosed()
+    {
+        var fixture = new NegotiationFixture();
+        fixture.JobPost.Status = 2;
+        fixture.AddConversationWithParticipants();
+        var handler = new UpdateNegotiationMilestonePlanCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now));
+
+        var exception = await Assert.ThrowsAsync<BadRequestException>(() =>
+            handler.Handle(
+                new UpdateNegotiationMilestonePlanCommand(
+                    fixture.ConversationId,
+                    fixture.ClientUserId,
+                    new UpdateNegotiationMilestonePlanRequest(CreatePlan(600m, 900m))),
+                CancellationToken.None));
+
+        Assert.Contains("no longer open", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(fixture.NegotiationDrafts.Entities);
+    }
+
+    [Fact]
     public async Task RespondFinalOffer_AcceptMovesContractToSignatureAndCreatesEscrow()
     {
         var fixture = new NegotiationFixture();
@@ -196,6 +249,35 @@ public class NegotiationFlowCommandHandlerTests
         Assert.Equal(0m, escrow.FundedAmount);
         Assert.Equal(1.0m, escrow.RequiredPercentage);
         Assert.Equal((int)ContractEscrowStatus.PendingFunding, escrow.Status);
+    }
+
+    [Fact]
+    public async Task RespondFinalOffer_AcceptRejectsWhenJobPostIsClosed()
+    {
+        var fixture = new NegotiationFixture();
+        fixture.JobPost.Status = 2;
+        fixture.AddConversationWithParticipants();
+        fixture.AddOfferWithSnapshot(1500m, 600m, 900m);
+
+        var handler = new RespondFinalOfferCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopChatRealtimeNotifier());
+
+        var exception = await Assert.ThrowsAsync<BadRequestException>(() =>
+            handler.Handle(
+                new RespondFinalOfferCommand(
+                    fixture.FreelancerUserId,
+                    new RespondFinalOfferRequest(
+                        fixture.OfferId,
+                        FinalOfferResponse.Accept,
+                        null)),
+                CancellationToken.None));
+
+        Assert.Contains("no longer open", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal((int)NegotiationOfferStatus.PendingFreelancerConfirmation, fixture.Offers.Entities[0].Status);
+        Assert.Equal((int)ContractStatus.PendingFreelancerSelection, fixture.Contract.Status);
+        Assert.Empty(fixture.Escrows.Entities);
     }
 
     [Fact]
@@ -265,6 +347,15 @@ public class NegotiationFlowCommandHandlerTests
             Context.AddSet(
                 new User { UserId = ClientUserId, Role = (int)UserRole.Client, Email = "client@example.com", FullName = "Client" },
                 new User { UserId = FreelancerUserId, Role = (int)UserRole.Freelancer, Email = "freelancer@example.com", FullName = "Freelancer" });
+            Context.AddSet(new UserWallet
+            {
+                UserWalletsId = Guid.NewGuid(),
+                UserId = FreelancerUserId,
+                AvailableTokens = 100m,
+                HeldTokens = 0m,
+                CreatedAt = Now
+            });
+            Context.AddSet<WalletTransaction>();
             Context.AddSet(new ClientProfile { ClientProfilesId = ClientProfileId, UserId = ClientUserId });
             Context.AddSet(new FreelancerProfile { FreelancerProfilesId = FreelancerProfileId, UserId = FreelancerUserId });
             Context.AddSet(JobPost);

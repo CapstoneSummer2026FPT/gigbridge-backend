@@ -1,6 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Application.Features.JobPosts.Common;
 using Application.Features.Proposals.Common;
 using Domain.Entities;
 using MediatR;
@@ -76,7 +77,12 @@ public class SubmitProposalCommandHandler : IRequestHandler<SubmitProposalComman
 
     private void EnsureJobPostAcceptsProposals(JobPost jobPost)
     {
-        if (jobPost.Status != 1)
+        if (jobPost.Visibility == JobPostNegotiationGuard.AdminLockedVisibility)
+        {
+            throw new BadRequestException("This job post has been locked by an admin and is not accepting proposals.");
+        }
+
+        if (jobPost.Status != JobPostNegotiationGuard.OpenStatus)
         {
             throw new BadRequestException("This job post is not accepting proposals.");
         }

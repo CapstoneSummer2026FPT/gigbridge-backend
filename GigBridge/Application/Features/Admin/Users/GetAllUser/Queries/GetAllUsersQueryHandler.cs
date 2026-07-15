@@ -25,6 +25,23 @@ public class GetAllUsersQueryHandler : IRequestHandler<GetAllUsersQuery, GetAllU
         var page = Math.Max(request.Page, 1);
         var pageSize = Math.Clamp(request.PageSize, 1, 100);
         var query = ApplyFilters(_context.Set<User>().AsNoTracking(), request.Search, request.Status);
+        var now = DateTime.UtcNow;
+        if (request.Premium.HasValue)
+        {
+            query = request.Premium.Value
+                ? query.Where(user => _context.Set<Subscription>().Any(subscription =>
+                    user.Role == (int)UserRole.Freelancer && subscription.UserId == user.UserId &&
+                    subscription.Status == SubscriptionStatus.Active && subscription.StartDate <= now &&
+                    subscription.EndDate > now && subscription.SubscriptionPlans.Price > 0 &&
+                    subscription.SubscriptionPlans.IsActive == true &&
+                    (subscription.SubscriptionPlans.TargetRole == null || subscription.SubscriptionPlans.TargetRole == (int)UserRole.Freelancer)))
+                : query.Where(user => !_context.Set<Subscription>().Any(subscription =>
+                    user.Role == (int)UserRole.Freelancer && subscription.UserId == user.UserId &&
+                    subscription.Status == SubscriptionStatus.Active && subscription.StartDate <= now &&
+                    subscription.EndDate > now && subscription.SubscriptionPlans.Price > 0 &&
+                    subscription.SubscriptionPlans.IsActive == true &&
+                    (subscription.SubscriptionPlans.TargetRole == null || subscription.SubscriptionPlans.TargetRole == (int)UserRole.Freelancer)));
+        }
         var total = await query.CountAsync(cancellationToken);
 
         var users = await query
@@ -34,6 +51,7 @@ public class GetAllUsersQueryHandler : IRequestHandler<GetAllUsersQuery, GetAllU
             .ToListAsync(cancellationToken);
 
         var items = _mapper.Map<IReadOnlyList<AdminUserDto>>(users);
+        await AddPremiumStatusesAsync(items, now, cancellationToken);
         await AddOpenReportCountsAsync(items, cancellationToken);
         var reportedUserCount = await query.CountAsync(user =>
             _context.Set<Report>().Any(report =>
@@ -50,6 +68,26 @@ public class GetAllUsersQueryHandler : IRequestHandler<GetAllUsersQuery, GetAllU
             TotalItems = total,
             ReportedUserCount = reportedUserCount
         };
+    }
+
+    private async Task AddPremiumStatusesAsync(IReadOnlyList<AdminUserDto> users, DateTime now, CancellationToken ct)
+    {
+        var freelancerIds = users.Where(user => user.Role == (int)UserRole.Freelancer)
+            .Select(user => user.UserId).ToArray();
+        var expiries = await _context.Set<Subscription>().AsNoTracking()
+            .Where(subscription => freelancerIds.Contains(subscription.UserId) &&
+                subscription.Status == SubscriptionStatus.Active && subscription.StartDate <= now &&
+                subscription.EndDate > now && subscription.SubscriptionPlans.Price > 0 &&
+                subscription.SubscriptionPlans.IsActive == true &&
+                (subscription.SubscriptionPlans.TargetRole == null || subscription.SubscriptionPlans.TargetRole == (int)UserRole.Freelancer))
+            .GroupBy(subscription => subscription.UserId)
+            .Select(group => new { UserId = group.Key, Until = group.Max(item => item.EndDate) })
+            .ToDictionaryAsync(item => item.UserId, item => item.Until, ct);
+        foreach (var user in users)
+        {
+            user.IsPremium = expiries.TryGetValue(user.UserId, out var premiumUntil);
+            user.PremiumUntil = user.IsPremium ? premiumUntil : null;
+        }
     }
 
     private async Task AddOpenReportCountsAsync(IReadOnlyList<AdminUserDto> users, CancellationToken cancellationToken)

@@ -72,13 +72,11 @@ public sealed class AdminWalletUpdateCommandHandler :
             now,
             cancellationToken);
 
-        if (wallet.AvailableTokens < command.Request.TokenAmount)
-        {
-            throw new BadRequestException("Insufficient wallet balance for debit operation.");
-        }
-
-        wallet.AvailableTokens -= command.Request.TokenAmount;
-        wallet.UpdatedAt = now;
+        WalletWorkflow.DebitAvailable(
+            wallet,
+            command.Request.TokenAmount,
+            now,
+            "Insufficient wallet balance for debit operation.");
 
         var transaction = new WalletTransaction
         {

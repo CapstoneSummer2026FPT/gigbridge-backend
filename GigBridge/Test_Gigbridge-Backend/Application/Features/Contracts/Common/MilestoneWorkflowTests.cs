@@ -289,6 +289,7 @@ public class MilestoneWorkflowTests
         Assert.Equal(320m, result.EscrowReleasedAmountVnd);
         Assert.Equal(fixture.Now.AddMinutes(6), fixture.Contract.CompletedAt);
         Assert.Equal(680m, fixture.ClientWallet.HeldTokens);
+        Assert.Equal(0m, fixture.ClientWallet.AvailableTokens);
         Assert.Equal(320m, fixture.FreelancerWallet.AvailableTokens);
 
         var claim = await claimHandler.Handle(
@@ -302,7 +303,7 @@ public class MilestoneWorkflowTests
         Assert.Equal((int)ContractEscrowStatus.Released, fixture.Escrow.Status);
         Assert.Equal(0m, fixture.ClientWallet.HeldTokens);
         Assert.Equal(1_000m, fixture.FreelancerWallet.AvailableTokens);
-        Assert.Equal(8, fixture.WalletTransactions.Entities.Count);
+        Assert.Equal(9, fixture.WalletTransactions.Entities.Count);
         Assert.Equal(4, fixture.EscrowTransactions.Entities.Count);
         Assert.Contains(
             fixture.Context.Set<Message>().ToList(),
@@ -344,6 +345,8 @@ public class MilestoneWorkflowTests
         Assert.Equal(0m, retry.ReleasedAmountVnd);
         Assert.Equal(walletTransactionCount, fixture.WalletTransactions.Entities.Count);
         Assert.Equal(escrowTransactionCount, fixture.EscrowTransactions.Entities.Count);
+        Assert.Single(fixture.WalletTransactions.Entities);
+        Assert.Equal(0m, fixture.ClientWallet.AvailableTokens);
         Assert.Equal(1_000m, fixture.ClientWallet.HeldTokens);
         Assert.DoesNotContain(fixture.Wallets.Entities, wallet => wallet.UserId == fixture.FreelancerUserId);
 
@@ -414,7 +417,8 @@ public class MilestoneWorkflowTests
             CancellationToken.None));
 
         Assert.Equal(1_000m, fixture.ClientWallet.HeldTokens);
-        Assert.Empty(fixture.WalletTransactions.Entities);
+        Assert.Single(fixture.WalletTransactions.Entities);
+        Assert.Equal(0m, fixture.ClientWallet.AvailableTokens);
     }
 
     [Fact]
@@ -446,7 +450,7 @@ public class MilestoneWorkflowTests
         Assert.All(fixture.Milestones.Entities, milestone => Assert.Equal(0m, milestone.ReleasedAmount));
         Assert.Equal(0m, fixture.Escrow.ReleasedAmount);
         Assert.Equal((int)ContractEscrowStatus.Funded, fixture.Escrow.Status);
-        Assert.Empty(fixture.WalletTransactions.Entities);
+        Assert.Single(fixture.WalletTransactions.Entities);
         Assert.Empty(fixture.EscrowTransactions.Entities);
         Assert.DoesNotContain(fixture.Wallets.Entities, wallet => wallet.UserId == fixture.FreelancerUserId);
     }
@@ -522,7 +526,7 @@ public class MilestoneWorkflowTests
             {
                 UserWalletsId = Guid.NewGuid(),
                 UserId = ClientUserId,
-                AvailableTokens = 0m,
+                AvailableTokens = 10m,
                 HeldTokens = 1_000m,
                 CreatedAt = Now
             };

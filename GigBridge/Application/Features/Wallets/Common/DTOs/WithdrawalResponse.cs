@@ -5,6 +5,7 @@ public sealed record WithdrawalResponse(
     Guid UserId,
     Guid WalletId,
     Guid? BankAccountId,
+    string? BankBin,
     string BankCode,
     string BankName,
     string BankAccountNumberMasked,
@@ -24,7 +25,8 @@ public sealed record WithdrawalResponse(
     DateTime CreatedAt,
     DateTime? ProcessingStartedAt,
     DateTime? LastSyncedAt,
-    DateTime? CompletedAt)
+    DateTime? CompletedAt,
+    bool CanRetry)
 {
     public static WithdrawalResponse FromEntity(Domain.Entities.WalletWithdrawal withdrawal)
     {
@@ -33,6 +35,7 @@ public sealed record WithdrawalResponse(
             withdrawal.UserId,
             withdrawal.UserWalletsId,
             withdrawal.BankAccountId,
+            withdrawal.BankBin,
             withdrawal.BankCode,
             withdrawal.BankName,
             withdrawal.BankAccountNumberMasked,
@@ -52,6 +55,8 @@ public sealed record WithdrawalResponse(
             withdrawal.CreatedAt,
             withdrawal.ProcessingStartedAt,
             withdrawal.LastSyncedAt,
-            withdrawal.CompletedAt);
+            withdrawal.CompletedAt,
+            withdrawal.Status == (int)Domain.Enums.WithdrawalStatus.SyncRequired &&
+                string.IsNullOrWhiteSpace(withdrawal.ProviderPayoutId));
     }
 }

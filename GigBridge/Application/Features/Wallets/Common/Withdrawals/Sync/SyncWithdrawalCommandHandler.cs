@@ -30,7 +30,7 @@ public sealed class SyncWithdrawalCommandHandler :
         SyncWithdrawalCommand command,
         CancellationToken cancellationToken)
     {
-        var query = _context.Set<WalletWithdrawal>().AsQueryable();
+        var query = _context.Set<WalletWithdrawal>().AsNoTracking().AsQueryable();
         if (!command.IsAdmin)
         {
             query = query.Where(withdrawal => withdrawal.UserId == command.UserId);
@@ -54,14 +54,12 @@ public sealed class SyncWithdrawalCommandHandler :
                     withdrawal.ProviderPayoutId),
                 cancellationToken);
 
-            await WithdrawalWorkflow.ApplyProviderResultAsync(
+            withdrawal = await WithdrawalWorkflow.ApplyProviderResultAsync(
                 _context,
                 _dateTimeService,
-                withdrawal,
+                withdrawal.WalletWithdrawalId,
                 status,
                 cancellationToken);
-
-            await _context.SaveChangesAsync(cancellationToken);
         }
 
         return WithdrawalResponse.FromEntity(withdrawal);

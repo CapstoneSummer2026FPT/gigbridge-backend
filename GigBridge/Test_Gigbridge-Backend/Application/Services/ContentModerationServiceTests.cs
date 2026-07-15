@@ -1,4 +1,4 @@
-using Infrastructure.Services;
+using Infrastructure.Services.ContentModerationService;
 
 namespace Test_Gigbridge_Backend.Application.Services;
 

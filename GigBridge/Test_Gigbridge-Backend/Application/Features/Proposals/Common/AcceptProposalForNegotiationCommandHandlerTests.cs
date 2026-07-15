@@ -193,12 +193,14 @@ public class AcceptProposalForNegotiationCommandHandlerTests
         await Assert.ThrowsAsync<BadRequestException>(() => handler.Handle(command, CancellationToken.None));
     }
 
-    [Fact]
-    public async Task Handle_InvalidProposalStatus_ThrowsBadRequestException()
+    [Theory]
+    [InlineData(4)] // Rejected
+    [InlineData(5)] // Withdrawn
+    public async Task Handle_RejectedOrWithdrawnProposal_ThrowsBadRequestException(int invalidStatus)
     {
         // Arrange
         var fixture = new TestFixture();
-        fixture.Proposal.Status = 3; // Accepted
+        fixture.Proposal.Status = invalidStatus;
         var handler = CreateHandler(fixture);
         var command = new AcceptProposalForNegotiationCommand(fixture.ProposalId, fixture.ClientUserId);
 

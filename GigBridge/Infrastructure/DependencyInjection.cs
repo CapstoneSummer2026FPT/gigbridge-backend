@@ -9,9 +9,9 @@ using Infrastructure.ExternalServices.Ai;
 using Infrastructure.ExternalServices.GoogleMeet;
 using Infrastructure.ExternalServices.Payments;
 using Infrastructure.Persistence;
-using Infrastructure.Services;
 using Infrastructure.Services.Auth;
 using Infrastructure.Services.Common;
+using Infrastructure.Services.ContentModerationService;
 using Infrastructure.Services.Email;
 using Infrastructure.Services.GoogleMeet;
 using Infrastructure.Services.Media;
@@ -20,6 +20,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using PayOS;
 using Resend;
 
@@ -58,20 +60,6 @@ public static class DependencyInjection
                     options.ChecksumKey = Environment.GetEnvironmentVariable("PAYOS_CHECKSUM_KEY");
                 }
 
-                if (string.IsNullOrWhiteSpace(options.PayoutBaseUrl))
-                {
-                    options.PayoutBaseUrl = Environment.GetEnvironmentVariable("PAYOS_PAYOUT_BASE_URL");
-                }
-
-                if (string.IsNullOrWhiteSpace(options.PayoutCreatePath))
-                {
-                    options.PayoutCreatePath = Environment.GetEnvironmentVariable("PAYOS_PAYOUT_CREATE_PATH");
-                }
-
-                if (string.IsNullOrWhiteSpace(options.PayoutStatusPath))
-                {
-                    options.PayoutStatusPath = Environment.GetEnvironmentVariable("PAYOS_PAYOUT_STATUS_PATH");
-                }
             })
             .Validate(
                 options =>
@@ -79,6 +67,24 @@ public static class DependencyInjection
                     !string.IsNullOrWhiteSpace(options.ApiKey) &&
                     !string.IsNullOrWhiteSpace(options.ChecksumKey),
                 "PayOS configuration is missing. Set PAYOS_CLIENT_ID, PAYOS_API_KEY, and PAYOS_CHECKSUM_KEY.")
+            .ValidateOnStart();
+
+        var withdrawalsEnabled = configuration.GetValue<bool>("WalletWithdrawals:Enabled");
+        services
+            .AddOptions<PayOsPayoutOptions>()
+            .Bind(configuration.GetSection(PayOsPayoutOptions.SectionName))
+            .PostConfigure(options =>
+            {
+                options.ClientId ??= Environment.GetEnvironmentVariable("PAYOS_PAYOUT_CLIENT_ID");
+                options.ApiKey ??= Environment.GetEnvironmentVariable("PAYOS_PAYOUT_API_KEY");
+                options.ChecksumKey ??= Environment.GetEnvironmentVariable("PAYOS_PAYOUT_CHECKSUM_KEY");
+            })
+            .Validate(
+                options => !withdrawalsEnabled ||
+                    (!string.IsNullOrWhiteSpace(options.ClientId) &&
+                        !string.IsNullOrWhiteSpace(options.ApiKey) &&
+                        !string.IsNullOrWhiteSpace(options.ChecksumKey)),
+                "PayOS payout configuration is missing. Set PAYOS_PAYOUT_CLIENT_ID, PAYOS_PAYOUT_API_KEY, and PAYOS_PAYOUT_CHECKSUM_KEY.")
             .ValidateOnStart();
 
         services
@@ -161,13 +167,18 @@ public static class DependencyInjection
         services.AddTransient<IDateTimeService, DateTimeService>();
         services.AddScoped<IContentModerationService, ContentModerationService>();
         services.AddScoped<IWalletTopUpPaymentService, PayOsWalletTopUpPaymentService>();
+        services.AddScoped<IWalletLedgerService, WalletLedgerService>();
         services.AddScoped<IBankAccountProtector, BankAccountProtector>();
+        services.AddMemoryCache();
+        services.AddHttpClient<ISupportedBankDirectory, VietQrBankDirectory>(client =>
+        {
+            client.BaseAddress = new Uri("https://api.vietqr.io/");
+            client.Timeout = TimeSpan.FromSeconds(10);
+        });
         services.AddScoped<IPayOsPaymentLinkClient>(provider =>
             new PayOsPaymentLinkClient(provider.GetRequiredKeyedService<PayOSClient>("OrderClient")));
-        services.AddHttpClient<IPayoutProvider, PayOsPayoutProvider>(client =>
-        {
-            client.Timeout = TimeSpan.FromSeconds(20);
-        });
+        services.AddScoped<IPayoutProvider>(provider =>
+            new PayOsPayoutProvider(provider.GetRequiredKeyedService<PayOSClient>("PayoutClient")));
 
         // AI Service Client
         services.AddHttpClient<IAiServiceClient, AiServiceClient>();
@@ -182,6 +193,19 @@ public static class DependencyInjection
                 ApiKey = options.ApiKey,
                 ChecksumKey = options.ChecksumKey,
                 LogLevel = LogLevel.Debug,
+            });
+        });
+        services.AddKeyedSingleton("PayoutClient", (sp, key) =>
+        {
+            var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<PayOsPayoutOptions>>().Value;
+            return new PayOSClient(new PayOSOptions
+            {
+                ClientId = options.ClientId,
+                ApiKey = options.ApiKey,
+                ChecksumKey = options.ChecksumKey,
+                LogLevel = LogLevel.Warning,
+                MaxRetries = 0,
+                TimeoutMs = 20_000
             });
         });
 
@@ -238,9 +262,12 @@ public static class DependencyInjection
 
         services.AddScoped<IGoogleMeetOAuthService, GoogleMeetOAuthService>();
         services.AddHostedService<GoogleMeetProvisioningWorker>();
+        services.AddHostedService<PremiumExpiryWorker>();
 
         // Data Protection for encrypted tokens
-        services.AddDataProtection();
+        services.AddDataProtection()
+            .SetApplicationName("GigBridge")
+            .PersistKeysToDbContext<GigbridgeDbContext>();
 
         // Health checks
         services.AddHealthChecks()
