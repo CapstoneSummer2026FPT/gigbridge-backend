@@ -14,6 +14,8 @@ public partial class WalletWithdrawal
 
     public string BankCode { get; set; } = null!;
 
+    public string? BankBin { get; set; }
+
     public string BankName { get; set; } = null!;
 
     public string BankAccountNumberEncrypted { get; set; } = null!;

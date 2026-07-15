@@ -12,9 +12,6 @@ public interface IPayoutProvider
         PayoutStatusRequest request,
         CancellationToken cancellationToken);
 
-    Task<PayoutWebhookVerificationResult> VerifyWebhookAsync(
-        PayoutWebhookVerificationRequest request,
-        CancellationToken cancellationToken);
 }
 
 public enum PayoutProviderOutcome
@@ -30,7 +27,7 @@ public sealed record PayoutCreateRequest(
     Guid WithdrawalId,
     string ProviderOrderCode,
     decimal AmountVnd,
-    string BankCode,
+    string BankBin,
     string AccountNumber,
     string AccountName,
     string Description,
@@ -46,20 +43,4 @@ public sealed record PayoutProviderResult(
     string? ProviderPayoutId,
     string? ProviderTransactionCode,
     string? RawStatus,
-    string? FailureReason,
-    string? RawPayload);
-
-public sealed record PayoutWebhookVerificationRequest(
-    string RawPayload,
-    string? Signature);
-
-public sealed record PayoutWebhookVerificationResult(
-    bool IsVerified,
-    string? EventId,
-    string? ProviderOrderCode,
-    string? ProviderPayoutId,
-    PayoutProviderOutcome Outcome,
-    string? ProviderTransactionCode,
-    string? RawStatus,
-    string? FailureReason,
-    string? RawPayload);
+    string? FailureReason);

@@ -11,6 +11,8 @@ public partial class BankAccount
 
     public string BankCode { get; set; } = null!;
 
+    public string? BankBin { get; set; }
+
     public string BankName { get; set; } = null!;
 
     public string AccountNumberEncrypted { get; set; } = null!;

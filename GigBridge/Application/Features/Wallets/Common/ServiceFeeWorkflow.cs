@@ -48,13 +48,12 @@ internal static class ServiceFeeWorkflow
         var wallet = await context.Set<UserWallet>()
             .FirstOrDefaultAsync(existingWallet => existingWallet.UserId == userId, cancellationToken);
 
-        if (wallet is null || wallet.AvailableTokens < serviceFee)
+        if (wallet is null)
         {
             throw new BadRequestException("Insufficient GigCoin balance to pay the service fee.");
         }
 
-        wallet.AvailableTokens -= serviceFee;
-        wallet.UpdatedAt = now;
+        WalletWorkflow.DebitAvailable(wallet, serviceFee, now, "Insufficient GigCoin balance to pay the service fee.");
 
         context.Set<WalletTransaction>().Add(new WalletTransaction
         {

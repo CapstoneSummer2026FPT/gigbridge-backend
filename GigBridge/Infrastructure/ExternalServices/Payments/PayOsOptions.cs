@@ -16,9 +16,15 @@ public sealed class PayOsOptions
 
     public string? WebhookUrl { get; set; }
 
-    public string? PayoutBaseUrl { get; set; }
+}
 
-    public string? PayoutCreatePath { get; set; }
+public sealed class PayOsPayoutOptions
+{
+    public const string SectionName = "PayOSPayout";
 
-    public string? PayoutStatusPath { get; set; }
+    public string? ClientId { get; set; }
+
+    public string? ApiKey { get; set; }
+
+    public string? ChecksumKey { get; set; }
 }

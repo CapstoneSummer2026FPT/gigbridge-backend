@@ -9,24 +9,29 @@ using Domain.Services.Payments;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using System.Security.Cryptography;
 
 namespace Application.Features.Wallets.Common.Withdrawals.Create;
 
 public sealed class CreateWithdrawalCommandHandler :
     IRequestHandler<CreateWithdrawalCommand, WithdrawalResponse>
 {
+    private const int MaxWalletRetries = 3;
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
     private readonly WalletWithdrawalOptions _options;
+    private readonly IBankAccountProtector _bankAccountProtector;
 
     public CreateWithdrawalCommandHandler(
         IApplicationDbContext context,
         IDateTimeService dateTimeService,
-        IOptions<WalletWithdrawalOptions> options)
+        IOptions<WalletWithdrawalOptions> options,
+        IBankAccountProtector bankAccountProtector)
     {
         _context = context;
         _dateTimeService = dateTimeService;
         _options = options.Value;
+        _bankAccountProtector = bankAccountProtector;
     }
 
     public async Task<WithdrawalResponse> Handle(
@@ -34,37 +39,43 @@ public sealed class CreateWithdrawalCommandHandler :
         CancellationToken cancellationToken)
     {
         var tokenAmount = decimal.Round(command.Request.TokenAmount, 4, MidpointRounding.AwayFromZero);
-        if (tokenAmount <= 0)
+        var idempotencyKey = command.Request.IdempotencyKey?.Trim();
+        if (string.IsNullOrWhiteSpace(idempotencyKey) || idempotencyKey.Length > 200)
         {
-            throw new BadRequestException("Withdrawal amount must be greater than zero.");
+            throw new BadRequestException("A valid idempotency key is required.");
         }
 
-        if (tokenAmount < _options.MinTokens || tokenAmount > _options.MaxTokens)
+        var existing = await _context.Set<WalletWithdrawal>()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
+                withdrawal => withdrawal.UserId == command.UserId &&
+                    withdrawal.IdempotencyKey == idempotencyKey,
+                cancellationToken);
+        if (existing is not null)
+        {
+            if (existing.TokenAmount != tokenAmount ||
+                (command.Request.BankAccountId.HasValue && existing.BankAccountId != command.Request.BankAccountId))
+            {
+                throw new ConflictException("Idempotency key was already used for another withdrawal payload.");
+            }
+
+            return WithdrawalResponse.FromEntity(existing);
+        }
+
+        if (!_options.Enabled)
+        {
+            throw new ConflictException("Bank withdrawals are temporarily disabled.");
+        }
+
+        if (tokenAmount <= 0 || tokenAmount < _options.MinTokens || tokenAmount > _options.MaxTokens)
         {
             throw new BadRequestException($"Withdrawal amount must be between {_options.MinTokens} and {_options.MaxTokens} tokens.");
-        }
-
-        if (!string.IsNullOrWhiteSpace(command.Request.IdempotencyKey))
-        {
-            var existing = await _context.Set<WalletWithdrawal>()
-                .AsNoTracking()
-                .FirstOrDefaultAsync(
-                    withdrawal =>
-                        withdrawal.UserId == command.UserId &&
-                        withdrawal.IdempotencyKey == command.Request.IdempotencyKey,
-                    cancellationToken);
-
-            if (existing is not null)
-            {
-                return WithdrawalResponse.FromEntity(existing);
-            }
         }
 
         var now = _dateTimeService.UtcNow;
         var user = await _context.Set<User>()
             .AsNoTracking()
             .FirstOrDefaultAsync(user => user.UserId == command.UserId, cancellationToken);
-
         if (user is null || user.Role != (int)UserRole.Freelancer)
         {
             throw new ForbiddenAccessException("Only freelancers can create withdrawal requests.");
@@ -75,171 +86,201 @@ public sealed class CreateWithdrawalCommandHandler :
             throw new ForbiddenAccessException("Your account is not allowed to withdraw at this time.");
         }
 
-        var dailyStart = now.Date;
-        var usedToday = await _context.Set<WalletWithdrawal>()
-            .Where(withdrawal =>
-                withdrawal.UserId == command.UserId &&
-                withdrawal.CreatedAt >= dailyStart &&
-                withdrawal.Status != (int)WithdrawalStatus.Failed &&
-                withdrawal.Status != (int)WithdrawalStatus.Cancelled)
-            .SumAsync(withdrawal => (decimal?)withdrawal.TokenAmount, cancellationToken) ?? 0m;
-
-        if (usedToday + tokenAmount > _options.DailyMaxTokens)
-        {
-            throw new BadRequestException("Daily withdrawal limit exceeded.");
-        }
-
         var bankAccount = command.Request.BankAccountId.HasValue
-            ? await _context.Set<BankAccount>().FirstOrDefaultAsync(
-                account =>
-                    account.BankAccountId == command.Request.BankAccountId.Value &&
-                    account.UserId == command.UserId &&
-                    account.DeletedAt == null &&
+            ? await _context.Set<BankAccount>().AsNoTracking().FirstOrDefaultAsync(
+                account => account.BankAccountId == command.Request.BankAccountId.Value &&
+                    account.UserId == command.UserId && account.DeletedAt == null &&
                     account.Status == (int)BankAccountStatus.Active,
                 cancellationToken)
-            : await _context.Set<BankAccount>()
-                .Where(account =>
-                    account.UserId == command.UserId &&
-                    account.DeletedAt == null &&
+            : await _context.Set<BankAccount>().AsNoTracking()
+                .Where(account => account.UserId == command.UserId && account.DeletedAt == null &&
                     account.Status == (int)BankAccountStatus.Active)
                 .OrderByDescending(account => account.IsDefault)
                 .ThenByDescending(account => account.CreatedAt)
                 .FirstOrDefaultAsync(cancellationToken);
-
-        if (bankAccount is null)
+        if (bankAccount is null || string.IsNullOrWhiteSpace(bankAccount.BankBin))
         {
-            throw new BadRequestException("An active bank account is required before withdrawal.");
+            throw new BadRequestException("An active bank account with a valid BIN is required before withdrawal.");
         }
 
-        var wallet = await _context.Set<UserWallet>()
-            .AsNoTracking()
-            .FirstOrDefaultAsync(wallet => wallet.UserId == command.UserId, cancellationToken);
-
-        if (wallet is null || wallet.AvailableTokens < tokenAmount)
+        try
         {
-            throw new BadRequestException("Wallet balance is insufficient for withdrawal.");
+            _bankAccountProtector.Unprotect(bankAccount.AccountNumberEncrypted);
+        }
+        catch (CryptographicException)
+        {
+            var invalidAccount = await _context.Set<BankAccount>().FirstAsync(
+                account => account.BankAccountId == bankAccount.BankAccountId,
+                cancellationToken);
+            invalidAccount.Status = (int)BankAccountStatus.Disabled;
+            invalidAccount.IsDefault = false;
+            invalidAccount.UpdatedAt = now;
+            await _context.SaveChangesAsync(cancellationToken);
+            throw new BadRequestException("Bank account encryption is no longer valid. Please add the account again.");
         }
 
-        var vndAmount = TokenWalletRules.ToVnd(tokenAmount);
-        var feeVnd = decimal.Round(_options.FixedFeeVnd, 2, MidpointRounding.AwayFromZero);
+        var vndAmount = decimal.Round(TokenWalletRules.ToVnd(tokenAmount), 0, MidpointRounding.AwayFromZero);
+        var feeVnd = decimal.Round(_options.FixedFeeVnd, 0, MidpointRounding.AwayFromZero);
         var netVndAmount = vndAmount - feeVnd;
         if (netVndAmount <= 0)
         {
             throw new BadRequestException("Withdrawal amount must be greater than the payout fee.");
         }
 
-        await using var transaction = await _context.BeginTransactionAsync(cancellationToken);
-        var locked = await TryLockWalletAsync(wallet.UserWalletsId, tokenAmount, now, cancellationToken);
-        if (!locked)
+        var withdrawalId = Guid.NewGuid();
+        for (var attempt = 0; attempt < MaxWalletRetries; attempt++)
         {
-            throw new BadRequestException("Wallet balance is insufficient for withdrawal.");
+            try
+            {
+                await using var transaction = await _context.BeginTransactionAsync(cancellationToken);
+                var usedToday = await _context.Set<WalletWithdrawal>()
+                    .Where(withdrawal => withdrawal.UserId == command.UserId &&
+                        withdrawal.CreatedAt >= now.Date &&
+                        withdrawal.Status != (int)WithdrawalStatus.Failed &&
+                        withdrawal.Status != (int)WithdrawalStatus.Cancelled)
+                    .SumAsync(withdrawal => (decimal?)withdrawal.TokenAmount, cancellationToken) ?? 0m;
+                if (usedToday + tokenAmount > _options.DailyMaxTokens)
+                {
+                    throw new BadRequestException("Daily withdrawal limit exceeded.");
+                }
+
+                var wallet = await _context.Set<UserWallet>().AsNoTracking()
+                    .FirstOrDefaultAsync(item => item.UserId == command.UserId, cancellationToken);
+                if (wallet is null || wallet.AvailableTokens < tokenAmount || wallet.WithdrawableTokens < tokenAmount)
+                {
+                    throw new BadRequestException("Withdrawable project earnings are insufficient for withdrawal.");
+                }
+
+                if (!await TryLockWalletAsync(wallet, tokenAmount, now, cancellationToken))
+                {
+                    continue;
+                }
+
+                var providerOrderCode = $"wd_{withdrawalId:N}";
+                var withdrawal = new WalletWithdrawal
+                {
+                    WalletWithdrawalId = withdrawalId,
+                    UserWalletsId = wallet.UserWalletsId,
+                    UserId = command.UserId,
+                    BankAccountId = bankAccount.BankAccountId,
+                    BankBin = bankAccount.BankBin,
+                    BankCode = bankAccount.BankCode,
+                    BankName = bankAccount.BankName,
+                    BankAccountNumberEncrypted = bankAccount.AccountNumberEncrypted,
+                    BankAccountNumberMasked = bankAccount.AccountNumberMasked,
+                    BankAccountName = bankAccount.AccountName,
+                    TokenAmount = tokenAmount,
+                    VndAmount = vndAmount,
+                    FeeVnd = feeVnd,
+                    NetVndAmount = netVndAmount,
+                    Status = (int)WithdrawalStatus.Pending,
+                    Provider = _options.Provider,
+                    ProviderOrderCode = providerOrderCode,
+                    IdempotencyKey = idempotencyKey,
+                    CreatedAt = now
+                };
+
+                _context.Set<WalletWithdrawal>().Add(withdrawal);
+                _context.Set<WalletTransaction>().Add(new WalletTransaction
+                {
+                    WalletTransactionsId = Guid.NewGuid(),
+                    UserWalletsId = wallet.UserWalletsId,
+                    UserId = command.UserId,
+                    TokenAmount = tokenAmount,
+                    VndAmount = vndAmount,
+                    Type = (int)WalletTransactionType.WithdrawalLock,
+                    Status = (int)WalletTransactionStatus.Succeeded,
+                    IdempotencyKey = $"withdrawal:{withdrawalId:D}:lock",
+                    GatewayProvider = "InternalTokenWallet",
+                    GatewayOrderCode = providerOrderCode,
+                    GatewayTransactionCode = $"WITHDRAWAL-LOCK-{withdrawalId:N}",
+                    Metadata = withdrawalId.ToString("D"),
+                    Note = "Locked wallet balance for payout withdrawal.",
+                    CreatedAt = now,
+                    CompletedAt = now
+                });
+                _context.Set<PayoutOutbox>().Add(new PayoutOutbox
+                {
+                    PayoutOutboxId = Guid.NewGuid(),
+                    WalletWithdrawalId = withdrawalId,
+                    PayoutKey = $"withdrawal:{withdrawalId:D}:create",
+                    Status = (int)PayoutOutboxStatus.Pending,
+                    AttemptCount = 0,
+                    NextAttemptAt = now,
+                    CreatedAt = now
+                });
+
+                await _context.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+                return WithdrawalResponse.FromEntity(withdrawal);
+            }
+            catch (DbUpdateException)
+            {
+                var racedWithdrawal = await _context.Set<WalletWithdrawal>()
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(
+                        withdrawal => withdrawal.UserId == command.UserId &&
+                            withdrawal.IdempotencyKey == idempotencyKey,
+                        cancellationToken);
+                if (racedWithdrawal is null)
+                {
+                    throw;
+                }
+
+                if (racedWithdrawal.TokenAmount != tokenAmount ||
+                    (command.Request.BankAccountId.HasValue && racedWithdrawal.BankAccountId != command.Request.BankAccountId))
+                {
+                    throw new ConflictException("Idempotency key was already used for another withdrawal payload.");
+                }
+
+                return WithdrawalResponse.FromEntity(racedWithdrawal);
+            }
         }
 
-        var withdrawal = new WalletWithdrawal
-        {
-            WalletWithdrawalId = Guid.NewGuid(),
-            UserWalletsId = wallet.UserWalletsId,
-            UserId = command.UserId,
-            BankAccountId = bankAccount.BankAccountId,
-            BankCode = bankAccount.BankCode,
-            BankName = bankAccount.BankName,
-            BankAccountNumberEncrypted = bankAccount.AccountNumberEncrypted,
-            BankAccountNumberMasked = bankAccount.AccountNumberMasked,
-            BankAccountName = bankAccount.AccountName,
-            TokenAmount = tokenAmount,
-            VndAmount = vndAmount,
-            FeeVnd = feeVnd,
-            NetVndAmount = netVndAmount,
-            Status = (int)WithdrawalStatus.Pending,
-            Provider = _options.Provider,
-            ProviderOrderCode = GenerateProviderOrderCode(now),
-            IdempotencyKey = command.Request.IdempotencyKey,
-            CreatedAt = now
-        };
-
-        _context.Set<WalletWithdrawal>().Add(withdrawal);
-        _context.Set<WalletTransaction>().Add(new WalletTransaction
-        {
-            WalletTransactionsId = Guid.NewGuid(),
-            UserWalletsId = wallet.UserWalletsId,
-            UserId = command.UserId,
-            TokenAmount = tokenAmount,
-            VndAmount = vndAmount,
-            Type = (int)WalletTransactionType.WithdrawalLock,
-            Status = (int)WalletTransactionStatus.Succeeded,
-            GatewayProvider = "InternalTokenWallet",
-            GatewayOrderCode = withdrawal.ProviderOrderCode,
-            GatewayTransactionCode = $"WITHDRAWAL-LOCK-{withdrawal.WalletWithdrawalId:N}",
-            Metadata = withdrawal.WalletWithdrawalId.ToString("D"),
-            Note = "Locked wallet balance for payout withdrawal.",
-            CreatedAt = now,
-            CompletedAt = now
-        });
-        _context.Set<PayoutOutbox>().Add(new PayoutOutbox
-        {
-            PayoutOutboxId = Guid.NewGuid(),
-            WalletWithdrawalId = withdrawal.WalletWithdrawalId,
-            PayoutKey = $"withdrawal:{withdrawal.WalletWithdrawalId:D}:create",
-            Status = (int)PayoutOutboxStatus.Pending,
-            AttemptCount = 0,
-            NextAttemptAt = now,
-            CreatedAt = now
-        });
-
-        await _context.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-
-        return WithdrawalResponse.FromEntity(withdrawal);
+        throw new ConflictException("Wallet balance changed during withdrawal. Please try again.");
     }
 
     private async Task<bool> TryLockWalletAsync(
-        Guid walletId,
+        UserWallet snapshot,
         decimal tokenAmount,
         DateTime now,
         CancellationToken cancellationToken)
     {
         try
         {
-            var updated = await _context.Set<UserWallet>()
-                .Where(wallet => wallet.UserWalletsId == walletId && wallet.AvailableTokens >= tokenAmount)
+            return await _context.Set<UserWallet>()
+                .Where(wallet => wallet.UserWalletsId == snapshot.UserWalletsId &&
+                    wallet.Version == snapshot.Version && wallet.AvailableTokens >= tokenAmount &&
+                    wallet.WithdrawableTokens >= tokenAmount)
                 .ExecuteUpdateAsync(
                     setters => setters
                         .SetProperty(wallet => wallet.AvailableTokens, wallet => wallet.AvailableTokens - tokenAmount)
+                        .SetProperty(wallet => wallet.WithdrawableTokens, wallet => wallet.WithdrawableTokens - tokenAmount)
                         .SetProperty(wallet => wallet.PendingWithdrawalTokens, wallet => wallet.PendingWithdrawalTokens + tokenAmount)
+                        .SetProperty(wallet => wallet.Version, wallet => wallet.Version + 1)
                         .SetProperty(wallet => wallet.UpdatedAt, now),
-                    cancellationToken);
-
-            return updated == 1;
+                    cancellationToken) == 1;
         }
         catch (Exception ex) when (IsExecuteUpdateUnsupported(ex))
         {
             var wallet = await _context.Set<UserWallet>()
-                .FirstOrDefaultAsync(wallet => wallet.UserWalletsId == walletId, cancellationToken);
-
-            if (wallet is null || wallet.AvailableTokens < tokenAmount)
+                .FirstOrDefaultAsync(item => item.UserWalletsId == snapshot.UserWalletsId, cancellationToken);
+            if (wallet is null || wallet.Version != snapshot.Version ||
+                wallet.AvailableTokens < tokenAmount || wallet.WithdrawableTokens < tokenAmount)
             {
                 return false;
             }
 
             wallet.AvailableTokens -= tokenAmount;
+            wallet.WithdrawableTokens -= tokenAmount;
             wallet.PendingWithdrawalTokens += tokenAmount;
+            wallet.Version++;
             wallet.UpdatedAt = now;
             return true;
         }
     }
 
-    private static bool IsExecuteUpdateUnsupported(Exception exception)
-    {
-        if (exception is InvalidOperationException or NotSupportedException)
-        {
-            return true;
-        }
-
-        return exception.InnerException is not null && IsExecuteUpdateUnsupported(exception.InnerException);
-    }
-
-    private static string GenerateProviderOrderCode(DateTime now)
-    {
-        return $"WD{now:yyyyMMddHHmmss}{Random.Shared.Next(1000, 9999)}";
-    }
+    private static bool IsExecuteUpdateUnsupported(Exception exception) =>
+        exception is InvalidOperationException or NotSupportedException ||
+        exception.InnerException is not null && IsExecuteUpdateUnsupported(exception.InnerException);
 }

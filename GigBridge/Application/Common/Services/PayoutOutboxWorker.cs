@@ -57,6 +57,8 @@ public sealed class PayoutOutboxWorker : BackgroundService
 
     internal async Task ProcessBatchAsync(CancellationToken cancellationToken)
     {
+        if (!_options.Enabled) return;
+
         using var scope = _scopeFactory.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
         var now = DateTime.UtcNow;
@@ -105,13 +107,17 @@ public sealed class PayoutOutboxWorker : BackgroundService
 
     internal async Task SyncStaleWithdrawalsAsync(CancellationToken cancellationToken)
     {
+        if (!_options.Enabled) return;
+
         using var scope = _scopeFactory.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
         var provider = scope.ServiceProvider.GetRequiredService<IPayoutProvider>();
         var dateTimeService = scope.ServiceProvider.GetRequiredService<IDateTimeService>();
-        var syncBefore = dateTimeService.UtcNow.AddMinutes(-Math.Max(1, _options.SyncIntervalMinutes));
+        var now = dateTimeService.UtcNow;
+        var syncBefore = now.AddMinutes(-Math.Max(1, _options.SyncIntervalMinutes));
 
         var withdrawals = await context.Set<WalletWithdrawal>()
+            .AsNoTracking()
             .Where(withdrawal =>
                 (withdrawal.Status == (int)WithdrawalStatus.Processing ||
                     withdrawal.Status == (int)WithdrawalStatus.SyncRequired) &&
@@ -122,6 +128,12 @@ public sealed class PayoutOutboxWorker : BackgroundService
 
         foreach (var withdrawal in withdrawals)
         {
+            var delay = GetReconciliationDelay(withdrawal.CreatedAt, now);
+            if (withdrawal.LastSyncedAt.HasValue && withdrawal.LastSyncedAt.Value > now.Subtract(delay))
+            {
+                continue;
+            }
+
             try
             {
                 var status = await provider.GetPayoutStatusAsync(
@@ -134,21 +146,39 @@ public sealed class PayoutOutboxWorker : BackgroundService
                 await WithdrawalWorkflow.ApplyProviderResultAsync(
                     context,
                     dateTimeService,
-                    withdrawal,
+                    withdrawal.WalletWithdrawalId,
                     status,
                     cancellationToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                WithdrawalWorkflow.MarkSyncRequired(
+                await WithdrawalWorkflow.ApplyProviderResultAsync(
+                    context,
                     dateTimeService,
-                    withdrawal,
-                    ex.Message.Length > 1000 ? ex.Message[..1000] : ex.Message);
+                    withdrawal.WalletWithdrawalId,
+                    new PayoutProviderResult(
+                        PayoutProviderOutcome.SyncRequired,
+                        withdrawal.ProviderPayoutId,
+                        withdrawal.ProviderTransactionCode,
+                        withdrawal.ProviderRawStatus,
+                        "Provider sync failed."),
+                    cancellationToken);
             }
         }
-
-        await context.SaveChangesAsync(cancellationToken);
     }
+
+    private TimeSpan GetReconciliationDelay(DateTime createdAt, DateTime now)
+    {
+        var minimum = TimeSpan.FromMinutes(Math.Max(1, _options.SyncIntervalMinutes));
+        var age = now - createdAt;
+        if (age < TimeSpan.FromMinutes(10)) return minimum;
+        if (age < TimeSpan.FromHours(1)) return Max(minimum, TimeSpan.FromMinutes(5));
+        if (age < TimeSpan.FromHours(6)) return Max(minimum, TimeSpan.FromMinutes(15));
+        if (age < TimeSpan.FromDays(1)) return Max(minimum, TimeSpan.FromHours(1));
+        return Max(minimum, TimeSpan.FromHours(6));
+    }
+
+    private static TimeSpan Max(TimeSpan left, TimeSpan right) => left >= right ? left : right;
 
     private async Task ProcessOutboxAsync(
         IServiceProvider serviceProvider,
@@ -164,6 +194,7 @@ public sealed class PayoutOutboxWorker : BackgroundService
             .FirstAsync(outbox => outbox.PayoutOutboxId == outboxId, cancellationToken);
 
         var withdrawal = await context.Set<WalletWithdrawal>()
+            .AsNoTracking()
             .FirstOrDefaultAsync(
                 withdrawal => withdrawal.WalletWithdrawalId == outbox.WalletWithdrawalId,
                 cancellationToken);
@@ -188,23 +219,41 @@ public sealed class PayoutOutboxWorker : BackgroundService
 
         try
         {
-            var accountNumber = protector.Unprotect(withdrawal.BankAccountNumberEncrypted);
-            var payout = await provider.CreatePayoutAsync(
-                new PayoutCreateRequest(
-                    withdrawal.WalletWithdrawalId,
-                    withdrawal.ProviderOrderCode,
-                    withdrawal.NetVndAmount,
-                    withdrawal.BankCode,
-                    accountNumber,
-                    withdrawal.BankAccountName,
-                    $"GigBridge withdrawal {withdrawal.ProviderOrderCode}",
-                    withdrawal.ProviderOrderCode),
-                cancellationToken);
+            PayoutProviderResult payout;
+            if (!string.IsNullOrWhiteSpace(withdrawal.ProviderPayoutId))
+            {
+                payout = await provider.GetPayoutStatusAsync(
+                    new PayoutStatusRequest(
+                        withdrawal.WalletWithdrawalId,
+                        withdrawal.ProviderOrderCode,
+                        withdrawal.ProviderPayoutId),
+                    cancellationToken);
+            }
+            else
+            {
+                if (string.IsNullOrWhiteSpace(withdrawal.BankBin))
+                {
+                    throw new InvalidOperationException("Withdrawal bank BIN is missing.");
+                }
+
+                var accountNumber = protector.Unprotect(withdrawal.BankAccountNumberEncrypted);
+                payout = await provider.CreatePayoutAsync(
+                    new PayoutCreateRequest(
+                        withdrawal.WalletWithdrawalId,
+                        withdrawal.ProviderOrderCode,
+                        withdrawal.NetVndAmount,
+                        withdrawal.BankBin,
+                        accountNumber,
+                        withdrawal.BankAccountName,
+                        ($"GigBridge WD {withdrawal.WalletWithdrawalId:N}")[..21],
+                        withdrawal.WalletWithdrawalId.ToString("D")),
+                    cancellationToken);
+            }
 
             await WithdrawalWorkflow.ApplyProviderResultAsync(
                 context,
                 dateTimeService,
-                withdrawal,
+                withdrawal.WalletWithdrawalId,
                 payout,
                 cancellationToken);
 
@@ -221,9 +270,18 @@ public sealed class PayoutOutboxWorker : BackgroundService
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            var message = ex.Message.Length > 1000 ? ex.Message[..1000] : ex.Message;
-            WithdrawalWorkflow.MarkSyncRequired(dateTimeService, withdrawal, message);
-            ScheduleRetry(outbox, message, dateTimeService.UtcNow);
+            await WithdrawalWorkflow.ApplyProviderResultAsync(
+                context,
+                dateTimeService,
+                withdrawal.WalletWithdrawalId,
+                new PayoutProviderResult(
+                    PayoutProviderOutcome.SyncRequired,
+                    withdrawal.ProviderPayoutId,
+                    withdrawal.ProviderTransactionCode,
+                    withdrawal.ProviderRawStatus,
+                    "Payout processing failed."),
+                cancellationToken);
+            ScheduleRetry(outbox, "Payout processing failed.", dateTimeService.UtcNow);
             _logger.LogWarning(ex, "Payout outbox {OutboxId} failed for withdrawal {WithdrawalId}.", outboxId, withdrawal.WalletWithdrawalId);
         }
 

@@ -3,6 +3,7 @@ using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.Contracts.Escrow.Client.Fund.DTOs;
+using Application.Features.Wallets.Common;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
@@ -126,14 +127,8 @@ public sealed class FundContractEscrowCommandHandler :
 
         var requiredAmount = escrow.RequiredAmount;
         var requiredTokens = requiredAmount;
-        if (wallet.AvailableTokens < requiredTokens)
-        {
-            throw new BadRequestException("Wallet balance is insufficient to fund escrow.");
-        }
-
-        wallet.AvailableTokens -= requiredTokens;
+        WalletWorkflow.DebitAvailable(wallet, requiredTokens, now, "Wallet balance is insufficient to fund escrow.");
         wallet.HeldTokens += requiredTokens;
-        wallet.UpdatedAt = now;
 
         escrow.FundedAmount = escrow.RequiredAmount;
         escrow.Status = (int)ContractEscrowStatus.Funded;

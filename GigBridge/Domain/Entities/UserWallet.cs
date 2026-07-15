@@ -11,6 +11,8 @@ public partial class UserWallet
 
     public decimal AvailableTokens { get; set; }
 
+    public decimal WithdrawableTokens { get; set; }
+
     public decimal HeldTokens { get; set; }
 
     public decimal PendingWithdrawalTokens { get; set; }

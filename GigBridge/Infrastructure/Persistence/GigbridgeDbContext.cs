@@ -2,10 +2,11 @@ using Application.Common.Interfaces;
 using Domain.Entities;
 using Domain.Enums;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 
 namespace Infrastructure.Persistence;
 
-public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
+public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDataProtectionKeyContext
 {
     public GigbridgeDbContext(DbContextOptions<GigbridgeDbContext> options)
         : base(options)
@@ -15,6 +16,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
     public virtual DbSet<AdminAuditLog> AdminAuditLogs { get; set; }
 
     public virtual DbSet<BankAccount> BankAccounts { get; set; }
+
+    public DbSet<DataProtectionKey> DataProtectionKeys { get; set; }
 
     public virtual DbSet<Category> Categories { get; set; }
 
@@ -197,6 +200,7 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
 
             entity.Property(e => e.BankAccountId).HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.BankCode).HasMaxLength(30);
+            entity.Property(e => e.BankBin).HasMaxLength(6);
             entity.Property(e => e.BankName).HasMaxLength(120);
             entity.Property(e => e.AccountNumberEncrypted).HasColumnType("text");
             entity.Property(e => e.AccountNumberMasked).HasMaxLength(60);
@@ -2343,6 +2347,9 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.Property(e => e.AvailableTokens)
                 .HasPrecision(18, 4)
                 .HasDefaultValue(0m);
+            entity.Property(e => e.WithdrawableTokens)
+                .HasPrecision(18, 4)
+                .HasDefaultValue(0m);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.HeldTokens)
                 .HasPrecision(18, 4)
@@ -2355,6 +2362,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
             entity.ToTable(t =>
             {
                 t.HasCheckConstraint("CK_UserWallets_AvailableTokens_NonNegative", "\"AvailableTokens\" >= 0");
+                t.HasCheckConstraint("CK_UserWallets_WithdrawableTokens_NonNegative", "\"WithdrawableTokens\" >= 0");
+                t.HasCheckConstraint("CK_UserWallets_WithdrawableTokens_MaxAvailable", "\"WithdrawableTokens\" <= \"AvailableTokens\"");
                 t.HasCheckConstraint("CK_UserWallets_HeldTokens_NonNegative", "\"HeldTokens\" >= 0");
                 t.HasCheckConstraint("CK_UserWallets_PendingWithdrawalTokens_NonNegative", "\"PendingWithdrawalTokens\" >= 0");
             });
@@ -2379,6 +2388,7 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext
 
             entity.Property(e => e.WalletWithdrawalId).HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.BankCode).HasMaxLength(30);
+            entity.Property(e => e.BankBin).HasMaxLength(6);
             entity.Property(e => e.BankName).HasMaxLength(120);
             entity.Property(e => e.BankAccountNumberEncrypted).HasColumnType("text");
             entity.Property(e => e.BankAccountNumberMasked).HasMaxLength(60);

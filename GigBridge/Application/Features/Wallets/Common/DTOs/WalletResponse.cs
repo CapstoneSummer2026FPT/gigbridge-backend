@@ -6,9 +6,11 @@ public sealed record WalletResponse(
     Guid WalletId,
     Guid UserId,
     decimal AvailableTokens,
+    decimal WithdrawableTokens,
     decimal HeldTokens,
     decimal PendingWithdrawalTokens,
     decimal AvailableVnd,
+    decimal WithdrawableVnd,
     decimal HeldVnd,
     decimal PendingWithdrawalVnd)
 {
@@ -18,9 +20,11 @@ public sealed record WalletResponse(
             wallet.UserWalletsId,
             wallet.UserId,
             wallet.AvailableTokens,
+            wallet.WithdrawableTokens,
             wallet.HeldTokens,
             wallet.PendingWithdrawalTokens,
             TokenWalletRules.ToVnd(wallet.AvailableTokens),
+            TokenWalletRules.ToVnd(wallet.WithdrawableTokens),
             TokenWalletRules.ToVnd(wallet.HeldTokens),
             TokenWalletRules.ToVnd(wallet.PendingWithdrawalTokens));
     }

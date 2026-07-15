@@ -1,9 +1,9 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Features.Contracts.Common.Internal;
+using Application.Features.Wallets.Common;
 using Domain.Entities;
 using Domain.Enums;
-using Domain.Services.Payments;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -94,7 +94,7 @@ public sealed class AdminOverrideMilestoneCommandHandler :
                 throw new BadRequestException("Escrow balance is insufficient for this release.");
             }
 
-            var releasedTokens = TokenWalletRules.ToTokens(releasableVnd);
+            var releasedTokens = releasableVnd;
             if (clientWallet.HeldTokens < releasedTokens)
             {
                 throw new BadRequestException("Client held wallet balance is insufficient for this release.");
@@ -120,6 +120,7 @@ public sealed class AdminOverrideMilestoneCommandHandler :
                     UserWalletsId = Guid.NewGuid(),
                     UserId = freelancerUserId,
                     AvailableTokens = 0m,
+                    WithdrawableTokens = 0m,
                     HeldTokens = 0m,
                     CreatedAt = now
                 };
@@ -129,8 +130,7 @@ public sealed class AdminOverrideMilestoneCommandHandler :
             // Move tokens
             clientWallet.HeldTokens -= releasedTokens;
             clientWallet.UpdatedAt = now;
-            freelancerWallet.AvailableTokens += releasedTokens;
-            freelancerWallet.UpdatedAt = now;
+            WalletWorkflow.CreditWithdrawable(freelancerWallet, releasedTokens, now);
 
             milestone.ReleasedAmount += releasableVnd;
             milestone.LastReleasedAt = now;
@@ -219,7 +219,7 @@ public sealed class AdminOverrideMilestoneCommandHandler :
                 throw new BadRequestException("Escrow balance is insufficient for this refund.");
             }
 
-            var refundedTokens = TokenWalletRules.ToTokens(refundableVnd);
+            var refundedTokens = refundableVnd;
             if (clientWallet.HeldTokens < refundedTokens)
             {
                 throw new BadRequestException("Client held wallet balance is insufficient for this refund.");

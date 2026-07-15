@@ -1,22 +1,17 @@
-using System.Globalization;
-using System.Net.Http.Json;
-using System.Text.Json;
 using Application.Common.Interfaces.IService;
-using Microsoft.Extensions.Options;
+using PayOS;
+using PayOS.Models;
+using PayOS.Models.V1.Payouts;
 
 namespace Infrastructure.ExternalServices.Payments;
 
 public sealed class PayOsPayoutProvider : IPayoutProvider
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private readonly PayOSClient _client;
 
-    private readonly HttpClient _httpClient;
-    private readonly PayOsOptions _options;
-
-    public PayOsPayoutProvider(HttpClient httpClient, IOptions<PayOsOptions> options)
+    public PayOsPayoutProvider(PayOSClient client)
     {
-        _httpClient = httpClient;
-        _options = options.Value;
+        _client = client;
     }
 
     public string ProviderName => "PayOS";
@@ -25,51 +20,39 @@ public sealed class PayOsPayoutProvider : IPayoutProvider
         PayoutCreateRequest request,
         CancellationToken cancellationToken)
     {
-        if (!ConfigureBaseAddress())
-        {
-            return SyncRequired("PayOS payout endpoint is not configured.");
-        }
-
-        var payload = new
-        {
-            orderCode = request.ProviderOrderCode,
-            amount = Convert.ToInt64(decimal.Round(request.AmountVnd, 0, MidpointRounding.AwayFromZero)),
-            bankCode = request.BankCode,
-            accountNumber = request.AccountNumber,
-            accountName = request.AccountName,
-            description = request.Description,
-            idempotencyKey = request.IdempotencyKey
-        };
-
-        using var message = new HttpRequestMessage(
-            HttpMethod.Post,
-            _options.PayoutCreatePath ?? "/v2/payouts")
-        {
-            Content = JsonContent.Create(payload, options: JsonOptions)
-        };
-
-        AddHeaders(message);
-
         try
         {
-            using var response = await _httpClient.SendAsync(message, cancellationToken);
-            var raw = await response.Content.ReadAsStringAsync(cancellationToken);
-            if (!response.IsSuccessStatusCode)
+            var existing = await FindByReferenceIdAsync(request.ProviderOrderCode, cancellationToken);
+            if (existing is not null)
             {
-                return new PayoutProviderResult(
-                    PayoutProviderOutcome.SyncRequired,
-                    null,
-                    null,
-                    response.StatusCode.ToString(),
-                    $"PayOS payout create failed with HTTP {(int)response.StatusCode}.",
-                    raw);
+                return Map(existing);
             }
 
-            return MapRawResponse(raw);
+            var payout = await _client.Payouts.CreateAsync(
+                new PayoutRequest
+                {
+                    ReferenceId = request.ProviderOrderCode,
+                    Amount = checked(Convert.ToInt64(request.AmountVnd)),
+                    Description = request.Description,
+                    ToBin = request.BankBin,
+                    ToAccountNumber = request.AccountNumber
+                },
+                request.IdempotencyKey,
+                new RequestOptions<Payout>
+                {
+                    CancellationToken = cancellationToken,
+                    MaxRetries = 0
+                });
+
+            return Map(payout);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return SyncRequired("PayOS payout request timed out.");
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            return SyncRequired(ex.Message);
+            return SyncRequired($"PayOS payout request failed ({ex.GetType().Name}).");
         }
     }
 
@@ -77,127 +60,69 @@ public sealed class PayOsPayoutProvider : IPayoutProvider
         PayoutStatusRequest request,
         CancellationToken cancellationToken)
     {
-        if (!ConfigureBaseAddress())
-        {
-            return SyncRequired("PayOS payout endpoint is not configured.");
-        }
-
-        var path = (_options.PayoutStatusPath ?? "/v2/payouts/{orderCode}")
-            .Replace("{orderCode}", Uri.EscapeDataString(request.ProviderOrderCode), StringComparison.Ordinal)
-            .Replace("{payoutId}", Uri.EscapeDataString(request.ProviderPayoutId ?? string.Empty), StringComparison.Ordinal);
-
-        using var message = new HttpRequestMessage(HttpMethod.Get, path);
-        AddHeaders(message);
-
         try
         {
-            using var response = await _httpClient.SendAsync(message, cancellationToken);
-            var raw = await response.Content.ReadAsStringAsync(cancellationToken);
-            if (!response.IsSuccessStatusCode)
-            {
-                return new PayoutProviderResult(
-                    PayoutProviderOutcome.SyncRequired,
+            var payout = string.IsNullOrWhiteSpace(request.ProviderPayoutId)
+                ? await FindByReferenceIdAsync(request.ProviderOrderCode, cancellationToken)
+                : await _client.Payouts.GetAsync(
                     request.ProviderPayoutId,
-                    null,
-                    response.StatusCode.ToString(),
-                    $"PayOS payout status failed with HTTP {(int)response.StatusCode}.",
-                    raw);
-            }
+                    new RequestOptions { CancellationToken = cancellationToken, MaxRetries = 0 });
 
-            return MapRawResponse(raw);
+            return payout is null
+                ? SyncRequired("PayOS payout was not found by reference ID.")
+                : Map(payout);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return SyncRequired("PayOS payout status request timed out.");
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            return SyncRequired(ex.Message);
+            return SyncRequired($"PayOS payout status request failed ({ex.GetType().Name}).");
         }
     }
 
-    public Task<PayoutWebhookVerificationResult> VerifyWebhookAsync(
-        PayoutWebhookVerificationRequest request,
+    private async Task<Payout?> FindByReferenceIdAsync(
+        string referenceId,
         CancellationToken cancellationToken)
     {
-        cancellationToken.ThrowIfCancellationRequested();
+        var page = await _client.Payouts.ListAsync(
+            new GetPayoutListParam { ReferenceId = referenceId, Limit = 10, Offset = 0 },
+            new RequestOptions { CancellationToken = cancellationToken, MaxRetries = 0 });
 
-        var document = JsonDocument.Parse(string.IsNullOrWhiteSpace(request.RawPayload) ? "{}" : request.RawPayload);
-        var signatureData = ExtractSignatureData(document.RootElement);
-        var isValid = PayOsSignatureVerifier.IsValid(
-            signatureData,
-            request.Signature,
-            _options.ChecksumKey);
-
-        var eventId = GetString(document.RootElement, "eventId", "id", "webhookId") ??
-            GetString(GetDataElement(document.RootElement), "eventId", "id", "webhookId");
-        var orderCode = GetString(document.RootElement, "orderCode", "referenceCode") ??
-            GetString(GetDataElement(document.RootElement), "orderCode", "referenceCode");
-        var payoutId = GetString(document.RootElement, "payoutId", "id", "paymentId") ??
-            GetString(GetDataElement(document.RootElement), "payoutId", "id", "paymentId");
-        var transactionCode = GetString(document.RootElement, "transactionCode", "transactionId", "reference") ??
-            GetString(GetDataElement(document.RootElement), "transactionCode", "transactionId", "reference");
-        var rawStatus = GetString(document.RootElement, "status", "code") ??
-            GetString(GetDataElement(document.RootElement), "status", "code");
-        var failureReason = GetString(document.RootElement, "desc", "message", "failureReason") ??
-            GetString(GetDataElement(document.RootElement), "desc", "message", "failureReason");
-
-        return Task.FromResult(new PayoutWebhookVerificationResult(
-            isValid,
-            eventId,
-            orderCode,
-            payoutId,
-            MapStatus(rawStatus),
-            transactionCode,
-            rawStatus,
-            failureReason,
-            request.RawPayload));
+        return page.Data.FirstOrDefault(payout =>
+            string.Equals(payout.ReferenceId, referenceId, StringComparison.Ordinal));
     }
 
-    private bool ConfigureBaseAddress()
+    internal static PayoutProviderResult Map(Payout payout)
     {
-        if (_httpClient.BaseAddress is not null)
+        var transaction = payout.Transactions?.FirstOrDefault();
+        var rawStatus = transaction is null
+            ? payout.ApprovalState.ToString()
+            : $"{payout.ApprovalState}:{transaction.State}";
+        var transactionCode = transaction?.Reference ?? transaction?.Id;
+        var failureReason = transaction?.ErrorMessage ?? transaction?.ErrorCode;
+
+        var outcome = payout.ApprovalState switch
         {
-            return true;
-        }
-
-        if (string.IsNullOrWhiteSpace(_options.PayoutBaseUrl))
-        {
-            return false;
-        }
-
-        _httpClient.BaseAddress = new Uri(_options.PayoutBaseUrl.TrimEnd('/') + "/");
-        return true;
-    }
-
-    private void AddHeaders(HttpRequestMessage message)
-    {
-        if (!string.IsNullOrWhiteSpace(_options.ClientId))
-        {
-            message.Headers.TryAddWithoutValidation("x-client-id", _options.ClientId);
-        }
-
-        if (!string.IsNullOrWhiteSpace(_options.ApiKey))
-        {
-            message.Headers.TryAddWithoutValidation("x-api-key", _options.ApiKey);
-        }
-    }
-
-    private static PayoutProviderResult MapRawResponse(string raw)
-    {
-        using var document = JsonDocument.Parse(string.IsNullOrWhiteSpace(raw) ? "{}" : raw);
-        var root = document.RootElement;
-        var data = GetDataElement(root);
-        var status = GetString(root, "status", "code") ?? GetString(data, "status", "code");
-        var payoutId = GetString(root, "payoutId", "id", "paymentId") ?? GetString(data, "payoutId", "id", "paymentId");
-        var transactionCode = GetString(root, "transactionCode", "transactionId", "reference") ??
-            GetString(data, "transactionCode", "transactionId", "reference");
-        var failureReason = GetString(root, "desc", "message", "failureReason") ??
-            GetString(data, "desc", "message", "failureReason");
+            PayoutApprovalState.Completed when payout.Transactions is { Count: > 0 } &&
+                payout.Transactions.All(item => item.State == PayoutTransactionState.Succeeded)
+                => PayoutProviderOutcome.Succeeded,
+            PayoutApprovalState.Rejected or PayoutApprovalState.Cancelled or PayoutApprovalState.Failed
+                => PayoutProviderOutcome.Failed,
+            PayoutApprovalState.Processing or PayoutApprovalState.Approved or PayoutApprovalState.Scheduled
+                => PayoutProviderOutcome.Accepted,
+            PayoutApprovalState.Drafting or PayoutApprovalState.Submitted
+                => PayoutProviderOutcome.Pending,
+            _ => PayoutProviderOutcome.SyncRequired
+        };
 
         return new PayoutProviderResult(
-            MapStatus(status),
-            payoutId,
+            outcome,
+            payout.Id,
             transactionCode,
-            status,
-            failureReason,
-            raw);
+            rawStatus,
+            failureReason);
     }
 
     private static PayoutProviderResult SyncRequired(string reason)
@@ -207,103 +132,6 @@ public sealed class PayOsPayoutProvider : IPayoutProvider
             null,
             null,
             null,
-            reason,
-            null);
-    }
-
-    private static PayoutProviderOutcome MapStatus(string? status)
-    {
-        var normalized = status?
-            .Trim()
-            .Replace("-", string.Empty, StringComparison.Ordinal)
-            .Replace("_", string.Empty, StringComparison.Ordinal)
-            .ToUpperInvariant();
-
-        return normalized switch
-        {
-            "00" or "SUCCESS" or "SUCCEEDED" or "COMPLETED" or "PAID" => PayoutProviderOutcome.Succeeded,
-            "FAILED" or "FAIL" or "REJECTED" or "CANCELLED" or "CANCELED" or "EXPIRED" => PayoutProviderOutcome.Failed,
-            "ACCEPTED" or "PROCESSING" => PayoutProviderOutcome.Accepted,
-            "PENDING" or "WAITING" => PayoutProviderOutcome.Pending,
-            _ => PayoutProviderOutcome.SyncRequired
-        };
-    }
-
-    private static JsonElement GetDataElement(JsonElement element)
-    {
-        return element.ValueKind == JsonValueKind.Object &&
-            element.TryGetProperty("data", out var data) &&
-            data.ValueKind == JsonValueKind.Object
-            ? data
-            : default;
-    }
-
-    private static string? GetString(JsonElement element, params string[] names)
-    {
-        if (element.ValueKind != JsonValueKind.Object)
-        {
-            return null;
-        }
-
-        foreach (var name in names)
-        {
-            if (!element.TryGetProperty(name, out var property))
-            {
-                continue;
-            }
-
-            var value = property.ValueKind switch
-            {
-                JsonValueKind.String => property.GetString(),
-                JsonValueKind.Number => property.TryGetInt64(out var number)
-                    ? number.ToString(CultureInfo.InvariantCulture)
-                    : property.GetRawText(),
-                JsonValueKind.True => "true",
-                JsonValueKind.False => "false",
-                _ => null
-            };
-
-            if (!string.IsNullOrWhiteSpace(value))
-            {
-                return value;
-            }
-        }
-
-        return null;
-    }
-
-    private static IReadOnlyDictionary<string, string?> ExtractSignatureData(JsonElement root)
-    {
-        var target = GetDataElement(root);
-        if (target.ValueKind != JsonValueKind.Object)
-        {
-            target = root;
-        }
-
-        var data = new Dictionary<string, string?>(StringComparer.Ordinal);
-        if (target.ValueKind != JsonValueKind.Object)
-        {
-            return data;
-        }
-
-        foreach (var property in target.EnumerateObject())
-        {
-            if (string.Equals(property.Name, "signature", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-
-            data[property.Name] = property.Value.ValueKind switch
-            {
-                JsonValueKind.String => property.Value.GetString(),
-                JsonValueKind.Number => property.Value.GetRawText(),
-                JsonValueKind.True => "true",
-                JsonValueKind.False => "false",
-                JsonValueKind.Null => null,
-                _ => property.Value.GetRawText()
-            };
-        }
-
-        return data;
+            reason);
     }
 }
