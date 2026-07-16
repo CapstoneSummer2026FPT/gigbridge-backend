@@ -202,6 +202,20 @@ public class AiServiceClient : IAiServiceClient
         };
     }
 
+    public async Task<VettingEvaluationResponseDto> AnalyzeVettingAsync(
+        AnalyzeVettingRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient.PostAsJsonAsync(
+            "api/ai/interviews/analyze-vetting",
+            request,
+            cancellationToken);
+
+        return await ReadInterviewResponseAsync<VettingEvaluationResponseDto>(
+            response,
+            cancellationToken);
+    }
+
     private static async Task<T> ReadInterviewResponseAsync<T>(
         HttpResponseMessage response,
         CancellationToken cancellationToken)

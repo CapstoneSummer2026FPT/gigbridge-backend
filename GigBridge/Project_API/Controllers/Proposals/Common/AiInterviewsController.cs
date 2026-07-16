@@ -16,7 +16,7 @@ namespace Project_API.Controllers.Common;
 [Authorize(Roles = nameof(UserRole.Freelancer))]
 public sealed class AiInterviewsController : BaseApiController
 {
-    private const long MaxAudioUploadBytes = 4 * 1024 * 1024;
+    private const long MaxAudioUploadBytes = 4 * 1024 * 1024; // 4mb
     private readonly IApplicationDbContext _context;
     private readonly IAiServiceClient _aiServiceClient;
     private readonly ILogger<AiInterviewsController> _logger;

@@ -26,4 +26,7 @@ public interface IAiServiceClient
         int questionIndex,
         string audioAccessToken,
         CancellationToken cancellationToken = default);
+    Task<VettingEvaluationResponseDto> AnalyzeVettingAsync(
+        AnalyzeVettingRequestDto request,
+        CancellationToken cancellationToken = default);
 }

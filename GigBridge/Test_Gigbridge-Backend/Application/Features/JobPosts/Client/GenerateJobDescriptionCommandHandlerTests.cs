@@ -127,6 +127,10 @@ public class GenerateJobDescriptionCommandHandlerTests
             int questionIndex,
             string audioAccessToken,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task<VettingEvaluationResponseDto> AnalyzeVettingAsync(
+            AnalyzeVettingRequestDto request,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     private class FakeDateTimeService : IDateTimeService
