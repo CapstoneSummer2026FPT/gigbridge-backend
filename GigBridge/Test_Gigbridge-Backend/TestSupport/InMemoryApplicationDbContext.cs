@@ -33,6 +33,8 @@ internal sealed class InMemoryApplicationDbContext : IApplicationDbContext
 
     public int SaveChangesCount { get; private set; }
 
+    public Exception? SaveChangesException { get; set; }
+
     public Task<IApplicationDbContextTransaction> BeginTransactionAsync(CancellationToken cancellationToken)
     {
         return Task.FromResult<IApplicationDbContextTransaction>(new NoopApplicationDbContextTransaction());
@@ -41,6 +43,11 @@ internal sealed class InMemoryApplicationDbContext : IApplicationDbContext
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken)
     {
         SaveChangesCount++;
+        if (SaveChangesException is not null)
+        {
+            return Task.FromException<int>(SaveChangesException);
+        }
+
         return Task.FromResult(1);
     }
 }

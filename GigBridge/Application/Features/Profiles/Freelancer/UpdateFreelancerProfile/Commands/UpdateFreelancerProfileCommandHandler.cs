@@ -2,10 +2,12 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Features.Profiles.FreelancerProfile.CreateFreelancerProfile.DTOs;
+using Application.Features.Profiles.FreelancerProfile.Common;
 using AutoMapper;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using FreelancerProfileEntity = Domain.Entities.FreelancerProfile;
 
 namespace Application.Features.Profiles.FreelancerProfile.UpdateFreelancerProfile.Commands;
@@ -16,15 +18,18 @@ public class UpdateFreelancerProfileCommandHandler
     private readonly IApplicationDbContext _context;
     private readonly ICurrentUserService _currentUserService;
     private readonly IMapper _mapper;
+    private readonly ILogger<UpdateFreelancerProfileCommandHandler> _logger;
 
     public UpdateFreelancerProfileCommandHandler(
         IApplicationDbContext context,
         ICurrentUserService currentUserService,
-        IMapper mapper)
+        IMapper mapper,
+        ILogger<UpdateFreelancerProfileCommandHandler> logger)
     {
         _context = context;
         _currentUserService = currentUserService;
         _mapper = mapper;
+        _logger = logger;
     }
 
     public async Task<FreelancerProfileResponseDto> Handle(
@@ -35,6 +40,8 @@ public class UpdateFreelancerProfileCommandHandler
         {
             throw new BadRequestException("User ID from token is invalid or missing.");
         }
+
+        await using var transaction = await _context.BeginTransactionAsync(cancellationToken);
 
         var user = await _context.Set<User>()
             .Include(u => u.FreelancerProfile)
@@ -69,23 +76,67 @@ public class UpdateFreelancerProfileCommandHandler
         freelancerProfile.Location = request.Dto.Location?.Trim();
         freelancerProfile.UpdatedAt = now;
 
-        int score = 0;
-        if (!string.IsNullOrWhiteSpace(freelancerProfile.Title)) score += 30;
-        if (!string.IsNullOrWhiteSpace(freelancerProfile.Bio)) score += 30;
-        if (freelancerProfile.Availability != null) score += 20;
-        if (!string.IsNullOrWhiteSpace(freelancerProfile.Location)) score += 20;
-        freelancerProfile.ProfileCompletionScore = score;
+        var taxonomyMappings = await FreelancerProfileTaxonomy.ValidateAndLoadAsync(
+            _context,
+            request.Dto.MajorId,
+            request.Dto.CategoryIds,
+            cancellationToken);
+        await FreelancerProfileTaxonomy.SynchronizeSelectionsAsync(
+            _context,
+            freelancerProfile,
+            request.Dto.MajorId,
+            taxonomyMappings,
+            now,
+            cancellationToken);
 
-        bool requirementsMet = !string.IsNullOrWhiteSpace(freelancerProfile.Title) &&
-                               !string.IsNullOrWhiteSpace(freelancerProfile.Bio) &&
-                               !string.IsNullOrWhiteSpace(freelancerProfile.Location);
+        if (request.Dto.SkillIds is not null)
+        {
+            var skills = await FreelancerProfileSkills.ValidateAndLoadAsync(
+                _context,
+                request.Dto.SkillIds,
+                cancellationToken);
+            await FreelancerProfileSkills.SynchronizeAsync(
+                _context,
+                freelancerProfile,
+                skills,
+                cancellationToken);
+        }
 
-        if (requirementsMet)
+        freelancerProfile.ProfileCompletionScore = FreelancerProfileTaxonomy.CalculateCompletionScore(freelancerProfile);
+
+        if (FreelancerProfileTaxonomy.IsSetupComplete(freelancerProfile))
         {
             user.IsSetup = true;
         }
 
-        await _context.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException exception)
+        {
+            foreach (var entry in exception.Entries)
+            {
+                var primaryKey = entry.Metadata.FindPrimaryKey();
+                var key = primaryKey is null
+                    ? "<none>"
+                    : string.Join(
+                        ", ",
+                        primaryKey.Properties.Select(property =>
+                            $"{property.Name}={entry.Property(property.Name).CurrentValue}"));
+                _logger.LogWarning(
+                    exception,
+                    "Freelancer profile persistence conflict. Entity={EntityType}, State={EntityState}, Key={PrimaryKey}",
+                    entry.Metadata.ClrType.Name,
+                    entry.State,
+                    key);
+            }
+
+            throw new ConflictException(
+                "Your freelancer profile was updated by another request. Reload the latest profile and try again.",
+                exception);
+        }
 
         return _mapper.Map<FreelancerProfileResponseDto>(freelancerProfile);
     }

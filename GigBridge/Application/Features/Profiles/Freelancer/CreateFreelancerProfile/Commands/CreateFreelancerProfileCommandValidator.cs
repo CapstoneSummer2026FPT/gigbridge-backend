@@ -21,5 +21,13 @@ public class CreateFreelancerProfileCommandValidator : AbstractValidator<CreateF
         RuleFor(v => v.Dto.Location)
             .NotEmpty().WithMessage("Location is required.")
             .MaximumLength(300).WithMessage("Location cannot exceed 300 characters.");
+
+        RuleFor(v => v.Dto.MajorId)
+            .NotEmpty().WithMessage("Major is required.");
+
+        RuleFor(v => v.Dto.CategoryIds)
+            .NotEmpty().WithMessage("At least one category is required.")
+            .Must(categoryIds => categoryIds is not null && categoryIds.Distinct().Count() == categoryIds.Count)
+            .WithMessage("Duplicate categories are not allowed.");
     }
 }

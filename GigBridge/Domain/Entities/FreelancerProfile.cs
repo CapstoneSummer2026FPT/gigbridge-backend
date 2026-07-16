@@ -9,6 +9,8 @@ public partial class FreelancerProfile
 
     public Guid UserId { get; set; }
 
+    public Guid? MajorId { get; set; }
+
     public string? Title { get; set; }
 
     public string? Bio { get; set; }
@@ -29,6 +31,10 @@ public partial class FreelancerProfile
     public virtual ICollection<Contract> Contracts { get; set; } = new List<Contract>();
 
     public virtual ICollection<FreelancerSkill> FreelancerSkills { get; set; } = new List<FreelancerSkill>();
+
+    public virtual ICollection<FreelancerProfileCategory> FreelancerProfileCategories { get; set; } = new List<FreelancerProfileCategory>();
+
+    public virtual Major? Major { get; set; }
     public virtual ICollection<FreelancerRankProtection> RankProtections { get; set; } = new List<FreelancerRankProtection>();
     public virtual ICollection<FreelancerProfilePromotion> Promotions { get; set; } = new List<FreelancerProfilePromotion>();
 

@@ -5,6 +5,7 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Features.Profiles.FreelancerProfile.CreateFreelancerProfile.DTOs;
+using Application.Features.Profiles.FreelancerProfile.Common;
 using AutoMapper;
 using Domain.Entities;
 using MediatR;
@@ -41,6 +42,7 @@ public class CreateFreelancerProfileCommandHandler
 
         var user = await _context.Set<User>()
             .Include(u => u.FreelancerProfile)
+                .ThenInclude(profile => profile!.FreelancerProfileCategories)
             .FirstOrDefaultAsync(u => u.UserId == currentUserId, cancellationToken);
 
         if (user == null)
@@ -73,20 +75,21 @@ public class CreateFreelancerProfileCommandHandler
         freelancerProfile.Location = request.Dto.Location?.Trim();
         freelancerProfile.UpdatedAt = now;
 
-        // Calculate profile completion score
-        int score = 0;
-        if (!string.IsNullOrWhiteSpace(freelancerProfile.Title)) score += 30;
-        if (!string.IsNullOrWhiteSpace(freelancerProfile.Bio)) score += 30;
-        if (freelancerProfile.Availability != null) score += 20;
-        if (!string.IsNullOrWhiteSpace(freelancerProfile.Location)) score += 20;
-        freelancerProfile.ProfileCompletionScore = score;
+        var taxonomyMappings = await FreelancerProfileTaxonomy.ValidateAndLoadAsync(
+            _context,
+            request.Dto.MajorId,
+            request.Dto.CategoryIds,
+            cancellationToken);
+        FreelancerProfileTaxonomy.ReplaceSelections(
+            _context,
+            freelancerProfile,
+            request.Dto.MajorId,
+            taxonomyMappings,
+            now);
 
-        // Verify requirements to set IsSetup = true
-        bool requirementsMet = !string.IsNullOrWhiteSpace(freelancerProfile.Title) &&
-                               !string.IsNullOrWhiteSpace(freelancerProfile.Bio) &&
-                               !string.IsNullOrWhiteSpace(freelancerProfile.Location);
+        freelancerProfile.ProfileCompletionScore = FreelancerProfileTaxonomy.CalculateCompletionScore(freelancerProfile);
 
-        if (requirementsMet)
+        if (FreelancerProfileTaxonomy.IsSetupComplete(freelancerProfile))
         {
             user.IsSetup = true;
         }
