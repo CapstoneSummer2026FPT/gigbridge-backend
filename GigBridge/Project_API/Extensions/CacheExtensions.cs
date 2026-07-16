@@ -9,12 +9,12 @@ public static class CacheExtensions {
     public static IServiceCollection AddHybridCache(this IServiceCollection services, IConfiguration configuration) {
         services.AddMemoryCache();
 
-        var redisConnectionString = configuration["Redis:ConnectionString"];
+        // Ưu tiên env var, fallback xuống config, cuối cùng là localhost cho dev
+        var redisConnectionString = Environment.GetEnvironmentVariable("REDIS_CONNECTION_STRING")
+            ?? configuration["Redis:ConnectionString"]
+            ?? "localhost:6379";
 
-        if (string.IsNullOrWhiteSpace(redisConnectionString)) {
-            redisConnectionString = "localhost:6379";
-        }
-
+        // Không throw nếu Redis không available ở dev/testing
         services.AddStackExchangeRedisCache(options => {
             options.Configuration = redisConnectionString;
             options.InstanceName = "GigBridge_";
