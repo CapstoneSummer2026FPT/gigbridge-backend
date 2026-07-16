@@ -17,7 +17,7 @@ using FreelancerProfileEntity = Domain.Entities.FreelancerProfile;
 
 namespace Application.Features.Profiles.FreelancerProfile.GetAllFreelancers.Queries;
 
-public class GetAllFreelancersQueryHandler 
+public class GetAllFreelancersQueryHandler
     : IRequestHandler<GetAllFreelancersQuery, IEnumerable<FreelancerProfileDetailDto>>
 {
     private readonly IApplicationDbContext _context;
@@ -30,7 +30,7 @@ public class GetAllFreelancersQueryHandler
     }
 
     public async Task<IEnumerable<FreelancerProfileDetailDto>> Handle(
-        GetAllFreelancersQuery request, 
+        GetAllFreelancersQuery request,
         CancellationToken cancellationToken)
     {
         // Start query with active users
@@ -76,21 +76,22 @@ public class GetAllFreelancersQueryHandler
 
         // Fetch all reviews for these freelancers to calculate ratings in memory
         var freelancerUserIds = freelancerProfiles.Select(p => p.UserId).ToList();
+        var freelancerProfileIds = freelancerProfiles.Select(p => p.FreelancerProfilesId).ToList();
         var now = _clock.UtcNow;
-        var promotionBoostByUser = await _context.Set<FreelancerProfilePromotion>()
+        var promotionBoostByProfile = await _context.Set<FreelancerProfilePromotion>()
             .AsNoTracking()
             .Where(item =>
-                freelancerUserIds.Contains(item.FreelancerProfile.UserId) &&
+                freelancerProfileIds.Contains(item.FreelancerProfileId) &&
                 item.Status == PromotionStatus.Active &&
                 item.StartTime <= now &&
                 item.EndTime > now)
             .ToDictionaryAsync(
-                item => item.FreelancerProfile.UserId,
+                item => item.FreelancerProfileId,
                 item => item.BoostWeight,
                 cancellationToken);
         freelancerProfiles = freelancerProfiles
             .OrderByDescending(item =>
-                promotionBoostByUser.TryGetValue(item.UserId, out var boost) ? boost : 0m)
+                promotionBoostByProfile.TryGetValue(item.FreelancerProfilesId, out var boost) ? boost : 0m)
             .ThenByDescending(item =>
                 item.User.UserEloScore?.CurrentPoints ?? UserEloCalculator.DefaultPoints)
             .ThenByDescending(item => item.CreatedAt)
