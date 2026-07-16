@@ -17,7 +17,7 @@ using FreelancerProfileEntity = Domain.Entities.FreelancerProfile;
 
 namespace Application.Features.Profiles.FreelancerProfile.GetAllFreelancers.Queries;
 
-public class GetAllFreelancersQueryHandler 
+public class GetAllFreelancersQueryHandler
     : IRequestHandler<GetAllFreelancersQuery, IEnumerable<FreelancerProfileDetailDto>>
 {
     private readonly IApplicationDbContext _context;
@@ -30,7 +30,7 @@ public class GetAllFreelancersQueryHandler
     }
 
     public async Task<IEnumerable<FreelancerProfileDetailDto>> Handle(
-        GetAllFreelancersQuery request, 
+        GetAllFreelancersQuery request,
         CancellationToken cancellationToken)
     {
         // Start query with active users
