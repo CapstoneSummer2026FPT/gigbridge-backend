@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace Application.Features.JobPosts.Client.GenerateJobDescription.DTOs;
+namespace Application.Features.Premium.Client.AiJobPostGenerator.DTOs;
 
 public class GeneratedSkillDto
 {
@@ -21,4 +21,8 @@ public class GenerateJobDescriptionResponse
     public List<string> CustomSkills { get; set; } = new();
     public string Description { get; set; } = null!;
     public List<string> QuestionRecruitment { get; set; } = new();
+    public decimal? BudgetMin { get; set; }
+    public decimal? BudgetMax { get; set; }
+    public string? Currency { get; set; }
+    public string AiDisclaimer { get; set; } = string.Empty;
 }

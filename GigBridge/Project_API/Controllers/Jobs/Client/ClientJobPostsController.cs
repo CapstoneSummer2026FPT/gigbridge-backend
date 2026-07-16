@@ -21,8 +21,15 @@ using Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Project_API.Controllers.Common;
-using Application.Features.JobPosts.Client.GenerateJobDescription.Commands;
-using Application.Features.JobPosts.Client.GenerateJobDescription.DTOs;
+using Application.Features.Premium.Client.AiJobPostGenerator.Commands;
+using Application.Features.Premium.Client.AiJobPostGenerator.DTOs;
+using Application.Features.Premium.Client.JobPostPromotion.Commands;
+using Application.Features.Premium.Client.JobPostPromotion.DTOs;
+using Application.Features.Premium.Client.SmartTalentMatching.GetMatches.DTOs;
+using Application.Features.Premium.Client.SmartTalentMatching.GetMatches.Queries;
+using Application.Features.Premium.Client.AiInterviews.Create.Commands;
+using Application.Features.Premium.Client.AiInterviews.DTOs;
+using Application.Features.Premium.Client.AiInterviews.GetResults.Queries;
 
 namespace Project_API.Controllers.Jobs.Client;
 
@@ -62,14 +69,63 @@ public class ClientJobPostsController : BaseApiController
     [HttpPost("ai/generate")]
     public async Task<IActionResult> GenerateJobDescription([FromBody] GenerateJobDescriptionCommand command)
     {
-        if (!TryGetCurrentUserId(out _))
+        if (!TryGetCurrentUserId(out var userId))
         {
             return InvalidTokenResponse();
         }
 
-        var result = await Mediator.Send(command);
+        var result = await Mediator.Send(new GenerateJobDescriptionCommand(userId, command.ClientPrompt));
 
         return Ok(ApiResponse<GenerateJobDescriptionResponse>.Ok(result, "Job description generated successfully"));
+    }
+
+    [HttpPost("{jobPostId:guid}/promote")]
+    public async Task<IActionResult> PromoteJobPost(
+        Guid jobPostId,
+        [FromBody] PromoteJobPostRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetCurrentUserId(out var userId)) return InvalidTokenResponse();
+        var result = await Mediator.Send(
+            new PromoteJobPostCommand(userId, jobPostId, request), cancellationToken);
+        return Ok(ApiResponse<JobPostPromotionDto>.Ok(result, "Job post promoted successfully"));
+    }
+
+    [HttpGet("{jobPostId:guid}/talent-matches")]
+    public async Task<IActionResult> GetTalentMatches(
+        Guid jobPostId,
+        [FromQuery] int topK = 10,
+        CancellationToken cancellationToken = default)
+    {
+        if (!TryGetCurrentUserId(out var userId)) return InvalidTokenResponse();
+        var result = await Mediator.Send(
+            new GetTalentMatchesQuery(userId, jobPostId, topK), cancellationToken);
+        return Ok(ApiResponse<TalentMatchingResultDto>.Ok(result, "Talent recommendation complete"));
+    }
+
+    [HttpPost("{jobPostId:guid}/ai-interviews")]
+    public async Task<IActionResult> CreateAiInterview(
+        Guid jobPostId,
+        [FromBody] CreateAiInterviewRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetCurrentUserId(out var userId)) return InvalidTokenResponse();
+        var result = await Mediator.Send(
+            new CreateAiInterviewCommand(userId, jobPostId, request), cancellationToken);
+        return StatusCode(StatusCodes.Status201Created,
+            ApiResponse<AiInterviewDefinitionDto>.CreatedAt(result, "AI interview definition created"));
+    }
+
+    [HttpGet("{jobPostId:guid}/ai-interviews/{interviewId:guid}/results")]
+    public async Task<IActionResult> GetAiInterviewResults(
+        Guid jobPostId,
+        Guid interviewId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetCurrentUserId(out var userId)) return InvalidTokenResponse();
+        var result = await Mediator.Send(
+            new GetAiInterviewResultsQuery(userId, jobPostId, interviewId), cancellationToken);
+        return Ok(ApiResponse<AiInterviewResultsDto>.Ok(result, "Success"));
     }
 
     [HttpGet("my-jobs")]

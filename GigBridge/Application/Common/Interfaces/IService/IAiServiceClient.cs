@@ -5,6 +5,9 @@ namespace Application.Common.Interfaces.IService;
 public interface IAiServiceClient
 {
     Task<JobPostGenerationResponseDto> GenerateJobDescriptionAsync(JobPostGenerationRequestDto request, CancellationToken cancellationToken = default);
+    Task<AiInterviewDefinitionResponseDto> CreateInterviewDefinitionAsync(
+        AiInterviewDefinitionRequestDto request,
+        CancellationToken cancellationToken = default);
     Task<AiInterviewQuestionResponseDto> StartInterviewAsync(AiInterviewStartRequestDto request, CancellationToken cancellationToken = default);
     Task<AiInterviewDraftResponseDto> TranscribeInterviewAudioAsync(
         string sessionId,
@@ -25,5 +28,8 @@ public interface IAiServiceClient
         string sessionId,
         int questionIndex,
         string audioAccessToken,
+        CancellationToken cancellationToken = default);
+    Task<TalentMatchingResponseDto> RecommendTalentAsync(
+        TalentMatchingRequestDto request,
         CancellationToken cancellationToken = default);
 }

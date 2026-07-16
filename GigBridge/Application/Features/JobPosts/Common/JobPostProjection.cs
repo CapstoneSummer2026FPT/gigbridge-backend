@@ -7,12 +7,13 @@ namespace Application.Features.JobPosts.Common;
 
 internal static class JobPostProjection
 {
-    public static List<JobPostSummaryDto> ToSummaryDtos(IEnumerable<JobPost> jobPosts)
+    public static List<JobPostSummaryDto> ToSummaryDtos(IEnumerable<JobPost> jobPosts, DateTime? utcNow = null)
     {
-        return jobPosts.Select(ToSummaryDto).ToList();
+        var effectiveNow = utcNow ?? DateTime.UtcNow;
+        return jobPosts.Select(jobPost => ToSummaryDto(jobPost, effectiveNow)).ToList();
     }
 
-    private static JobPostSummaryDto ToSummaryDto(JobPost jobPost)
+    private static JobPostSummaryDto ToSummaryDto(JobPost jobPost, DateTime utcNow)
     {
         var officialSkills = jobPost.JobPostSkills
             .Where(jobPostSkill => jobPostSkill.Skills is not null)
@@ -41,7 +42,9 @@ internal static class JobPostProjection
             CustomSkillNames: jobPost.CustomSkillNames.ToList(),
             SkillNames: officialSkills
                 .Select(skill => skill.SkillName)
-                .ToList());
+                .ToList(),
+            IsFeatured: jobPost.IsFeatured && jobPost.FeaturedUntil > utcNow,
+            FeaturedUntil: jobPost.FeaturedUntil);
     }
 
     private static string CreatePreview(string? description)
