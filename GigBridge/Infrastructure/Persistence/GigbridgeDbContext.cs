@@ -135,6 +135,10 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
     public virtual DbSet<Report> Reports { get; set; }
 
+    public virtual DbSet<ReportContract> ReportContracts { get; set; }
+
+    public virtual DbSet<ReportContractAttachment> ReportContractAttachments { get; set; }
+
     public virtual DbSet<Review> Reviews { get; set; }
 
     public virtual DbSet<SavedFreelancer> SavedFreelancers { get; set; }
@@ -2563,6 +2567,83 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
                 .HasForeignKey(d => d.FreelancerId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("WorkExperiences_fl_FreelancerId_fkey");
+        });
+
+        modelBuilder.Entity<ReportContract>(entity =>
+        {
+            entity.HasKey(e => e.ReportContractId).HasName("ReportContracts_pkey");
+
+            entity.HasIndex(e => e.ContractId, "IX_ReportContracts_ContractId");
+
+            entity.HasIndex(e => e.ReporterId, "IX_ReportContracts_ReporterId");
+
+            entity.HasIndex(e => e.RespondentId, "IX_ReportContracts_RespondentId");
+
+            entity.HasIndex(e => e.Status, "IX_ReportContracts_Status");
+
+            entity.Property(e => e.ReportContractId)
+                .HasDefaultValueSql("gen_random_uuid()")
+                .HasColumnName("ReportContractId");
+            entity.Property(e => e.ContractId).HasColumnName("ContractId");
+            entity.Property(e => e.ReporterId).HasColumnName("ReporterId");
+            entity.Property(e => e.RespondentId).HasColumnName("RespondentId");
+            entity.Property(e => e.MilestoneId).HasColumnName("MilestoneId");
+            entity.Property(e => e.Description).HasMaxLength(5000);
+            entity.Property(e => e.DesiredResolution).HasMaxLength(5000);
+            entity.Property(e => e.IssueType)
+                .HasComment("Enum ContractReportIssueType: 0=PaymentIssue, 1=MilestoneIssue, 2=Delay, 3=PoorQuality, 4=CommunicationProblem, 5=ScopeChange, 6=Other");
+            entity.Property(e => e.Status)
+                .HasComment("Enum ContractReportStatus: 0=Pending, 1=WaitingReporterConfirmation, 2=Resolved, 3=Escalated");
+            entity.Property(e => e.ResolutionAction)
+                .HasComment("Enum ContractReportResolutionAction: 0=AcceptIssue, 1=ProvideExplanation, 2=ProposeResolution, 3=RejectIssue");
+            entity.Property(e => e.Explanation).HasMaxLength(5000);
+            entity.Property(e => e.ProposedResolution).HasMaxLength(5000);
+            entity.Property(e => e.RejectReason).HasMaxLength(5000);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.IsEscalatedToDispute).HasDefaultValue(false);
+
+            entity.HasOne(d => d.Contract).WithMany(p => p.ReportContracts)
+                .HasForeignKey(d => d.ContractId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("ReportContracts_cont_ContractId_fkey");
+
+            entity.HasOne(d => d.Reporter).WithMany(p => p.ReportContractReporters)
+                .HasForeignKey(d => d.ReporterId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("ReportContracts_usr_ReporterId_fkey");
+
+            entity.HasOne(d => d.Respondent).WithMany(p => p.ReportContractRespondents)
+                .HasForeignKey(d => d.RespondentId)
+                .HasConstraintName("ReportContracts_usr_RespondentId_fkey");
+
+            entity.HasOne(d => d.Milestone).WithMany(p => p.ReportContracts)
+                .HasForeignKey(d => d.MilestoneId)
+                .HasConstraintName("ReportContracts_mStone_MilestoneId_fkey");
+
+            entity.HasOne(d => d.ResolvedByUser).WithMany(p => p.ReportContractResolvedBy)
+                .HasForeignKey(d => d.ResolvedBy)
+                .HasConstraintName("ReportContracts_usr_ResolvedBy_fkey");
+        });
+
+        modelBuilder.Entity<ReportContractAttachment>(entity =>
+        {
+            entity.HasKey(e => e.ReportContractAttachmentId).HasName("ReportContractAttachments_pkey");
+
+            entity.HasIndex(e => e.ReportContractId, "IX_ReportContractAttachments_ReportContractId");
+
+            entity.Property(e => e.ReportContractAttachmentId)
+                .HasDefaultValueSql("gen_random_uuid()")
+                .HasColumnName("ReportContractAttachmentId");
+            entity.Property(e => e.ReportContractId).HasColumnName("ReportContractId");
+            entity.Property(e => e.FileUrl).HasColumnName("FileUrl");
+            entity.Property(e => e.FileName).HasMaxLength(500);
+            entity.Property(e => e.ContentType).HasMaxLength(200);
+            entity.Property(e => e.UploadedAt).HasDefaultValueSql("now()");
+
+            entity.HasOne(d => d.ReportContract).WithMany(p => p.ReportContractAttachments)
+                .HasForeignKey(d => d.ReportContractId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("ReportContractAttachments_rc_ReportContractId_fkey");
         });
 
         OnModelCreatingPartial(modelBuilder);

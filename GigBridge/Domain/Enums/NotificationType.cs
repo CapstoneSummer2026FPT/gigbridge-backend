@@ -21,5 +21,6 @@ public enum NotificationType
     PromotionActivated = 16,
     PromotionExpired = 17,
     RankProtectionActivated = 18,
-    RankProtectionExpired = 19
+    RankProtectionExpired = 19,
+    ReportUpdate = 20
 }

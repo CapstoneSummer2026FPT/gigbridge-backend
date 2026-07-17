@@ -109,6 +109,12 @@ public partial class User
 
     public virtual ICollection<Report> ReportReporters { get; set; } = new List<Report>();
 
+    public virtual ICollection<ReportContract> ReportContractReporters { get; set; } = new List<ReportContract>();
+
+    public virtual ICollection<ReportContract> ReportContractRespondents { get; set; } = new List<ReportContract>();
+
+    public virtual ICollection<ReportContract> ReportContractResolvedBy { get; set; } = new List<ReportContract>();
+
     public virtual ICollection<Review> ReviewReviewees { get; set; } = new List<Review>();
 
     public virtual ICollection<Review> ReviewReviewers { get; set; } = new List<Review>();
