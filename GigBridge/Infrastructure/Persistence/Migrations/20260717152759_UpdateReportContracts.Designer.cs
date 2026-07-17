@@ -3,6 +3,7 @@ using System;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(GigbridgeDbContext))]
-    partial class GigbridgeDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260717152759_UpdateReportContracts")]
+    partial class UpdateReportContracts
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -3700,8 +3703,7 @@ namespace Infrastructure.Persistence.Migrations
                         .HasDefaultValueSql("now()");
 
                     b.Property<Guid?>("UploadedByUserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("UploadedByUserId");
+                        .HasColumnType("uuid");
 
                     b.HasKey("ReportContractAttachmentId")
                         .HasName("ReportContractAttachments_pkey");

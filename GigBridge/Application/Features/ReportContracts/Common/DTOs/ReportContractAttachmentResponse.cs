@@ -6,4 +6,5 @@ public sealed record ReportContractAttachmentResponse(
     string FileName,
     string ContentType,
     long FileSize,
-    DateTime UploadedAt);
+    DateTime UploadedAt,
+    Guid? UploadedByUserId);

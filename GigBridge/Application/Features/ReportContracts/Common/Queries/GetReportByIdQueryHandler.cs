@@ -73,7 +73,8 @@ public sealed class GetReportByIdQueryHandler :
                 a.FileName,
                 a.ContentType,
                 a.FileSize,
-                a.UploadedAt))
+                a.UploadedAt,
+                a.UploadedByUserId))
             .ToList();
 
         return new ReportContractResponse(

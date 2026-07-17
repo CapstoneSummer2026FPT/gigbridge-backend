@@ -94,27 +94,44 @@ public sealed class ContractReportsController : BaseApiController
     }
 
     /// <summary>
-    /// Respond to a report (respondent only).
+    /// Respond to a report (respondent only) with optional attachments.
     /// </summary>
     [HttpPost("{reportId:guid}/respond")]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(MaxRequestSizeBytes)]
     public async Task<IActionResult> Respond(
         Guid contractId,
         Guid reportId,
-        [FromBody] RespondToReportRequest request)
+        [FromForm] int resolutionAction,
+        [FromForm] string? explanation,
+        [FromForm] string? proposedResolution,
+        [FromForm] string? rejectReason)
     {
         if (!TryGetCurrentUserId(out var userId))
         {
             return InvalidTokenResponse();
         }
 
+        var attachments = new List<CreateReportFile>();
+        foreach (var file in Request.Form.Files)
+        {
+            var stream = file.OpenReadStream();
+            attachments.Add(new CreateReportFile(
+                stream,
+                file.FileName,
+                file.ContentType,
+                file.Length));
+        }
+
         var result = await Mediator.Send(new RespondToReportCommand(
             contractId,
             reportId,
             userId,
-            request.ResolutionAction,
-            request.Explanation,
-            request.ProposedResolution,
-            request.RejectReason));
+            resolutionAction,
+            explanation,
+            proposedResolution,
+            rejectReason,
+            attachments));
 
         return Ok(ApiResponse<ReportContractResponse>.Ok(result, "Response submitted successfully"));
     }
@@ -147,15 +164,6 @@ public sealed class ContractReportsController : BaseApiController
         return Ok(ApiResponse<ReportContractResponse>.Ok(result, "Resolution declined. You may escalate to dispute if needed."));
     }
 }
-
-/// <summary>
-/// Request body for responding to a report.
-/// </summary>
-public sealed record RespondToReportRequest(
-    int ResolutionAction,
-    string? Explanation,
-    string? ProposedResolution,
-    string? RejectReason);
 
 /// <summary>
 /// Request body for confirming or declining a resolution.

@@ -18,5 +18,11 @@ public partial class ReportContractAttachment
 
     public DateTime UploadedAt { get; set; }
 
+    /// <summary>
+    /// Identifies who uploaded this attachment.
+    /// NULL = legacy records (assumed reporter).
+    /// </summary>
+    public Guid? UploadedByUserId { get; set; }
+
     public virtual ReportContract ReportContract { get; set; } = null!;
 }

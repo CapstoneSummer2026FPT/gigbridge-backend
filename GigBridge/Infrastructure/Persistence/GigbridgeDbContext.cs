@@ -2639,6 +2639,7 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.Property(e => e.FileName).HasMaxLength(500);
             entity.Property(e => e.ContentType).HasMaxLength(200);
             entity.Property(e => e.UploadedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.UploadedByUserId).HasColumnName("UploadedByUserId");
 
             entity.HasOne(d => d.ReportContract).WithMany(p => p.ReportContractAttachments)
                 .HasForeignKey(d => d.ReportContractId)

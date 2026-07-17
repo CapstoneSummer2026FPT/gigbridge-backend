@@ -3,6 +3,7 @@ using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Features.ReportContracts.Common.DTOs;
 using Application.Features.ReportContracts.Common.Internal;
+using Application.Features.ReportContracts.Create.Commands;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
@@ -14,8 +15,11 @@ namespace Application.Features.ReportContracts.Respond.Commands;
 public sealed class RespondToReportCommandHandler :
     IRequestHandler<RespondToReportCommand, ReportContractResponse>
 {
+    private const long MaxAttachmentFileSizeBytes = 100 * 1024 * 1024;
+
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
+    private readonly IMediaService _mediaService;
     private readonly INotificationService _notificationService;
     private readonly IChatRealtimeNotifier _chatRealtimeNotifier;
     private readonly ILogger<RespondToReportCommandHandler> _logger;
@@ -23,12 +27,14 @@ public sealed class RespondToReportCommandHandler :
     public RespondToReportCommandHandler(
         IApplicationDbContext context,
         IDateTimeService dateTimeService,
+        IMediaService mediaService,
         INotificationService notificationService,
         IChatRealtimeNotifier chatRealtimeNotifier,
         ILogger<RespondToReportCommandHandler> logger)
     {
         _context = context;
         _dateTimeService = dateTimeService;
+        _mediaService = mediaService;
         _notificationService = notificationService;
         _chatRealtimeNotifier = chatRealtimeNotifier;
         _logger = logger;
@@ -122,6 +128,34 @@ public sealed class RespondToReportCommandHandler :
         report.Status = (int)Domain.Enums.ContractReportStatus.WaitingReporterConfirmation;
         report.RespondedAt = now;
 
+        // Upload and save respondent attachments
+        foreach (var attachment in command.Attachments)
+        {
+            ValidateAttachment(attachment);
+
+            var safeFileName = Path.GetFileName(attachment.FileName.Trim());
+            var fileUrl = await _mediaService.UploadFileAsync(
+                attachment.Content,
+                safeFileName,
+                attachment.ContentType,
+                "report-contract-attachments",
+                cancellationToken);
+
+            var reportAttachment = new ReportContractAttachment
+            {
+                ReportContractAttachmentId = Guid.NewGuid(),
+                ReportContractId = report.ReportContractId,
+                FileUrl = fileUrl,
+                FileName = safeFileName,
+                ContentType = attachment.ContentType,
+                FileSize = attachment.Length,
+                UploadedAt = now,
+                UploadedByUserId = command.UserId
+            };
+
+            _context.Set<ReportContractAttachment>().Add(reportAttachment);
+        }
+
         var respondent = await _context.Set<User>()
             .AsNoTracking()
             .FirstOrDefaultAsync(u => u.UserId == command.UserId, cancellationToken);
@@ -198,7 +232,9 @@ public sealed class RespondToReportCommandHandler :
                 .FirstOrDefaultAsync(cancellationToken);
         }
 
-        var attachments = report.ReportContractAttachments
+        // Reload attachments to include newly added respondent attachments
+        var attachments = await _context.Set<ReportContractAttachment>()
+            .Where(a => a.ReportContractId == report.ReportContractId)
             .OrderBy(a => a.UploadedAt)
             .Select(a => new ReportContractAttachmentResponse(
                 a.ReportContractAttachmentId,
@@ -206,8 +242,9 @@ public sealed class RespondToReportCommandHandler :
                 a.FileName,
                 a.ContentType,
                 a.FileSize,
-                a.UploadedAt))
-            .ToList();
+                a.UploadedAt,
+                a.UploadedByUserId))
+            .ToListAsync(cancellationToken);
 
         return new ReportContractResponse(
             report.ReportContractId,
@@ -234,5 +271,34 @@ public sealed class RespondToReportCommandHandler :
             report.ResolvedAt,
             report.IsEscalatedToDispute,
             attachments);
+    }
+
+    private static void ValidateAttachment(CreateReportFile file)
+    {
+        if (file.Length <= 0)
+        {
+            throw new BadRequestException("Attachment file is empty.");
+        }
+
+        if (file.Length > MaxAttachmentFileSizeBytes)
+        {
+            throw new BadRequestException("Attachment file size exceeds the maximum allowed size of 100 MB.");
+        }
+
+        if (string.IsNullOrWhiteSpace(file.FileName))
+        {
+            throw new BadRequestException("Attachment file name is required.");
+        }
+
+        var safeFileName = Path.GetFileName(file.FileName.Trim());
+        if (string.IsNullOrWhiteSpace(safeFileName))
+        {
+            throw new BadRequestException("Attachment file name is invalid.");
+        }
+
+        if (safeFileName.Length > 500)
+        {
+            throw new BadRequestException("Attachment file name must not exceed 500 characters.");
+        }
     }
 }

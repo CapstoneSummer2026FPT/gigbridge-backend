@@ -125,7 +125,8 @@ public sealed class CreateReportCommandHandler :
                 FileName = safeFileName,
                 ContentType = attachment.ContentType,
                 FileSize = attachment.Length,
-                UploadedAt = now
+                UploadedAt = now,
+                UploadedByUserId = command.UserId
             };
 
             attachments.Add(reportAttachment);
@@ -196,7 +197,8 @@ public sealed class CreateReportCommandHandler :
                 a.FileName,
                 a.ContentType,
                 a.FileSize,
-                a.UploadedAt))
+                a.UploadedAt,
+                a.UploadedByUserId))
             .ToList();
 
         return new ReportContractResponse(

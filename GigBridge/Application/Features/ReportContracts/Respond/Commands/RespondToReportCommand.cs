@@ -1,4 +1,5 @@
 using Application.Features.ReportContracts.Common.DTOs;
+using Application.Features.ReportContracts.Create.Commands;
 using MediatR;
 
 namespace Application.Features.ReportContracts.Respond.Commands;
@@ -10,4 +11,5 @@ public sealed record RespondToReportCommand(
     int ResolutionAction,
     string? Explanation,
     string? ProposedResolution,
-    string? RejectReason) : IRequest<ReportContractResponse>;
+    string? RejectReason,
+    IReadOnlyList<CreateReportFile> Attachments) : IRequest<ReportContractResponse>;
