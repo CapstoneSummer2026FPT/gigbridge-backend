@@ -28,11 +28,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Update="Templates\ContractFixedPriceTemporary.html">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-    </None>
-    <None Update="Templates\NewJobInvitationTemplate.html">
+    <None Update="Templates\*.html">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
     </None>

@@ -1453,6 +1453,10 @@ namespace Infrastructure.Persistence.Migrations
                         .HasMaxLength(300)
                         .HasColumnType("character varying(300)");
 
+                    b.Property<Guid?>("MajorId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("MajorId");
+
                     b.Property<int?>("ProfileCompletionScore")
                         .HasColumnType("integer");
 
@@ -1475,10 +1479,46 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "Availability" }, "IX_FreelancerProfiles_Availability");
 
+                    b.HasIndex(new[] { "MajorId" }, "IX_FreelancerProfiles_MajorId");
+
                     b.HasIndex(new[] { "UserId" }, "IX_FreelancerProfiles_UserId")
                         .IsUnique();
 
                     b.ToTable("FreelancerProfiles");
+                });
+
+            modelBuilder.Entity("Domain.Entities.FreelancerProfileCategory", b =>
+                {
+                    b.Property<Guid>("FreelancerProfileCategoriesId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("FreelancerProfileCategoriesId")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid>("FreelancerProfileId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("FreelancerProfileId");
+
+                    b.Property<Guid>("MajorCategoryId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("MajorCategoryId");
+
+                    b.HasKey("FreelancerProfileCategoriesId")
+                        .HasName("FreelancerProfileCategories_pkey");
+
+                    b.HasIndex(new[] { "FreelancerProfileId", "MajorCategoryId" }, "FreelancerProfileCategories_Profile_MajorCategory_key")
+                        .IsUnique();
+
+                    b.HasIndex(new[] { "FreelancerProfileId" }, "IX_FreelancerProfileCategories_FreelancerProfileId");
+
+                    b.HasIndex(new[] { "MajorCategoryId" }, "IX_FreelancerProfileCategories_MajorCategoryId");
+
+                    b.ToTable("FreelancerProfileCategories");
                 });
 
             modelBuilder.Entity("Domain.Entities.FreelancerProfilePromotion", b =>
@@ -4968,13 +5008,42 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.FreelancerProfile", b =>
                 {
+                    b.HasOne("Domain.Entities.Major", "Major")
+                        .WithMany("FreelancerProfiles")
+                        .HasForeignKey("MajorId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FreelancerProfiles_major_MajorId_fkey");
+
                     b.HasOne("Domain.Entities.User", "User")
                         .WithOne("FreelancerProfile")
                         .HasForeignKey("Domain.Entities.FreelancerProfile", "UserId")
                         .IsRequired()
                         .HasConstraintName("FreelancerProfiles_usr_UserId_fkey");
 
+                    b.Navigation("Major");
+
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Domain.Entities.FreelancerProfileCategory", b =>
+                {
+                    b.HasOne("Domain.Entities.FreelancerProfile", "FreelancerProfile")
+                        .WithMany("FreelancerProfileCategories")
+                        .HasForeignKey("FreelancerProfileId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FreelancerProfileCategories_profile_FreelancerProfileId_fkey");
+
+                    b.HasOne("Domain.Entities.MajorCategory", "MajorCategory")
+                        .WithMany("FreelancerProfileCategories")
+                        .HasForeignKey("MajorCategoryId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FreelancerProfileCategories_majorCategory_MajorCategoryId_fkey");
+
+                    b.Navigation("FreelancerProfile");
+
+                    b.Navigation("MajorCategory");
                 });
 
             modelBuilder.Entity("Domain.Entities.FreelancerProfilePromotion", b =>
@@ -5900,6 +5969,8 @@ namespace Infrastructure.Persistence.Migrations
                 {
                     b.Navigation("Contracts");
 
+                    b.Navigation("FreelancerProfileCategories");
+
                     b.Navigation("FreelancerSkills");
 
                     b.Navigation("PortfolioItems");
@@ -5947,11 +6018,15 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.Major", b =>
                 {
+                    b.Navigation("FreelancerProfiles");
+
                     b.Navigation("MajorCategories");
                 });
 
             modelBuilder.Entity("Domain.Entities.MajorCategory", b =>
                 {
+                    b.Navigation("FreelancerProfileCategories");
+
                     b.Navigation("JobPosts");
                 });
 

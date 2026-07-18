@@ -6,6 +6,7 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Features.Profiles.FreelancerProfile.GetFreelancerProfile.DTOs;
+using Application.Features.Profiles.FreelancerProfile.Common.DTOs;
 using Application.Features.Premium.Common;
 using Domain.Entities;
 using Domain.Enums;
@@ -45,6 +46,10 @@ public class GetFreelancerProfileQueryHandler
                 .ThenInclude(fs => fs.Skills)
             .Include(p => p.PortfolioItems)
             .Include(p => p.WorkExperiences)
+            .Include(p => p.Major)
+            .Include(p => p.FreelancerProfileCategories)
+                .ThenInclude(selection => selection.MajorCategory)
+                    .ThenInclude(mapping => mapping.Category)
             .FirstOrDefaultAsync(p => p.UserId == request.UserId, cancellationToken);
 
         if (freelancerProfile == null)
@@ -82,6 +87,18 @@ public class GetFreelancerProfileQueryHandler
             ProfileCompletionScore = freelancerProfile.ProfileCompletionScore,
             CreatedAt = freelancerProfile.CreatedAt,
             UpdatedAt = freelancerProfile.UpdatedAt,
+            MajorId = freelancerProfile.MajorId,
+            MajorName = freelancerProfile.Major?.Name,
+            Categories = freelancerProfile.FreelancerProfileCategories
+                .OrderBy(selection => selection.MajorCategory.Category.SortOrder)
+                .ThenBy(selection => selection.MajorCategory.Category.Name)
+                .Select(selection => new FreelancerProfileCategoryDto
+                {
+                    MajorCategoryId = selection.MajorCategoryId,
+                    CategoryId = selection.MajorCategory.CategoryId,
+                    Name = selection.MajorCategory.Category.Name
+                })
+                .ToList(),
 
             UserFullName = freelancerProfile.User.FullName,
             UserEmail = freelancerProfile.User.Email,

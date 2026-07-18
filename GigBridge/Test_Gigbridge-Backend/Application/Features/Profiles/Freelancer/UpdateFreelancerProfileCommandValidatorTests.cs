@@ -45,6 +45,21 @@ public class UpdateFreelancerProfileCommandValidatorTests
         Assert.Contains(result.Errors, error => error.PropertyName == "Dto.Availability");
     }
 
+    [Fact]
+    public void Validate_ReturnsErrorsForMissingOrDuplicateTaxonomy()
+    {
+        var dto = CreateValidDto();
+        var categoryId = Guid.NewGuid();
+        dto.MajorId = Guid.Empty;
+        dto.CategoryIds = new[] { categoryId, categoryId };
+
+        var result = _validator.Validate(new UpdateFreelancerProfileCommand(dto));
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, error => error.PropertyName == "Dto.MajorId");
+        Assert.Contains(result.Errors, error => error.PropertyName == "Dto.CategoryIds");
+    }
+
     private static UpdateFreelancerProfileDto CreateValidDto()
     {
         return new UpdateFreelancerProfileDto
@@ -52,7 +67,9 @@ public class UpdateFreelancerProfileCommandValidatorTests
             Title = "Backend Developer",
             Bio = "Experienced .NET developer focused on clean application architecture.",
             Availability = 0,
-            Location = "Ho Chi Minh City"
+            Location = "Ho Chi Minh City",
+            MajorId = Guid.NewGuid(),
+            CategoryIds = new[] { Guid.NewGuid() }
         };
     }
 }

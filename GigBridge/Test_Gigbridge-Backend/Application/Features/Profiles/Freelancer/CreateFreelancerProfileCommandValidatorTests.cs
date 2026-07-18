@@ -24,7 +24,9 @@ public class CreateFreelancerProfileCommandValidatorTests
             Title = "Backend Developer",
             Bio = "Experienced .NET developer focused on clean application architecture.",
             Availability = 0,
-            Location = "Ho Chi Minh City"
+            Location = "Ho Chi Minh City",
+            MajorId = Guid.NewGuid(),
+            CategoryIds = new[] { Guid.NewGuid() }
         };
     }
 }

@@ -4,8 +4,10 @@ using Application.Common.Interfaces.IService;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.Contracts.Milestones.Common.DTOs;
 using Application.Features.Contracts.Milestones.Common.Internal;
+using Domain.Entities;
 using Domain.Enums;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.Contracts.Milestones.Client.Approve.Commands;
 
@@ -47,6 +49,21 @@ public sealed class ApproveMilestoneCommandHandler :
         if (milestone.Status != (int)MilestoneStatus.Submitted)
         {
             throw new BadRequestException("Only submitted milestones can be approved.");
+        }
+
+        var escrow = await _context.Set<ContractEscrow>()
+            .FirstOrDefaultAsync(e => e.ContractsId == contract.ContractsId, cancellationToken);
+
+        if (escrow is null)
+        {
+            throw new NotFoundException("Contract escrow does not exist. The contract must be funded before milestones can be approved.");
+        }
+
+        if (escrow.Status != (int)ContractEscrowStatus.Funded &&
+            escrow.Status != (int)ContractEscrowStatus.PartiallyReleased &&
+            escrow.Status != (int)ContractEscrowStatus.Released)
+        {
+            throw new BadRequestException("Escrow must be funded before milestone approval.");
         }
 
         var now = _dateTimeService.UtcNow;
