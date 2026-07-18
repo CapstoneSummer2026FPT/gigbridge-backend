@@ -24,6 +24,15 @@ public sealed class PromoteJobPostCommandHandler(
     {
         await premiumAccess.RequirePremiumClientAsync(command.UserId, cancellationToken);
         var idempotencyKey = command.Request.IdempotencyKey.Trim();
+        if (string.IsNullOrWhiteSpace(idempotencyKey) || idempotencyKey.Length > 200)
+            throw new BadRequestException("A valid idempotency key is required.");
+        if (!Uri.TryCreate(command.Request.ImageUrl?.Trim(), UriKind.Absolute, out var imageUri) ||
+            (imageUri.Scheme != Uri.UriSchemeHttp && imageUri.Scheme != Uri.UriSchemeHttps))
+            throw new BadRequestException("A valid HTTP(S) promotion image URL is required.");
+        if (string.IsNullOrWhiteSpace(command.Request.PromotionTitle) || command.Request.PromotionTitle.Trim().Length > 140)
+            throw new BadRequestException("Promotion title is required and must not exceed 140 characters.");
+        if (string.IsNullOrWhiteSpace(command.Request.PromotionDescription) || command.Request.PromotionDescription.Trim().Length > 1000)
+            throw new BadRequestException("Promotion description is required and must not exceed 1000 characters.");
         var existing = await context.Set<JobPostPromotionEntity>()
             .AsNoTracking()
             .FirstOrDefaultAsync(x => x.ClientUserId == command.UserId &&
@@ -79,6 +88,9 @@ public sealed class PromoteJobPostCommandHandler(
             WalletTransactionId = walletTransaction.WalletTransactionsId,
             IdempotencyKey = idempotencyKey,
             TokenCost = policy.TokenCost,
+            ImageUrl = command.Request.ImageUrl.Trim(),
+            PromotionTitle = command.Request.PromotionTitle.Trim(),
+            PromotionDescription = command.Request.PromotionDescription.Trim(),
             FeaturedFrom = now,
             FeaturedUntil = featuredUntil,
             CreatedAt = now
@@ -95,5 +107,9 @@ public sealed class PromoteJobPostCommandHandler(
         promotion.FeaturedFrom,
         promotion.FeaturedUntil,
         promotion.TokenCost,
-        promotion.WalletTransactionId);
+        promotion.WalletTransactionId,
+        promotion.JobPostPromotionsId,
+        promotion.ImageUrl,
+        promotion.PromotionTitle,
+        promotion.PromotionDescription);
 }

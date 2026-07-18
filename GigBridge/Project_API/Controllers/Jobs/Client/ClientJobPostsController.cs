@@ -25,6 +25,7 @@ using Application.Features.Premium.Client.AiJobPostGenerator.Commands;
 using Application.Features.Premium.Client.AiJobPostGenerator.DTOs;
 using Application.Features.Premium.Client.JobPostPromotion.Commands;
 using Application.Features.Premium.Client.JobPostPromotion.DTOs;
+using Application.Features.Premium.Client.JobPostPromotion.Queries;
 using Application.Features.Premium.Client.SmartTalentMatching.GetMatches.DTOs;
 using Application.Features.Premium.Client.SmartTalentMatching.GetMatches.Queries;
 using Application.Features.Premium.Client.AiInterviews.Create.Commands;
@@ -38,6 +39,13 @@ namespace Project_API.Controllers.Jobs.Client;
 [Authorize(Roles = nameof(UserRole.Client))]
 public class ClientJobPostsController : BaseApiController
 {
+    [HttpGet("promotion-policy")]
+    public async Task<IActionResult> GetJobPromotionPolicy(CancellationToken cancellationToken)
+    {
+        var result = await Mediator.Send(new GetJobPromotionPolicyQuery(), cancellationToken);
+        return Ok(ApiResponse<JobPromotionPolicyDto>.Ok(result, "Success"));
+    }
+
     [HttpPost("draft")]
     public async Task<IActionResult> CreateDraftJobPost()
     {
@@ -95,12 +103,51 @@ public class ClientJobPostsController : BaseApiController
     public async Task<IActionResult> GetTalentMatches(
         Guid jobPostId,
         [FromQuery] int topK = 10,
+        [FromQuery] int? availability = null,
+        [FromQuery] int? minimumProficiency = null,
+        [FromQuery] int? minimumYears = null,
+        [FromQuery] double? minimumRating = null,
+        [FromQuery] int? minimumCompletedContracts = null,
+        [FromQuery] Guid? majorCategoryId = null,
+        [FromQuery] Guid? majorId = null,
+        [FromQuery] Guid[]? skillIds = null,
         CancellationToken cancellationToken = default)
     {
         if (!TryGetCurrentUserId(out var userId)) return InvalidTokenResponse();
         var result = await Mediator.Send(
-            new GetTalentMatchesQuery(userId, jobPostId, topK), cancellationToken);
+            new GetTalentMatchesQuery(userId, jobPostId, topK, new TalentMatchingFiltersDto(
+                availability, minimumProficiency, minimumYears, minimumRating,
+                minimumCompletedContracts, majorCategoryId, majorId, skillIds)), cancellationToken);
         return Ok(ApiResponse<TalentMatchingResultDto>.Ok(result, "Talent recommendation complete"));
+    }
+
+    [HttpPost("promotion-image")]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(5 * 1024 * 1024)]
+    public async Task<IActionResult> UploadPromotionImage(
+        IFormFile file,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetCurrentUserId(out var userId)) return InvalidTokenResponse();
+        if (file is null || file.Length == 0)
+            return BadRequest(ApiResponse<object>.BadRequest("A promotion image is required."));
+        await using var stream = file.OpenReadStream();
+        var result = await Mediator.Send(new UploadJobPromotionImageCommand(
+            userId, stream, file.FileName, file.ContentType), cancellationToken);
+        return Ok(ApiResponse<string>.Ok(result, "Promotion image uploaded"));
+    }
+
+    [HttpPost("{jobPostId:guid}/talent-matches/ai")]
+    public async Task<IActionResult> GetAiTalentMatches(
+        Guid jobPostId,
+        [FromBody] AiTalentMatchingRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetCurrentUserId(out var userId)) return InvalidTokenResponse();
+        var result = await Mediator.Send(
+            new GetAiTalentMatchesQuery(userId, jobPostId, request.TopK, request.Filters), cancellationToken);
+        return Ok(ApiResponse<TalentMatchingResultDto>.Ok(
+            result, "Experimental AI talent recommendation complete"));
     }
 
     [HttpPost("{jobPostId:guid}/ai-interviews")]

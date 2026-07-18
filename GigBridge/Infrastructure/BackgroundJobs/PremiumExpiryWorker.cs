@@ -161,6 +161,7 @@ public sealed class PremiumExpiryWorker : BackgroundService
 
         var due = await context.Set<Subscription>()
             .Include(item => item.SubscriptionPlans)
+            .Include(item => item.User)
             .Where(item => item.Status == SubscriptionStatus.Active &&
                            item.AutoRenew == true &&
                            item.EndDate <= now &&
@@ -204,10 +205,15 @@ public sealed class PremiumExpiryWorker : BackgroundService
                 await context.SaveChangesAsync(cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
 
-                await cache.RemoveAsync($"premium:access:{subscription.UserId:N}", cancellationToken);
+                var isClient = subscription.User.Role == (int)UserRole.Client;
+                var cacheKey = isClient
+                    ? $"premium:access:client:{subscription.UserId:N}"
+                    : $"premium:access:{subscription.UserId:N}";
+                var premiumName = isClient ? "Client Premium" : "Freelancer Premium";
+                await cache.RemoveAsync(cacheKey, cancellationToken);
                 await notifications.CreateNotificationAsync(
                     subscription.UserId, NotificationType.SubscriptionActivated,
-                    $"Freelancer Premium auto-renewed through {renewed.EndDate:yyyy-MM-dd}",
+                    $"{premiumName} auto-renewed through {renewed.EndDate:yyyy-MM-dd}",
                     null, renewed.SubscriptionsId, nameof(Subscription), cancellationToken);
             }
             catch (Exception exception)

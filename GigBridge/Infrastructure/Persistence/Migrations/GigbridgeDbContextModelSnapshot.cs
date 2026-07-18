@@ -178,6 +178,9 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<Guid>("ClientUserId")
                         .HasColumnType("uuid");
 
+                    b.Property<int>("ClickCount")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -2299,8 +2302,26 @@ namespace Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<string>("ImageUrl")
+                        .IsRequired()
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
+
+                    b.Property<int>("ImpressionCount")
+                        .HasColumnType("integer");
+
                     b.Property<Guid>("JobPostId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("PromotionDescription")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("PromotionTitle")
+                        .IsRequired()
+                        .HasMaxLength(140)
+                        .HasColumnType("character varying(140)");
 
                     b.Property<decimal>("TokenCost")
                         .HasPrecision(18, 4)

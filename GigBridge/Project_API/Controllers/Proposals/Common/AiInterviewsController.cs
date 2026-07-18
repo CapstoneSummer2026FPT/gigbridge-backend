@@ -4,6 +4,7 @@ using Application.Features.AiInterviews.Freelancer.Audio.Queries;
 using Application.Features.AiInterviews.Freelancer.Confirm.Commands;
 using Application.Features.AiInterviews.Freelancer.Start.Commands;
 using Application.Features.AiInterviews.Freelancer.Transcribe.Commands;
+using Application.Features.AiInterviews.Freelancer.Requirement;
 using Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -90,6 +91,15 @@ public sealed class AiInterviewsController : BaseApiController
         Response.Headers.CacheControl = "no-store";
         Response.Headers.XContentTypeOptions = "nosniff";
         return File(result.AudioStream, result.ContentType);
+    }
+
+    [HttpGet("requirement/{jobPostId:guid}")]
+    public async Task<IActionResult> Requirement(Guid jobPostId, CancellationToken cancellationToken)
+    {
+        if (!TryGetCurrentUserId(out var userId)) return InvalidTokenResponse();
+        var result = await Mediator.Send(
+            new GetAiInterviewRequirementQuery(userId, jobPostId), cancellationToken);
+        return Ok(ApiResponse<AiInterviewRequirementDto>.Ok(result, "Success"));
     }
 
     private static string NormalizeMode(string? mode) =>

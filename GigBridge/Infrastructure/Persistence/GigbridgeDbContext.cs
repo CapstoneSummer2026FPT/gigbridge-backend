@@ -1120,6 +1120,9 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.ToTable("JobPostPromotions");
             entity.HasKey(e => e.JobPostPromotionsId);
             entity.Property(e => e.IdempotencyKey).HasMaxLength(200);
+            entity.Property(e => e.ImageUrl).HasMaxLength(2048);
+            entity.Property(e => e.PromotionTitle).HasMaxLength(140);
+            entity.Property(e => e.PromotionDescription).HasMaxLength(1000);
             entity.Property(e => e.TokenCost).HasPrecision(18, 4);
             entity.HasIndex(e => new { e.ClientUserId, e.IdempotencyKey }).IsUnique();
             entity.HasIndex(e => new { e.JobPostId, e.FeaturedUntil });

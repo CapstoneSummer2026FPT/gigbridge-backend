@@ -32,4 +32,7 @@ public interface IAiServiceClient
     Task<TalentMatchingResponseDto> RecommendTalentAsync(
         TalentMatchingRequestDto request,
         CancellationToken cancellationToken = default);
+    Task<TalentRerankResponseDto> RerankTalentAsync(
+        TalentRerankRequestDto request,
+        CancellationToken cancellationToken = default);
 }

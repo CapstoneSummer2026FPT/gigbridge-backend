@@ -135,6 +135,10 @@ public class GenerateJobDescriptionCommandHandlerTests
         public Task<TalentMatchingResponseDto> RecommendTalentAsync(
             TalentMatchingRequestDto request,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task<TalentRerankResponseDto> RerankTalentAsync(
+            TalentRerankRequestDto request,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     private sealed class FakePremiumAccessService : IPremiumAccessService

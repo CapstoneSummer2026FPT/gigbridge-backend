@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using System.Net.Http.Headers;
+using System.Text.Json;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces.IService;
 using Application.Common.Models;
@@ -228,6 +229,32 @@ public class AiServiceClient : IAiServiceClient
                 "AI service is temporarily unavailable. Please try again later.");
         var apiResponse = await response.Content.ReadFromJsonAsync<ApiResponse<TalentMatchingResponseDto>>(
             cancellationToken: cancellationToken);
+        if (apiResponse is null || !apiResponse.Success || apiResponse.Data is null)
+            throw new ExternalServiceException(
+                "AI service is temporarily unavailable. Please try again later.");
+        return apiResponse.Data;
+    }
+
+    public async Task<TalentRerankResponseDto> RerankTalentAsync(
+        TalentRerankRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient.PostAsJsonAsync(
+            "api/ai/matching/rerank", request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+            throw new ExternalServiceException(
+                "AI service is temporarily unavailable. Please try again later.");
+        ApiResponse<TalentRerankResponseDto>? apiResponse;
+        try
+        {
+            apiResponse = await response.Content.ReadFromJsonAsync<ApiResponse<TalentRerankResponseDto>>(
+                cancellationToken: cancellationToken);
+        }
+        catch (JsonException exception)
+        {
+            throw new ExternalServiceException(
+                "AI service returned an invalid response. Please try again later.", exception);
+        }
         if (apiResponse is null || !apiResponse.Success || apiResponse.Data is null)
             throw new ExternalServiceException(
                 "AI service is temporarily unavailable. Please try again later.");

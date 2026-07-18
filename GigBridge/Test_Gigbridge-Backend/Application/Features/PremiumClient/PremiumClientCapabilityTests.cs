@@ -221,7 +221,11 @@ public sealed class PremiumClientCapabilityTests
         var handler = new PromoteJobPostCommandHandler(
             context, new Premium(true), ledger, new Clock(now));
         var command = new PromoteJobPostCommand(
-            userId, jobId, new PromoteJobPostRequest("promote-request-1"));
+            userId, jobId, new PromoteJobPostRequest(
+                "promote-request-1",
+                "https://cdn.gigbridge.test/promotions/job.png",
+                "Build a premium marketplace",
+                "Join this client project and ship a polished marketplace experience."));
 
         var first = await handler.Handle(command, CancellationToken.None);
         var second = await handler.Handle(command, CancellationToken.None);
