@@ -207,7 +207,7 @@ public class AiServiceClient : IAiServiceClient
         CancellationToken cancellationToken = default)
     {
         using var response = await _httpClient.PostAsJsonAsync(
-            "api/ai/interviews/analyze-vetting",
+            "api/ai/interviews/ai-interview-judging",
             request,
             cancellationToken);
 

@@ -332,7 +332,7 @@ public class AiServiceClientTests
         Assert.Equal("Q1", result.GradedQuestions[0].QuestionText);
         Assert.Equal(80, result.GradedQuestions[0].Score);
         Assert.Equal(HttpMethod.Post, handler.RequestMethod);
-        Assert.Equal("http://localhost:8000/api/ai/interviews/analyze-vetting", handler.RequestUri?.ToString());
+        Assert.Equal("http://localhost:8000/api/ai/interviews/ai-interview-judging", handler.RequestUri?.ToString());
         Assert.Equal("test-key", handler.ApiKey);
         Assert.Contains("freelancer_id", handler.RequestBody);
         Assert.Contains("freelancer-123", handler.RequestBody);

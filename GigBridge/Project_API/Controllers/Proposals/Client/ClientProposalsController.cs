@@ -35,7 +35,7 @@ public class ClientProposalsController : BaseApiController
         return Ok(ApiResponse<IEnumerable<ProposalDto>>.Ok(result, "Success"));
     }
 
-    [HttpPost("{proposalId}/vetting/evaluate")]
+    [HttpPost("{proposalId}/ai-interview-judging")]
     public async Task<IActionResult> EvaluateVettingAnswers(Guid proposalId)
     {
         if (!TryGetCurrentUserId(out var userId))
