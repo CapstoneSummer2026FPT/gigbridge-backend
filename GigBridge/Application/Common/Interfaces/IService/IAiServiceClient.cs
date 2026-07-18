@@ -29,4 +29,8 @@ public interface IAiServiceClient
     Task<VettingEvaluationResponseDto> AnalyzeVettingAsync(
         AnalyzeVettingRequestDto request,
         CancellationToken cancellationToken = default);
+    Task<AiChatBoxResponseDto> QueryChatBoxAsync(
+        AiChatBoxRequestDto request,
+        CancellationToken cancellationToken = default);
 }
+
