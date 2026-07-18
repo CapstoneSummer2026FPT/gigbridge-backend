@@ -20,15 +20,18 @@ public sealed class AiInterviewsController : BaseApiController
     private readonly IApplicationDbContext _context;
     private readonly IAiServiceClient _aiServiceClient;
     private readonly ILogger<AiInterviewsController> _logger;
+    private readonly IDateTimeService _dateTimeService;
 
     public AiInterviewsController(
         IApplicationDbContext context,
         IAiServiceClient aiServiceClient,
-        ILogger<AiInterviewsController> logger)
+        ILogger<AiInterviewsController> logger,
+        IDateTimeService dateTimeService)
     {
         _context = context;
         _aiServiceClient = aiServiceClient;
         _logger = logger;
+        _dateTimeService = dateTimeService;
     }
 
     [HttpPost("start")]
@@ -46,6 +49,7 @@ public sealed class AiInterviewsController : BaseApiController
             .AsNoTracking()
             .Include(item => item.JobPostSkills)
                 .ThenInclude(item => item.Skills)
+            .Include(item => item.JobPostQuestions)
             .FirstOrDefaultAsync(item => item.JobPostsId == request.JobPostId, cancellationToken);
 
         if (jobPost is null)
@@ -61,6 +65,11 @@ public sealed class AiInterviewsController : BaseApiController
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
 
+        var jobQuestions = jobPost.JobPostQuestions
+            .OrderBy(q => q.OrderIndex)
+            .Select(q => q.QuestionText)
+            .ToList();
+
         var aiRequest = new AiInterviewStartRequestDto
         {
             JobId = jobPost.JobPostsId.ToString(),
@@ -68,6 +77,7 @@ public sealed class AiInterviewsController : BaseApiController
             JobTitle = jobPost.Title,
             JobDescription = jobPost.Description,
             JobSkills = skills,
+            JobQuestions = jobQuestions,
             Mode = NormalizeMode(request.Mode),
             Language = NormalizeLanguage(request.Language)
         };
@@ -138,6 +148,84 @@ public sealed class AiInterviewsController : BaseApiController
                 CorrectedText = request.CorrectedText
             },
             cancellationToken);
+
+        // Map answer back to database if there's an associated proposal
+        if (!string.IsNullOrEmpty(result.JobId) && !string.IsNullOrEmpty(result.FreelancerId))
+        {
+            if (Guid.TryParse(result.JobId, out var jobId) && Guid.TryParse(result.FreelancerId, out var freelancerUserId))
+            {
+                var proposal = await _context.Set<Proposal>()
+                    .Include(p => p.FreelancerProfiles)
+                    .FirstOrDefaultAsync(p => p.JobPostsId == jobId && p.FreelancerProfiles.UserId == freelancerUserId, cancellationToken);
+
+                if (proposal is not null)
+                {
+                    int answeredIndex = result.IsCompleted ? result.QuestionIndex : result.QuestionIndex - 1;
+
+                    var questions = await _context.Set<JobPostQuestion>()
+                        .Where(q => q.JobPostsId == jobId)
+                        .OrderBy(q => q.OrderIndex)
+                        .ToListAsync(cancellationToken);
+
+                    if (answeredIndex >= 1 && answeredIndex <= questions.Count)
+                    {
+                        var question = questions[answeredIndex - 1];
+                        var now = _dateTimeService.UtcNow;
+
+                        // 1. Upsert ProposalAnswer
+                        var existingAnswer = await _context.Set<ProposalAnswer>()
+                            .FirstOrDefaultAsync(a => a.ProposalsId == proposal.ProposalsId && a.JobPostQuestionsId == question.JobPostQuestionsId, cancellationToken);
+
+                        if (existingAnswer is null)
+                        {
+                            _context.Set<ProposalAnswer>().Add(new ProposalAnswer
+                            {
+                                ProposalAnswersId = Guid.NewGuid(),
+                                ProposalsId = proposal.ProposalsId,
+                                JobPostQuestionsId = question.JobPostQuestionsId,
+                                AnswerText = request.CorrectedText ?? string.Empty,
+                                CreatedAt = now
+                            });
+                        }
+                        else
+                        {
+                            existingAnswer.AnswerText = request.CorrectedText ?? string.Empty;
+                            existingAnswer.UpdatedAt = now;
+                        }
+
+                        // 2. Lock ProposalQuestionTimer
+                        var existingTimer = await _context.Set<ProposalQuestionTimer>()
+                            .FirstOrDefaultAsync(t => t.ProposalsId == proposal.ProposalsId && t.JobPostQuestionsId == question.JobPostQuestionsId, cancellationToken);
+
+                        if (existingTimer is null)
+                        {
+                            _context.Set<ProposalQuestionTimer>().Add(new ProposalQuestionTimer
+                            {
+                                ProposalQuestionTimersId = Guid.NewGuid(),
+                                ProposalsId = proposal.ProposalsId,
+                                JobPostQuestionsId = question.JobPostQuestionsId,
+                                FreelancerUserId = freelancerUserId,
+                                StartedAt = now,
+                                ExpiresAt = now,
+                                IsLocked = true,
+                                LockedReason = (int)QuestionTimerLockedReason.Completed,
+                                CompletedAt = now,
+                                CreatedAt = now
+                            });
+                        }
+                        else if (!existingTimer.IsLocked)
+                        {
+                            existingTimer.IsLocked = true;
+                            existingTimer.LockedReason = (int)QuestionTimerLockedReason.Completed;
+                            existingTimer.CompletedAt = now;
+                            existingTimer.UpdatedAt = now;
+                        }
+
+                        await _context.SaveChangesAsync(cancellationToken);
+                    }
+                }
+            }
+        }
 
         return Ok(ApiResponse<AiInterviewQuestionResponseDto>.Ok(
             result,

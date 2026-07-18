@@ -27,6 +27,9 @@ public class AiInterviewStartRequestDto
 
     [JsonPropertyName("language")]
     public string Language { get; set; } = "auto";
+
+    [JsonPropertyName("job_questions")]
+    public List<string> JobQuestions { get; set; } = new();
 }
 
 public class AiInterviewConfirmRequestDto
@@ -72,6 +75,12 @@ public class AiInterviewQuestionResponseDto
 
     [JsonPropertyName("feedback")]
     public AiInterviewFeedbackDto? Feedback { get; set; }
+
+    [JsonPropertyName("job_id")]
+    public string? JobId { get; set; }
+
+    [JsonPropertyName("freelancer_id")]
+    public string? FreelancerId { get; set; }
 }
 
 public class AiInterviewFeedbackDto
