@@ -17,6 +17,8 @@ public sealed record DisputeResponse(
     string Reason,
     decimal? ClaimedAmount,
     string? RequestedResolution,
+    int? IssueType,
+    int Urgency,
     int Status,
     int? Resolution,
     string? ResolutionLabel,

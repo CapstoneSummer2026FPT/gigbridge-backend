@@ -17,6 +17,7 @@ public sealed class EscalateReportToDisputeCommandHandler :
 {
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
+    private readonly IMediaService _mediaService;
     private readonly INotificationService _notificationService;
     private readonly IChatRealtimeNotifier _chatRealtimeNotifier;
     private readonly ILogger<EscalateReportToDisputeCommandHandler> _logger;
@@ -24,12 +25,14 @@ public sealed class EscalateReportToDisputeCommandHandler :
     public EscalateReportToDisputeCommandHandler(
         IApplicationDbContext context,
         IDateTimeService dateTimeService,
+        IMediaService mediaService,
         INotificationService notificationService,
         IChatRealtimeNotifier chatRealtimeNotifier,
         ILogger<EscalateReportToDisputeCommandHandler> logger)
     {
         _context = context;
         _dateTimeService = dateTimeService;
+        _mediaService = mediaService;
         _notificationService = notificationService;
         _chatRealtimeNotifier = chatRealtimeNotifier;
         _logger = logger;
@@ -70,6 +73,17 @@ public sealed class EscalateReportToDisputeCommandHandler :
             throw new BadRequestException("Only reports with a declined resolution can be escalated.");
         }
 
+        if (report.IssueType is (int)ContractReportIssueType.PaymentIssue
+                or (int)ContractReportIssueType.MilestoneIssue &&
+            (!command.ClaimedAmount.HasValue || command.ClaimedAmount <= 0))
+        {
+            throw new BadRequestException(
+                "Claimed amount must be greater than 0 for payment or milestone disputes.");
+        }
+
+        if (!command.Urgency.HasValue || !Enum.IsDefined(command.Urgency.Value))
+            throw new BadRequestException("Dispute urgency is required and must be valid.");
+
         // Check no active dispute exists
         var hasActiveDispute = await _context.Set<Dispute>()
             .AnyAsync(d =>
@@ -86,6 +100,7 @@ public sealed class EscalateReportToDisputeCommandHandler :
         DisputeAccess.EnsureCreationAllowed(contract);
 
         var now = _dateTimeService.UtcNow;
+        var disputeId = Guid.NewGuid();
         var initiatorName = await _context.Set<User>()
             .AsNoTracking()
             .Where(u => u.UserId == command.UserId)
@@ -95,22 +110,58 @@ public sealed class EscalateReportToDisputeCommandHandler :
         // Determine respondent: use report's respondent if set, otherwise the other party
         var resolvedRespondentId = report.RespondentId ?? participants.GetOtherParty(command.UserId);
 
+        var reportAttachments = await _context.Set<ReportContractAttachment>()
+            .AsNoTracking()
+            .Where(attachment => attachment.ReportContractId == report.ReportContractId)
+            .OrderBy(attachment => attachment.UploadedAt)
+            .ToListAsync(cancellationToken);
+
+        var evidences = reportAttachments
+            .Select(attachment => new DisputeEvidence
+            {
+                DisputeEvidenceId = Guid.NewGuid(),
+                DisputesId = disputeId,
+                UploadedById = attachment.UploadedByUserId ?? report.ReporterId,
+                FileName = attachment.FileName,
+                FileUrl = attachment.FileUrl,
+                FileSize = attachment.FileSize,
+                Description = null,
+                CreatedAt = attachment.UploadedAt
+            })
+            .ToList();
+
+        if (command.EvidenceFiles.Count > 0)
+        {
+            DisputeEvidenceSupport.ValidateBatch(command.EvidenceFiles);
+            foreach (var file in command.EvidenceFiles)
+            {
+                evidences.Add(await DisputeEvidenceSupport.UploadAsync(
+                    _mediaService,
+                    file,
+                    disputeId,
+                    command.UserId,
+                    now,
+                    cancellationToken));
+            }
+        }
+
         await using var transaction = await _context.BeginTransactionAsync(cancellationToken);
 
         // Create the dispute
         var dispute = new Dispute
         {
-            DisputesId = Guid.NewGuid(),
+            DisputesId = disputeId,
             ContractsId = command.ContractId,
             InitiatorId = command.UserId,
             RespondentId = resolvedRespondentId,
             MilestonesId = report.MilestoneId,
             RelatedReportId = command.ReportId,
-            Title = command.Title?.Trim(),
-            Description = command.Description?.Trim(),
-            Reason = command.Reason.Trim(),
+            Title = command.Title.Trim(),
+            Description = command.Description.Trim(),
+            Reason = command.Description.Trim(),
             ClaimedAmount = command.ClaimedAmount,
-            RequestedResolution = command.RequestedResolution?.Trim(),
+            RequestedResolution = command.RequestedResolution.Trim(),
+            Urgency = (int)command.Urgency.Value,
             Status = (int)DisputeStatus.Open,
             Resolution = null,
             ResolutionNote = null,
@@ -122,6 +173,8 @@ public sealed class EscalateReportToDisputeCommandHandler :
         };
 
         _context.Set<Dispute>().Add(dispute);
+        if (evidences.Count > 0)
+            _context.Set<DisputeEvidence>().AddRange(evidences);
 
         // Mark report as escalated
         report.Status = (int)ContractReportStatus.Escalated;
@@ -236,7 +289,9 @@ public sealed class EscalateReportToDisputeCommandHandler :
             initiatorName,
             participants.GetRole(command.UserId),
             resolvedRespondentId.HasValue ? participants.GetRole(resolvedRespondentId.Value) : null,
-            null);
+            null,
+            report.IssueType,
+            evidences);
     }
 
     private static DisputeResponse BuildDisputeResponse(
@@ -244,7 +299,9 @@ public sealed class EscalateReportToDisputeCommandHandler :
         string? initiatorName,
         string? initiatorRole,
         string? respondentRole,
-        string? milestoneTitle)
+        string? milestoneTitle,
+        int? issueType,
+        IReadOnlyList<DisputeEvidence> evidences)
     {
         return new DisputeResponse(
             dispute.DisputesId,
@@ -263,6 +320,8 @@ public sealed class EscalateReportToDisputeCommandHandler :
             dispute.Reason,
             dispute.ClaimedAmount,
             dispute.RequestedResolution,
+            issueType,
+            dispute.Urgency,
             dispute.Status,
             dispute.Resolution,
             null,
@@ -271,7 +330,16 @@ public sealed class EscalateReportToDisputeCommandHandler :
             dispute.CreatedAt,
             dispute.UpdatedAt,
             dispute.OpenedAt,
-            Array.Empty<DisputeEvidenceResponse>());
+            evidences
+                .OrderBy(evidence => evidence.CreatedAt)
+                .Select(evidence => new DisputeEvidenceResponse(
+                    evidence.DisputeEvidenceId,
+                    evidence.UploadedById,
+                    evidence.FileName,
+                    evidence.FileSize,
+                    evidence.Description,
+                    evidence.CreatedAt))
+                .ToList());
     }
 
     private static object BuildSystemMessagePayload(Domain.Entities.Message message)

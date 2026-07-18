@@ -4,8 +4,6 @@ namespace Application.Features.ReportContracts.Escalate.Commands;
 
 public sealed class EscalateReportToDisputeCommandValidator : AbstractValidator<EscalateReportToDisputeCommand>
 {
-    private const int ReasonMaxLength = 2000;
-
     public EscalateReportToDisputeCommandValidator()
     {
         RuleFor(c => c.ContractId)
@@ -14,29 +12,39 @@ public sealed class EscalateReportToDisputeCommandValidator : AbstractValidator<
         RuleFor(c => c.ReportId)
             .NotEmpty();
 
-        RuleFor(c => c.Reason)
-            .NotEmpty()
-            .WithMessage("Dispute reason is required.")
-            .Must(r => !string.IsNullOrWhiteSpace(r))
-            .WithMessage("Dispute reason cannot be only whitespace.")
-            .MaximumLength(ReasonMaxLength)
-            .WithMessage($"Dispute reason must not exceed {ReasonMaxLength} characters.");
-
         RuleFor(c => c.Title)
-            .MaximumLength(200)
-            .When(c => c.Title is not null);
+            .NotEmpty()
+            .WithMessage("Dispute title is required.")
+            .MaximumLength(200);
 
         RuleFor(c => c.Description)
-            .MaximumLength(5000)
-            .When(c => c.Description is not null);
+            .NotEmpty()
+            .WithMessage("Dispute description is required.")
+            .MaximumLength(5000);
 
         RuleFor(c => c.RequestedResolution)
-            .MaximumLength(2000)
-            .When(c => c.RequestedResolution is not null);
+            .NotEmpty()
+            .WithMessage("Requested resolution is required.")
+            .MaximumLength(2000);
 
         RuleFor(c => c.ClaimedAmount)
-            .GreaterThan(0)
-            .When(c => c.ClaimedAmount.HasValue)
-            .WithMessage("Claimed amount must be greater than 0.");
+            .NotNull()
+            .WithMessage("Claimed amount is required.")
+            .GreaterThanOrEqualTo(0)
+            .WithMessage("Claimed amount cannot be negative.");
+
+        RuleFor(c => c.Urgency)
+            .NotNull()
+            .WithMessage("Dispute urgency is required.")
+            .IsInEnum()
+            .WithMessage("Dispute urgency is invalid.");
+
+        RuleFor(c => c.DeclarationAccepted)
+            .Equal(true)
+            .WithMessage("You must accept the dispute declaration before submitting.");
+
+        RuleFor(c => c.EvidenceFiles)
+            .Must(files => files.Count <= 5)
+            .WithMessage("No more than 5 additional evidence files can be uploaded at a time.");
     }
 }

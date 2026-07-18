@@ -1,4 +1,6 @@
 using Application.Features.Disputes.Common.DTOs;
+using Application.Features.Disputes.Common.Internal;
+using Domain.Enums;
 using MediatR;
 
 namespace Application.Features.ReportContracts.Escalate.Commands;
@@ -13,8 +15,10 @@ public sealed record EscalateReportToDisputeCommand(
     Guid ContractId,
     Guid ReportId,
     Guid UserId,
-    string? Title,
-    string? Description,
-    string Reason,
+    string Title,
+    string Description,
     decimal? ClaimedAmount,
-    string? RequestedResolution) : IRequest<DisputeResponse>;
+    string RequestedResolution,
+    DisputeUrgency? Urgency,
+    bool DeclarationAccepted,
+    IReadOnlyList<DisputeEvidenceFile> EvidenceFiles) : IRequest<DisputeResponse>;

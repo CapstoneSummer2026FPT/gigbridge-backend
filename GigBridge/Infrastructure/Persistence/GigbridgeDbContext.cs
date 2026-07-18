@@ -602,6 +602,9 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.Property(e => e.Description).HasMaxLength(5000);
             entity.Property(e => e.ClaimedAmount).HasPrecision(18, 2);
             entity.Property(e => e.RequestedResolution).HasMaxLength(2000);
+            entity.Property(e => e.Urgency)
+                .HasDefaultValue((int)DisputeUrgency.Normal)
+                .HasComment("Enum DisputeUrgency: 0=Normal, 1=High, 2=Critical");
             entity.Property(e => e.OpenedAt);
             entity.Property(e => e.Resolution).HasComment("Enum DisputeResolution: 0=ClientFavored, 1=FreelancerFavored, 2=Split, 3=Dismissed");
             entity.Property(e => e.Status).HasComment("Enum DisputeStatus: 0=Open, 1=UnderReview, 2=Resolved, 3=Closed");

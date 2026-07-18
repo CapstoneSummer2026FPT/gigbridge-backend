@@ -1,6 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Models;
 using Application.Features.Disputes.Common.DTOs;
+using Application.Features.Disputes.Common.Internal;
 using Application.Features.ReportContracts.Common.DTOs;
 using Application.Features.ReportContracts.Common.Queries;
 using Application.Features.ReportContracts.Confirm.Commands;
@@ -9,6 +10,7 @@ using Application.Features.ReportContracts.Escalate.Commands;
 using Application.Features.ReportContracts.Respond.Commands;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Domain.Enums;
 
 namespace Project_API.Controllers;
 
@@ -172,29 +174,54 @@ public sealed class ContractReportsController : BaseApiController
     /// This creates a Dispute, locks the contract, and opens a dispute conversation.
     /// </summary>
     [HttpPost("{reportId:guid}/escalate")]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(MaxRequestSizeBytes)]
     public async Task<IActionResult> Escalate(
         Guid contractId,
         Guid reportId,
-        [FromBody] EscalateReportToDisputeRequest request)
+        [FromForm] EscalateReportToDisputeRequest request)
     {
         if (!TryGetCurrentUserId(out var userId))
         {
             return InvalidTokenResponse();
         }
 
-        var result = await Mediator.Send(new EscalateReportToDisputeCommand(
-            contractId,
-            reportId,
-            userId,
-            request.Title,
-            request.Description,
-            request.Reason,
-            request.ClaimedAmount,
-            request.RequestedResolution));
+        var streams = new List<Stream>();
+        try
+        {
+            var evidenceFiles = new List<DisputeEvidenceFile>(request.EvidenceFiles.Count);
+            foreach (var file in request.EvidenceFiles)
+            {
+                var stream = file.OpenReadStream();
+                streams.Add(stream);
+                evidenceFiles.Add(new DisputeEvidenceFile(
+                    stream,
+                    file.FileName,
+                    file.ContentType,
+                    file.Length));
+            }
 
-        return StatusCode(
-            StatusCodes.Status201Created,
-            ApiResponse<DisputeResponse>.CreatedAt(result, "Dispute created successfully"));
+            var result = await Mediator.Send(new EscalateReportToDisputeCommand(
+                contractId,
+                reportId,
+                userId,
+                request.Title,
+                request.Description,
+                request.ClaimedAmount,
+                request.RequestedResolution,
+                request.Urgency.HasValue ? (DisputeUrgency?)request.Urgency.Value : null,
+                request.DeclarationAccepted,
+                evidenceFiles));
+
+            return StatusCode(
+                StatusCodes.Status201Created,
+                ApiResponse<DisputeResponse>.CreatedAt(result, "Dispute created successfully"));
+        }
+        finally
+        {
+            foreach (var stream in streams)
+                await stream.DisposeAsync();
+        }
     }
 }
 
@@ -208,9 +235,11 @@ public sealed record ConfirmResolutionRequest(bool IsAccepted);
 /// </summary>
 public sealed record EscalateReportToDisputeRequest
 {
-    public string? Title { get; init; }
-    public string? Description { get; init; }
-    public string Reason { get; init; } = null!;
+    public string Title { get; init; } = null!;
+    public string Description { get; init; } = null!;
     public decimal? ClaimedAmount { get; init; }
-    public string? RequestedResolution { get; init; }
+    public string RequestedResolution { get; init; } = null!;
+    public int? Urgency { get; init; }
+    public bool DeclarationAccepted { get; init; }
+    public List<IFormFile> EvidenceFiles { get; init; } = [];
 }

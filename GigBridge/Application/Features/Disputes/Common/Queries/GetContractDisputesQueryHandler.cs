@@ -73,6 +73,20 @@ public sealed class GetContractDisputesQueryHandler :
                 .ToDictionaryAsync(milestone => milestone.MilestonesId, milestone => milestone.Title, cancellationToken);
 
         var disputeIds = disputes.Select(dispute => dispute.DisputesId).ToHashSet();
+        var reportIds = disputes
+            .Where(dispute => dispute.RelatedReportId.HasValue)
+            .Select(dispute => dispute.RelatedReportId!.Value)
+            .Distinct()
+            .ToHashSet();
+        var issueTypes = reportIds.Count == 0
+            ? new Dictionary<Guid, int>()
+            : await _context.Set<ReportContract>()
+                .AsNoTracking()
+                .Where(report => reportIds.Contains(report.ReportContractId))
+                .ToDictionaryAsync(
+                    report => report.ReportContractId,
+                    report => report.IssueType,
+                    cancellationToken);
         var evidenceByDispute = (await _context.Set<DisputeEvidence>()
                 .AsNoTracking()
                 .Where(evidence => disputeIds.Contains(evidence.DisputesId))
@@ -83,6 +97,13 @@ public sealed class GetContractDisputesQueryHandler :
 
         return disputes.Select(dispute =>
         {
+            int? issueType = null;
+            if (dispute.RelatedReportId.HasValue &&
+                issueTypes.TryGetValue(dispute.RelatedReportId.Value, out var resolvedIssueType))
+            {
+                issueType = resolvedIssueType;
+            }
+
             var evidenceResponses = evidenceByDispute
                 .GetValueOrDefault(dispute.DisputesId, [])
                 .Select(evidence => new DisputeEvidenceResponse(
@@ -113,6 +134,8 @@ public sealed class GetContractDisputesQueryHandler :
                 dispute.Reason,
                 dispute.ClaimedAmount,
                 dispute.RequestedResolution,
+                issueType,
+                dispute.Urgency,
                 dispute.Status,
                 dispute.Resolution,
                 dispute.Resolution.HasValue

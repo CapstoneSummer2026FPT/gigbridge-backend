@@ -75,6 +75,16 @@ public sealed class GetDisputeByIdQueryHandler :
                 .FirstOrDefaultAsync(cancellationToken);
         }
 
+        int? issueType = null;
+        if (dispute.RelatedReportId.HasValue)
+        {
+            issueType = await _context.Set<ReportContract>()
+                .AsNoTracking()
+                .Where(report => report.ReportContractId == dispute.RelatedReportId.Value)
+                .Select(report => (int?)report.IssueType)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
         var evidences = await _context.Set<DisputeEvidence>()
             .AsNoTracking()
             .Where(evidence => evidence.DisputesId == dispute.DisputesId)
@@ -105,6 +115,8 @@ public sealed class GetDisputeByIdQueryHandler :
             dispute.Reason,
             dispute.ClaimedAmount,
             dispute.RequestedResolution,
+            issueType,
+            dispute.Urgency,
             dispute.Status,
             dispute.Resolution,
             dispute.Resolution.HasValue

@@ -40,6 +40,11 @@ public partial class Dispute
     public string? RequestedResolution { get; set; }
 
     /// <summary>
+    /// Enum DisputeUrgency: 0=Normal, 1=High, 2=Critical
+    /// </summary>
+    public int Urgency { get; set; }
+
+    /// <summary>
     /// Enum DisputeStatus: 0=Open, 1=UnderReview, 2=Resolved, 3=Closed
     /// </summary>
     public int Status { get; set; }
