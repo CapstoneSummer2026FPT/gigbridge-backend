@@ -71,6 +71,8 @@ public partial class User
 
     public virtual ICollection<Dispute> DisputeInitiators { get; set; } = new List<Dispute>();
 
+    public virtual ICollection<Dispute> DisputeRespondents { get; set; } = new List<Dispute>();
+
     public virtual ICollection<EsignSignature> EsignSignatures { get; set; } = new List<EsignSignature>();
 
     public virtual ICollection<EsignTemplate> EsignTemplates { get; set; } = new List<EsignTemplate>();

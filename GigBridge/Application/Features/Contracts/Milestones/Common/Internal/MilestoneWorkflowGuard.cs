@@ -44,9 +44,22 @@ internal static class MilestoneWorkflowGuard
 
     public static void EnsureContractActive(Contract contract)
     {
+        if (contract.Status == (int)ContractStatus.Disputed)
+        {
+            throw new BadRequestException("Cannot perform this action while the contract is under dispute.");
+        }
+
         if (contract.Status != (int)ContractStatus.Active)
         {
             throw new BadRequestException("Milestones can only be managed after the contract is active.");
+        }
+    }
+
+    public static void EnsureNotDisputed(Contract contract)
+    {
+        if (contract.Status == (int)ContractStatus.Disputed)
+        {
+            throw new BadRequestException("Cannot perform this action while the contract is under dispute.");
         }
     }
 

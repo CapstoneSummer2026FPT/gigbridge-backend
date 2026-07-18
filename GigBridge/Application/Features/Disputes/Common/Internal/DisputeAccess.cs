@@ -40,6 +40,11 @@ internal static class DisputeAccess
 
     public static void EnsureCreationAllowed(Contract contract)
     {
+        if (contract.Status == (int)ContractStatus.Disputed)
+        {
+            throw new BadRequestException("A dispute already exists for this contract.");
+        }
+
         if (!CanCreateForContractStatus(contract.Status))
         {
             throw new BadRequestException(

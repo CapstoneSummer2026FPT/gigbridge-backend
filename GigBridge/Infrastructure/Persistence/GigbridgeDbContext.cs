@@ -583,6 +583,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
             entity.HasIndex(e => e.InitiatorId, "IX_Disputes_InitiatorId");
 
+            entity.HasIndex(e => e.RespondentId, "IX_Disputes_RespondentId");
+
             entity.HasIndex(e => e.ResolvedByAdminId, "IX_Disputes_ResolvedByAdminId");
 
             entity.HasIndex(e => e.Status, "IX_Disputes_Status");
@@ -592,10 +594,17 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
                 .HasColumnName("DisputesId");
             entity.Property(e => e.ContractsId).HasColumnName("ContractsId");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.InitiatorId).HasColumnName("InitiatorId");
             entity.Property(e => e.MilestonesId).HasColumnName("MilestonesId");
+            entity.Property(e => e.RespondentId).HasColumnName("RespondentId");
+            entity.Property(e => e.RelatedReportId).HasColumnName("RelatedReportId");
+            entity.Property(e => e.Title).HasMaxLength(300);
+            entity.Property(e => e.Description).HasMaxLength(5000);
+            entity.Property(e => e.ClaimedAmount).HasPrecision(18, 2);
+            entity.Property(e => e.RequestedResolution).HasMaxLength(2000);
+            entity.Property(e => e.OpenedAt);
             entity.Property(e => e.Resolution).HasComment("Enum DisputeResolution: 0=ClientFavored, 1=FreelancerFavored, 2=Split, 3=Dismissed");
             entity.Property(e => e.Status).HasComment("Enum DisputeStatus: 0=Open, 1=UnderReview, 2=Resolved, 3=Closed");
-            entity.Property(e => e.InitiatorId).HasColumnName("InitiatorId");
 
             entity.HasOne(d => d.Contracts).WithMany(p => p.Disputes)
                 .HasForeignKey(d => d.ContractsId)
@@ -605,6 +614,14 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.HasOne(d => d.Milestones).WithMany(p => p.Disputes)
                 .HasForeignKey(d => d.MilestonesId)
                 .HasConstraintName("Disputes_mStone_MilestonesId_fkey");
+
+            entity.HasOne(d => d.Respondent).WithMany(p => p.DisputeRespondents)
+                .HasForeignKey(d => d.RespondentId)
+                .HasConstraintName("Disputes_usr_RespondentId_fkey");
+
+            entity.HasOne(d => d.RelatedReport).WithMany()
+                .HasForeignKey(d => d.RelatedReportId)
+                .HasConstraintName("Disputes_rc_RelatedReportId_fkey");
 
             entity.HasOne(d => d.ResolvedByAdmin).WithMany(p => p.DisputeResolvedByAdmins)
                 .HasForeignKey(d => d.ResolvedByAdminId)

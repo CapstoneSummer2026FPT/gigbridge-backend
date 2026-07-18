@@ -11,9 +11,33 @@ public partial class Dispute
 
     public Guid InitiatorId { get; set; }
 
+    /// <summary>
+    /// The other party in the dispute (the non-initiator).
+    /// </summary>
+    public Guid? RespondentId { get; set; }
+
     public Guid? MilestonesId { get; set; }
 
+    /// <summary>
+    /// The report that was escalated to create this dispute, if any.
+    /// </summary>
+    public Guid? RelatedReportId { get; set; }
+
+    /// <summary>
+    /// Optional short title for the dispute.
+    /// </summary>
+    public string? Title { get; set; }
+
+    /// <summary>
+    /// Optional longer description for the dispute.
+    /// </summary>
+    public string? Description { get; set; }
+
     public string Reason { get; set; } = null!;
+
+    public decimal? ClaimedAmount { get; set; }
+
+    public string? RequestedResolution { get; set; }
 
     /// <summary>
     /// Enum DisputeStatus: 0=Open, 1=UnderReview, 2=Resolved, 3=Closed
@@ -35,6 +59,8 @@ public partial class Dispute
 
     public DateTime? UpdatedAt { get; set; }
 
+    public DateTime? OpenedAt { get; set; }
+
     public virtual Contract Contracts { get; set; } = null!;
 
     public virtual ICollection<Conversation> Conversations { get; set; } = new List<Conversation>();
@@ -48,4 +74,8 @@ public partial class Dispute
     public virtual User? ResolvedByAdmin { get; set; }
 
     public virtual User Initiator { get; set; } = null!;
+
+    public virtual User? Respondent { get; set; }
+
+    public virtual ReportContract? RelatedReport { get; set; }
 }

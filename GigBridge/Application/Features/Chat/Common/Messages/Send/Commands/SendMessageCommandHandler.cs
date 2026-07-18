@@ -73,6 +73,8 @@ public class SendMessageCommandHandler : IRequestHandler<SendMessageCommand, Mes
             throw new ForbiddenAccessException("You are not a participant in this conversation.");
         }
 
+        await EnsureWorkspaceConversationWritable(conversation, cancellationToken);
+
         await EnsureReplyTargetBelongsToConversation(request, cancellationToken);
 
         var existingMessage = await _context.Set<Message>()
@@ -222,6 +224,29 @@ public class SendMessageCommandHandler : IRequestHandler<SendMessageCommand, Mes
         if (!replyExists)
         {
             throw new BadRequestException("ReplyToMessageId must belong to the same conversation.");
+        }
+    }
+
+    private async Task EnsureWorkspaceConversationWritable(
+        Conversation conversation,
+        CancellationToken cancellationToken)
+    {
+        if (conversation.ConversationType != (int)ConversationType.ContractWorkroom ||
+            !conversation.ContractsId.HasValue)
+        {
+            return;
+        }
+
+        var contractStatus = await _context.Set<Contract>()
+            .AsNoTracking()
+            .Where(contract => contract.ContractsId == conversation.ContractsId.Value)
+            .Select(contract => (int?)contract.Status)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (contractStatus == (int)ContractStatus.Disputed)
+        {
+            throw new BadRequestException(
+                "This contract is currently under dispute. Please continue communication in the dispute conversation.");
         }
     }
 

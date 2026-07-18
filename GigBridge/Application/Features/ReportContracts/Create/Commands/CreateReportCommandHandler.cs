@@ -53,6 +53,12 @@ public sealed class CreateReportCommandHandler :
             command.UserId,
             cancellationToken);
 
+        // Cannot create reports on disputed contracts
+        if (contract.Status == (int)ContractStatus.Disputed)
+        {
+            throw new BadRequestException("Cannot create a report while the contract is under dispute.");
+        }
+
         // Determine respondent automatically
         var reporterRole = participants.GetRole(command.UserId);
         Guid? respondentId = reporterRole == "Client"

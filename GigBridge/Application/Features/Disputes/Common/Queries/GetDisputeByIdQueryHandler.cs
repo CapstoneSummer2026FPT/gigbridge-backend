@@ -55,6 +55,16 @@ public sealed class GetDisputeByIdQueryHandler :
             .Select(user => user.FullName)
             .FirstOrDefaultAsync(cancellationToken);
 
+        string? respondentName = null;
+        if (dispute.RespondentId.HasValue)
+        {
+            respondentName = await _context.Set<User>()
+                .AsNoTracking()
+                .Where(user => user.UserId == dispute.RespondentId.Value)
+                .Select(user => user.FullName)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
         string? milestoneTitle = null;
         if (dispute.MilestonesId.HasValue)
         {
@@ -84,9 +94,17 @@ public sealed class GetDisputeByIdQueryHandler :
             dispute.InitiatorId,
             initiatorName,
             participants.GetRole(dispute.InitiatorId),
+            dispute.RespondentId,
+            respondentName,
+            dispute.RespondentId.HasValue ? participants.GetRole(dispute.RespondentId.Value) : null,
             dispute.MilestonesId,
             milestoneTitle,
+            dispute.RelatedReportId,
+            dispute.Title,
+            dispute.Description,
             dispute.Reason,
+            dispute.ClaimedAmount,
+            dispute.RequestedResolution,
             dispute.Status,
             dispute.Resolution,
             dispute.Resolution.HasValue
@@ -96,6 +114,7 @@ public sealed class GetDisputeByIdQueryHandler :
             dispute.ResolvedAt,
             dispute.CreatedAt,
             dispute.UpdatedAt,
+            dispute.OpenedAt,
             evidences);
     }
 }

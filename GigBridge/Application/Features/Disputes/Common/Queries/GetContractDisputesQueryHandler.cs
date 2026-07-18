@@ -49,10 +49,15 @@ public sealed class GetContractDisputesQueryHandler :
         if (disputes.Count == 0)
             return Array.Empty<DisputeResponse>();
 
-        var initiatorIds = disputes.Select(dispute => dispute.InitiatorId).Distinct().ToHashSet();
+        var allUserIds = disputes
+            .SelectMany(d => new Guid?[] { d.InitiatorId, d.RespondentId })
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
+            .Distinct()
+            .ToHashSet();
         var users = await _context.Set<User>()
             .AsNoTracking()
-            .Where(user => initiatorIds.Contains(user.UserId))
+            .Where(user => allUserIds.Contains(user.UserId))
             .ToDictionaryAsync(user => user.UserId, user => user.FullName, cancellationToken);
 
         var milestoneIds = disputes
@@ -95,11 +100,19 @@ public sealed class GetContractDisputesQueryHandler :
                 dispute.InitiatorId,
                 users.GetValueOrDefault(dispute.InitiatorId),
                 participants.GetRole(dispute.InitiatorId),
+                dispute.RespondentId,
+                dispute.RespondentId.HasValue ? users.GetValueOrDefault(dispute.RespondentId.Value) : null,
+                dispute.RespondentId.HasValue ? participants.GetRole(dispute.RespondentId.Value) : null,
                 dispute.MilestonesId,
                 dispute.MilestonesId.HasValue
                     ? milestones.GetValueOrDefault(dispute.MilestonesId.Value)
                     : null,
+                dispute.RelatedReportId,
+                dispute.Title,
+                dispute.Description,
                 dispute.Reason,
+                dispute.ClaimedAmount,
+                dispute.RequestedResolution,
                 dispute.Status,
                 dispute.Resolution,
                 dispute.Resolution.HasValue
@@ -109,6 +122,7 @@ public sealed class GetContractDisputesQueryHandler :
                 dispute.ResolvedAt,
                 dispute.CreatedAt,
                 dispute.UpdatedAt,
+                dispute.OpenedAt,
                 evidenceResponses);
         }).ToList();
     }

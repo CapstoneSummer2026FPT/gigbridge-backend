@@ -1,9 +1,11 @@
 using Application.Common.Exceptions;
 using Application.Common.Models;
+using Application.Features.Disputes.Common.DTOs;
 using Application.Features.ReportContracts.Common.DTOs;
 using Application.Features.ReportContracts.Common.Queries;
 using Application.Features.ReportContracts.Confirm.Commands;
 using Application.Features.ReportContracts.Create.Commands;
+using Application.Features.ReportContracts.Escalate.Commands;
 using Application.Features.ReportContracts.Respond.Commands;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -163,9 +165,52 @@ public sealed class ContractReportsController : BaseApiController
 
         return Ok(ApiResponse<ReportContractResponse>.Ok(result, "Resolution declined. You may escalate to dispute if needed."));
     }
+
+    /// <summary>
+    /// Escalate a report into an official dispute (reporter only).
+    /// The report must be in WaitingReporterConfirmation status and the user must be the reporter.
+    /// This creates a Dispute, locks the contract, and opens a dispute conversation.
+    /// </summary>
+    [HttpPost("{reportId:guid}/escalate")]
+    public async Task<IActionResult> Escalate(
+        Guid contractId,
+        Guid reportId,
+        [FromBody] EscalateReportToDisputeRequest request)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return InvalidTokenResponse();
+        }
+
+        var result = await Mediator.Send(new EscalateReportToDisputeCommand(
+            contractId,
+            reportId,
+            userId,
+            request.Title,
+            request.Description,
+            request.Reason,
+            request.ClaimedAmount,
+            request.RequestedResolution));
+
+        return StatusCode(
+            StatusCodes.Status201Created,
+            ApiResponse<DisputeResponse>.CreatedAt(result, "Dispute created successfully"));
+    }
 }
 
 /// <summary>
 /// Request body for confirming or declining a resolution.
 /// </summary>
 public sealed record ConfirmResolutionRequest(bool IsAccepted);
+
+/// <summary>
+/// Request body for escalating a report to a dispute.
+/// </summary>
+public sealed record EscalateReportToDisputeRequest
+{
+    public string? Title { get; init; }
+    public string? Description { get; init; }
+    public string Reason { get; init; } = null!;
+    public decimal? ClaimedAmount { get; init; }
+    public string? RequestedResolution { get; init; }
+}

@@ -1,5 +1,3 @@
-using Domain.Enums;
-
 namespace Application.Features.Disputes.Common.DTOs;
 
 public sealed record DisputeResponse(
@@ -8,9 +6,17 @@ public sealed record DisputeResponse(
     Guid InitiatorId,
     string? InitiatorName,
     string? InitiatorRole,
+    Guid? RespondentId,
+    string? RespondentName,
+    string? RespondentRole,
     Guid? MilestonesId,
     string? MilestoneTitle,
+    Guid? RelatedReportId,
+    string? Title,
+    string? Description,
     string Reason,
+    decimal? ClaimedAmount,
+    string? RequestedResolution,
     int Status,
     int? Resolution,
     string? ResolutionLabel,
@@ -18,4 +24,5 @@ public sealed record DisputeResponse(
     DateTime? ResolvedAt,
     DateTime CreatedAt,
     DateTime? UpdatedAt,
+    DateTime? OpenedAt,
     IReadOnlyList<DisputeEvidenceResponse> Evidences);

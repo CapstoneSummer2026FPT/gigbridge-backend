@@ -117,6 +117,7 @@ public sealed class CreateDisputeCommandHandler :
             DisputesId = Guid.NewGuid(),
             ContractsId = command.ContractId,
             InitiatorId = command.UserId,
+            RespondentId = participants.GetOtherParty(command.UserId),
             MilestonesId = command.MilestoneId,
             Reason = command.Reason.Trim(),
             Status = (int)DisputeStatus.Open,
@@ -125,7 +126,8 @@ public sealed class CreateDisputeCommandHandler :
             ResolvedByAdminId = null,
             ResolvedAt = null,
             CreatedAt = now,
-            UpdatedAt = null
+            UpdatedAt = null,
+            OpenedAt = now
         };
 
         _context.Set<Dispute>().Add(dispute);
@@ -167,6 +169,7 @@ public sealed class CreateDisputeCommandHandler :
             evidence,
             initiatorName,
             initiatorRole,
+            otherPartyId.HasValue ? participants.GetRole(otherPartyId.Value) : null,
             milestoneTitle);
     }
 
@@ -206,6 +209,7 @@ public sealed class CreateDisputeCommandHandler :
         DisputeEvidence? evidence,
         string? initiatorName,
         string initiatorRole,
+        string? respondentRole,
         string? milestoneTitle)
     {
         var evidences = evidence is null
@@ -227,9 +231,17 @@ public sealed class CreateDisputeCommandHandler :
             dispute.InitiatorId,
             initiatorName,
             initiatorRole,
+            dispute.RespondentId,
+            null,
+            respondentRole,
             dispute.MilestonesId,
             milestoneTitle,
+            dispute.RelatedReportId,
+            dispute.Title,
+            dispute.Description,
             dispute.Reason,
+            dispute.ClaimedAmount,
+            dispute.RequestedResolution,
             dispute.Status,
             dispute.Resolution,
             null,
@@ -237,6 +249,7 @@ public sealed class CreateDisputeCommandHandler :
             dispute.ResolvedAt,
             dispute.CreatedAt,
             dispute.UpdatedAt,
+            dispute.OpenedAt,
             evidences);
     }
 }
