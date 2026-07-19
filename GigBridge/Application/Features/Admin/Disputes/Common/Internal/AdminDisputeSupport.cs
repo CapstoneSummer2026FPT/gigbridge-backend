@@ -54,10 +54,94 @@ internal static class AdminDisputeSupport
                 .ThenInclude(contract => contract.FreelancerProfiles)
                     .ThenInclude(profile => profile!.User)
             .Include(item => item.Initiator)
+            .Include(item => item.Respondent)
+            .Include(item => item.AssignedAdmin)
+            .Include(item => item.RelatedReport)
             .Include(item => item.Milestones)
-            .Include(item => item.DisputeEvidences)
             .FirstOrDefaultAsync(item => item.DisputesId == disputeId, cancellationToken)
             ?? throw new NotFoundException("Dispute does not exist.");
+
+        var contract = dispute.Contracts;
+        var job = await context.Set<JobPost>()
+            .AsNoTracking()
+            .Include(item => item.MajorCategory).ThenInclude(item => item!.Major)
+            .Include(item => item.MajorCategory).ThenInclude(item => item!.Category)
+            .Include(item => item.JobPostSkills).ThenInclude(item => item.Skills)
+            .Include(item => item.JobPostQuestions)
+            .FirstAsync(item => item.JobPostsId == contract.JobPostsId, cancellationToken);
+
+        var proposal = contract.ProposalsId.HasValue
+            ? await context.Set<Proposal>()
+                .AsNoTracking()
+                .Include(item => item.ProposalAnswers).ThenInclude(item => item.JobPostQuestions)
+                .Include(item => item.ProposalMilestonePlans)
+                .FirstOrDefaultAsync(item => item.ProposalsId == contract.ProposalsId.Value, cancellationToken)
+            : null;
+
+        var milestones = await context.Set<Milestone>()
+            .AsNoTracking()
+            .Include(item => item.MilestoneAttachments)
+            .Where(item => item.ContractsId == contract.ContractsId)
+            .OrderBy(item => item.SortOrder)
+            .ThenBy(item => item.CreatedAt)
+            .ToListAsync(cancellationToken);
+
+        var escrow = await context.Set<ContractEscrow>()
+            .AsNoTracking()
+            .Include(item => item.EscrowTransactions)
+            .FirstOrDefaultAsync(item => item.ContractsId == contract.ContractsId, cancellationToken);
+        var serviceFees = await context.Set<WalletTransaction>()
+            .AsNoTracking()
+            .Where(item => item.ContractsId == contract.ContractsId &&
+                           item.Status == (int)WalletTransactionStatus.Succeeded &&
+                           item.Type == (int)WalletTransactionType.Adjustment &&
+                           item.Metadata != null && item.Metadata.Contains("ServiceFee"))
+            .SumAsync(item => item.TokenAmount, cancellationToken);
+
+        var conversations = await context.Set<Conversation>()
+            .AsNoTracking()
+            .Where(item => item.ContractsId == contract.ContractsId)
+            .Select(item => new { item.ConversationsId, item.ConversationType, item.DisputesId })
+            .ToListAsync(cancellationToken);
+
+        var evidences = await context.Set<DisputeEvidence>()
+            .AsNoTracking()
+            .Include(item => item.UploadedBy)
+            .Include(item => item.RequestedByAdmin)
+            .Include(item => item.ReviewedByAdmin)
+            .Where(item => item.DisputesId == dispute.DisputesId)
+            .OrderBy(item => item.RequestedAt ?? item.CreatedAt)
+            .ThenBy(item => item.CreatedAt)
+            .ToListAsync(cancellationToken);
+
+        var auditTrail = await context.Set<AdminAuditLog>()
+            .AsNoTracking()
+            .Where(item => item.EntityId == dispute.DisputesId && item.EntityType == nameof(Dispute))
+            .OrderByDescending(item => item.CreatedAt)
+            .Select(item => new AdminAuditEventResponse(
+                item.AdminAuditLogsId,
+                item.AdminId,
+                item.Action,
+                item.OldValues,
+                item.NewValues,
+                item.CreatedAt))
+            .ToListAsync(cancellationToken);
+
+        var decisions = await context.Set<DisputeMilestoneDecision>()
+            .AsNoTracking()
+            .Where(item => item.DisputesId == dispute.DisputesId)
+            .OrderBy(item => item.CreatedAt)
+            .Select(item => new AdminMilestoneDecisionResponse(
+                item.DisputeMilestoneDecisionId,
+                item.MilestonesId,
+                item.Outcome,
+                item.MilestoneAmountSnapshot,
+                item.ReleasedAmountSnapshot,
+                item.AdditionalReleaseAmount,
+                item.RefundAmount,
+                item.DecidedByAdminId,
+                item.CreatedAt))
+            .ToListAsync(cancellationToken);
 
         var clientProfile = dispute.Contracts.ClientProfiles;
         var freelancerProfile = dispute.Contracts.FreelancerProfiles;
@@ -77,6 +161,21 @@ internal static class AdminDisputeSupport
         var initiatorRole = dispute.InitiatorId == client.UserId
             ? "Client"
             : freelancer?.UserId == dispute.InitiatorId ? "Freelancer" : null;
+
+        var approvedCount = milestones.Count(item => item.Status == (int)MilestoneStatus.Approved);
+        var progress = milestones.Count == 0
+            ? 0
+            : (int)Math.Round(approvedCount * 100m / milestones.Count, MidpointRounding.AwayFromZero);
+        var proposalAnswers = proposal?.ProposalAnswers
+            .ToDictionary(item => item.JobPostQuestionsId, item => item.AnswerText)
+            ?? new Dictionary<Guid, string>();
+        var refundedAmount = escrow?.EscrowTransactions
+            .Where(item => item.Type == (int)EscrowTransactionType.RefundToClient &&
+                           item.Status == (int)EscrowTransactionStatus.Succeeded)
+            .Sum(item => item.Amount) ?? 0m;
+        var remainingAmount = escrow is null
+            ? 0m
+            : Math.Max(0m, escrow.FundedAmount - escrow.ReleasedAmount);
 
         return new AdminDisputeDetailResponse(
             dispute.DisputesId,
@@ -101,16 +200,127 @@ internal static class AdminDisputeSupport
             dispute.ResolvedAt,
             dispute.CreatedAt,
             dispute.UpdatedAt,
-            dispute.DisputeEvidences
-                .OrderBy(evidence => evidence.CreatedAt)
+            evidences
                 .Select(evidence => new DisputeEvidenceResponse(
                     evidence.DisputeEvidenceId,
                     evidence.UploadedById,
                     evidence.FileName,
                     evidence.FileSize,
                     evidence.Description,
-                    evidence.CreatedAt))
-                .ToList());
+                    evidence.CreatedAt,
+                    evidence.IsRequestedByAdmin,
+                    evidence.RequestGroupId,
+                    evidence.RequestedByAdminId,
+                    evidence.RequestedAt,
+                    evidence.Deadline,
+                    evidence.RequestTarget,
+                    evidence.IsRequestFulfilled,
+                    evidence.ReviewedByAdminId,
+                    evidence.ReviewedAt,
+                    evidence.ReviewNote,
+                    evidence.UploadedBy?.FullName,
+                    evidence.RequestedByAdmin?.FullName,
+                    evidence.ReviewedByAdmin?.FullName))
+                .ToList(),
+            dispute.Title,
+            dispute.Description,
+            dispute.ClaimedAmount,
+            dispute.RequestedResolution,
+            dispute.Urgency,
+            dispute.RespondentId,
+            dispute.Respondent?.FullName,
+            dispute.AssignedAdmin?.FullName,
+            dispute.RelatedReport is null
+                ? null
+                : new AdminRelatedReportResponse(
+                    dispute.RelatedReport.ReportContractId,
+                    dispute.RelatedReport.IssueType,
+                    dispute.RelatedReport.Description,
+                    dispute.RelatedReport.DesiredResolution,
+                    dispute.RelatedReport.Status,
+                    dispute.RelatedReport.CreatedAt),
+            new AdminContractSummaryResponse(
+                contract.TotalBudget,
+                contract.CreatedAt,
+                contract.StartDate,
+                contract.EndDate,
+                contract.CompletedAt,
+                progress),
+            new AdminOriginalJobResponse(
+                job.JobPostsId,
+                job.Title,
+                job.Description,
+                job.BudgetMin,
+                job.BudgetMax,
+                job.Currency,
+                job.EstimatedDuration,
+                job.MajorCategory is null
+                    ? null
+                    : $"{job.MajorCategory.Major.Name} / {job.MajorCategory.Category.Name}",
+                job.JobPostSkills.Select(item => item.Skills.Name)
+                    .Concat(job.CustomSkillNames)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .OrderBy(item => item)
+                    .ToList(),
+                proposal?.ProposedBudget,
+                proposal?.ProposedDuration,
+                job.JobPostQuestions.OrderBy(item => item.OrderIndex)
+                    .Select(item => new AdminJobQuestionResponse(
+                        item.QuestionText,
+                        proposalAnswers.GetValueOrDefault(item.JobPostQuestionsId)))
+                    .ToList(),
+                proposal?.ProposalMilestonePlans.OrderBy(item => item.OrderIndex)
+                    .Select(item => new AdminProposalMilestoneResponse(
+                        item.Title,
+                        item.Description,
+                        item.Amount,
+                        item.EstimatedDuration,
+                        item.Deliverables,
+                        item.AcceptanceCriteria,
+                        item.OrderIndex))
+                    .ToList() ?? []),
+            milestones.Select(item => new AdminMilestoneResponse(
+                    item.MilestonesId,
+                    item.Title,
+                    item.Description,
+                    item.Amount,
+                    item.ReleasedAmount,
+                    Math.Max(0m, item.Amount - item.ReleasedAmount),
+                    item.Status,
+                    item.Deliverables,
+                    item.SubmissionDescription,
+                    item.DueDate,
+                    item.StartedAt,
+                    item.SubmittedAt,
+                    item.ApprovedAt,
+                    item.PaidAt,
+                    item.MilestoneAttachments.OrderBy(attachment => attachment.CreatedAt)
+                        .Select(attachment => new AdminMilestoneAttachmentResponse(
+                            attachment.MilestoneAttachmentsId,
+                            attachment.FileName,
+                            attachment.FileUrl,
+                            attachment.FileSize,
+                            attachment.MimeType,
+                            attachment.UploadedByUserId,
+                            attachment.CreatedAt))
+                        .ToList()))
+                .ToList(),
+            new AdminEscrowSummaryResponse(
+                escrow?.ContractEscrowId,
+                escrow?.RequiredAmount ?? contract.TotalBudget,
+                escrow?.FundedAmount ?? 0m,
+                escrow?.ReleasedAmount ?? 0m,
+                refundedAmount,
+                serviceFees,
+                remainingAmount,
+                escrow?.Status),
+            new AdminConversationReferencesResponse(
+                conversations.FirstOrDefault(item =>
+                    item.ConversationType == (int)ConversationType.ContractWorkroom &&
+                    !item.DisputesId.HasValue)?.ConversationsId,
+                conversations.FirstOrDefault(item => item.DisputesId == dispute.DisputesId)?.ConversationsId),
+            auditTrail,
+            decisions);
     }
 
     public static async Task NotifyParticipantsAsync(

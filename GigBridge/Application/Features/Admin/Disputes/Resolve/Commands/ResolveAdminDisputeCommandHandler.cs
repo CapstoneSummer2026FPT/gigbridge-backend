@@ -1,9 +1,12 @@
+using System.Text.Json;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Features.Admin.Disputes.Common.DTOs;
 using Application.Features.Admin.Disputes.Common.Internal;
 using Application.Features.Contracts.Common.Internal;
+using Application.Features.Notifications.Common.DTOs;
+using Application.Features.Wallets.Common;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
@@ -15,23 +18,24 @@ namespace Application.Features.Admin.Disputes.Resolve.Commands;
 public sealed class ResolveAdminDisputeCommandHandler :
     IRequestHandler<ResolveAdminDisputeCommand, AdminDisputeDetailResponse>
 {
+    private const decimal Tolerance = 0.01m;
     private readonly IApplicationDbContext _context;
-    private readonly IDateTimeService _dateTimeService;
-    private readonly IChatRealtimeNotifier _chatRealtimeNotifier;
-    private readonly INotificationService _notifications;
+    private readonly IDateTimeService _clock;
+    private readonly IChatRealtimeNotifier _realtime;
+    private readonly INotificationSender _notificationSender;
     private readonly ILogger<ResolveAdminDisputeCommandHandler> _logger;
 
     public ResolveAdminDisputeCommandHandler(
         IApplicationDbContext context,
-        IDateTimeService dateTimeService,
-        IChatRealtimeNotifier chatRealtimeNotifier,
-        INotificationService notifications,
+        IDateTimeService clock,
+        IChatRealtimeNotifier realtime,
+        INotificationSender notificationSender,
         ILogger<ResolveAdminDisputeCommandHandler> logger)
     {
         _context = context;
-        _dateTimeService = dateTimeService;
-        _chatRealtimeNotifier = chatRealtimeNotifier;
-        _notifications = notifications;
+        _clock = clock;
+        _realtime = realtime;
+        _notificationSender = notificationSender;
         _logger = logger;
     }
 
@@ -40,66 +44,161 @@ public sealed class ResolveAdminDisputeCommandHandler :
         CancellationToken cancellationToken)
     {
         await AdminDisputeSupport.EnsureAdminAsync(_context, command.AdminId, cancellationToken);
-
         if (!Enum.IsDefined(command.Resolution))
             throw new BadRequestException("Invalid dispute resolution.");
-
+        if (!Enum.IsDefined(command.ContractAction))
+            throw new BadRequestException("Invalid contract action.");
         if (string.IsNullOrWhiteSpace(command.ResolutionNote))
             throw new BadRequestException("Resolution note is required.");
 
         var dispute = await _context.Set<Dispute>()
-            .Include(d => d.Contracts)
-                .ThenInclude(c => c.ClientProfiles)
-                    .ThenInclude(p => p.User)
-            .Include(d => d.Contracts)
-                .ThenInclude(c => c.FreelancerProfiles)
-                    .ThenInclude(p => p!.User)
-            .Include(d => d.Contracts)
-                .ThenInclude(c => c.Milestones)
-            .FirstOrDefaultAsync(d => d.DisputesId == command.DisputeId, cancellationToken)
+            .Include(item => item.Contracts).ThenInclude(item => item.ClientProfiles)
+            .Include(item => item.Contracts).ThenInclude(item => item.FreelancerProfiles)
+            .Include(item => item.Contracts).ThenInclude(item => item.Milestones)
+            .FirstOrDefaultAsync(item => item.DisputesId == command.DisputeId, cancellationToken)
             ?? throw new NotFoundException("Dispute does not exist.");
 
-        if (dispute.Status != (int)DisputeStatus.DecisionPending &&
-            dispute.Status != (int)DisputeStatus.UnderReview)
+        if (dispute.Status is not ((int)DisputeStatus.UnderReview) and
+            not ((int)DisputeStatus.WaitingEvidence) and
+            not ((int)DisputeStatus.DecisionPending))
         {
-            throw new BadRequestException("Dispute must be under review or pending decision to resolve.");
+            throw new BadRequestException("Dispute must be under review, waiting for evidence, or pending decision.");
         }
+        if (dispute.AssignedAdminId != command.AdminId)
+            throw new ForbiddenAccessException("Only the assigned administrator may resolve this dispute.");
 
         var contract = dispute.Contracts;
-        var now = _dateTimeService.UtcNow;
-
-        // Validate financial amounts based on resolution type
-        ValidateFinancials(command, contract);
-
-        // Execute financial transactions
-        if (command.Resolution == DisputeResolution.ClientFavored ||
-            command.Resolution == DisputeResolution.Split)
-        {
-            if (command.RefundToClientAmount.HasValue && command.RefundToClientAmount.Value > 0)
+        if (!contract.FreelancerProfilesId.HasValue || contract.FreelancerProfiles is null)
+            throw new BadRequestException("Contract does not have a freelancer.");
+        var escrow = await _context.Set<ContractEscrow>()
+            .FirstOrDefaultAsync(item => item.ContractsId == contract.ContractsId, cancellationToken)
+            ?? throw new NotFoundException("Contract escrow does not exist.");
+        var milestones = contract.Milestones.OrderBy(item => item.SortOrder).ThenBy(item => item.CreatedAt).ToList();
+        var inputs = command.MilestoneDecisions
+            .GroupBy(item => item.MilestoneId)
+            .ToDictionary(group => group.Key, group =>
             {
-                await ExecuteRefundAsync(contract, dispute, command.RefundToClientAmount.Value, now, cancellationToken);
-            }
-        }
+                if (group.Count() != 1)
+                    throw new BadRequestException("Each milestone may have only one administrative decision.");
+                return group.Single();
+            });
 
-        if (command.Resolution == DisputeResolution.FreelancerFavored ||
-            command.Resolution == DisputeResolution.Split)
+        var required = command.ContractAction == AdminContractAction.Terminate
+            ? milestones.Where(item => item.Amount - item.ReleasedAmount > Tolerance).Select(item => item.MilestonesId).ToHashSet()
+            : milestones.Where(item => item.Status == (int)MilestoneStatus.Disputed ||
+                                       item.MilestonesId == dispute.MilestonesId)
+                .Select(item => item.MilestonesId)
+                .ToHashSet();
+        if (required.Any(id => !inputs.ContainsKey(id)))
+            throw new BadRequestException("A decision is required for every affected milestone.");
+        if (inputs.Keys.Any(id => milestones.All(item => item.MilestonesId != id)))
+            throw new BadRequestException("A milestone decision does not belong to this contract.");
+
+        foreach (var input in inputs.Values)
         {
-            if (command.ReleaseToFreelancerAmount.HasValue && command.ReleaseToFreelancerAmount.Value > 0)
+            if (!Enum.IsDefined(input.Outcome))
+                throw new BadRequestException("Invalid milestone outcome.");
+            var milestone = milestones.Single(item => item.MilestonesId == input.MilestoneId);
+            var allocatable = Math.Max(0m, milestone.Amount - milestone.ReleasedAmount);
+            if (input.AdditionalReleaseToFreelancer < 0 || input.RefundToClient < 0 ||
+                Math.Abs(input.AdditionalReleaseToFreelancer + input.RefundToClient - allocatable) > Tolerance)
             {
-                await ExecuteReleaseAsync(contract, dispute, command.ReleaseToFreelancerAmount.Value, now, cancellationToken);
+                throw new BadRequestException($"Allocation for milestone '{milestone.Title}' must equal its unreleased escrow amount.");
             }
+            if (input.Outcome == DisputeMilestoneOutcome.Accepted && input.RefundToClient > Tolerance)
+                throw new BadRequestException("Accepted milestones must release all remaining funds to the freelancer.");
+            if (input.Outcome is DisputeMilestoneOutcome.Rejected or DisputeMilestoneOutcome.Cancelled &&
+                input.AdditionalReleaseToFreelancer > Tolerance)
+                throw new BadRequestException("Rejected or cancelled milestones must refund all remaining funds to the client.");
+            if (input.Outcome == DisputeMilestoneOutcome.PartiallyAccepted &&
+                (input.AdditionalReleaseToFreelancer <= 0 || input.RefundToClient <= 0))
+                throw new BadRequestException("Partially accepted milestones require both a release and a refund.");
         }
 
-        // Execute milestone actions
-        if (command.MilestoneActions is { Count: > 0 })
+        var totalRelease = inputs.Values.Sum(item => item.AdditionalReleaseToFreelancer);
+        var totalRefund = inputs.Values.Sum(item => item.RefundToClient);
+        var currentRemaining = Math.Max(0m, escrow.FundedAmount - escrow.ReleasedAmount);
+        if (totalRelease + totalRefund - currentRemaining > Tolerance)
+            throw new BadRequestException("Settlement exceeds the remaining contract escrow.");
+
+        var clientWallet = await _context.Set<UserWallet>()
+            .FirstOrDefaultAsync(item => item.UserId == contract.ClientProfiles.UserId, cancellationToken)
+            ?? throw new BadRequestException("Client escrow wallet does not exist.");
+        if (clientWallet.HeldTokens + Tolerance < totalRelease + totalRefund)
+            throw new BadRequestException("Client held wallet balance is insufficient for this settlement.");
+        var freelancerWallet = await WalletWorkflow.GetOrCreateWalletAsync(
+            _context,
+            contract.FreelancerProfiles.UserId,
+            _clock.UtcNow,
+            cancellationToken);
+
+        var now = _clock.UtcNow;
+        var systemMessages = new List<Message>();
+        var notifications = new List<Notification>();
+        await using var transaction = await _context.BeginTransactionAsync(cancellationToken);
+
+        clientWallet.HeldTokens -= totalRelease + totalRefund;
+        clientWallet.AvailableTokens += totalRefund;
+        clientWallet.UpdatedAt = now;
+        if (totalRelease > 0)
+            WalletWorkflow.CreditWithdrawable(freelancerWallet, totalRelease, now);
+
+        foreach (var input in inputs.Values)
         {
-            await ExecuteMilestoneActionsAsync(command.MilestoneActions, contract, now, cancellationToken);
+            var milestone = milestones.Single(item => item.MilestonesId == input.MilestoneId);
+            _context.Set<DisputeMilestoneDecision>().Add(new DisputeMilestoneDecision
+            {
+                DisputeMilestoneDecisionId = Guid.NewGuid(),
+                DisputesId = dispute.DisputesId,
+                MilestonesId = milestone.MilestonesId,
+                Outcome = (int)input.Outcome,
+                MilestoneAmountSnapshot = milestone.Amount,
+                ReleasedAmountSnapshot = milestone.ReleasedAmount,
+                AdditionalReleaseAmount = input.AdditionalReleaseToFreelancer,
+                RefundAmount = input.RefundToClient,
+                DecidedByAdminId = command.AdminId,
+                CreatedAt = now
+            });
+
+            if (input.AdditionalReleaseToFreelancer > 0)
+                AddReleaseLedger(contract, escrow, milestone, clientWallet, freelancerWallet, dispute, input.AdditionalReleaseToFreelancer, now);
+            if (input.RefundToClient > 0)
+                AddRefundLedger(contract, escrow, milestone, clientWallet, dispute, input.RefundToClient, now);
+
+            milestone.ReleasedAmount += input.AdditionalReleaseToFreelancer;
+            milestone.LastReleasedAt = input.AdditionalReleaseToFreelancer > 0 ? now : milestone.LastReleasedAt;
+            milestone.Status = input.Outcome switch
+            {
+                DisputeMilestoneOutcome.Accepted or DisputeMilestoneOutcome.PartiallyAccepted => (int)MilestoneStatus.Approved,
+                DisputeMilestoneOutcome.Rejected => (int)MilestoneStatus.InProgress,
+                _ => (int)MilestoneStatus.Cancelled
+            };
+            milestone.ApprovedAt = milestone.Status == (int)MilestoneStatus.Approved ? now : milestone.ApprovedAt;
+            milestone.UpdatedAt = now;
+            AddAudit(command.AdminId, dispute.DisputesId, "Dispute.MilestoneDecision", new
+            {
+                milestone.MilestonesId,
+                outcome = input.Outcome.ToString(),
+                input.AdditionalReleaseToFreelancer,
+                input.RefundToClient
+            }, now);
         }
 
-        // Execute contract action
-        ExecuteContractAction(command, contract, now);
+        escrow.ReleasedAmount += totalRelease;
+        escrow.FundedAmount -= totalRefund;
+        var remaining = Math.Max(0m, escrow.FundedAmount - escrow.ReleasedAmount);
+        if (command.ContractAction == AdminContractAction.Terminate && remaining > Tolerance)
+            throw new BadRequestException("Terminating a contract requires allocating all remaining escrow.");
+        escrow.Status = remaining <= Tolerance
+            ? totalRelease > 0 ? (int)ContractEscrowStatus.Released : (int)ContractEscrowStatus.Refunded
+            : escrow.ReleasedAmount > 0 ? (int)ContractEscrowStatus.PartiallyReleased : (int)ContractEscrowStatus.Funded;
+        escrow.ReleasedAt = escrow.Status == (int)ContractEscrowStatus.Released ? now : escrow.ReleasedAt;
+        escrow.RefundedAt = escrow.Status == (int)ContractEscrowStatus.Refunded ? now : escrow.RefundedAt;
 
-        // Update dispute
+        contract.Status = command.ContractAction == AdminContractAction.Resume
+            ? (int)ContractStatus.Active
+            : (int)ContractStatus.Cancelled;
+        contract.UpdatedAt = now;
         dispute.Status = (int)DisputeStatus.Resolved;
         dispute.Resolution = (int)command.Resolution;
         dispute.ResolutionNote = command.ResolutionNote.Trim();
@@ -107,233 +206,161 @@ public sealed class ResolveAdminDisputeCommandHandler :
         dispute.ResolvedAt = now;
         dispute.UpdatedAt = now;
 
+        AddAudit(command.AdminId, dispute.DisputesId, totalRefund > 0 ? "Dispute.EscrowRefund" : "Dispute.NoRefund", new { totalRefund }, now);
+        AddAudit(command.AdminId, dispute.DisputesId, totalRelease > 0 ? "Dispute.EscrowRelease" : "Dispute.NoRelease", new { totalRelease }, now);
+        AddAudit(command.AdminId, dispute.DisputesId,
+            command.ContractAction == AdminContractAction.Resume ? "Dispute.ContractResume" : "Dispute.ContractTermination",
+            new { contract.ContractsId, remaining }, now);
+        AddAudit(command.AdminId, dispute.DisputesId, "Dispute.FinalResolution", new
+        {
+            resolution = command.Resolution.ToString(),
+            command.ResolutionNote,
+            command.InternalNotes,
+            totalRelease,
+            totalRefund,
+            remaining
+        }, now);
+
+        var conversation = await _context.Set<Conversation>()
+            .FirstOrDefaultAsync(item => item.DisputesId == dispute.DisputesId, cancellationToken);
+        if (conversation is not null)
+        {
+            AddSystemMessage(conversation, $"Milestone decisions recorded for {inputs.Count} milestone(s).", now, systemMessages);
+            if (totalRefund > 0) AddSystemMessage(conversation, $"{totalRefund:N2} GigCoin refunded to the client.", now, systemMessages);
+            if (totalRelease > 0) AddSystemMessage(conversation, $"{totalRelease:N2} GigCoin released to the freelancer.", now, systemMessages);
+            AddSystemMessage(conversation,
+                command.ContractAction == AdminContractAction.Resume ? "Contract has been resumed." : "Contract has been terminated.",
+                now,
+                systemMessages);
+            AddSystemMessage(conversation,
+                $"Final decision: {AdminDisputeSupport.GetResolutionLabel((int)command.Resolution)}. {command.ResolutionNote.Trim()}",
+                now,
+                systemMessages);
+        }
+
+        foreach (var userId in new[] { contract.ClientProfiles.UserId, contract.FreelancerProfiles.UserId }.Distinct())
+        {
+            var notification = new Notification
+            {
+                NotificationsId = Guid.NewGuid(),
+                UserId = userId,
+                Type = (int)NotificationType.DisputeUpdate,
+                Title = "Dispute resolved",
+                Content = $"The dispute for '{contract.Title}' was resolved. Released: {totalRelease:N2}; refunded: {totalRefund:N2} GigCoin.",
+                ReferenceId = contract.ContractsId,
+                ReferenceType = nameof(Contract),
+                IsRead = false,
+                CreatedAt = now
+            };
+            notifications.Add(notification);
+            _context.Set<Notification>().Add(notification);
+        }
+
         await _context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
-        // System messages
-        await SendResolutionSystemMessagesAsync(dispute, contract, command, now, cancellationToken);
-
-        // Notify participants
-        var resolutionLabel = AdminDisputeSupport.GetResolutionLabel(dispute.Resolution) ?? "resolved";
-        await AdminDisputeSupport.NotifyParticipantsAsync(
-            _notifications, _logger, contract, dispute,
-            $"The dispute on contract '{contract.Title}' has been resolved: {resolutionLabel}.",
-            cancellationToken);
+        foreach (var message in systemMessages)
+        {
+            try
+            {
+                await _realtime.SendConversationEventAsync(message.ConversationsId, "ReceiveMessage", ToMessagePayload(message), cancellationToken);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                _logger.LogWarning(exception, "Failed to publish dispute resolution message {MessageId}.", message.MessagesId);
+            }
+        }
+        foreach (var notification in notifications)
+        {
+            try
+            {
+                await _notificationSender.SendToUserAsync(notification.UserId, ToNotificationDto(notification), cancellationToken);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                _logger.LogWarning(exception, "Failed to deliver dispute resolution notification.");
+            }
+        }
 
         return await AdminDisputeSupport.GetDetailAsync(_context, dispute.DisputesId, cancellationToken);
     }
 
-    private static void ValidateFinancials(ResolveAdminDisputeCommand command, Contract contract)
+    private void AddReleaseLedger(Contract contract, ContractEscrow escrow, Milestone milestone,
+        UserWallet clientWallet, UserWallet freelancerWallet, Dispute dispute, decimal amount, DateTime now)
     {
-        switch (command.Resolution)
+        var code = $"DISPUTE-RELEASE-{dispute.DisputesId:N}-{milestone.MilestonesId:N}";
+        foreach (var wallet in new[] { clientWallet, freelancerWallet })
         {
-            case DisputeResolution.ClientFavored:
-                if (command.ReleaseToFreelancerAmount.HasValue && command.ReleaseToFreelancerAmount.Value > 0)
-                    throw new BadRequestException("Client Favored resolution cannot release funds to the freelancer.");
-                break;
-
-            case DisputeResolution.FreelancerFavored:
-                if (command.RefundToClientAmount.HasValue && command.RefundToClientAmount.Value > 0)
-                    throw new BadRequestException("Freelancer Favored resolution cannot refund funds to the client.");
-                break;
-
-            case DisputeResolution.Split:
-                var refund = command.RefundToClientAmount ?? 0;
-                var release = command.ReleaseToFreelancerAmount ?? 0;
-                if (refund <= 0 || release <= 0)
-                    throw new BadRequestException("Split resolution requires both refund and release amounts.");
-                // Note: Total validation requires knowing the escrow balance, done in caller
-                break;
-
-            case DisputeResolution.Dismissed:
-                if ((command.RefundToClientAmount ?? 0) > 0 || (command.ReleaseToFreelancerAmount ?? 0) > 0)
-                    throw new BadRequestException("Dismissed resolution cannot transfer funds.");
-                break;
-        }
-    }
-
-    private async Task ExecuteRefundAsync(
-        Contract contract, Dispute dispute, decimal amount, DateTime now,
-        CancellationToken cancellationToken)
-    {
-        var clientUserId = contract.ClientProfiles.UserId;
-        var clientWallet = await _context.Set<UserWallet>()
-            .FirstOrDefaultAsync(w => w.UserId == clientUserId, cancellationToken)
-            ?? throw new BadRequestException("Client wallet not found.");
-
-        var escrow = await _context.Set<ContractEscrow>()
-            .FirstOrDefaultAsync(e => e.ContractsId == contract.ContractsId, cancellationToken);
-
-        var walletTx = new WalletTransaction
-        {
-            WalletTransactionsId = Guid.NewGuid(),
-            UserWalletsId = clientWallet.UserWalletsId,
-            UserId = clientUserId,
-            ContractsId = contract.ContractsId,
-            ContractEscrowId = escrow?.ContractEscrowId,
-            TokenAmount = amount,
-            VndAmount = 0,
-            Type = (int)WalletTransactionType.EscrowRefund,
-            Status = (int)WalletTransactionStatus.Succeeded,
-            CreatedAt = now,
-            CompletedAt = now
-        };
-        _context.Set<WalletTransaction>().Add(walletTx);
-    }
-
-    private async Task ExecuteReleaseAsync(
-        Contract contract, Dispute dispute, decimal amount, DateTime now,
-        CancellationToken cancellationToken)
-    {
-        if (!contract.FreelancerProfilesId.HasValue)
-            throw new BadRequestException("Contract does not have a freelancer.");
-
-        var freelancerUserId = await _context.Set<FreelancerProfile>()
-            .Where(p => p.FreelancerProfilesId == contract.FreelancerProfilesId.Value)
-            .Select(p => p.UserId)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        var freelancerWallet = await _context.Set<UserWallet>()
-            .FirstOrDefaultAsync(w => w.UserId == freelancerUserId, cancellationToken)
-            ?? throw new BadRequestException("Freelancer wallet not found.");
-
-        var escrow = await _context.Set<ContractEscrow>()
-            .FirstOrDefaultAsync(e => e.ContractsId == contract.ContractsId, cancellationToken);
-
-        var walletTx = new WalletTransaction
-        {
-            WalletTransactionsId = Guid.NewGuid(),
-            UserWalletsId = freelancerWallet.UserWalletsId,
-            UserId = freelancerUserId,
-            ContractsId = contract.ContractsId,
-            ContractEscrowId = escrow?.ContractEscrowId,
-            TokenAmount = amount,
-            VndAmount = 0,
-            Type = (int)WalletTransactionType.EscrowRelease,
-            Status = (int)WalletTransactionStatus.Succeeded,
-            CreatedAt = now,
-            CompletedAt = now
-        };
-        _context.Set<WalletTransaction>().Add(walletTx);
-    }
-
-    private async Task ExecuteMilestoneActionsAsync(
-        IReadOnlyList<AdminMilestoneAction> actions, Contract contract, DateTime now,
-        CancellationToken cancellationToken)
-    {
-        var milestoneIds = actions.Select(a => a.MilestoneId).ToHashSet();
-        var milestones = await _context.Set<Milestone>()
-            .Where(m => milestoneIds.Contains(m.MilestonesId) && m.ContractsId == contract.ContractsId)
-            .ToListAsync(cancellationToken);
-
-        foreach (var action in actions)
-        {
-            var milestone = milestones.FirstOrDefault(m => m.MilestonesId == action.MilestoneId);
-            if (milestone is null) continue;
-
-            switch (action.Action)
+            _context.Set<WalletTransaction>().Add(new WalletTransaction
             {
-                case 0: // Approve
-                    milestone.Status = (int)MilestoneStatus.Approved;
-                    milestone.ApprovedAt = now;
-                    break;
-                case 1: // Reject
-                    milestone.Status = (int)MilestoneStatus.Pending;
-                    break;
-                case 2: // Cancel (revert to pending)
-                    milestone.Status = (int)MilestoneStatus.Pending;
-                    break;
-            }
+                WalletTransactionsId = Guid.NewGuid(), UserWalletsId = wallet.UserWalletsId, UserId = wallet.UserId,
+                ContractsId = contract.ContractsId, ContractEscrowId = escrow.ContractEscrowId,
+                MilestonesId = milestone.MilestonesId, TokenAmount = amount, VndAmount = amount,
+                Type = (int)WalletTransactionType.EscrowRelease, Status = (int)WalletTransactionStatus.Succeeded,
+                IdempotencyKey = code, GatewayProvider = "AdminDisputeResolution", GatewayTransactionCode = code,
+                Note = "Released through dispute resolution.", CreatedAt = now, CompletedAt = now
+            });
         }
+        _context.Set<EscrowTransaction>().Add(new EscrowTransaction
+        {
+            EscrowTransactionId = Guid.NewGuid(), ContractEscrowId = escrow.ContractEscrowId,
+            MilestonesId = milestone.MilestonesId, Amount = amount,
+            Type = (int)EscrowTransactionType.ReleaseToFreelancer, Status = (int)EscrowTransactionStatus.Succeeded,
+            PaymentGateway = "AdminDisputeResolution", GatewayTransactionCode = code,
+            Note = "Released through dispute resolution.", CreatedAt = now, CompletedAt = now
+        });
     }
 
-    private static void ExecuteContractAction(
-        ResolveAdminDisputeCommand command, Contract contract, DateTime now)
+    private void AddRefundLedger(Contract contract, ContractEscrow escrow, Milestone milestone,
+        UserWallet clientWallet, Dispute dispute, decimal amount, DateTime now)
     {
-        switch (command.ContractAction)
+        var code = $"DISPUTE-REFUND-{dispute.DisputesId:N}-{milestone.MilestonesId:N}";
+        _context.Set<WalletTransaction>().Add(new WalletTransaction
         {
-            case AdminContractAction.Resume:
-                contract.Status = (int)ContractStatus.Active;
-                break;
-            case AdminContractAction.Terminate:
-                contract.Status = (int)ContractStatus.Cancelled;
-                break;
-        }
+            WalletTransactionsId = Guid.NewGuid(), UserWalletsId = clientWallet.UserWalletsId,
+            UserId = clientWallet.UserId, ContractsId = contract.ContractsId,
+            ContractEscrowId = escrow.ContractEscrowId, MilestonesId = milestone.MilestonesId,
+            TokenAmount = amount, VndAmount = amount, Type = (int)WalletTransactionType.EscrowRefund,
+            Status = (int)WalletTransactionStatus.Succeeded, IdempotencyKey = code,
+            GatewayProvider = "AdminDisputeResolution", GatewayTransactionCode = code,
+            Note = "Refunded through dispute resolution.", CreatedAt = now, CompletedAt = now
+        });
+        _context.Set<EscrowTransaction>().Add(new EscrowTransaction
+        {
+            EscrowTransactionId = Guid.NewGuid(), ContractEscrowId = escrow.ContractEscrowId,
+            MilestonesId = milestone.MilestonesId, Amount = amount,
+            Type = (int)EscrowTransactionType.RefundToClient, Status = (int)EscrowTransactionStatus.Succeeded,
+            PaymentGateway = "AdminDisputeResolution", GatewayTransactionCode = code,
+            Note = "Refunded through dispute resolution.", CreatedAt = now, CompletedAt = now
+        });
     }
 
-    private async Task SendResolutionSystemMessagesAsync(
-        Dispute dispute, Contract contract, ResolveAdminDisputeCommand command, DateTime now,
-        CancellationToken cancellationToken)
+    private void AddAudit(Guid adminId, Guid disputeId, string action, object values, DateTime now) =>
+        _context.Set<AdminAuditLog>().Add(new AdminAuditLog
+        {
+            AdminAuditLogsId = Guid.NewGuid(), AdminId = adminId, Action = action,
+            EntityId = disputeId, EntityType = nameof(Dispute),
+            NewValues = JsonSerializer.Serialize(values), CreatedAt = now
+        });
+
+    private void AddSystemMessage(Conversation conversation, string content, DateTime now, ICollection<Message> messages)
     {
-        var conversation = await _context.Set<Conversation>()
-            .Where(c => c.DisputesId == dispute.DisputesId)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (conversation is null) return;
-
-        var resolutionLabel = AdminDisputeSupport.GetResolutionLabel((int)command.Resolution) ?? "Resolved";
-
-        // Resolution message
-        var msg = ContractConversationEvents.AddSystemMessage(
-            _context, conversation,
-            $"Decision: {resolutionLabel}. {command.ResolutionNote}",
-            now);
-
-        // Financial messages
-        if (command.RefundToClientAmount > 0)
-        {
-            ContractConversationEvents.AddSystemMessage(
-                _context, conversation,
-                $"{command.RefundToClientAmount:N2} GigCoin refunded to client.",
-                now);
-        }
-
-        if (command.ReleaseToFreelancerAmount > 0)
-        {
-            ContractConversationEvents.AddSystemMessage(
-                _context, conversation,
-                $"{command.ReleaseToFreelancerAmount:N2} GigCoin released to freelancer.",
-                now);
-        }
-
-        // Contract action message
-        var contractActionText = command.ContractAction == AdminContractAction.Resume
-            ? "Contract has been resumed."
-            : "Contract has been terminated.";
-        ContractConversationEvents.AddSystemMessage(_context, conversation, contractActionText, now);
-
-        if (msg is not null)
-        {
-            try
-            {
-                await _chatRealtimeNotifier.SendConversationEventAsync(
-                    conversation.ConversationsId,
-                    "ReceiveMessage",
-                    BuildSystemMessagePayload(msg),
-                    cancellationToken);
-            }
-            catch (Exception ex) when (ex is not OperationCanceledException)
-            {
-                _logger.LogWarning(ex, "Failed to notify conversation for dispute resolution.");
-            }
-        }
+        var message = ContractConversationEvents.AddSystemMessage(_context, conversation, content, now);
+        if (message is not null) messages.Add(message);
     }
 
-    private static object BuildSystemMessagePayload(Domain.Entities.Message message)
+    private static object ToMessagePayload(Message message) => new
     {
-        return new
-        {
-            messagesId = message.MessagesId,
-            conversationsId = message.ConversationsId,
-            senderUserId = (Guid?)null,
-            messageType = message.MessageType,
-            content = message.Content,
-            replyToMessageId = (Guid?)null,
-            metadata = (string?)null,
-            clientMessageId = (string?)null,
-            sentAt = message.SentAt,
-            editedAt = (DateTime?)null,
-            isDeleted = false,
-            attachments = Array.Empty<object>()
-        };
-    }
+        messagesId = message.MessagesId, conversationsId = message.ConversationsId,
+        senderUserId = (Guid?)null, messageType = message.MessageType, content = message.Content,
+        sentAt = message.SentAt, attachments = Array.Empty<object>()
+    };
+
+    private static NotificationDto ToNotificationDto(Notification notification) => new()
+    {
+        Id = notification.NotificationsId, Source = "Personal", NotificationId = notification.NotificationsId,
+        ReadTargetId = notification.NotificationsId, Type = (NotificationType)notification.Type,
+        Title = notification.Title, Content = notification.Content, ReferenceId = notification.ReferenceId,
+        ReferenceType = notification.ReferenceType, IsRead = notification.IsRead ?? false, CreatedAt = notification.CreatedAt
+    };
 }

@@ -8,4 +8,5 @@ public sealed record AddDisputeEvidenceCommand(
     Guid ContractId,
     Guid DisputeId,
     Guid UserId,
-    IReadOnlyList<DisputeEvidenceFile> Files) : IRequest<IReadOnlyList<DisputeEvidenceResponse>>;
+    IReadOnlyList<DisputeEvidenceFile> Files,
+    Guid? RequestEvidenceId = null) : IRequest<IReadOnlyList<DisputeEvidenceResponse>>;

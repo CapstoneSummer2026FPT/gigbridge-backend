@@ -35,7 +35,7 @@ public class GetConversationMessagesQueryHandler
                     participant.DeletedAt == null,
                 cancellationToken);
 
-        if (!isParticipant)
+        if (!isParticipant && !await CanAdminReadDisputeConversationAsync(request, cancellationToken))
         {
             throw new ForbiddenAccessException("You are not a participant in this conversation.");
         }
@@ -94,6 +94,39 @@ public class GetConversationMessagesQueryHandler
                     ? schedulesById.GetValueOrDefault(message.ScheduleId.Value)
                     : null))
             .ToList();
+    }
+
+    private async Task<bool> CanAdminReadDisputeConversationAsync(
+        GetConversationMessagesQuery request,
+        CancellationToken cancellationToken)
+    {
+        if (!request.AdminDisputeId.HasValue)
+            return false;
+
+        var isAdmin = await _context.Set<User>()
+            .AsNoTracking()
+            .AnyAsync(user => user.UserId == request.UserId &&
+                              user.Role == (int)Domain.Enums.UserRole.Admin &&
+                              user.IsActive,
+                cancellationToken);
+        if (!isAdmin)
+            return false;
+
+        var disputeContractId = await _context.Set<Dispute>()
+            .AsNoTracking()
+            .Where(dispute => dispute.DisputesId == request.AdminDisputeId.Value)
+            .Select(dispute => (Guid?)dispute.ContractsId)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (!disputeContractId.HasValue)
+            return false;
+
+        return await _context.Set<Conversation>()
+            .AsNoTracking()
+            .AnyAsync(conversation => conversation.ConversationsId == request.ConversationId &&
+                                      (conversation.DisputesId == request.AdminDisputeId ||
+                                       (conversation.ContractsId == disputeContractId &&
+                                        conversation.ConversationType == (int)Domain.Enums.ConversationType.ContractWorkroom)),
+                cancellationToken);
     }
 
     private static ConversationMessageResponse ToMessageResponse(

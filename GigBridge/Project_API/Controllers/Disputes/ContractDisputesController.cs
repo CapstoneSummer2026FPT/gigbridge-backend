@@ -76,7 +76,10 @@ public sealed class ContractDisputesController : BaseApiController
                 contractId,
                 disputeId,
                 userId,
-                files));
+                files,
+                Guid.TryParse(Request.Form["requestEvidenceId"], out var requestEvidenceId)
+                    ? requestEvidenceId
+                    : null));
 
             return StatusCode(
                 StatusCodes.Status201Created,

@@ -73,7 +73,7 @@ public class SendMessageCommandHandler : IRequestHandler<SendMessageCommand, Mes
             throw new ForbiddenAccessException("You are not a participant in this conversation.");
         }
 
-        await EnsureWorkspaceConversationWritable(conversation, cancellationToken);
+        await EnsureConversationWritable(conversation, participant, cancellationToken);
 
         await EnsureReplyTargetBelongsToConversation(request, cancellationToken);
 
@@ -107,13 +107,17 @@ public class SendMessageCommandHandler : IRequestHandler<SendMessageCommand, Mes
             MessagesId = Guid.NewGuid(),
             ConversationsId = request.ConversationId,
             SenderUserId = command.UserId,
-            MessageType = attachments.Count > 0
-                ? (int)MessageType.File
-                : (int)MessageType.Text,
+            MessageType = participant.ParticipantRole == (int)ParticipantRole.Admin &&
+                          conversation.ConversationType == (int)ConversationType.Dispute
+                ? (int)MessageType.AdminOfficial
+                : attachments.Count > 0
+                    ? (int)MessageType.File
+                    : (int)MessageType.Text,
             Content = string.IsNullOrWhiteSpace(request.Content)
                 ? null
                 : request.Content.Trim(),
             ReplyToMessageId = request.ReplyToMessageId,
+            Metadata = command.ServerMetadata,
             ClientMessageId = clientMessageId,
             SentAt = now
         };
@@ -227,10 +231,17 @@ public class SendMessageCommandHandler : IRequestHandler<SendMessageCommand, Mes
         }
     }
 
-    private async Task EnsureWorkspaceConversationWritable(
+    private async Task EnsureConversationWritable(
         Conversation conversation,
+        ConversationParticipant participant,
         CancellationToken cancellationToken)
     {
+        if (conversation.ConversationType == (int)ConversationType.ContractWorkroom &&
+            participant.ParticipantRole == (int)ParticipantRole.Admin)
+        {
+            throw new ForbiddenAccessException("Administrators may only read Workspace conversations.");
+        }
+
         if (conversation.ConversationType != (int)ConversationType.ContractWorkroom ||
             !conversation.ContractsId.HasValue)
         {

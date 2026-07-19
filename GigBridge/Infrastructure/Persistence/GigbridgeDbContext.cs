@@ -57,6 +57,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
     public virtual DbSet<DisputeMessage> DisputeMessages { get; set; }
 
+    public virtual DbSet<DisputeMilestoneDecision> DisputeMilestoneDecisions { get; set; }
+
     public virtual DbSet<EsignDocument> EsignDocuments { get; set; }
 
     public virtual DbSet<EsignSignature> EsignSignatures { get; set; }
@@ -652,12 +654,23 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
             entity.HasIndex(e => e.DisputesId, "IX_DisputeEvidence_DisputesId");
 
+            entity.HasIndex(e => new { e.DisputesId, e.RequestGroupId }, "IX_DisputeEvidence_DisputesId_RequestGroupId");
+
+            entity.HasIndex(e => e.RequestedByAdminId, "IX_DisputeEvidence_RequestedByAdminId");
+
+            entity.HasIndex(e => e.ReviewedByAdminId, "IX_DisputeEvidence_ReviewedByAdminId");
+
             entity.Property(e => e.DisputeEvidenceId)
                 .HasDefaultValueSql("gen_random_uuid()")
                 .HasColumnName("DisputeEvidenceId");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.DisputesId).HasColumnName("DisputesId");
             entity.Property(e => e.FileName).HasMaxLength(500);
+            entity.Property(e => e.IsRequestedByAdmin).HasDefaultValue(false);
+            entity.Property(e => e.IsRequestFulfilled).HasDefaultValue(false);
+            entity.Property(e => e.RequestTarget)
+                .HasComment("Enum EvidenceRequestTarget: 0=Reporter, 1=Respondent, 2=Both");
+            entity.Property(e => e.ReviewNote).HasMaxLength(2000);
             entity.Property(e => e.UploadedById).HasColumnName("UploadedById");
 
             entity.HasOne(d => d.Disputes).WithMany(p => p.DisputeEvidences)
@@ -667,8 +680,42 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
             entity.HasOne(d => d.UploadedBy).WithMany(p => p.DisputeEvidences)
                 .HasForeignKey(d => d.UploadedById)
-                .OnDelete(DeleteBehavior.ClientSetNull)
+                .OnDelete(DeleteBehavior.SetNull)
                 .HasConstraintName("DisputeEvidence_usr_UploadedById_fkey");
+
+            entity.HasOne(d => d.RequestedByAdmin).WithMany()
+                .HasForeignKey(d => d.RequestedByAdminId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("DisputeEvidence_RequestedByAdminId_fkey");
+
+            entity.HasOne(d => d.ReviewedByAdmin).WithMany()
+                .HasForeignKey(d => d.ReviewedByAdminId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("DisputeEvidence_ReviewedByAdminId_fkey");
+        });
+
+        modelBuilder.Entity<DisputeMilestoneDecision>(entity =>
+        {
+            entity.HasKey(e => e.DisputeMilestoneDecisionId);
+            entity.HasIndex(e => new { e.DisputesId, e.MilestonesId }).IsUnique();
+            entity.HasIndex(e => e.DecidedByAdminId);
+            entity.Property(e => e.Outcome)
+                .HasComment("Enum DisputeMilestoneOutcome: 0=Accepted, 1=Rejected, 2=PartiallyAccepted, 3=Cancelled");
+            entity.Property(e => e.MilestoneAmountSnapshot).HasPrecision(18, 2);
+            entity.Property(e => e.ReleasedAmountSnapshot).HasPrecision(18, 2);
+            entity.Property(e => e.AdditionalReleaseAmount).HasPrecision(18, 2);
+            entity.Property(e => e.RefundAmount).HasPrecision(18, 2);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+
+            entity.HasOne(e => e.Dispute).WithMany(d => d.MilestoneDecisions)
+                .HasForeignKey(e => e.DisputesId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.Milestone).WithMany()
+                .HasForeignKey(e => e.MilestonesId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.DecidedByAdmin).WithMany()
+                .HasForeignKey(e => e.DecidedByAdminId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<DisputeMessage>(entity =>

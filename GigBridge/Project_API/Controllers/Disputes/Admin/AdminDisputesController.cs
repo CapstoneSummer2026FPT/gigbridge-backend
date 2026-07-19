@@ -4,9 +4,14 @@ using Application.Features.Admin.Disputes.DownloadEvidence.Queries;
 using Application.Features.Admin.Disputes.GetDetail.Queries;
 using Application.Features.Admin.Disputes.GetList.Queries;
 using Application.Features.Admin.Disputes.RequestEvidence.Commands;
+using Application.Features.Admin.Disputes.ReviewEvidence.Commands;
 using Application.Features.Admin.Disputes.Resolve.Commands;
+using Application.Features.Admin.Disputes.SendMessage.Commands;
 using Application.Features.Admin.Disputes.UpdateStatus.Commands;
 using Application.Features.Disputes.Common.DTOs;
+using Application.Features.Chat.Common.Messages.GetConversationMessages.DTOs;
+using Application.Features.Chat.Common.Messages.GetConversationMessages.Queries;
+using Application.Features.Chat.Common.Messages.Send.DTOs;
 using Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -15,20 +20,25 @@ namespace Project_API.Controllers.Admin.Disputes;
 
 public sealed record AdminDisputeStatusRequest(DisputeStatus Status);
 
-public sealed record AdminMilestoneActionRequest(Guid MilestoneId, int Action);
+public sealed record AdminMilestoneDecisionRequest(
+    Guid MilestoneId,
+    DisputeMilestoneOutcome Outcome,
+    decimal AdditionalReleaseToFreelancer,
+    decimal RefundToClient);
 
 public sealed record AdminResolveDisputeRequest(
     DisputeResolution Resolution,
     string ResolutionNote,
     string? InternalNotes,
-    decimal? RefundToClientAmount,
-    decimal? ReleaseToFreelancerAmount,
-    List<AdminMilestoneActionRequest>? MilestoneActions,
+    List<AdminMilestoneDecisionRequest>? MilestoneDecisions,
     int ContractAction);
 
 public sealed record AdminRequestEvidenceRequest(
     string Reason,
-    DateTime? Deadline);
+    DateTime? Deadline,
+    EvidenceRequestTarget Target);
+
+public sealed record AdminReviewEvidenceRequest(string? ReviewNote);
 
 [ApiController]
 [Route("api/admin/disputes")]
@@ -72,6 +82,79 @@ public sealed class AdminDisputesController : BaseApiController
         return Ok(ApiResponse<DisputeEvidenceDownloadResponse>.Ok(result, "Success"));
     }
 
+    [HttpGet("{disputeId:guid}/conversations/{conversationId:guid}/messages")]
+    public async Task<IActionResult> GetConversationMessages(
+        Guid disputeId,
+        Guid conversationId,
+        [FromQuery] DateTime? before,
+        [FromQuery] int pageSize = 50)
+    {
+        if (!TryGetCurrentUserId(out var adminId))
+            return InvalidTokenResponse();
+
+        var result = await Mediator.Send(new GetConversationMessagesQuery(
+            conversationId,
+            adminId,
+            before,
+            pageSize,
+            disputeId));
+        return Ok(ApiResponse<IReadOnlyList<ConversationMessageResponse>>.Ok(result, "Success"));
+    }
+
+    [HttpPost("{disputeId:guid}/conversations/{conversationId:guid}/messages")]
+    [RequestSizeLimit(502 * 1024 * 1024)]
+    public async Task<IActionResult> SendDisputeMessage(
+        Guid disputeId,
+        Guid conversationId,
+        [FromForm] string? content,
+        [FromForm] List<IFormFile>? attachments)
+    {
+        if (!TryGetCurrentUserId(out var adminId))
+            return InvalidTokenResponse();
+
+        var streams = new List<Stream>();
+        try
+        {
+            var files = new List<AdminDisputeMessageFile>();
+            foreach (var file in attachments ?? [])
+            {
+                var stream = file.OpenReadStream();
+                streams.Add(stream);
+                files.Add(new AdminDisputeMessageFile(stream, file.FileName, file.ContentType, file.Length));
+            }
+
+            var result = await Mediator.Send(new SendAdminDisputeMessageCommand(
+                disputeId,
+                conversationId,
+                adminId,
+                content,
+                files));
+            return Ok(ApiResponse<MessageResponse>.Ok(result, "Official message sent successfully."));
+        }
+        finally
+        {
+            foreach (var stream in streams)
+                await stream.DisposeAsync();
+        }
+    }
+
+    [HttpPost("{disputeId:guid}/evidence/{evidenceId:guid}/review")]
+    public async Task<IActionResult> ReviewEvidence(
+        Guid disputeId,
+        Guid evidenceId,
+        [FromBody] AdminReviewEvidenceRequest request)
+    {
+        if (!TryGetCurrentUserId(out var adminId))
+            return InvalidTokenResponse();
+
+        var result = await Mediator.Send(new ReviewDisputeEvidenceCommand(
+            disputeId,
+            evidenceId,
+            adminId,
+            request.ReviewNote));
+        return Ok(ApiResponse<DisputeEvidenceResponse>.Ok(result, "Evidence reviewed successfully."));
+    }
+
     [HttpPatch("{disputeId:guid}/status")]
     public async Task<IActionResult> UpdateStatus(
         Guid disputeId,
@@ -103,7 +186,8 @@ public sealed class AdminDisputesController : BaseApiController
             disputeId,
             adminId,
             request.Reason,
-            request.Deadline));
+            request.Deadline,
+            request.Target));
 
         return Ok(ApiResponse<AdminDisputeDetailResponse>.Ok(result, "Evidence requested successfully."));
     }
@@ -122,9 +206,11 @@ public sealed class AdminDisputesController : BaseApiController
             request.Resolution,
             request.ResolutionNote,
             request.InternalNotes,
-            request.RefundToClientAmount,
-            request.ReleaseToFreelancerAmount,
-            request.MilestoneActions?.Select(m => new AdminMilestoneAction(m.MilestoneId, m.Action)).ToList(),
+            request.MilestoneDecisions?.Select(item => new AdminMilestoneDecisionInput(
+                item.MilestoneId,
+                item.Outcome,
+                item.AdditionalReleaseToFreelancer,
+                item.RefundToClient)).ToList() ?? [],
             (AdminContractAction)request.ContractAction);
 
         var result = await Mediator.Send(command);
