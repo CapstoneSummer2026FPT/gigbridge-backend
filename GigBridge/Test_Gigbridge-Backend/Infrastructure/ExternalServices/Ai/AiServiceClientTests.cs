@@ -99,6 +99,45 @@ public class AiServiceClientTests
     }
 
     [Fact]
+    public async Task CreateInterviewDefinitionAsync_RegistersPremiumConfiguration()
+    {
+        var expectedResponse = new ApiResponse<AiInterviewDefinitionResponseDto>
+        {
+            Success = true,
+            StatusCode = 201,
+            Data = new AiInterviewDefinitionResponseDto
+            {
+                DefinitionReference = "aidef_123_signature",
+                Status = "active",
+                Language = "en",
+                Mode = "voice",
+                QuestionCount = 5
+            }
+        };
+        var handler = new MockHttpMessageHandler(HttpStatusCode.Created, expectedResponse);
+        var client = new AiServiceClient(new HttpClient(handler), _options);
+
+        var result = await client.CreateInterviewDefinitionAsync(
+            new AiInterviewDefinitionRequestDto
+            {
+                JobId = "job-123",
+                JobTitle = "Senior React Engineer",
+                JobSkills = ["React", "TypeScript"],
+                Mode = "voice",
+                Language = "en",
+                QuestionCount = 5
+            },
+            CancellationToken.None);
+
+        Assert.Equal("aidef_123_signature", result.DefinitionReference);
+        Assert.Equal(HttpMethod.Post, handler.RequestMethod);
+        Assert.Equal(
+            "http://localhost:8000/api/ai/interviews/definitions",
+            handler.RequestUri?.ToString());
+        Assert.Contains("\"question_count\":5", handler.RequestBody);
+    }
+
+    [Fact]
     public async Task StartInterviewAsync_PostsToInterviewEndpoint_AndReturnsFirstQuestion()
     {
         var expectedResponse = new ApiResponse<AiInterviewQuestionResponseDto>
@@ -125,7 +164,9 @@ public class AiServiceClientTests
             JobTitle = "Senior React Engineer",
             JobSkills = new List<string> { "React", "TypeScript" },
             Mode = "voice",
-            Language = "en"
+            Language = "en",
+            QuestionCount = 5,
+            DefinitionReference = "aidef_123_signature"
         };
 
         var result = await client.StartInterviewAsync(request, CancellationToken.None);
@@ -136,6 +177,8 @@ public class AiServiceClientTests
         Assert.Equal(HttpMethod.Post, handler.RequestMethod);
         Assert.Equal("http://localhost:8000/api/ai/interviews/start", handler.RequestUri?.ToString());
         Assert.Equal("test-key", handler.ApiKey);
+        Assert.Contains("\"question_count\":5", handler.RequestBody);
+        Assert.Contains("\"definition_reference\":\"aidef_123_signature\"", handler.RequestBody);
     }
 
     [Fact]

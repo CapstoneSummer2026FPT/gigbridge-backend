@@ -30,6 +30,54 @@ public class AiInterviewStartRequestDto
 
     [JsonPropertyName("job_questions")]
     public List<string> JobQuestions { get; set; } = new();
+
+    [JsonPropertyName("question_count")]
+    public int? QuestionCount { get; set; }
+
+    [JsonPropertyName("definition_reference")]
+    public string? DefinitionReference { get; set; }
+}
+
+public class AiInterviewDefinitionRequestDto
+{
+    [JsonPropertyName("job_id")]
+    public string JobId { get; set; } = null!;
+
+    [JsonPropertyName("job_title")]
+    public string JobTitle { get; set; } = null!;
+
+    [JsonPropertyName("job_description")]
+    public string? JobDescription { get; set; }
+
+    [JsonPropertyName("job_skills")]
+    public List<string> JobSkills { get; set; } = new();
+
+    [JsonPropertyName("mode")]
+    public string Mode { get; set; } = "voice";
+
+    [JsonPropertyName("language")]
+    public string Language { get; set; } = "auto";
+
+    [JsonPropertyName("question_count")]
+    public int QuestionCount { get; set; } = 5;
+}
+
+public class AiInterviewDefinitionResponseDto
+{
+    [JsonPropertyName("definition_reference")]
+    public string DefinitionReference { get; set; } = null!;
+
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = "active";
+
+    [JsonPropertyName("mode")]
+    public string Mode { get; set; } = "voice";
+
+    [JsonPropertyName("language")]
+    public string Language { get; set; } = "auto";
+
+    [JsonPropertyName("question_count")]
+    public int QuestionCount { get; set; }
 }
 
 public class AiInterviewConfirmRequestDto

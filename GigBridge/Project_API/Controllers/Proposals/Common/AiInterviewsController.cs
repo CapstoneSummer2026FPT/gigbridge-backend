@@ -1,9 +1,12 @@
-using System.Diagnostics;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Common.Models;
 using Application.Common.Models.Ai;
-using Domain.Entities;
+using Application.Features.AiInterviews.Freelancer.Audio.Queries;
+using Application.Features.AiInterviews.Freelancer.Confirm.Commands;
+using Application.Features.AiInterviews.Freelancer.Start.Commands;
+using Application.Features.AiInterviews.Freelancer.Transcribe.Commands;
+using Application.Features.AiInterviews.Freelancer.Requirement;
 using Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -39,13 +42,13 @@ public sealed class AiInterviewsController : BaseApiController
         [FromBody] StartAiInterviewRequest request,
         CancellationToken cancellationToken)
     {
-        var total = Stopwatch.StartNew();
+        var total = System.Diagnostics.Stopwatch.StartNew();
         if (!TryGetCurrentUserId(out var userId))
         {
             return InvalidTokenResponse();
         }
 
-        var jobPost = await _context.Set<JobPost>()
+        var jobPost = await _context.Set<Domain.Entities.JobPost>()
             .AsNoTracking()
             .Include(item => item.JobPostSkills)
                 .ThenInclude(item => item.Skills)
@@ -107,28 +110,14 @@ public sealed class AiInterviewsController : BaseApiController
         [FromForm] TranscribeAiInterviewAudioRequest request,
         CancellationToken cancellationToken)
     {
-        if (!TryGetCurrentUserId(out _))
-        {
-            return InvalidTokenResponse();
-        }
-
+        if (!TryGetCurrentUserId(out var userId)) return InvalidTokenResponse();
         if (request.AudioFile is null || request.AudioFile.Length == 0)
-        {
             return BadRequest(ApiResponse<object>.BadRequest("A recorded answer is required."));
-        }
-
-        await using var audioStream = request.AudioFile.OpenReadStream();
-        var result = await _aiServiceClient.TranscribeInterviewAudioAsync(
-            request.SessionId,
-            audioStream,
-            request.AudioFile.FileName,
-            request.AudioFile.ContentType,
-            NormalizeLanguage(request.Language),
-            cancellationToken);
-
-        return Ok(ApiResponse<AiInterviewDraftResponseDto>.Ok(
-            result,
-            "Answer transcribed successfully"));
+        await using var stream = request.AudioFile.OpenReadStream();
+        var result = await Mediator.Send(new TranscribeAiInterviewCommand(
+            userId, request.SessionId, stream, request.AudioFile.FileName,
+            request.AudioFile.ContentType, NormalizeLanguage(request.Language)), cancellationToken);
+        return Ok(ApiResponse<AiInterviewDraftResponseDto>.Ok(result, "Answer transcribed successfully"));
     }
 
     [HttpPost("confirm-answer")]
@@ -154,7 +143,7 @@ public sealed class AiInterviewsController : BaseApiController
         {
             if (Guid.TryParse(result.JobId, out var jobId) && Guid.TryParse(result.FreelancerId, out var freelancerUserId))
             {
-                var proposal = await _context.Set<Proposal>()
+                var proposal = await _context.Set<Domain.Entities.Proposal>()
                     .Include(p => p.FreelancerProfiles)
                     .FirstOrDefaultAsync(p => p.JobPostsId == jobId && p.FreelancerProfiles.UserId == freelancerUserId, cancellationToken);
 
@@ -162,7 +151,7 @@ public sealed class AiInterviewsController : BaseApiController
                 {
                     int answeredIndex = result.IsCompleted ? result.QuestionIndex : result.QuestionIndex - 1;
 
-                    var questions = await _context.Set<JobPostQuestion>()
+                    var questions = await _context.Set<Domain.Entities.JobPostQuestion>()
                         .Where(q => q.JobPostsId == jobId)
                         .OrderBy(q => q.OrderIndex)
                         .ToListAsync(cancellationToken);
@@ -173,12 +162,12 @@ public sealed class AiInterviewsController : BaseApiController
                         var now = _dateTimeService.UtcNow;
 
                         // 1. Upsert ProposalAnswer
-                        var existingAnswer = await _context.Set<ProposalAnswer>()
+                        var existingAnswer = await _context.Set<Domain.Entities.ProposalAnswer>()
                             .FirstOrDefaultAsync(a => a.ProposalsId == proposal.ProposalsId && a.JobPostQuestionsId == question.JobPostQuestionsId, cancellationToken);
 
                         if (existingAnswer is null)
                         {
-                            _context.Set<ProposalAnswer>().Add(new ProposalAnswer
+                            _context.Set<Domain.Entities.ProposalAnswer>().Add(new Domain.Entities.ProposalAnswer
                             {
                                 ProposalAnswersId = Guid.NewGuid(),
                                 ProposalsId = proposal.ProposalsId,
@@ -194,12 +183,12 @@ public sealed class AiInterviewsController : BaseApiController
                         }
 
                         // 2. Lock ProposalQuestionTimer
-                        var existingTimer = await _context.Set<ProposalQuestionTimer>()
+                        var existingTimer = await _context.Set<Domain.Entities.ProposalQuestionTimer>()
                             .FirstOrDefaultAsync(t => t.ProposalsId == proposal.ProposalsId && t.JobPostQuestionsId == question.JobPostQuestionsId, cancellationToken);
 
                         if (existingTimer is null)
                         {
-                            _context.Set<ProposalQuestionTimer>().Add(new ProposalQuestionTimer
+                            _context.Set<Domain.Entities.ProposalQuestionTimer>().Add(new Domain.Entities.ProposalQuestionTimer
                             {
                                 ProposalQuestionTimersId = Guid.NewGuid(),
                                 ProposalsId = proposal.ProposalsId,
@@ -226,10 +215,8 @@ public sealed class AiInterviewsController : BaseApiController
                 }
             }
         }
-
         return Ok(ApiResponse<AiInterviewQuestionResponseDto>.Ok(
-            result,
-            result.IsCompleted ? "Interview completed" : "Next question ready"));
+            result, result.IsCompleted ? "Interview completed" : "Next question ready"));
     }
 
     [HttpGet("{sessionId}/questions/{questionIndex:int}/audio")]
@@ -239,25 +226,13 @@ public sealed class AiInterviewsController : BaseApiController
         [FromHeader(Name = "X-Session-Token")] string audioAccessToken,
         CancellationToken cancellationToken)
     {
-        if (!TryGetCurrentUserId(out _))
-        {
-            return InvalidTokenResponse();
-        }
-
+        if (!TryGetCurrentUserId(out _)) return InvalidTokenResponse();
         if (string.IsNullOrWhiteSpace(audioAccessToken))
-        {
             return BadRequest(ApiResponse<object>.BadRequest("The interview audio token is required."));
-        }
-
-        var result = await _aiServiceClient.GetInterviewQuestionAudioAsync(
-            sessionId,
-            questionIndex,
-            audioAccessToken,
-            cancellationToken);
-
+        var result = await Mediator.Send(new GetAiInterviewQuestionAudioQuery(
+            sessionId, questionIndex, audioAccessToken), cancellationToken);
         return Ok(ApiResponse<AiInterviewQuestionAudioResponseDto>.Ok(
-            result,
-            "Question audio status retrieved"));
+            result, "Question audio status retrieved"));
     }
 
     [HttpGet("{sessionId}/questions/{questionIndex:int}/audio/stream")]
@@ -267,24 +242,23 @@ public sealed class AiInterviewsController : BaseApiController
         [FromHeader(Name = "X-Session-Token")] string audioAccessToken,
         CancellationToken cancellationToken)
     {
-        if (!TryGetCurrentUserId(out _))
-        {
-            return InvalidTokenResponse();
-        }
-
+        if (!TryGetCurrentUserId(out _)) return InvalidTokenResponse();
         if (string.IsNullOrWhiteSpace(audioAccessToken))
-        {
             return BadRequest(ApiResponse<object>.BadRequest("The interview audio token is required."));
-        }
-
-        var result = await _aiServiceClient.StreamInterviewQuestionAudioAsync(
-            sessionId,
-            questionIndex,
-            audioAccessToken,
-            cancellationToken);
+        var result = await Mediator.Send(new StreamAiInterviewQuestionAudioQuery(
+            sessionId, questionIndex, audioAccessToken), cancellationToken);
         Response.Headers.CacheControl = "no-store";
         Response.Headers.XContentTypeOptions = "nosniff";
         return File(result.AudioStream, result.ContentType);
+    }
+
+    [HttpGet("requirement/{jobPostId:guid}")]
+    public async Task<IActionResult> Requirement(Guid jobPostId, CancellationToken cancellationToken)
+    {
+        if (!TryGetCurrentUserId(out var userId)) return InvalidTokenResponse();
+        var result = await Mediator.Send(
+            new GetAiInterviewRequirementQuery(userId, jobPostId), cancellationToken);
+        return Ok(ApiResponse<AiInterviewRequirementDto>.Ok(result, "Success"));
     }
 
     private static string NormalizeMode(string? mode) =>
@@ -301,6 +275,7 @@ public sealed class AiInterviewsController : BaseApiController
 public sealed class StartAiInterviewRequest
 {
     public Guid JobPostId { get; set; }
+    public Guid? InterviewDefinitionId { get; set; }
     public string Mode { get; set; } = "voice";
     public string Language { get; set; } = "auto";
 }
