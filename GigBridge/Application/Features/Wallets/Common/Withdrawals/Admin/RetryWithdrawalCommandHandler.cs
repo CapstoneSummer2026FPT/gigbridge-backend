@@ -63,6 +63,7 @@ public sealed class RetryWithdrawalCommandHandler :
         }
 
         outbox.Status = (int)PayoutOutboxStatus.Pending;
+        outbox.AttemptCount = 0;
         outbox.NextAttemptAt = now;
         outbox.LastError = null;
         outbox.ProcessedAt = null;

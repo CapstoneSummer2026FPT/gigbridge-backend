@@ -1,6 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces.IService;
 using Application.Common.Options;
+using Application.Common.Services;
 using Application.Features.Wallets.Common;
 using Application.Features.Admin.AdminCredit.Commands;
 using Application.Features.Admin.AdminCredit.DTOs;
@@ -11,10 +12,13 @@ using Application.Features.Wallets.Common.TopUps.Confirm.Commands;
 using Application.Features.Wallets.Common.TopUps.Create.Commands;
 using Application.Features.Wallets.Common.TopUps.Sync.Commands;
 using Application.Features.Wallets.Common.Withdrawals.Create;
+using Application.Features.Wallets.Common.Withdrawals.Admin;
 using Application.Features.Wallets.Common.Withdrawals.Sync;
 using Domain.Entities;
 using Domain.Enums;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using System.Security.Cryptography;
 using Test_Gigbridge_Backend.TestSupport;
 
@@ -528,6 +532,113 @@ public class WalletWorkflowTests
     }
 
     [Fact]
+    public async Task Withdrawal_CreateWithUnavailableProviderDoesNotLockWallet()
+    {
+        var fixture = new WalletFixture();
+        fixture.SeedFreelancerWallet(100m);
+        fixture.SeedBankAccount();
+        var provider = new FakePayoutProvider
+        {
+            Availability = new PayoutProviderAvailability(
+                false,
+                null,
+                "HTTP_403",
+                "PayOS denied access.")
+        };
+
+        await Assert.ThrowsAsync<ExternalServiceException>(() =>
+            fixture.CreateWithdrawalHandler(provider).Handle(
+                new CreateWithdrawalCommand(
+                    fixture.FreelancerUserId,
+                    new CreateWithdrawalRequest(30m, null, "withdrawal-provider-unavailable")),
+                CancellationToken.None));
+
+        var wallet = Assert.Single(fixture.Wallets.Entities);
+        Assert.Equal(100m, wallet.AvailableTokens);
+        Assert.Equal(100m, wallet.WithdrawableTokens);
+        Assert.Equal(0m, wallet.PendingWithdrawalTokens);
+        Assert.Empty(fixture.Withdrawals.Entities);
+        Assert.Empty(fixture.PayoutOutboxes.Entities);
+    }
+
+    [Fact]
+    public async Task Withdrawal_CreateWithInsufficientPayoutBalanceDoesNotLockWallet()
+    {
+        var fixture = new WalletFixture();
+        fixture.SeedFreelancerWallet(100m);
+        fixture.SeedBankAccount();
+        var provider = new FakePayoutProvider
+        {
+            Availability = new PayoutProviderAvailability(true, 20_000m, null, null)
+        };
+
+        await Assert.ThrowsAsync<ExternalServiceException>(() =>
+            fixture.CreateWithdrawalHandler(provider).Handle(
+                new CreateWithdrawalCommand(
+                    fixture.FreelancerUserId,
+                    new CreateWithdrawalRequest(30m, null, "withdrawal-provider-balance")),
+                CancellationToken.None));
+
+        var wallet = Assert.Single(fixture.Wallets.Entities);
+        Assert.Equal(100m, wallet.AvailableTokens);
+        Assert.Equal(100m, wallet.WithdrawableTokens);
+        Assert.Equal(0m, wallet.PendingWithdrawalTokens);
+        Assert.Empty(fixture.Withdrawals.Entities);
+        Assert.Empty(fixture.PayoutOutboxes.Entities);
+    }
+
+    [Fact]
+    public async Task PayoutWorker_UnavailableProviderStopsBeforeClaimingOutbox()
+    {
+        var provider = new FakePayoutProvider
+        {
+            Availability = new PayoutProviderAvailability(false, null, "HTTP_403", "Denied")
+        };
+        using var services = new ServiceCollection()
+            .AddSingleton<IPayoutProvider>(provider)
+            .BuildServiceProvider();
+        var worker = new PayoutOutboxWorker(
+            services.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<PayoutOutboxWorker>.Instance,
+            Options.Create(new WalletWithdrawalOptions { Enabled = true }));
+        var method = typeof(PayoutOutboxWorker).GetMethod(
+            "ProcessBatchAsync",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+
+        await (Task)method.Invoke(worker, [CancellationToken.None])!;
+
+        Assert.Equal(1, provider.AvailabilityChecks);
+    }
+
+    [Fact]
+    public async Task Withdrawal_AdminRetryResetsDeadLetterAttempts()
+    {
+        var fixture = new WalletFixture();
+        var response = await fixture.CreatePendingWithdrawalAsync(20m, "withdrawal-admin-retry");
+        var withdrawal = Assert.Single(fixture.Withdrawals.Entities);
+        withdrawal.Status = (int)WithdrawalStatus.SyncRequired;
+        var outbox = Assert.Single(fixture.PayoutOutboxes.Entities);
+        outbox.Status = (int)PayoutOutboxStatus.DeadLettered;
+        outbox.AttemptCount = 6;
+        outbox.LastError = "HTTP_403";
+        outbox.ProcessedAt = fixture.Now;
+        var handler = new RetryWithdrawalCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now.AddMinutes(1)));
+
+        var result = await handler.Handle(
+            new RetryWithdrawalCommand(fixture.AdminUserId, response.WithdrawalId),
+            CancellationToken.None);
+
+        Assert.True(result.CanRetry);
+        Assert.Equal((int)PayoutOutboxStatus.Pending, outbox.Status);
+        Assert.Equal(0, outbox.AttemptCount);
+        Assert.Null(outbox.LastError);
+        Assert.Null(outbox.ProcessedAt);
+        Assert.Equal(fixture.Now.AddMinutes(1), outbox.NextAttemptAt);
+    }
+
+    [Fact]
     public async Task Withdrawal_SyncSuccessFinalizesOnce()
     {
         var fixture = new WalletFixture();
@@ -716,7 +827,7 @@ public class WalletWorkflowTests
             return bankAccount;
         }
 
-        public CreateWithdrawalCommandHandler CreateWithdrawalHandler()
+        public CreateWithdrawalCommandHandler CreateWithdrawalHandler(FakePayoutProvider? provider = null)
         {
             return new CreateWithdrawalCommandHandler(
                 Context,
@@ -729,7 +840,8 @@ public class WalletWorkflowTests
                     DailyMaxTokens = 2_000m,
                     Provider = "PayOS"
                 }),
-                new FakeBankAccountProtector());
+                new FakeBankAccountProtector(),
+                provider ?? new FakePayoutProvider());
         }
 
         public SyncWithdrawalCommandHandler CreateSyncHandler(FakePayoutProvider provider)
@@ -830,6 +942,14 @@ public class WalletWorkflowTests
             "PENDING",
             null);
 
+        public PayoutProviderAvailability Availability { get; set; } = new(
+            true,
+            1_000_000_000m,
+            null,
+            null);
+
+        public int AvailabilityChecks { get; private set; }
+
         public Task<PayoutProviderResult> CreatePayoutAsync(
             PayoutCreateRequest request,
             CancellationToken cancellationToken)
@@ -842,6 +962,13 @@ public class WalletWorkflowTests
             CancellationToken cancellationToken)
         {
             return Task.FromResult(StatusResult);
+        }
+
+        public Task<PayoutProviderAvailability> CheckAvailabilityAsync(
+            CancellationToken cancellationToken)
+        {
+            AvailabilityChecks++;
+            return Task.FromResult(Availability);
         }
     }
 

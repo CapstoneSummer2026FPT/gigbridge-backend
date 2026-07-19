@@ -21,17 +21,20 @@ public sealed class CreateWithdrawalCommandHandler :
     private readonly IDateTimeService _dateTimeService;
     private readonly WalletWithdrawalOptions _options;
     private readonly IBankAccountProtector _bankAccountProtector;
+    private readonly IPayoutProvider _payoutProvider;
 
     public CreateWithdrawalCommandHandler(
         IApplicationDbContext context,
         IDateTimeService dateTimeService,
         IOptions<WalletWithdrawalOptions> options,
-        IBankAccountProtector bankAccountProtector)
+        IBankAccountProtector bankAccountProtector,
+        IPayoutProvider payoutProvider)
     {
         _context = context;
         _dateTimeService = dateTimeService;
         _options = options.Value;
         _bankAccountProtector = bankAccountProtector;
+        _payoutProvider = payoutProvider;
     }
 
     public async Task<WithdrawalResponse> Handle(
@@ -125,6 +128,18 @@ public sealed class CreateWithdrawalCommandHandler :
         if (netVndAmount <= 0)
         {
             throw new BadRequestException("Withdrawal amount must be greater than the payout fee.");
+        }
+
+        var availability = await _payoutProvider.CheckAvailabilityAsync(cancellationToken);
+        if (!availability.IsAvailable)
+        {
+            throw new ExternalServiceException("Bank withdrawals are temporarily unavailable.");
+        }
+
+        if (!availability.BalanceVnd.HasValue || availability.BalanceVnd.Value < netVndAmount)
+        {
+            throw new ExternalServiceException(
+                "Bank withdrawals are temporarily unavailable because the payout account balance is insufficient.");
         }
 
         var withdrawalId = Guid.NewGuid();

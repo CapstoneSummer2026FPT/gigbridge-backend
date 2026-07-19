@@ -27,4 +27,6 @@ public sealed class PayOsPayoutOptions
     public string? ApiKey { get; set; }
 
     public string? ChecksumKey { get; set; }
+
+    public string? ProxyUrl { get; set; }
 }

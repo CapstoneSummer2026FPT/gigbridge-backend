@@ -60,6 +60,9 @@ public sealed class PayoutOutboxWorker : BackgroundService
         if (!_options.Enabled) return;
 
         using var scope = _scopeFactory.CreateScope();
+        var provider = scope.ServiceProvider.GetRequiredService<IPayoutProvider>();
+        if (!(await provider.CheckAvailabilityAsync(cancellationToken)).IsAvailable) return;
+
         var context = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
         var now = DateTime.UtcNow;
         var timeout = now.AddMinutes(_options.ProcessingTimeoutMinutes);
@@ -112,6 +115,8 @@ public sealed class PayoutOutboxWorker : BackgroundService
         using var scope = _scopeFactory.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
         var provider = scope.ServiceProvider.GetRequiredService<IPayoutProvider>();
+        if (!(await provider.CheckAvailabilityAsync(cancellationToken)).IsAvailable) return;
+
         var dateTimeService = scope.ServiceProvider.GetRequiredService<IDateTimeService>();
         var now = dateTimeService.UtcNow;
         var syncBefore = now.AddMinutes(-Math.Max(1, _options.SyncIntervalMinutes));

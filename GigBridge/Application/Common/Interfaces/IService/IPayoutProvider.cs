@@ -12,6 +12,9 @@ public interface IPayoutProvider
         PayoutStatusRequest request,
         CancellationToken cancellationToken);
 
+    Task<PayoutProviderAvailability> CheckAvailabilityAsync(
+        CancellationToken cancellationToken);
+
 }
 
 public enum PayoutProviderOutcome
@@ -44,3 +47,9 @@ public sealed record PayoutProviderResult(
     string? ProviderTransactionCode,
     string? RawStatus,
     string? FailureReason);
+
+public sealed record PayoutProviderAvailability(
+    bool IsAvailable,
+    decimal? BalanceVnd,
+    string? ErrorCode,
+    string? SafeMessage);

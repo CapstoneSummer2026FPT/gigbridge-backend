@@ -1,6 +1,8 @@
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Common.Models;
+using System.Net;
+using System.Net.Sockets;
 using Application.Features.Chat.Common.Schedules;
 using Application.Features.JobInvitations.Common.Email;
 using Application.Features.Proposals.Common.Email;
@@ -75,9 +77,10 @@ public static class DependencyInjection
             .Bind(configuration.GetSection(PayOsPayoutOptions.SectionName))
             .PostConfigure(options =>
             {
-                options.ClientId ??= Environment.GetEnvironmentVariable("PAYOS_PAYOUT_CLIENT_ID");
-                options.ApiKey ??= Environment.GetEnvironmentVariable("PAYOS_PAYOUT_API_KEY");
-                options.ChecksumKey ??= Environment.GetEnvironmentVariable("PAYOS_PAYOUT_CHECKSUM_KEY");
+                options.ClientId = ReadFallback(options.ClientId, "PAYOS_PAYOUT_CLIENT_ID");
+                options.ApiKey = ReadFallback(options.ApiKey, "PAYOS_PAYOUT_API_KEY");
+                options.ChecksumKey = ReadFallback(options.ChecksumKey, "PAYOS_PAYOUT_CHECKSUM_KEY");
+                options.ProxyUrl = ReadFallback(options.ProxyUrl, "PAYOS_PAYOUT_PROXY_URL");
             })
             .Validate(
                 options => !withdrawalsEnabled ||
@@ -85,6 +88,11 @@ public static class DependencyInjection
                         !string.IsNullOrWhiteSpace(options.ApiKey) &&
                         !string.IsNullOrWhiteSpace(options.ChecksumKey)),
                 "PayOS payout configuration is missing. Set PAYOS_PAYOUT_CLIENT_ID, PAYOS_PAYOUT_API_KEY, and PAYOS_PAYOUT_CHECKSUM_KEY.")
+            .Validate(
+                options => string.IsNullOrWhiteSpace(options.ProxyUrl) ||
+                    Uri.TryCreate(options.ProxyUrl, UriKind.Absolute, out var proxyUri) &&
+                    (proxyUri.Scheme == Uri.UriSchemeHttp || proxyUri.Scheme == Uri.UriSchemeHttps),
+                "PayOS payout proxy URL must be an absolute HTTP or HTTPS URL.")
             .ValidateOnStart();
 
         services
@@ -178,7 +186,9 @@ public static class DependencyInjection
         services.AddScoped<IPayOsPaymentLinkClient>(provider =>
             new PayOsPaymentLinkClient(provider.GetRequiredKeyedService<PayOSClient>("OrderClient")));
         services.AddScoped<IPayoutProvider>(provider =>
-            new PayOsPayoutProvider(provider.GetRequiredKeyedService<PayOSClient>("PayoutClient")));
+            new PayOsPayoutProvider(
+                provider.GetRequiredKeyedService<PayOSClient>("PayoutClient"),
+                provider.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>()));
 
         // AI Service Client
         services.AddHttpClient<IAiServiceClient, AiServiceClient>();
@@ -198,7 +208,7 @@ public static class DependencyInjection
         services.AddKeyedSingleton("PayoutClient", (sp, key) =>
         {
             var options = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<PayOsPayoutOptions>>().Value;
-            return new PayOSClient(new PayOSOptions
+            var clientOptions = new PayOSOptions
             {
                 ClientId = options.ClientId,
                 ApiKey = options.ApiKey,
@@ -206,7 +216,12 @@ public static class DependencyInjection
                 LogLevel = LogLevel.Warning,
                 MaxRetries = 0,
                 TimeoutMs = 20_000
-            });
+            };
+            clientOptions.HttpClient = string.IsNullOrWhiteSpace(options.ProxyUrl)
+                ? new HttpClient(CreatePayoutDirectHandler())
+                : new HttpClient(CreatePayoutProxyHandler(options.ProxyUrl));
+
+            return new PayOSClient(clientOptions);
         });
 
         services
@@ -274,5 +289,45 @@ public static class DependencyInjection
             .AddDbContextCheck<GigbridgeDbContext>("Database");
 
         return services;
+    }
+
+    private static string? ReadFallback(string? configuredValue, string environmentVariable) =>
+        string.IsNullOrWhiteSpace(configuredValue)
+            ? Environment.GetEnvironmentVariable(environmentVariable)
+            : configuredValue;
+
+    internal static SocketsHttpHandler CreatePayoutDirectHandler() => new()
+    {
+        UseProxy = false,
+        ConnectCallback = async (context, cancellationToken) =>
+        {
+            var socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+            try
+            {
+                await socket.ConnectAsync(context.DnsEndPoint, cancellationToken);
+                return new NetworkStream(socket, ownsSocket: true);
+            }
+            catch
+            {
+                socket.Dispose();
+                throw;
+            }
+        }
+    };
+
+    internal static HttpClientHandler CreatePayoutProxyHandler(string proxyUrl)
+    {
+        var proxyUri = new Uri(proxyUrl);
+        var address = new UriBuilder(proxyUri) { UserName = string.Empty, Password = string.Empty }.Uri;
+        var proxy = new WebProxy(address);
+        if (!string.IsNullOrWhiteSpace(proxyUri.UserInfo))
+        {
+            var credentials = proxyUri.UserInfo.Split(':', 2);
+            proxy.Credentials = new NetworkCredential(
+                Uri.UnescapeDataString(credentials[0]),
+                credentials.Length == 2 ? Uri.UnescapeDataString(credentials[1]) : string.Empty);
+        }
+
+        return new HttpClientHandler { Proxy = proxy, UseProxy = true };
     }
 }
