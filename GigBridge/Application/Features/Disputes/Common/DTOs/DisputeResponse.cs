@@ -23,6 +23,8 @@ public sealed record DisputeResponse(
     int? Resolution,
     string? ResolutionLabel,
     string? ResolutionNote,
+    Guid? AssignedAdminId,
+    DateTime? AssignedAt,
     DateTime? ResolvedAt,
     DateTime CreatedAt,
     DateTime? UpdatedAt,

@@ -52,6 +52,8 @@ public sealed record AdminDisputeDetailResponse(
     string? ResolutionLabel,
     string? ResolutionNote,
     Guid? ResolvedByAdminId,
+    Guid? AssignedAdminId,
+    DateTime? AssignedAt,
     DateTime? ResolvedAt,
     DateTime CreatedAt,
     DateTime? UpdatedAt,

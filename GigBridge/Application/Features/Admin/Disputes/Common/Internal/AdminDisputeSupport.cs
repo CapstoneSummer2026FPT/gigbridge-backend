@@ -96,6 +96,8 @@ internal static class AdminDisputeSupport
             GetResolutionLabel(dispute.Resolution),
             dispute.ResolutionNote,
             dispute.ResolvedByAdminId,
+            dispute.AssignedAdminId,
+            dispute.AssignedAt,
             dispute.ResolvedAt,
             dispute.CreatedAt,
             dispute.UpdatedAt,

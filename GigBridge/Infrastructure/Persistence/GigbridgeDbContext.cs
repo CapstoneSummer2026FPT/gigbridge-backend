@@ -587,6 +587,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
             entity.HasIndex(e => e.ResolvedByAdminId, "IX_Disputes_ResolvedByAdminId");
 
+            entity.HasIndex(e => e.AssignedAdminId, "IX_Disputes_AssignedAdminId");
+
             entity.HasIndex(e => e.Status, "IX_Disputes_Status");
 
             entity.Property(e => e.DisputesId)
@@ -607,7 +609,9 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
                 .HasComment("Enum DisputeUrgency: 0=Normal, 1=High, 2=Critical");
             entity.Property(e => e.OpenedAt);
             entity.Property(e => e.Resolution).HasComment("Enum DisputeResolution: 0=ClientFavored, 1=FreelancerFavored, 2=Split, 3=Dismissed");
-            entity.Property(e => e.Status).HasComment("Enum DisputeStatus: 0=Open, 1=UnderReview, 2=Resolved, 3=Closed");
+            entity.Property(e => e.Status).HasComment("Enum DisputeStatus: 0=Open, 1=WaitingAdmin, 2=UnderReview, 3=WaitingEvidence, 4=DecisionPending, 5=Resolved, 6=Closed");
+            entity.Property(e => e.AssignedAdminId).HasColumnName("AssignedAdminId");
+            entity.Property(e => e.AssignedAt);
 
             entity.HasOne(d => d.Contracts).WithMany(p => p.Disputes)
                 .HasForeignKey(d => d.ContractsId)
@@ -629,6 +633,10 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.HasOne(d => d.ResolvedByAdmin).WithMany(p => p.DisputeResolvedByAdmins)
                 .HasForeignKey(d => d.ResolvedByAdminId)
                 .HasConstraintName("Disputes_ResolvedByAdminId_fkey");
+
+            entity.HasOne(d => d.AssignedAdmin).WithMany(p => p.DisputeAssignedByAdmins)
+                .HasForeignKey(d => d.AssignedAdminId)
+                .HasConstraintName("Disputes_AssignedAdminId_fkey");
 
             entity.HasOne(d => d.Initiator).WithMany(p => p.DisputeInitiators)
                 .HasForeignKey(d => d.InitiatorId)

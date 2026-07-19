@@ -3,6 +3,7 @@ using Application.Features.Admin.Disputes.Common.DTOs;
 using Application.Features.Admin.Disputes.DownloadEvidence.Queries;
 using Application.Features.Admin.Disputes.GetDetail.Queries;
 using Application.Features.Admin.Disputes.GetList.Queries;
+using Application.Features.Admin.Disputes.RequestEvidence.Commands;
 using Application.Features.Admin.Disputes.Resolve.Commands;
 using Application.Features.Admin.Disputes.UpdateStatus.Commands;
 using Application.Features.Disputes.Common.DTOs;
@@ -14,9 +15,20 @@ namespace Project_API.Controllers.Admin.Disputes;
 
 public sealed record AdminDisputeStatusRequest(DisputeStatus Status);
 
+public sealed record AdminMilestoneActionRequest(Guid MilestoneId, int Action);
+
 public sealed record AdminResolveDisputeRequest(
     DisputeResolution Resolution,
-    string ResolutionNote);
+    string ResolutionNote,
+    string? InternalNotes,
+    decimal? RefundToClientAmount,
+    decimal? ReleaseToFreelancerAmount,
+    List<AdminMilestoneActionRequest>? MilestoneActions,
+    int ContractAction);
+
+public sealed record AdminRequestEvidenceRequest(
+    string Reason,
+    DateTime? Deadline);
 
 [ApiController]
 [Route("api/admin/disputes")]
@@ -76,6 +88,26 @@ public sealed class AdminDisputesController : BaseApiController
         return Ok(ApiResponse<AdminDisputeDetailResponse>.Ok(result, "Dispute status updated successfully."));
     }
 
+    [HttpPost("{disputeId:guid}/request-evidence")]
+    public async Task<IActionResult> RequestEvidence(
+        Guid disputeId,
+        [FromBody] AdminRequestEvidenceRequest request)
+    {
+        if (!TryGetCurrentUserId(out var adminId))
+            return InvalidTokenResponse();
+
+        if (string.IsNullOrWhiteSpace(request.Reason))
+            throw new Application.Common.Exceptions.BadRequestException("Evidence request reason is required.");
+
+        var result = await Mediator.Send(new RequestEvidenceCommand(
+            disputeId,
+            adminId,
+            request.Reason,
+            request.Deadline));
+
+        return Ok(ApiResponse<AdminDisputeDetailResponse>.Ok(result, "Evidence requested successfully."));
+    }
+
     [HttpPost("{disputeId:guid}/resolve")]
     public async Task<IActionResult> Resolve(
         Guid disputeId,
@@ -84,11 +116,18 @@ public sealed class AdminDisputesController : BaseApiController
         if (!TryGetCurrentUserId(out var adminId))
             return InvalidTokenResponse();
 
-        var result = await Mediator.Send(new ResolveAdminDisputeCommand(
+        var command = new ResolveAdminDisputeCommand(
             disputeId,
             adminId,
             request.Resolution,
-            request.ResolutionNote));
+            request.ResolutionNote,
+            request.InternalNotes,
+            request.RefundToClientAmount,
+            request.ReleaseToFreelancerAmount,
+            request.MilestoneActions?.Select(m => new AdminMilestoneAction(m.MilestoneId, m.Action)).ToList(),
+            (AdminContractAction)request.ContractAction);
+
+        var result = await Mediator.Send(command);
 
         return Ok(ApiResponse<AdminDisputeDetailResponse>.Ok(result, "Dispute resolved successfully."));
     }

@@ -142,6 +142,8 @@ public sealed class GetContractDisputesQueryHandler :
                     ? ResolutionLabels.GetValueOrDefault(dispute.Resolution.Value)
                     : null,
                 dispute.ResolutionNote,
+                dispute.AssignedAdminId,
+                dispute.AssignedAt,
                 dispute.ResolvedAt,
                 dispute.CreatedAt,
                 dispute.UpdatedAt,

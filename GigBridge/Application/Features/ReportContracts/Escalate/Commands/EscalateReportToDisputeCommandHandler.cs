@@ -326,6 +326,8 @@ public sealed class EscalateReportToDisputeCommandHandler :
             dispute.Resolution,
             null,
             dispute.ResolutionNote,
+            dispute.AssignedAdminId,
+            dispute.AssignedAt,
             dispute.ResolvedAt,
             dispute.CreatedAt,
             dispute.UpdatedAt,

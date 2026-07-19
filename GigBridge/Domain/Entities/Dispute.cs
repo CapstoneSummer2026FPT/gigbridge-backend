@@ -66,6 +66,16 @@ public partial class Dispute
 
     public DateTime? OpenedAt { get; set; }
 
+    /// <summary>
+    /// The administrator assigned to review this dispute.
+    /// </summary>
+    public Guid? AssignedAdminId { get; set; }
+
+    /// <summary>
+    /// When the administrator was assigned to this dispute.
+    /// </summary>
+    public DateTime? AssignedAt { get; set; }
+
     public virtual Contract Contracts { get; set; } = null!;
 
     public virtual ICollection<Conversation> Conversations { get; set; } = new List<Conversation>();
@@ -77,6 +87,8 @@ public partial class Dispute
     public virtual Milestone? Milestones { get; set; }
 
     public virtual User? ResolvedByAdmin { get; set; }
+
+    public virtual User? AssignedAdmin { get; set; }
 
     public virtual User Initiator { get; set; } = null!;
 
