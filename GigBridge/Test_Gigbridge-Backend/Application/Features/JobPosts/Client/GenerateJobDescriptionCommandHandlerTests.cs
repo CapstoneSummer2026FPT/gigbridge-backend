@@ -4,8 +4,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using Application.Common.Interfaces.IService;
 using Application.Common.Models.Ai;
-using Application.Features.JobPosts.Client.GenerateJobDescription.Commands;
-using Application.Features.JobPosts.Client.GenerateJobDescription.DTOs;
+using Application.Features.Premium.Client.AiJobPostGenerator.Commands;
+using Application.Features.Premium.Client.AiJobPostGenerator.DTOs;
 using Domain.Entities;
 using Test_Gigbridge_Backend.TestSupport;
 using Xunit;
@@ -64,10 +64,10 @@ public class GenerateJobDescriptionCommandHandlerTests
         };
 
         var fakeAiClient = new FakeAiServiceClient { ResponseToReturn = aiResponse };
-        var fakeDateTime = new FakeDateTimeService(DateTime.UtcNow);
+        var fakePremium = new FakePremiumAccessService();
 
-        var handler = new GenerateJobDescriptionCommandHandler(context, fakeAiClient, fakeDateTime);
-        var command = new GenerateJobDescriptionCommand("React, TypeScript developer");
+        var handler = new GenerateJobDescriptionCommandHandler(context, fakeAiClient, fakePremium);
+        var command = new GenerateJobDescriptionCommand(Guid.NewGuid(), "React, TypeScript developer");
 
         // Act
         var result = await handler.Handle(command, CancellationToken.None);
@@ -96,6 +96,10 @@ public class GenerateJobDescriptionCommandHandlerTests
         {
             return Task.FromResult(ResponseToReturn);
         }
+
+        public Task<AiInterviewDefinitionResponseDto> CreateInterviewDefinitionAsync(
+            AiInterviewDefinitionRequestDto request,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
         public Task<AiInterviewQuestionResponseDto> StartInterviewAsync(
             AiInterviewStartRequestDto request,
@@ -127,15 +131,22 @@ public class GenerateJobDescriptionCommandHandlerTests
             int questionIndex,
             string audioAccessToken,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task<TalentMatchingResponseDto> RecommendTalentAsync(
+            TalentMatchingRequestDto request,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task<TalentRerankResponseDto> RerankTalentAsync(
+            TalentRerankRequestDto request,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
-    private class FakeDateTimeService : IDateTimeService
+    private sealed class FakePremiumAccessService : IPremiumAccessService
     {
-        public FakeDateTimeService(DateTime utcNow)
-        {
-            UtcNow = utcNow;
-        }
-
-        public DateTime UtcNow { get; }
+        public Task<bool> IsPremiumFreelancerAsync(Guid userId, CancellationToken cancellationToken) => Task.FromResult(false);
+        public Task<bool> IsPremiumClientAsync(Guid userId, CancellationToken cancellationToken) => Task.FromResult(true);
+        public Task<global::Application.Features.Premium.Common.PremiumBenefitsDto> GetPremiumBenefitsAsync(Guid userId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task RequirePremiumFreelancerAsync(Guid userId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task RequirePremiumClientAsync(Guid userId, CancellationToken cancellationToken) => Task.CompletedTask;
     }
 }

@@ -583,6 +583,9 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
             entity.HasIndex(e => e.Status, "IX_Disputes_Status");
 
+            entity.HasIndex(e => new { e.Status, e.IsVipPriority, e.ResolutionTargetAt },
+                "IX_Disputes_Status_Vip_ResolutionTarget");
+
             entity.Property(e => e.DisputesId)
                 .HasDefaultValueSql("gen_random_uuid()")
                 .HasColumnName("DisputesId");
@@ -592,6 +595,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.Property(e => e.Resolution).HasComment("Enum DisputeResolution: 0=ClientFavored, 1=FreelancerFavored, 2=Split, 3=Dismissed");
             entity.Property(e => e.Status).HasComment("Enum DisputeStatus: 0=Open, 1=UnderReview, 2=Resolved, 3=Closed");
             entity.Property(e => e.InitiatorId).HasColumnName("InitiatorId");
+            entity.Property(e => e.IsVipPriority).HasDefaultValue(false);
+            entity.Property(e => e.AiAnalysisStatus).HasConversion<int>();
 
             entity.HasOne(d => d.Contracts).WithMany(p => p.Disputes)
                 .HasForeignKey(d => d.ContractsId)
@@ -1048,6 +1053,9 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.HasIndex(e => new { e.Status, e.Visibility, e.CreatedAt }, "IX_JobPosts_Status_Visibility_CreatedAt")
                 .IsDescending(false, false, true);
 
+            entity.HasIndex(e => new { e.IsFeatured, e.FeaturedUntil },
+                "IX_JobPosts_IsFeatured_FeaturedUntil");
+
             entity.Property(e => e.JobPostsId)
                 .HasDefaultValueSql("gen_random_uuid()")
                 .HasColumnName("JobPostsId");
@@ -1078,6 +1086,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
                 .HasDefaultValue(false)
                 .HasColumnName("IsAIGenerated");
 
+            entity.Property(e => e.IsFeatured).HasDefaultValue(false);
+
             entity.Property(e => e.Status)
                 .HasComment("Enum JobPostStatus: 0=Draft, 1=Open, 2=Closed, 3=Cancelled");
 
@@ -1103,6 +1113,61 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
                 .HasForeignKey(d => d.ClientProfilesId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("JobPosts_clPro_ClientProfilesId_fkey");
+        });
+
+        modelBuilder.Entity<JobPostPromotion>(entity =>
+        {
+            entity.ToTable("JobPostPromotions");
+            entity.HasKey(e => e.JobPostPromotionsId);
+            entity.Property(e => e.IdempotencyKey).HasMaxLength(200);
+            entity.Property(e => e.ImageUrl).HasMaxLength(2048);
+            entity.Property(e => e.PromotionTitle).HasMaxLength(140);
+            entity.Property(e => e.PromotionDescription).HasMaxLength(1000);
+            entity.Property(e => e.TokenCost).HasPrecision(18, 4);
+            entity.HasIndex(e => new { e.ClientUserId, e.IdempotencyKey }).IsUnique();
+            entity.HasIndex(e => new { e.JobPostId, e.FeaturedUntil });
+            entity.HasOne(e => e.JobPost).WithMany(e => e.JobPostPromotions)
+                .HasForeignKey(e => e.JobPostId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.ClientUser).WithMany()
+                .HasForeignKey(e => e.ClientUserId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.WalletTransaction).WithMany()
+                .HasForeignKey(e => e.WalletTransactionId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<AiInterviewDefinition>(entity =>
+        {
+            entity.ToTable("AiInterviewDefinitions");
+            entity.HasKey(e => e.AiInterviewDefinitionsId);
+            entity.Property(e => e.Language).HasMaxLength(20);
+            entity.Property(e => e.Mode).HasMaxLength(20);
+            entity.Property(e => e.ExternalReference).HasMaxLength(200);
+            entity.HasIndex(e => new { e.ClientUserId, e.JobPostId, e.Status });
+            entity.HasOne(e => e.JobPost).WithMany().HasForeignKey(e => e.JobPostId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.ClientUser).WithMany().HasForeignKey(e => e.ClientUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<AiInterviewAttempt>(entity =>
+        {
+            entity.ToTable("AiInterviewAttempts");
+            entity.HasKey(e => e.AiInterviewAttemptsId);
+            entity.Property(e => e.ExternalSessionId).HasMaxLength(128);
+            entity.HasIndex(e => e.ExternalSessionId).IsUnique();
+            entity.HasIndex(e => new { e.AiInterviewDefinitionId, e.Status });
+            entity.HasOne(e => e.Definition).WithMany(e => e.Attempts)
+                .HasForeignKey(e => e.AiInterviewDefinitionId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.FreelancerUser).WithMany().HasForeignKey(e => e.FreelancerUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<AiInterviewAnswerResult>(entity =>
+        {
+            entity.ToTable("AiInterviewAnswerResults");
+            entity.HasKey(e => e.AiInterviewAnswerResultsId);
+            entity.HasIndex(e => new { e.AiInterviewAttemptId, e.QuestionIndex }).IsUnique();
+            entity.HasOne(e => e.Attempt).WithMany(e => e.Answers)
+                .HasForeignKey(e => e.AiInterviewAttemptId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<JobPostAttachment>(entity =>
@@ -2565,8 +2630,5 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
                 .HasConstraintName("WorkExperiences_fl_FreelancerId_fkey");
         });
 
-        OnModelCreatingPartial(modelBuilder);
     }
-
-    partial void OnModelCreatingPartial(ModelBuilder modelBuilder);
 }

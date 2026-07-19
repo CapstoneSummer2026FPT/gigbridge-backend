@@ -28,13 +28,26 @@ public sealed class PremiumAccessService : IPremiumAccessService
     public async Task<bool> IsPremiumFreelancerAsync(
         Guid userId,
         CancellationToken cancellationToken) =>
-        (await GetPremiumBenefitsAsync(userId, cancellationToken)).IsPremium;
+        (await GetPremiumBenefitsForRoleAsync(userId, UserRole.Freelancer, cancellationToken)).IsPremium;
+
+    public async Task<bool> IsPremiumClientAsync(
+        Guid userId,
+        CancellationToken cancellationToken) =>
+        (await GetPremiumBenefitsForRoleAsync(userId, UserRole.Client, cancellationToken)).IsPremium;
 
     public async Task<PremiumBenefitsDto> GetPremiumBenefitsAsync(
         Guid userId,
+        CancellationToken cancellationToken) =>
+        await GetPremiumBenefitsForRoleAsync(userId, UserRole.Freelancer, cancellationToken);
+
+    private async Task<PremiumBenefitsDto> GetPremiumBenefitsForRoleAsync(
+        Guid userId,
+        UserRole targetRole,
         CancellationToken cancellationToken)
     {
-        var key = $"premium:access:{userId:N}";
+        var key = targetRole == UserRole.Freelancer
+            ? $"premium:access:{userId:N}"
+            : $"premium:access:client:{userId:N}";
         var cached = await _cache.GetAsync<PremiumBenefitsDto>(key, cancellationToken);
         if (cached is not null &&
             (!cached.IsPremium || cached.PremiumUntil > _clock.UtcNow))
@@ -62,12 +75,12 @@ public sealed class PremiumAccessService : IPremiumAccessService
                 item.SubscriptionPlans.IsActive == true &&
                 item.SubscriptionPlans.Price > 0 &&
                 (item.SubscriptionPlans.TargetRole == null ||
-                 item.SubscriptionPlans.TargetRole == (int)UserRole.Freelancer))
+                 item.SubscriptionPlans.TargetRole == (int)targetRole))
             .OrderByDescending(item => item.EndDate)
             .Select(item => new { item.EndDate, item.SubscriptionPlans.Name })
             .FirstOrDefaultAsync(cancellationToken);
 
-        var isPremium = user.Role == (int)UserRole.Freelancer && subscription is not null;
+        var isPremium = user.Role == (int)targetRole && subscription is not null;
         var result = new PremiumBenefitsDto(
             isPremium,
             user.IsEmailVerified,
@@ -85,5 +98,13 @@ public sealed class PremiumAccessService : IPremiumAccessService
     {
         if (!await IsPremiumFreelancerAsync(userId, cancellationToken))
             throw new ForbiddenAccessException("An active Premium Freelancer subscription is required.");
+    }
+
+    public async Task RequirePremiumClientAsync(
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        if (!await IsPremiumClientAsync(userId, cancellationToken))
+            throw new ForbiddenAccessException("This feature requires a Premium subscription");
     }
 }

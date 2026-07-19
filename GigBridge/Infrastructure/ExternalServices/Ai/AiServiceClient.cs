@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using System.Net.Http.Headers;
+using System.Text.Json;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces.IService;
 using Application.Common.Models;
@@ -77,6 +78,20 @@ public class AiServiceClient : IAiServiceClient
         }
 
         return apiResponse.Data;
+    }
+
+    public async Task<AiInterviewDefinitionResponseDto> CreateInterviewDefinitionAsync(
+        AiInterviewDefinitionRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient.PostAsJsonAsync(
+            "api/ai/interviews/definitions",
+            request,
+            cancellationToken);
+
+        return await ReadInterviewResponseAsync<AiInterviewDefinitionResponseDto>(
+            response,
+            cancellationToken);
     }
 
     public async Task<AiInterviewQuestionResponseDto> StartInterviewAsync(
@@ -190,7 +205,8 @@ public class AiServiceClient : IAiServiceClient
             {
                 response.Dispose();
             }
-            throw new HttpRequestException(message, null, response.StatusCode);
+            throw new ExternalServiceException(
+                "AI service is temporarily unavailable. Please try again later.");
         }
 
         var contentType = response.Content.Headers.ContentType?.MediaType ?? "audio/mpeg";
@@ -200,6 +216,49 @@ public class AiServiceClient : IAiServiceClient
             AudioStream = new ResponseOwnedStream(responseStream, response),
             ContentType = contentType
         };
+    }
+
+    public async Task<TalentMatchingResponseDto> RecommendTalentAsync(
+        TalentMatchingRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient.PostAsJsonAsync(
+            "api/ai/matching/recommend", request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+            throw new ExternalServiceException(
+                "AI service is temporarily unavailable. Please try again later.");
+        var apiResponse = await response.Content.ReadFromJsonAsync<ApiResponse<TalentMatchingResponseDto>>(
+            cancellationToken: cancellationToken);
+        if (apiResponse is null || !apiResponse.Success || apiResponse.Data is null)
+            throw new ExternalServiceException(
+                "AI service is temporarily unavailable. Please try again later.");
+        return apiResponse.Data;
+    }
+
+    public async Task<TalentRerankResponseDto> RerankTalentAsync(
+        TalentRerankRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient.PostAsJsonAsync(
+            "api/ai/matching/rerank", request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+            throw new ExternalServiceException(
+                "AI service is temporarily unavailable. Please try again later.");
+        ApiResponse<TalentRerankResponseDto>? apiResponse;
+        try
+        {
+            apiResponse = await response.Content.ReadFromJsonAsync<ApiResponse<TalentRerankResponseDto>>(
+                cancellationToken: cancellationToken);
+        }
+        catch (JsonException exception)
+        {
+            throw new ExternalServiceException(
+                "AI service returned an invalid response. Please try again later.", exception);
+        }
+        if (apiResponse is null || !apiResponse.Success || apiResponse.Data is null)
+            throw new ExternalServiceException(
+                "AI service is temporarily unavailable. Please try again later.");
+        return apiResponse.Data;
     }
 
     private static async Task<T> ReadInterviewResponseAsync<T>(
@@ -214,7 +273,8 @@ public class AiServiceClient : IAiServiceClient
                 ? errorResponse.Message
                 : $"AI interview service returned {(int)response.StatusCode}.";
 
-            throw new HttpRequestException(message, null, response.StatusCode);
+            throw new ExternalServiceException(
+                "AI service is temporarily unavailable. Please try again later.");
         }
 
         var apiResponse = await response.Content.ReadFromJsonAsync<ApiResponse<T>>(
@@ -222,8 +282,8 @@ public class AiServiceClient : IAiServiceClient
 
         if (apiResponse is null || !apiResponse.Success || apiResponse.Data is null)
         {
-            throw new HttpRequestException(
-                apiResponse?.Message ?? "The AI interview service returned an invalid response.");
+            throw new ExternalServiceException(
+                "AI service is temporarily unavailable. Please try again later.");
         }
 
         return apiResponse.Data;
