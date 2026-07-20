@@ -103,7 +103,7 @@ public class AiServiceClient : IAiServiceClient
             request,
             cancellationToken);
 
-        return await ReadInterviewResponseAsync<AiInterviewQuestionResponseDto>(
+        return await ReadAiResponseAsync<AiInterviewQuestionResponseDto>(
             response,
             cancellationToken);
     }
@@ -136,7 +136,7 @@ public class AiServiceClient : IAiServiceClient
             form,
             cancellationToken);
 
-        return await ReadInterviewResponseAsync<AiInterviewDraftResponseDto>(
+        return await ReadAiResponseAsync<AiInterviewDraftResponseDto>(
             response,
             cancellationToken);
     }
@@ -150,7 +150,7 @@ public class AiServiceClient : IAiServiceClient
             request,
             cancellationToken);
 
-        return await ReadInterviewResponseAsync<AiInterviewQuestionResponseDto>(
+        return await ReadAiResponseAsync<AiInterviewQuestionResponseDto>(
             response,
             cancellationToken);
     }
@@ -167,7 +167,7 @@ public class AiServiceClient : IAiServiceClient
         request.Headers.TryAddWithoutValidation("X-Session-Token", audioAccessToken);
 
         using var response = await _httpClient.SendAsync(request, cancellationToken);
-        return await ReadInterviewResponseAsync<AiInterviewQuestionAudioResponseDto>(
+        return await ReadAiResponseAsync<AiInterviewQuestionAudioResponseDto>(
             response,
             cancellationToken);
     }
@@ -218,6 +218,34 @@ public class AiServiceClient : IAiServiceClient
         };
     }
 
+    public async Task<VettingEvaluationResponseDto> AnalyzeVettingAsync(
+        AnalyzeVettingRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient.PostAsJsonAsync(
+            "api/ai/interviews/ai-interview-judging",
+            request,
+            cancellationToken);
+
+        return await ReadAiResponseAsync<VettingEvaluationResponseDto>(
+            response,
+            cancellationToken);
+    }
+
+    public async Task<AiChatBoxResponseDto> QueryChatBoxAsync(
+        AiChatBoxRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient.PostAsJsonAsync(
+            "api/ai/rag/query",
+            request,
+            cancellationToken);
+
+        return await ReadAiResponseAsync<AiChatBoxResponseDto>(
+            response,
+            cancellationToken);
+    }
+
     public async Task<TalentMatchingResponseDto> RecommendTalentAsync(
         TalentMatchingRequestDto request,
         CancellationToken cancellationToken = default)
@@ -262,6 +290,10 @@ public class AiServiceClient : IAiServiceClient
     }
 
     private static async Task<T> ReadInterviewResponseAsync<T>(
+        HttpResponseMessage response,
+        CancellationToken cancellationToken) => await ReadAiResponseAsync<T>(response, cancellationToken);
+
+    private static async Task<T> ReadAiResponseAsync<T>(
         HttpResponseMessage response,
         CancellationToken cancellationToken)
     {

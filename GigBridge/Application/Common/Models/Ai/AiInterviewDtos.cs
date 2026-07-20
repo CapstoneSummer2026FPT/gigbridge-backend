@@ -28,6 +28,9 @@ public class AiInterviewStartRequestDto
     [JsonPropertyName("language")]
     public string Language { get; set; } = "auto";
 
+    [JsonPropertyName("job_questions")]
+    public List<string> JobQuestions { get; set; } = new();
+
     [JsonPropertyName("question_count")]
     public int? QuestionCount { get; set; }
 
@@ -120,6 +123,12 @@ public class AiInterviewQuestionResponseDto
 
     [JsonPropertyName("feedback")]
     public AiInterviewFeedbackDto? Feedback { get; set; }
+
+    [JsonPropertyName("job_id")]
+    public string? JobId { get; set; }
+
+    [JsonPropertyName("freelancer_id")]
+    public string? FreelancerId { get; set; }
 }
 
 public class AiInterviewFeedbackDto
@@ -201,4 +210,85 @@ public sealed class AiInterviewAudioStreamDto
 {
     public Stream AudioStream { get; init; } = Stream.Null;
     public string ContentType { get; init; } = "audio/mpeg";
+}
+
+public class AnalyzeVettingRequestDto
+{
+    [JsonPropertyName("freelancer_id")]
+    public string FreelancerId { get; set; } = null!;
+
+    [JsonPropertyName("job_title")]
+    public string JobTitle { get; set; } = null!;
+
+    [JsonPropertyName("job_description")]
+    public string? JobDescription { get; set; }
+
+    [JsonPropertyName("job_skills")]
+    public List<string> JobSkills { get; set; } = new();
+
+    [JsonPropertyName("qa_pairs")]
+    public List<QuestionAnswerPairDto> QaPairs { get; set; } = new();
+}
+
+public class QuestionAnswerPairDto
+{
+    [JsonPropertyName("question_index")]
+    public int QuestionIndex { get; set; }
+
+    [JsonPropertyName("question_text")]
+    public string QuestionText { get; set; } = null!;
+
+    [JsonPropertyName("candidate_answer")]
+    public string CandidateAnswer { get; set; } = null!;
+}
+
+public class VettingEvaluationResponseDto
+{
+    [JsonPropertyName("score")]
+    public int Score { get; set; }
+
+    [JsonPropertyName("summary")]
+    public string Summary { get; set; } = string.Empty;
+
+    [JsonPropertyName("technical_skills")]
+    public List<string> TechnicalSkills { get; set; } = new();
+
+    [JsonPropertyName("soft_skills")]
+    public List<string> SoftSkills { get; set; } = new();
+
+    [JsonPropertyName("recommended_hire")]
+    public bool RecommendedHire { get; set; }
+
+    [JsonPropertyName("holistic_adjustment")]
+    public int HolisticAdjustment { get; set; }
+
+    [JsonPropertyName("holistic_adjustment_reason")]
+    public string HolisticAdjustmentReason { get; set; } = string.Empty;
+
+    [JsonPropertyName("graded_questions")]
+    public List<GradedQuestionDto> GradedQuestions { get; set; } = new();
+}
+
+public class GradedQuestionDto
+{
+    [JsonPropertyName("question_index")]
+    public int QuestionIndex { get; set; }
+
+    [JsonPropertyName("question_text")]
+    public string QuestionText { get; set; } = null!;
+
+    [JsonPropertyName("question_type")]
+    public string QuestionType { get; set; } = null!;
+
+    [JsonPropertyName("difficulty")]
+    public string Difficulty { get; set; } = null!;
+
+    [JsonPropertyName("candidate_answer")]
+    public string CandidateAnswer { get; set; } = null!;
+
+    [JsonPropertyName("score")]
+    public int Score { get; set; }
+
+    [JsonPropertyName("feedback")]
+    public string Feedback { get; set; } = string.Empty;
 }

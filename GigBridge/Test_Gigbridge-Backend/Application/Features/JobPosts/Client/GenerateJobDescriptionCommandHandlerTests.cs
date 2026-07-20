@@ -132,6 +132,14 @@ public class GenerateJobDescriptionCommandHandlerTests
             string audioAccessToken,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();
 
+        public Task<VettingEvaluationResponseDto> AnalyzeVettingAsync(
+            AnalyzeVettingRequestDto request,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task<AiChatBoxResponseDto> QueryChatBoxAsync(
+            AiChatBoxRequestDto request,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
         public Task<TalentMatchingResponseDto> RecommendTalentAsync(
             TalentMatchingRequestDto request,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();

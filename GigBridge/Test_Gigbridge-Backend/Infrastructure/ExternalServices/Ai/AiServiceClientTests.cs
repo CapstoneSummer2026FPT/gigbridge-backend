@@ -309,6 +309,78 @@ public class AiServiceClientTests
         Assert.Equal("session-audio-token", handler.SessionToken);
     }
 
+    [Fact]
+    public async Task AnalyzeVettingAsync_PostsToVettingEvaluationEndpoint_AndReturnsEvaluation()
+    {
+        var expectedResponse = new ApiResponse<VettingEvaluationResponseDto>
+        {
+            Success = true,
+            StatusCode = 200,
+            Message = "Success",
+            Data = new VettingEvaluationResponseDto
+            {
+                Score = 85,
+                Summary = "Summary details",
+                TechnicalSkills = new List<string> { "React" },
+                SoftSkills = new List<string> { "Communication" },
+                RecommendedHire = true,
+                HolisticAdjustment = 5,
+                HolisticAdjustmentReason = "Reason",
+                GradedQuestions = new List<GradedQuestionDto>
+                {
+                    new GradedQuestionDto
+                    {
+                        QuestionIndex = 1,
+                        QuestionText = "Q1",
+                        QuestionType = "theoretical",
+                        Difficulty = "easy",
+                        CandidateAnswer = "A1",
+                        Score = 80,
+                        Feedback = "Feedback"
+                    }
+                }
+            }
+        };
+
+        var handler = new MockHttpMessageHandler(HttpStatusCode.OK, expectedResponse);
+        var client = new AiServiceClient(new HttpClient(handler), _options);
+
+        var request = new AnalyzeVettingRequestDto
+        {
+            FreelancerId = "freelancer-123",
+            JobTitle = "React Developer",
+            JobDescription = "React job",
+            JobSkills = new List<string> { "React" },
+            QaPairs = new List<QuestionAnswerPairDto>
+            {
+                new QuestionAnswerPairDto
+                {
+                    QuestionIndex = 1,
+                    QuestionText = "Q1",
+                    CandidateAnswer = "A1"
+                }
+            }
+        };
+
+        var result = await client.AnalyzeVettingAsync(request, CancellationToken.None);
+
+        Assert.Equal(85, result.Score);
+        Assert.Equal("Summary details", result.Summary);
+        Assert.Single(result.TechnicalSkills);
+        Assert.Contains("React", result.TechnicalSkills);
+        Assert.True(result.RecommendedHire);
+        Assert.Equal(5, result.HolisticAdjustment);
+        Assert.Equal("Reason", result.HolisticAdjustmentReason);
+        Assert.Single(result.GradedQuestions);
+        Assert.Equal("Q1", result.GradedQuestions[0].QuestionText);
+        Assert.Equal(80, result.GradedQuestions[0].Score);
+        Assert.Equal(HttpMethod.Post, handler.RequestMethod);
+        Assert.Equal("http://localhost:8000/api/ai/interviews/ai-interview-judging", handler.RequestUri?.ToString());
+        Assert.Equal("test-key", handler.ApiKey);
+        Assert.Contains("freelancer_id", handler.RequestBody);
+        Assert.Contains("freelancer-123", handler.RequestBody);
+    }
+
     private class MockHttpMessageHandler : HttpMessageHandler
     {
         private readonly HttpStatusCode _statusCode;

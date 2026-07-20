@@ -81,6 +81,7 @@ public class GenerateJobDescriptionCommandHandler
             var major = await _context.Set<Major>()
                 .AsNoTracking()
                 .FirstOrDefaultAsync(m => m.MajorsId == selectedMajorId.Value, cancellationToken);
+
             selectedMajorName = major?.Name;
         }
 

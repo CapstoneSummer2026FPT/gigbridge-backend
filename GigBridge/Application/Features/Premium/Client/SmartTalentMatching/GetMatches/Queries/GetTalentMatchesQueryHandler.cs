@@ -66,18 +66,24 @@ public sealed class GetTalentMatchesQueryHandler(
                 var profile = profiles[x.Id];
                 return new TalentMatchDto(
                     x.Id,
+                    x.Id,
                     profile.DisplayName ?? "Freelancer",
                     profile.Title,
                     Math.Round((decimal)x.Match.MatchScore * 100m, 2),
+                    "medium",
                     x.Match.SkillsMatched,
                     x.Match.SkillsMissing,
-                    x.Match.MatchReasons);
+                    Array.Empty<string>(),
+                    x.Match.MatchReasons,
+                    new TalentMatchScoreBreakdownDto(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+                    new TalentMatchEligibilityEvidenceDto(0, 0, 0, true, true),
+                    new TalentMatchVerifiedWorkEvidenceDto(0, 0, 0, Array.Empty<string>()));
             })
             .OrderByDescending(x => x.MatchPercentage)
             .Take(query.TopK)
             .ToList();
         if (matches.Count == 0)
             throw new NotFoundException("No matching freelancers found. Try adjusting your criteria.");
-        return new TalentMatchingResultDto(query.JobPostId, matches);
+        return new TalentMatchingResultDto(query.JobPostId, "ai-basic", false, matches);
     }
 }

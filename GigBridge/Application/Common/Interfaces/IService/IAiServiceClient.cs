@@ -29,6 +29,12 @@ public interface IAiServiceClient
         int questionIndex,
         string audioAccessToken,
         CancellationToken cancellationToken = default);
+    Task<VettingEvaluationResponseDto> AnalyzeVettingAsync(
+        AnalyzeVettingRequestDto request,
+        CancellationToken cancellationToken = default);
+    Task<AiChatBoxResponseDto> QueryChatBoxAsync(
+        AiChatBoxRequestDto request,
+        CancellationToken cancellationToken = default);
     Task<TalentMatchingResponseDto> RecommendTalentAsync(
         TalentMatchingRequestDto request,
         CancellationToken cancellationToken = default);
@@ -36,3 +42,5 @@ public interface IAiServiceClient
         TalentRerankRequestDto request,
         CancellationToken cancellationToken = default);
 }
+
+
