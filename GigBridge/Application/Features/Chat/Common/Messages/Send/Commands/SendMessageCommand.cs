@@ -5,4 +5,5 @@ namespace Application.Features.Chat.Common.Messages.Send.Commands;
 
 public record SendMessageCommand(
     Guid UserId,
-    SendMessageRequest Request) : IRequest<MessageResponse>;
+    SendMessageRequest Request,
+    string? ServerMetadata = null) : IRequest<MessageResponse>;

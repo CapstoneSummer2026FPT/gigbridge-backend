@@ -27,4 +27,13 @@ public class JobPostGenerationResponseDto
 
     [JsonPropertyName("question_recruitment")]
     public List<string> QuestionRecruitment { get; set; } = new();
+
+    [JsonPropertyName("budget_min")]
+    public decimal? BudgetMin { get; set; }
+
+    [JsonPropertyName("budget_max")]
+    public decimal? BudgetMax { get; set; }
+
+    [JsonPropertyName("currency")]
+    public string? Currency { get; set; }
 }

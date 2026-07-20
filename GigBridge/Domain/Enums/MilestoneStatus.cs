@@ -10,5 +10,6 @@ public enum MilestoneStatus
     PaymentProofUploaded = 4,
     [Obsolete("Payment state is derived from milestone ReleasedAmount and contract escrow status.")]
     PaymentConfirmed = 5,
-    Disputed = 6
+    Disputed = 6,
+    Cancelled = 7
 }

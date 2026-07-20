@@ -23,5 +23,7 @@ public record JobPostSummaryDto(
     string? ClientFullName,
     List<JobPostSkillDto> Skills,
     List<string> CustomSkillNames,
-    List<string> SkillNames
+    List<string> SkillNames,
+    bool IsFeatured,
+    DateTime? FeaturedUntil
 );

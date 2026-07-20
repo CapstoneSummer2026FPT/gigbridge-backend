@@ -58,6 +58,8 @@ public partial class Contract
 
     public virtual ICollection<ContractProductHandoff> ContractProductHandoffs { get; set; } = new List<ContractProductHandoff>();
 
+    public virtual ICollection<ReportContract> ReportContracts { get; set; } = new List<ReportContract>();
+
     public virtual Proposal? Proposals { get; set; }
 
     public virtual ICollection<Review> Reviews { get; set; } = new List<Review>();

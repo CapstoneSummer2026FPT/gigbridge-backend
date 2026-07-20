@@ -11,5 +11,6 @@ public enum MessageType
     MilestoneEvent = 6,
     PaymentEvent = 7,
     DisputeEvent = 8,
-    Schedule = 9
+    Schedule = 9,
+    AdminOfficial = 10
 }

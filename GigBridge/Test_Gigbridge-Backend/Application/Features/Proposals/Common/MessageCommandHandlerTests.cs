@@ -77,6 +77,46 @@ public class MessageCommandHandlerTests
     }
 
     [Fact]
+    public async Task SendMessage_DisputedWorkspaceConversationIsReadOnly()
+    {
+        var fixture = new MessageFixture();
+        var contractId = Guid.NewGuid();
+        fixture.Conversation.ConversationType = (int)ConversationType.ContractWorkroom;
+        fixture.Conversation.ContractsId = contractId;
+        fixture.Context.AddSet(new Contract
+        {
+            ContractsId = contractId,
+            Title = "Disputed contract",
+            Status = (int)ContractStatus.Disputed,
+            CreatedAt = fixture.Now
+        });
+
+        var handler = new SendMessageCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopChatRealtimeNotifier());
+
+        var exception = await Assert.ThrowsAsync<BadRequestException>(() =>
+            handler.Handle(
+                new SendMessageCommand(
+                    fixture.ClientUserId,
+                    new SendMessageRequest(
+                        fixture.ConversationId,
+                        "disputed-workspace-1",
+                        "This must not be sent.",
+                        null,
+                        [])),
+                CancellationToken.None));
+
+        Assert.Equal(
+            "This contract is currently under dispute. Please continue communication in the dispute conversation.",
+            exception.Message);
+        Assert.Empty(fixture.Messages.Entities);
+        Assert.Null(fixture.Conversation.LastMessageId);
+        Assert.Equal(0, fixture.Context.SaveChangesCount);
+    }
+
+    [Fact]
     public async Task SendMessage_CreatesMessageAndIncrementsUnreadForOtherParticipants()
     {
         var fixture = new MessageFixture();

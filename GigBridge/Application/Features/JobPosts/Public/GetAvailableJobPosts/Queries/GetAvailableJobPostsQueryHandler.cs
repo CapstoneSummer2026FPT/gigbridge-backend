@@ -1,6 +1,7 @@
 using Application.Common.Interfaces;
 using Application.Features.JobPosts.Common;
 using Application.Features.JobPosts.Public.GetAvailableJobPosts.DTOs;
+using Application.Common.Interfaces.IService;
 using Domain.Entities;
 using Domain.Services;
 using MediatR;
@@ -11,10 +12,12 @@ namespace Application.Features.JobPosts.Public.GetAvailableJobPosts.Queries;
 public class GetAvailableJobPostsQueryHandler : IRequestHandler<GetAvailableJobPostsQuery, IEnumerable<JobPostSummaryDto>>
 {
     private readonly IApplicationDbContext _context;
+    private readonly IDateTimeService _clock;
 
-    public GetAvailableJobPostsQueryHandler(IApplicationDbContext context)
+    public GetAvailableJobPostsQueryHandler(IApplicationDbContext context, IDateTimeService clock)
     {
         _context = context;
+        _clock = clock;
     }
 
     public async Task<IEnumerable<JobPostSummaryDto>> Handle(GetAvailableJobPostsQuery request, CancellationToken cancellationToken)
@@ -33,14 +36,14 @@ public class GetAvailableJobPostsQueryHandler : IRequestHandler<GetAvailableJobP
             .Where(jobPost => jobPost.Status == 1 && (jobPost.Visibility == null || jobPost.Visibility == 0));
 
         query = ApplyFilters(query, request);
-        query = ApplySorting(query, request);
+        query = ApplySorting(query, request, _clock.UtcNow);
 
         var jobPosts = await query
             .Skip((NormalizePageIndex(request.PageIndex) - 1) * NormalizePageSize(request.PageSize))
             .Take(NormalizePageSize(request.PageSize))
             .ToListAsync(cancellationToken);
 
-        return JobPostProjection.ToSummaryDtos(jobPosts);
+        return JobPostProjection.ToSummaryDtos(jobPosts, _clock.UtcNow);
     }
 
     private static IQueryable<JobPost> ApplyFilters(IQueryable<JobPost> query, GetAvailableJobPostsQuery request)
@@ -75,23 +78,32 @@ public class GetAvailableJobPostsQueryHandler : IRequestHandler<GetAvailableJobP
         return query;
     }
 
-    private static IQueryable<JobPost> ApplySorting(IQueryable<JobPost> query, GetAvailableJobPostsQuery request)
+    private static IQueryable<JobPost> ApplySorting(
+        IQueryable<JobPost> query,
+        GetAvailableJobPostsQuery request,
+        DateTime now)
     {
         return request.SortBy?.Trim().ToLowerInvariant() switch
         {
             "budgetmin" => request.SortDesc
-                ? query.OrderByDescending(jobPost => jobPost.BudgetMin)
-                : query.OrderBy(jobPost => jobPost.BudgetMin),
+                ? query.OrderByDescending(jobPost => jobPost.IsFeatured && jobPost.FeaturedUntil > now)
+                    .ThenByDescending(jobPost => jobPost.BudgetMin)
+                : query.OrderByDescending(jobPost => jobPost.IsFeatured && jobPost.FeaturedUntil > now)
+                    .ThenBy(jobPost => jobPost.BudgetMin),
             "budgetmax" => request.SortDesc
-                ? query.OrderByDescending(jobPost => jobPost.BudgetMax)
-                : query.OrderBy(jobPost => jobPost.BudgetMax),
+                ? query.OrderByDescending(jobPost => jobPost.IsFeatured && jobPost.FeaturedUntil > now)
+                    .ThenByDescending(jobPost => jobPost.BudgetMax)
+                : query.OrderByDescending(jobPost => jobPost.IsFeatured && jobPost.FeaturedUntil > now)
+                    .ThenBy(jobPost => jobPost.BudgetMax),
             "newest" => query
-                .OrderByDescending(jobPost => jobPost.ClientProfiles.User.UserEloScore != null
+                .OrderByDescending(jobPost => jobPost.IsFeatured && jobPost.FeaturedUntil > now)
+                .ThenByDescending(jobPost => jobPost.ClientProfiles.User.UserEloScore != null
                     ? jobPost.ClientProfiles.User.UserEloScore.CurrentPoints
                     : UserEloCalculator.DefaultPoints)
                 .ThenByDescending(jobPost => jobPost.CreatedAt),
             _ => query
-                .OrderByDescending(jobPost => jobPost.ClientProfiles.User.UserEloScore != null
+                .OrderByDescending(jobPost => jobPost.IsFeatured && jobPost.FeaturedUntil > now)
+                .ThenByDescending(jobPost => jobPost.ClientProfiles.User.UserEloScore != null
                     ? jobPost.ClientProfiles.User.UserEloScore.CurrentPoints
                     : UserEloCalculator.DefaultPoints)
                 .ThenByDescending(jobPost => jobPost.CreatedAt)

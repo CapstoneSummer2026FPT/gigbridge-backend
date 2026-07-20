@@ -43,6 +43,8 @@ public sealed class GetMyJobPostDto
     public DateTime? EndDate { get; set; }
 
     public bool? IsAigenerated { get; set; }
+    public bool IsFeatured { get; set; }
+    public DateTime? FeaturedUntil { get; set; }
 
     public DateTime CreatedAt { get; set; }
 

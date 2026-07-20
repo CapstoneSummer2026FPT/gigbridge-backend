@@ -7,4 +7,5 @@ public record GetConversationMessagesQuery(
     Guid ConversationId,
     Guid UserId,
     DateTime? Before,
-    int PageSize = 30) : IRequest<IReadOnlyList<ConversationMessageResponse>>;
+    int PageSize = 30,
+    Guid? AdminDisputeId = null) : IRequest<IReadOnlyList<ConversationMessageResponse>>;
