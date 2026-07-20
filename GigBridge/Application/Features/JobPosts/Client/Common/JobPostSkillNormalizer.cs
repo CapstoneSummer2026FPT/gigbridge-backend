@@ -46,20 +46,20 @@ internal static class JobPostSkillNormalizer
                 })
                 .ToListAsync(cancellationToken);
 
-            var officialSkillsByName = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
+            var officialSkillsByName = new Dictionary<string, Guid>(StringComparer.Ordinal);
             foreach (var officialSkill in officialSkills)
             {
-                if (!string.IsNullOrWhiteSpace(officialSkill.Name) &&
-                    !officialSkillsByName.ContainsKey(officialSkill.Name))
+                var canonicalKey = CanonicalSkillKey(officialSkill.Name);
+                if (canonicalKey.Length > 0 && !officialSkillsByName.ContainsKey(canonicalKey))
                 {
-                    officialSkillsByName.Add(officialSkill.Name, officialSkill.SkillId);
+                    officialSkillsByName.Add(canonicalKey, officialSkill.SkillId);
                 }
             }
 
             var unmatchedCustomSkillNames = new List<string>();
             foreach (var customSkillName in finalCustomSkillNames)
             {
-                if (officialSkillsByName.TryGetValue(customSkillName, out var officialSkillId))
+                if (officialSkillsByName.TryGetValue(CanonicalSkillKey(customSkillName), out var officialSkillId))
                 {
                     finalSkillIds.Add(officialSkillId);
                 }
@@ -124,5 +124,15 @@ internal static class JobPostSkillNormalizer
         {
             throw new NotFoundException("One or more skills do not exist.");
         }
+    }
+
+    private static string CanonicalSkillKey(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+        var expanded = value.Trim().ToLowerInvariant()
+            .Replace("#", "sharp", StringComparison.Ordinal)
+            .Replace("+", "plus", StringComparison.Ordinal)
+            .Replace("&", "and", StringComparison.Ordinal);
+        return new string(expanded.Where(char.IsLetterOrDigit).ToArray());
     }
 }

@@ -81,6 +81,8 @@ public class GetMyJobPostsQueryHandler : IRequestHandler<GetMyJobPostsQuery, IEn
                 Visibility = jobPost.Visibility,
                 EndDate = jobPost.EndDate,
                 IsAigenerated = jobPost.IsAigenerated,
+                IsFeatured = jobPost.IsFeatured && jobPost.FeaturedUntil > DateTime.UtcNow,
+                FeaturedUntil = jobPost.FeaturedUntil,
 
                 CustomSkillNames = jobPost.CustomSkillNames.ToList(),
 
