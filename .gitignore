@@ -35,3 +35,4 @@ GigBridge/Project_API/Properties/launchSettings.json
 *.csproj
 /docs
 *.tmp
+repomix-output.xml
