@@ -53,11 +53,7 @@ public sealed class SignContractCommandHandler :
             throw new BadRequestException("Contract can only be signed after details are confirmed.");
         }
 
-        if (!command.Request.PolicyAccepted ||
-            !string.Equals(
-                command.Request.PolicyVersion,
-                ContractEsignRenderer.PolicyVersion,
-                StringComparison.Ordinal))
+        if (!command.Request.PolicyAccepted)
         {
             throw new BadRequestException(
                 $"You must accept GigBridge policy {ContractEsignRenderer.PolicyVersion} before signing.");
@@ -67,6 +63,13 @@ public sealed class SignContractCommandHandler :
         var now = _dateTimeService.UtcNow;
         var document = await ContractEsignRenderer.EnsureDocumentAsync(
             _context, _documentGenerator, contract, now, cancellationToken);
+        var snapshot = ContractEsignRenderer.GetSnapshot(document);
+
+        if (!string.Equals(command.Request.PolicyVersion, snapshot.PolicyVersion, StringComparison.Ordinal))
+        {
+            throw new BadRequestException(
+                $"You must accept GigBridge policy {snapshot.PolicyVersion} before signing.");
+        }
 
         var existingSignature = await _context.Set<EsignSignature>()
             .FirstOrDefaultAsync(
@@ -106,7 +109,7 @@ public sealed class SignContractCommandHandler :
         existingSignature.SignedAt = now;
         existingSignature.IpAddress = command.IpAddress;
         existingSignature.UserAgent = command.UserAgent;
-        existingSignature.PolicyVersion = ContractEsignRenderer.PolicyVersion;
+        existingSignature.PolicyVersion = snapshot.PolicyVersion;
         existingSignature.PolicyAcceptedAt = now;
 
         var readiness = await ContractEsignSignatureBridge.ApplyClientJobPostSignatureAndGetReadinessAsync(
@@ -137,7 +140,6 @@ public sealed class SignContractCommandHandler :
                 signed.Single(signature => signature.SignerRole == (int)ESignerRole.Client));
             var freelancerSignature = ContractEsignRenderer.ToSignatureSnapshot(
                 signed.Single(signature => signature.SignerRole == (int)ESignerRole.Freelancer));
-            var snapshot = ContractEsignRenderer.GetSnapshot(document);
             var documentHash = ContractEsignRenderer.ComputeFinalHash(document, clientSignature, freelancerSignature);
             var finalized = await _documentGenerator.GenerateFinalAsync(
                 snapshot,
