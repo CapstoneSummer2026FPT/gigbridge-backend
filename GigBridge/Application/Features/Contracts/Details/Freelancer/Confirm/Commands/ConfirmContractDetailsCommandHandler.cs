@@ -47,6 +47,7 @@ public sealed class ConfirmContractDetailsCommandHandler :
         await ContractParticipantGuard.EnsureFreelancerAsync(_context, contract, command.UserId, cancellationToken);
 
         var milestones = await _context.Set<Milestone>()
+            .Include(item => item.WorkItems)
             .Where(milestone => milestone.ContractsId == contract.ContractsId)
             .ToListAsync(cancellationToken);
 
@@ -74,6 +75,7 @@ public sealed class ConfirmContractDetailsCommandHandler :
 
         contract.Status = (int)ContractStatus.PendingSignature;
         contract.UpdatedAt = now;
+        var document = await ContractEsignRenderer.EnsureDocumentAsync(_context, contract, now, cancellationToken);
 
         await ContractConversationEvents.AddSystemMessageAsync(
             _context,
@@ -100,6 +102,6 @@ public sealed class ConfirmContractDetailsCommandHandler :
                 cancellationToken);
         }
 
-        return new ContractWorkflowResponse(contract.ContractsId, contract.Status, escrow.ContractEscrowId, null);
+        return new ContractWorkflowResponse(contract.ContractsId, contract.Status, escrow.ContractEscrowId, document.EsignDocumentsId);
     }
 }

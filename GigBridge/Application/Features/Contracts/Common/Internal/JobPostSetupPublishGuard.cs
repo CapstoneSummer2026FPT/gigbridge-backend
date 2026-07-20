@@ -34,6 +34,37 @@ internal static class JobPostSetupPublishGuard
         {
             throw new BadRequestException("Project request category is required before publishing.");
         }
+
+
+        var milestones = jobPost.JobPostMilestonePlans.OrderBy(item => item.OrderIndex).ToList();
+        if (milestones.Select(item => item.OrderIndex).Distinct().Count() != milestones.Count)
+        {
+            throw new BadRequestException("Milestone order indexes must be unique.");
+        }
+
+        foreach (var milestone in milestones)
+        {
+            if (string.IsNullOrWhiteSpace(milestone.Title) ||
+                milestone.Amount <= 0 ||
+                string.IsNullOrWhiteSpace(milestone.EstimatedDuration) ||
+                string.IsNullOrWhiteSpace(milestone.Deliverables) ||
+                string.IsNullOrWhiteSpace(milestone.AcceptanceCriteria))
+            {
+                throw new BadRequestException("Each client milestone requires a title, positive amount, duration, deliverables, and acceptance criteria.");
+            }
+
+            if (milestone.WorkItems.Select(item => item.OrderIndex).Distinct().Count() != milestone.WorkItems.Count)
+            {
+                throw new BadRequestException("Work item order indexes must be unique within each milestone.");
+            }
+
+            if (milestone.WorkItems.Any(item =>
+                    string.IsNullOrWhiteSpace(item.Title) ||
+                    string.IsNullOrWhiteSpace(item.Description)))
+            {
+                throw new BadRequestException("Each client work item requires a title and description.");
+            }
+        }
     }
 
     public static async Task EnsureCanPublishAsync(

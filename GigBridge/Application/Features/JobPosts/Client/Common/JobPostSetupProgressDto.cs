@@ -14,6 +14,8 @@ public sealed class JobPostSetupProgressDto
 
     public bool HasMilestones { get; set; }
 
+    public bool IsMilestonePlanComplete { get; set; }
+
     public bool CanPublish { get; set; }
 }
 

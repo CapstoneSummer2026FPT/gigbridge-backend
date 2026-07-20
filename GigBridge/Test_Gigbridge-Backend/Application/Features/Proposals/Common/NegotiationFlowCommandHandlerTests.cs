@@ -205,7 +205,7 @@ public class NegotiationFlowCommandHandlerTests
     }
 
     [Fact]
-    public async Task RespondFinalOffer_AcceptMovesContractToSignatureAndCreatesEscrow()
+    public async Task RespondFinalOffer_AcceptCreatesContractForPlanConfirmationWithoutEscrow()
     {
         var fixture = new NegotiationFixture();
         fixture.AddConversationWithParticipants();
@@ -236,19 +236,16 @@ public class NegotiationFlowCommandHandlerTests
             CancellationToken.None);
 
         Assert.Equal((int)NegotiationOfferStatus.Accepted, fixture.Offers.Entities[0].Status);
-        Assert.Equal(fixture.FreelancerProfileId, fixture.Contract.FreelancerProfilesId);
-        Assert.Equal(fixture.ProposalId, fixture.Contract.ProposalsId);
-        Assert.Equal(1500m, fixture.Contract.TotalBudget);
-        Assert.Equal((int)ContractStatus.PendingSignature, fixture.Contract.Status);
+        var contract = Assert.Single(fixture.Contracts.Entities);
+        Assert.Equal(fixture.FreelancerProfileId, contract.FreelancerProfilesId);
+        Assert.Equal(fixture.ProposalId, contract.ProposalsId);
+        Assert.Equal(1500m, contract.TotalBudget);
+        Assert.Equal((int)ContractStatus.PendingContractConfirmation, contract.Status);
         Assert.Equal(3, fixture.Proposal.Status);
         Assert.Equal(1, waitlistedProposal.Status);
-        Assert.Equal(fixture.ContractId, result.ContractId);
-        Assert.Equal((int)ContractStatus.PendingSignature, result.ContractStatus);
-        var escrow = Assert.Single(fixture.Escrows.Entities);
-        Assert.Equal(1500m, escrow.RequiredAmount);
-        Assert.Equal(0m, escrow.FundedAmount);
-        Assert.Equal(1.0m, escrow.RequiredPercentage);
-        Assert.Equal((int)ContractEscrowStatus.PendingFunding, escrow.Status);
+        Assert.Equal(contract.ContractsId, result.ContractId);
+        Assert.Equal((int)ContractStatus.PendingContractConfirmation, result.ContractStatus);
+        Assert.Empty(fixture.Escrows.Entities);
     }
 
     [Fact]
@@ -276,7 +273,7 @@ public class NegotiationFlowCommandHandlerTests
 
         Assert.Contains("no longer open", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal((int)NegotiationOfferStatus.PendingFreelancerConfirmation, fixture.Offers.Entities[0].Status);
-        Assert.Equal((int)ContractStatus.PendingFreelancerSelection, fixture.Contract.Status);
+        Assert.Empty(fixture.Contracts.Entities);
         Assert.Empty(fixture.Escrows.Entities);
     }
 
@@ -302,18 +299,19 @@ public class NegotiationFlowCommandHandlerTests
             CancellationToken.None);
 
         Assert.Equal((int)NegotiationOfferStatus.Accepted, fixture.Offers.Entities[0].Status);
-        Assert.Equal(1200m, fixture.Contract.TotalBudget);
-        Assert.Equal((int)ContractStatus.PendingSignature, result.ContractStatus);
+        var contract = Assert.Single(fixture.Contracts.Entities);
+        Assert.Equal(1200m, contract.TotalBudget);
+        Assert.Equal((int)ContractStatus.PendingContractConfirmation, result.ContractStatus);
         Assert.Equal(1200m, fixture.Milestones.Entities.Sum(milestone => milestone.Amount));
         Assert.All(fixture.Milestones.Entities, milestone => Assert.Equal(600m, milestone.Amount));
         Assert.All(fixture.Milestones.Entities, milestone => Assert.False(string.IsNullOrWhiteSpace(milestone.AcceptanceCriteria)));
-        var escrow = Assert.Single(fixture.Escrows.Entities);
-        Assert.Equal(1200m, escrow.RequiredAmount);
+        Assert.Equal(2, fixture.Milestones.Entities.Sum(milestone => milestone.WorkItems.Count));
+        Assert.Empty(fixture.Escrows.Entities);
     }
 
     private sealed class NegotiationFixture
     {
-        public NegotiationFixture(bool includeContract = true)
+        public NegotiationFixture(bool includeContract = false)
         {
             JobPost = new JobPost
             {
@@ -428,7 +426,7 @@ public class NegotiationFlowCommandHandlerTests
                 NegotiationOfferId = OfferId,
                 ConversationsId = ConversationId,
                 JobPostsId = JobPostId,
-                ContractsId = ContractId,
+                ContractsId = null,
                 ProposalsId = ProposalId,
                 ClientProfilesId = ClientProfileId,
                 FreelancerProfilesId = FreelancerProfileId,
@@ -451,6 +449,16 @@ public class NegotiationFlowCommandHandlerTests
                     OrderIndex = index
                 };
                 offer.NegotiationOfferMilestones.Add(snapshot);
+                snapshot.WorkItems.Add(new NegotiationOfferWorkItem
+                {
+                    NegotiationOfferWorkItemId = Guid.NewGuid(),
+                    NegotiationOfferMilestoneId = snapshot.NegotiationOfferMilestoneId,
+                    Title = $"Work item {index + 1}",
+                    Description = $"Complete milestone {index + 1} scope.",
+                    Deliverables = $"Work item deliverable {index + 1}",
+                    EstimatedDuration = "1 week",
+                    OrderIndex = 0
+                });
                 OfferMilestones.Add(snapshot);
             }
             Offers.Add(offer);
@@ -464,7 +472,7 @@ public class NegotiationFlowCommandHandlerTests
                 ConversationType = (int)ConversationType.JobNegotiation,
                 JobPostsId = JobPostId,
                 ProposalsId = ProposalId,
-                ContractsId = ContractId,
+                ContractsId = null,
                 CreatedByUserId = ClientUserId,
                 Status = (int)ConversationStatus.Active,
                 CreatedAt = Now
@@ -496,7 +504,15 @@ public class NegotiationFlowCommandHandlerTests
             Amount = amount,
             Deliverables = $"Deliverable {index + 1}",
             AcceptanceCriteria = $"Acceptance criteria {index + 1}",
-            OrderIndex = index
+            OrderIndex = index,
+            WorkItems = [new NegotiationWorkItemDto
+            {
+                Title = $"Work item {index + 1}",
+                Description = $"Complete milestone {index + 1} scope.",
+                Deliverables = $"Work item deliverable {index + 1}",
+                EstimatedDuration = "1 week",
+                OrderIndex = 0
+            }]
         }).ToList();
     }
 

@@ -44,6 +44,7 @@ internal static class ContractEsignRenderer
         }
 
         var milestones = await context.Set<Milestone>()
+            .Include(milestone => milestone.WorkItems)
             .Where(milestone => milestone.ContractsId == contract.ContractsId)
             .OrderBy(milestone => milestone.SortOrder)
             .ThenBy(milestone => milestone.CreatedAt)
@@ -105,9 +106,11 @@ internal static class ContractEsignRenderer
             milestones.Select((milestone, index) =>
             {
                 var dueDate = milestone.DueDate?.ToString("yyyy-MM-dd") ?? string.Empty;
+                var workItems = string.Join("", milestone.WorkItems.OrderBy(item => item.OrderIndex)
+                    .Select(item => $"<li><strong>{Encode(item.Title)}</strong>: {Encode(item.Description)}</li>"));
                 return "<tr>" +
                     $"<td>{index + 1}</td>" +
-                    $"<td>{Encode(milestone.Title)}</td>" +
+                    $"<td>{Encode(milestone.Title)}<ul>{workItems}</ul></td>" +
                     $"<td>{milestone.Amount:0.##} VND</td>" +
                     $"<td>{Encode(dueDate)}</td>" +
                     "</tr>";

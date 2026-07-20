@@ -29,17 +29,6 @@ internal static class ContractEsignSignatureBridge
             signedRoles.Add((int)pendingSignedRole.Value);
         }
 
-        if (!signedRoles.Contains((int)ESignerRole.Client) &&
-            await TryHydrateClientSignatureFromJobPostAsync(
-                context,
-                contract,
-                contractDocument,
-                now,
-                cancellationToken))
-        {
-            signedRoles.Add((int)ESignerRole.Client);
-        }
-
         return new ContractEsignReadiness(
             signedRoles.Contains((int)ESignerRole.Client),
             signedRoles.Contains((int)ESignerRole.Freelancer));
@@ -88,90 +77,6 @@ internal static class ContractEsignSignatureBridge
         return document;
     }
 
-    private static async Task<bool> TryHydrateClientSignatureFromJobPostAsync(
-        IApplicationDbContext context,
-        Contract contract,
-        EsignDocument contractDocument,
-        DateTime now,
-        CancellationToken cancellationToken)
-    {
-        var clientUserId = await context.Set<ClientProfile>()
-            .Where(profile => profile.ClientProfilesId == contract.ClientProfilesId)
-            .Select(profile => (Guid?)profile.UserId)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (!clientUserId.HasValue)
-        {
-            return false;
-        }
-
-        var signedContractClientSignature = await context.Set<EsignSignature>()
-            .FirstOrDefaultAsync(
-                signature =>
-                    signature.EsignDocumentsId == contractDocument.EsignDocumentsId &&
-                    signature.UserId == clientUserId.Value,
-                cancellationToken);
-
-        if (signedContractClientSignature is not null &&
-            signedContractClientSignature.Status == (int)ESignSignatureStatus.Signed)
-        {
-            return true;
-        }
-
-        var jobPostDocumentId = await context.Set<EsignDocument>()
-            .Where(document =>
-                document.JobPostsId == contract.JobPostsId &&
-                !document.ContractsId.HasValue &&
-                document.Status == (int)ESignDocumentStatus.FullySigned)
-            .OrderByDescending(document => document.FinalizedAt ?? document.CreatedAt)
-            .Select(document => (Guid?)document.EsignDocumentsId)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (!jobPostDocumentId.HasValue)
-        {
-            return false;
-        }
-
-        var sourceSignature = await context.Set<EsignSignature>()
-            .Where(signature =>
-                signature.EsignDocumentsId == jobPostDocumentId.Value &&
-                signature.UserId == clientUserId.Value &&
-                signature.SignerRole == (int)ESignerRole.Client &&
-                signature.Status == (int)ESignSignatureStatus.Signed)
-            .OrderByDescending(signature => signature.SignedAt ?? signature.CreatedAt)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (sourceSignature is null)
-        {
-            return false;
-        }
-
-        var targetSignature = signedContractClientSignature ?? new EsignSignature
-        {
-            EsignSignaturesId = Guid.NewGuid(),
-            EsignDocumentsId = contractDocument.EsignDocumentsId,
-            UserId = clientUserId.Value,
-            CreatedAt = sourceSignature.CreatedAt
-        };
-
-        if (signedContractClientSignature is null)
-        {
-            context.Set<EsignSignature>().Add(targetSignature);
-        }
-
-        targetSignature.SignerRole = (int)ESignerRole.Client;
-        targetSignature.SignatureImageUrl = sourceSignature.SignatureImageUrl;
-        targetSignature.SignatureWidth = sourceSignature.SignatureWidth;
-        targetSignature.SignatureHeight = sourceSignature.SignatureHeight;
-        targetSignature.Status = (int)ESignSignatureStatus.Signed;
-        targetSignature.SignedAt = sourceSignature.SignedAt ?? now;
-        targetSignature.DeclinedAt = null;
-        targetSignature.DeclineReason = null;
-        targetSignature.IpAddress = sourceSignature.IpAddress;
-        targetSignature.UserAgent = sourceSignature.UserAgent;
-
-        return true;
-    }
 }
 
 internal sealed record ContractEsignReadiness(

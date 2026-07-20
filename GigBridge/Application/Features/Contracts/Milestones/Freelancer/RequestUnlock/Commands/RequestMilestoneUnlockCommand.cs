@@ -5,4 +5,5 @@ namespace Application.Features.Contracts.Milestones.Freelancer.RequestUnlock.Com
 public sealed record RequestMilestoneUnlockCommand(
     Guid ContractId,
     Guid MilestoneId,
-    Guid UserId) : IRequest;
+    Guid UserId,
+    string? Reason = null) : IRequest;

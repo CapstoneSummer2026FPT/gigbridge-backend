@@ -36,3 +36,4 @@ GigBridge/Project_API/Properties/launchSettings.json
 /docs
 *.tmp
 repomix-output.xml
+*.txt

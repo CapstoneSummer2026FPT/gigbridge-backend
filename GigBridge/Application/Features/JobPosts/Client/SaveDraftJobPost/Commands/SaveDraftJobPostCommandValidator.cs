@@ -94,6 +94,19 @@ public sealed class SaveDraftJobPostCommandValidator
                         .WithMessage("OrderIndex must be greater than or equal to 0.");
                 });
 
+            RuleForEach(x => x.Request.MilestonePlans)
+                .ChildRules(milestone =>
+                {
+                    milestone.RuleFor(x => x.OrderIndex).GreaterThanOrEqualTo(0);
+                    milestone.RuleFor(x => x.Title).MaximumLength(200);
+                    milestone.RuleFor(x => x.Amount).GreaterThanOrEqualTo(0);
+                    milestone.RuleForEach(x => x.WorkItems).ChildRules(item =>
+                    {
+                        item.RuleFor(x => x.OrderIndex).GreaterThanOrEqualTo(0);
+                        item.RuleFor(x => x.Title).MaximumLength(200);
+                    });
+                });
+
             RuleFor(x => (x.Request.SkillIds != null ? x.Request.SkillIds.Count : 0) + 
                          (x.Request.CustomSkillNames != null ? x.Request.CustomSkillNames.Count : 0))
                 .LessThanOrEqualTo(10)

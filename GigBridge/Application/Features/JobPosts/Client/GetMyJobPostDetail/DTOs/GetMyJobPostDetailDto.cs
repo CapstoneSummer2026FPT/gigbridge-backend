@@ -51,5 +51,7 @@ public sealed class GetMyJobPostDetailDto
 
     public int ProposalCount { get; set; }
 
+    public List<JobPostMilestonePlanDto> MilestonePlans { get; set; } = new();
+
     public JobPostSetupProgressDto? SetupProgress { get; set; }
 }

@@ -32,6 +32,8 @@ public class GetJobPostDetailQueryHandler : IRequestHandler<GetJobPostDetailQuer
             .Include(jobPost => jobPost.MajorCategory)
                 .ThenInclude(majorCategory => majorCategory!.Category)
             .Include(jobPost => jobPost.JobPostAttachments)
+            .Include(jobPost => jobPost.JobPostMilestonePlans)
+                .ThenInclude(plan => plan.WorkItems)
             .FirstOrDefaultAsync(jobPost =>
                 jobPost.JobPostsId == request.JobPostsId &&
                 jobPost.Status == 1 &&
@@ -72,6 +74,7 @@ public class GetJobPostDetailQueryHandler : IRequestHandler<GetJobPostDetailQuer
             CustomSkillNames: jobPost.CustomSkillNames.ToList(),
             Attachments: jobPost.JobPostAttachments
                 .Select(attachment => new AttachmentDto(attachment.JobPostAttachmentsId, attachment.FileUrl, attachment.FileName))
-                .ToList());
+                .ToList(),
+            MilestonePlans: Application.Features.JobPosts.Common.JobPostPlanProjection.ToDtos(jobPost.JobPostMilestonePlans));
     }
 }

@@ -35,6 +35,7 @@ public sealed class GetContractMilestonesQueryHandler :
         var milestones = await MilestoneWorkflowGuard.OrderMilestones(
                 _context.Set<Milestone>()
                     .Include(milestone => milestone.MilestoneAttachments)
+                    .Include(milestone => milestone.WorkItems)
                     .Where(milestone => milestone.ContractsId == query.ContractId)
             )
             .ToListAsync(cancellationToken);

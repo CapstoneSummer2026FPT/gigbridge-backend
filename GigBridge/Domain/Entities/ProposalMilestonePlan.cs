@@ -13,4 +13,5 @@ public class ProposalMilestonePlan
     public int OrderIndex { get; set; }
 
     public virtual Proposal Proposals { get; set; } = null!;
+    public virtual ICollection<ProposalWorkBreakdownItem> WorkItems { get; set; } = new List<ProposalWorkBreakdownItem>();
 }

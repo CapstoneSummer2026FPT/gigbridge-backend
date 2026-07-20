@@ -22,6 +22,7 @@ public sealed class GetNegotiationOfferDetailQueryHandler
         var offer = await _context.Set<NegotiationOffer>()
             .AsNoTracking()
             .Include(item => item.NegotiationOfferMilestones)
+                .ThenInclude(item => item.WorkItems)
             .FirstOrDefaultAsync(item => item.NegotiationOfferId == request.OfferId, cancellationToken);
         if (offer is null) throw new NotFoundException("Negotiation offer does not exist.");
 
@@ -54,7 +55,16 @@ public sealed class GetNegotiationOfferDetailQueryHandler
                 DueDate = item.DueDate,
                 Deliverables = item.Deliverables,
                 AcceptanceCriteria = item.AcceptanceCriteria,
-                OrderIndex = item.OrderIndex
+                OrderIndex = item.OrderIndex,
+                WorkItems = item.WorkItems.OrderBy(workItem => workItem.OrderIndex).Select(workItem => new NegotiationWorkItemDto
+                {
+                    Id = workItem.NegotiationOfferWorkItemId,
+                    Title = workItem.Title,
+                    Description = workItem.Description,
+                    Deliverables = workItem.Deliverables,
+                    EstimatedDuration = workItem.EstimatedDuration,
+                    OrderIndex = workItem.OrderIndex
+                }).ToList()
             }).ToList()
         };
     }

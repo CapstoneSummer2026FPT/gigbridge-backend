@@ -31,7 +31,8 @@ public class ContractWorkflowTests
 
         var request = new UpdateContractDetailsRequest(
             [
-                new ContractMilestoneRequest(null, "Milestone 1", 1_000_001m, DateOnly.FromDateTime(fixture.Now.AddDays(7)), 0)
+                new ContractMilestoneRequest(null, "Milestone 1", 1_000_001m, DateOnly.FromDateTime(fixture.Now.AddDays(7)), 0,
+                    WorkItems: [new ContractWorkItemRequest(null, "Implementation", "Complete implementation.", "Source code", "1 week", 0)])
             ]);
 
         var exception = await Assert.ThrowsAsync<BadRequestException>(() =>
@@ -44,7 +45,7 @@ public class ContractWorkflowTests
     }
     
     [Fact]
-    public async Task SubmitAndFreelancerConfirm_CreatesFullEscrowAndMovesToPendingSignature()
+    public async Task SubmitAndFreelancerConfirm_CreatesEsignDocumentAndPendingEscrow()
     {
         var fixture = new ContractWorkflowFixture();
         fixture.ApplyValidDetails();
@@ -58,6 +59,7 @@ public class ContractWorkflowTests
             CancellationToken.None);
 
         Assert.Equal((int)ContractStatus.PendingContractConfirmation, fixture.Contract.Status);
+        fixture.AddTemplate();
 
         var confirmHandler = new ConfirmContractDetailsCommandHandler(
             fixture.Context,
@@ -74,9 +76,9 @@ public class ContractWorkflowTests
 
         var escrow = Assert.Single(fixture.Escrows.Entities);
         Assert.Equal(1_000m, escrow.RequiredAmount);
-        Assert.Equal(1.0m, escrow.RequiredPercentage);
         Assert.Equal(0m, escrow.FundedAmount);
         Assert.Equal((int)ContractEscrowStatus.PendingFunding, escrow.Status);
+        Assert.Single(fixture.EsignDocuments.Entities);
         Assert.Equal((int)ContractStatus.PendingSignature, fixture.Contract.Status);
     }
 
@@ -175,7 +177,7 @@ public class ContractWorkflowTests
     }
 
     [Fact]
-    public async Task FundEscrow_StuckPendingSignatureBridgesClientJobPostSignatureAndFunds()
+    public async Task FundEscrow_DoesNotBridgeLegacyJobPostSignature()
     {
         var fixture = new ContractWorkflowFixture();
         fixture.MoveToPendingSignatureWithDocument();
@@ -196,29 +198,25 @@ public class ContractWorkflowTests
             new NoopNotificationService(),
             new NoopChatRealtimeNotifier());
 
-        var result = await handler.Handle(
+        var exception = await Assert.ThrowsAsync<BadRequestException>(() => handler.Handle(
             new FundContractEscrowCommand(fixture.ContractId, fixture.ClientUserId),
-            CancellationToken.None);
+            CancellationToken.None));
 
         var contractDocument = fixture.GetContractDocument();
         var contractSignatures = fixture.EsignSignatures.Entities
             .Where(signature => signature.EsignDocumentsId == contractDocument.EsignDocumentsId)
             .ToList();
 
-        Assert.Equal((int)ContractStatus.Active, result.ContractStatus);
-        Assert.Equal((int)ContractStatus.Active, fixture.Contract.Status);
-        Assert.Equal((int)ESignDocumentStatus.FullySigned, contractDocument.Status);
-        Assert.Contains(contractSignatures, signature =>
-            signature.UserId == fixture.ClientUserId &&
-            signature.SignerRole == (int)ESignerRole.Client &&
-            signature.SignatureImageUrl == fixture.ClientSignatureUrl);
+        Assert.Contains("both parties sign", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal((int)ContractStatus.PendingSignature, fixture.Contract.Status);
+        Assert.Equal((int)ESignDocumentStatus.PartiallySigned, contractDocument.Status);
+        Assert.DoesNotContain(contractSignatures, signature => signature.UserId == fixture.ClientUserId);
         Assert.Contains(contractSignatures, signature =>
             signature.UserId == fixture.FreelancerUserId &&
             signature.SignerRole == (int)ESignerRole.Freelancer);
-        Assert.Equal((int)ContractEscrowStatus.Funded, fixture.Escrows.Entities[0].Status);
-        Assert.Equal(2, fixture.Context.Set<JobPost>().Single().Status);
-        Assert.Single(fixture.WalletTransactions.Entities);
-        Assert.Single(fixture.EscrowTransactions.Entities);
+        Assert.Equal((int)ContractEscrowStatus.PendingFunding, fixture.Escrows.Entities[0].Status);
+        Assert.Empty(fixture.WalletTransactions.Entities);
+        Assert.Empty(fixture.EscrowTransactions.Entities);
     }
 
     [Fact]
@@ -319,7 +317,7 @@ public class ContractWorkflowTests
     }
 
     [Fact]
-    public async Task SignContract_FreelancerSignatureBridgesClientJobPostSignatureAndMovesToEscrow()
+    public async Task SignContract_FreelancerSignatureDoesNotBridgeLegacyClientSignature()
     {
         var fixture = new ContractWorkflowFixture();
         fixture.MoveToPendingSignatureWithDocument();
@@ -346,19 +344,16 @@ public class ContractWorkflowTests
             .Where(signature => signature.EsignDocumentsId == contractDocument.EsignDocumentsId)
             .ToList();
 
-        Assert.Equal((int)ContractStatus.PendingEscrow, fixture.Contract.Status);
-        Assert.Equal((int)ContractStatus.PendingEscrow, result.Status);
-        Assert.Equal((int)ESignDocumentStatus.FullySigned, contractDocument.Status);
-        Assert.Equal(fixture.Escrows.Entities[0].ContractEscrowId, result.EscrowId);
-        Assert.Contains(contractSignatures, signature =>
-            signature.UserId == fixture.ClientUserId &&
-            signature.SignerRole == (int)ESignerRole.Client &&
-            signature.SignatureImageUrl == fixture.ClientSignatureUrl);
+        Assert.Equal((int)ContractStatus.PendingSignature, fixture.Contract.Status);
+        Assert.Equal((int)ContractStatus.PendingSignature, result.Status);
+        Assert.Equal((int)ESignDocumentStatus.PartiallySigned, contractDocument.Status);
+        Assert.Null(result.EscrowId);
+        Assert.DoesNotContain(contractSignatures, signature => signature.UserId == fixture.ClientUserId);
         Assert.Contains(contractSignatures, signature =>
             signature.UserId == fixture.FreelancerUserId &&
             signature.SignerRole == (int)ESignerRole.Freelancer &&
             signature.SignatureImageUrl == fixture.FreelancerSignatureUrl);
-        Assert.Equal(2, fixture.Context.Set<JobPost>().Single().Status);
+        Assert.Equal(1, fixture.Context.Set<JobPost>().Single().Status);
         Assert.Single(mediaService.Uploads);
     }
 
@@ -555,7 +550,7 @@ public class ContractWorkflowTests
         public void ApplyValidDetails()
         {
 
-            Milestones.Add(new Milestone
+            var firstMilestone = new Milestone
             {
                 MilestonesId = Guid.NewGuid(),
                 ContractsId = ContractId,
@@ -564,8 +559,10 @@ public class ContractWorkflowTests
                 Status = (int)MilestoneStatus.Pending,
                 SortOrder = 0,
                 CreatedAt = Now
-            });
-            Milestones.Add(new Milestone
+            };
+            firstMilestone.WorkItems.Add(CreateWorkItem(firstMilestone.MilestonesId, "Implementation", 0));
+            Milestones.Add(firstMilestone);
+            var secondMilestone = new Milestone
             {
                 MilestonesId = Guid.NewGuid(),
                 ContractsId = ContractId,
@@ -574,8 +571,24 @@ public class ContractWorkflowTests
                 Status = (int)MilestoneStatus.Pending,
                 SortOrder = 1,
                 CreatedAt = Now
-            });
+            };
+            secondMilestone.WorkItems.Add(CreateWorkItem(secondMilestone.MilestonesId, "Verification", 0));
+            Milestones.Add(secondMilestone);
         }
+
+        private ContractWorkItem CreateWorkItem(Guid milestoneId, string title, int orderIndex) => new()
+        {
+            ContractWorkItemId = Guid.NewGuid(),
+            MilestonesId = milestoneId,
+            Title = title,
+            Description = $"Complete {title.ToLowerInvariant()} scope.",
+            Deliverables = "Verified project output",
+            EstimatedDuration = "1 week",
+            OrderIndex = orderIndex,
+            Status = (int)ContractWorkItemStatus.Todo,
+            CreatedAt = Now,
+            UpdatedAt = Now
+        };
 
         public void MoveToPendingSignature()
         {

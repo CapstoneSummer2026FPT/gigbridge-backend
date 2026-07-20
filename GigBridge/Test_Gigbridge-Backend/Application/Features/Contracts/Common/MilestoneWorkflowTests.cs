@@ -4,6 +4,7 @@ using Application.Features.Contracts.Completion.Client.Commands;
 using Application.Features.Contracts.Completion.Freelancer.Commands;
 using Application.Features.Contracts.Milestones.Client.Approve.Commands;
 using Application.Features.Contracts.Milestones.Client.RequestRevision.Commands;
+using Application.Features.Contracts.Milestones.Client.RequestRevision.DTOs;
 using Application.Features.Contracts.Milestones.Client.Start.Commands;
 using Application.Features.Contracts.Milestones.Common.List.Queries;
 using Application.Features.Contracts.Milestones.Freelancer.RequestUnlock.Commands;
@@ -17,16 +18,17 @@ namespace Test_Gigbridge_Backend.Application.Features.Contracts.Common;
 
 public class MilestoneWorkflowTests
 {
+    private static SubmitMilestoneFile CreateSubmissionFile(string fileName) =>
+        new(new MemoryStream([1, 2, 3]), fileName, "application/zip", 3);
+
     [Fact]
     public async Task MilestoneLifecycle_EnforcesParticipantRolesAndTransitions()
     {
         var fixture = new MilestoneWorkflowFixture();
-        var startHandler = new StartMilestoneCommandHandler(
-            fixture.Context,
-            new FixedDateTimeService(fixture.Now));
         var submitHandler = new SubmitMilestoneCommandHandler(
             fixture.Context,
-            new FixedDateTimeService(fixture.Now.AddMinutes(1)));
+            new FixedDateTimeService(fixture.Now.AddMinutes(1)),
+            new TestMediaService());
         var approveHandler = new ApproveMilestoneCommandHandler(
             fixture.Context,
             new FixedDateTimeService(fixture.Now.AddMinutes(2)));
@@ -39,20 +41,13 @@ public class MilestoneWorkflowTests
             listHandler.Handle(
                 new GetContractMilestonesQuery(fixture.ContractId, fixture.OutsiderUserId),
                 CancellationToken.None));
-        await Assert.ThrowsAsync<ForbiddenAccessException>(() =>
-            startHandler.Handle(
-                new StartMilestoneCommand(fixture.ContractId, fixture.FirstMilestoneId, fixture.FreelancerUserId),
-                CancellationToken.None));
-
         var milestones = await listHandler.Handle(
             new GetContractMilestonesQuery(fixture.ContractId, fixture.ClientUserId),
             CancellationToken.None);
         Assert.Equal(3, milestones.Count);
 
-        await startHandler.Handle(
-            new StartMilestoneCommand(fixture.ContractId, fixture.FirstMilestoneId, fixture.ClientUserId),
-            CancellationToken.None);
-
+        fixture.FirstMilestone.Status = (int)MilestoneStatus.InProgress;
+        fixture.FirstMilestone.StartedAt = fixture.Now;
         Assert.Equal((int)MilestoneStatus.InProgress, fixture.FirstMilestone.Status);
         Assert.NotNull(fixture.FirstMilestone.StartedAt);
 
@@ -62,7 +57,7 @@ public class MilestoneWorkflowTests
                     fixture.ContractId,
                     fixture.FirstMilestoneId,
                     fixture.ClientUserId,
-                    ExternalUrl: "https://example.com/client-wrong-role"),
+                    File: CreateSubmissionFile("client-wrong-role.zip")),
                 CancellationToken.None));
 
         await submitHandler.Handle(
@@ -71,18 +66,23 @@ public class MilestoneWorkflowTests
                 fixture.FirstMilestoneId,
                 fixture.FreelancerUserId,
                 "Initial delivery.",
-                ExternalUrl: "https://example.com/milestone-1-v1"),
+                File: CreateSubmissionFile("milestone-1-v1.zip")),
             CancellationToken.None);
 
         Assert.Equal((int)MilestoneStatus.Submitted, fixture.FirstMilestone.Status);
         Assert.NotNull(fixture.FirstMilestone.SubmittedAt);
 
         await revisionHandler.Handle(
-            new RequestMilestoneRevisionCommand(fixture.ContractId, fixture.FirstMilestoneId, fixture.ClientUserId),
+            new RequestMilestoneRevisionCommand(
+                fixture.ContractId,
+                fixture.FirstMilestoneId,
+                fixture.ClientUserId,
+                new RequestMilestoneRevisionRequest("Authentication flow needs revision.", [fixture.FirstWorkItem.ContractWorkItemId])),
             CancellationToken.None);
 
         Assert.Equal((int)MilestoneStatus.InProgress, fixture.FirstMilestone.Status);
         Assert.Null(fixture.FirstMilestone.ApprovedAt);
+        fixture.FirstWorkItem.Status = (int)ContractWorkItemStatus.Completed;
 
         await submitHandler.Handle(
             new SubmitMilestoneCommand(
@@ -90,7 +90,7 @@ public class MilestoneWorkflowTests
                 fixture.FirstMilestoneId,
                 fixture.FreelancerUserId,
                 "Revision delivery.",
-                ExternalUrl: "https://example.com/milestone-1-v2"),
+                File: CreateSubmissionFile("milestone-1-v2.zip")),
             CancellationToken.None);
 
         await Assert.ThrowsAsync<ForbiddenAccessException>(() =>
@@ -104,7 +104,8 @@ public class MilestoneWorkflowTests
 
         Assert.Equal((int)MilestoneStatus.Approved, fixture.FirstMilestone.Status);
         Assert.NotNull(fixture.FirstMilestone.ApprovedAt);
-        Assert.Equal((int)MilestoneStatus.Pending, fixture.SecondMilestone.Status);
+        Assert.Equal(400m, fixture.FirstMilestone.ReleasedAmount);
+        Assert.Equal((int)MilestoneStatus.InProgress, fixture.SecondMilestone.Status);
     }
 
     [Fact]
@@ -128,44 +129,47 @@ public class MilestoneWorkflowTests
     }
 
     [Fact]
-    public async Task StartMilestone_AllowsClientToStartAnyPendingMilestone()
+    public async Task StartMilestone_RejectsDeprecatedManualStart()
     {
         var fixture = new MilestoneWorkflowFixture();
         var startHandler = new StartMilestoneCommandHandler(
             fixture.Context,
             new FixedDateTimeService(fixture.Now.AddMinutes(7)));
 
-        var response = await startHandler.Handle(
+        var exception = await Assert.ThrowsAsync<BadRequestException>(() => startHandler.Handle(
             new StartMilestoneCommand(fixture.ContractId, fixture.ThirdMilestoneId, fixture.ClientUserId),
-            CancellationToken.None);
+            CancellationToken.None));
 
-        Assert.Equal((int)MilestoneStatus.InProgress, response.Status);
-        Assert.Equal((int)MilestoneStatus.InProgress, fixture.ThirdMilestone.Status);
-        Assert.NotNull(fixture.ThirdMilestone.StartedAt);
+        Assert.Contains("deprecated", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal((int)MilestoneStatus.Pending, fixture.ThirdMilestone.Status);
         Assert.Equal((int)MilestoneStatus.Pending, fixture.FirstMilestone.Status);
         Assert.Equal((int)MilestoneStatus.Pending, fixture.SecondMilestone.Status);
     }
 
     [Fact]
-    public async Task RequestMilestoneUnlock_NotifiesClientWithoutStartingMilestone()
+    public async Task RequestMilestoneUnlock_PersistsEarlyStartRequestWithoutStartingMilestone()
     {
         var fixture = new MilestoneWorkflowFixture();
         var handler = new RequestMilestoneUnlockCommandHandler(
             fixture.Context,
             new FixedDateTimeService(fixture.Now.AddMinutes(8)),
             new NoopNotificationService());
+        fixture.FirstMilestone.Status = (int)MilestoneStatus.InProgress;
+        fixture.FirstMilestone.StartedAt = fixture.Now;
 
         await handler.Handle(
             new RequestMilestoneUnlockCommand(
                 fixture.ContractId,
                 fixture.SecondMilestoneId,
-                fixture.FreelancerUserId),
+                fixture.FreelancerUserId,
+                "Begin integration while milestone one is in review."),
             CancellationToken.None);
 
         Assert.Equal((int)MilestoneStatus.Pending, fixture.SecondMilestone.Status);
-        Assert.Contains(
-            fixture.Context.Set<Message>().ToList(),
-            message => message.Content == "Freelancer requested milestone unlock: Milestone 2.");
+        var request = Assert.Single(fixture.Context.Set<MilestoneEarlyStartRequest>());
+        Assert.Equal(fixture.SecondMilestoneId, request.MilestonesId);
+        Assert.Equal("Begin integration while milestone one is in review.", request.Reason);
+        Assert.Equal((int)MilestoneEarlyStartRequestStatus.Pending, request.Status);
     }
 
     [Fact]
@@ -512,6 +516,12 @@ public class MilestoneWorkflowTests
                 SortOrder = 2,
                 CreatedAt = Now
             };
+            FirstWorkItem = CreateCompletedWorkItem(FirstMilestoneId, "Milestone 1 work");
+            SecondWorkItem = CreateCompletedWorkItem(SecondMilestoneId, "Milestone 2 work");
+            ThirdWorkItem = CreateCompletedWorkItem(ThirdMilestoneId, "Milestone 3 work");
+            FirstMilestone.WorkItems.Add(FirstWorkItem);
+            SecondMilestone.WorkItems.Add(SecondWorkItem);
+            ThirdMilestone.WorkItems.Add(ThirdWorkItem);
 
             Context.AddSet(
                 new User { UserId = ClientUserId, Role = (int)UserRole.Client, Email = "client@example.com", FullName = "Client" },
@@ -521,6 +531,7 @@ public class MilestoneWorkflowTests
             Context.AddSet(new FreelancerProfile { FreelancerProfilesId = FreelancerProfileId, UserId = FreelancerUserId });
             Context.AddSet(Contract);
             Milestones = Context.AddSet(FirstMilestone, SecondMilestone, ThirdMilestone);
+            WorkItems = Context.AddSet(FirstWorkItem, SecondWorkItem, ThirdWorkItem);
             Escrows = Context.AddSet(Escrow);
             ClientWallet = new UserWallet
             {
@@ -560,6 +571,7 @@ public class MilestoneWorkflowTests
         public Guid SecondMilestoneId { get; } = Guid.NewGuid();
         public Guid ThirdMilestoneId { get; } = Guid.NewGuid();
         public TestDbSet<Milestone> Milestones { get; }
+        public TestDbSet<ContractWorkItem> WorkItems { get; }
         public TestDbSet<ContractEscrow> Escrows { get; }
         public TestDbSet<UserWallet> Wallets { get; }
         public TestDbSet<WalletTransaction> WalletTransactions { get; }
@@ -570,6 +582,9 @@ public class MilestoneWorkflowTests
         public Milestone FirstMilestone { get; }
         public Milestone SecondMilestone { get; }
         public Milestone ThirdMilestone { get; }
+        public ContractWorkItem FirstWorkItem { get; }
+        public ContractWorkItem SecondWorkItem { get; }
+        public ContractWorkItem ThirdWorkItem { get; }
 
         public UserWallet FreelancerWallet =>
             Wallets.Entities.Single(wallet => wallet.UserId == FreelancerUserId);
@@ -580,6 +595,21 @@ public class MilestoneWorkflowTests
             milestone.SubmittedAt = Now;
             milestone.ApprovedAt = Now;
         }
+
+        private ContractWorkItem CreateCompletedWorkItem(Guid milestoneId, string title) => new()
+        {
+            ContractWorkItemId = Guid.NewGuid(),
+            MilestonesId = milestoneId,
+            Title = title,
+            Description = $"Complete {title.ToLowerInvariant()}.",
+            Deliverables = "Verified deliverable",
+            EstimatedDuration = "1 week",
+            OrderIndex = 0,
+            Status = (int)ContractWorkItemStatus.Completed,
+            CompletedAt = Now,
+            CreatedAt = Now,
+            UpdatedAt = Now
+        };
     }
 
     private sealed class FixedDateTimeService : IDateTimeService
@@ -645,7 +675,7 @@ public class MilestoneWorkflowTests
     }
 
     [Fact]
-    public async Task SubmitMilestone_WithLink_SavesLinkAttachmentWithoutUpload()
+    public async Task SubmitMilestone_WithExternalLink_IsRejected()
     {
         var fixture = new MilestoneWorkflowFixture();
         var submitHandler = new SubmitMilestoneCommandHandler(
@@ -654,23 +684,17 @@ public class MilestoneWorkflowTests
 
         fixture.FirstMilestone.Status = (int)MilestoneStatus.InProgress;
 
-        var response = await submitHandler.Handle(
+        var exception = await Assert.ThrowsAsync<BadRequestException>(() => submitHandler.Handle(
             new SubmitMilestoneCommand(
                 fixture.ContractId,
                 fixture.FirstMilestoneId,
                 fixture.FreelancerUserId,
                 "Published build.",
                 ExternalUrl: "https://example.com/build.zip"),
-            CancellationToken.None);
+            CancellationToken.None));
 
-        Assert.Equal((int)MilestoneStatus.Submitted, response.Status);
-        Assert.Equal("Published build.", response.SubmissionDescription);
-        Assert.Single(response.Attachments);
-        Assert.Equal((int)MilestoneSubmissionSourceType.Link, response.Attachments[0].SourceType);
-        Assert.Equal("https://example.com/build.zip", response.Attachments[0].FileUrl);
-        Assert.Equal("External URL", response.Attachments[0].FileName);
-        Assert.Null(response.Attachments[0].FileSize);
-        Assert.Null(response.Attachments[0].MimeType);
+        Assert.Contains("external deliverable URLs", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal((int)MilestoneStatus.InProgress, fixture.FirstMilestone.Status);
     }
 
     [Fact]

@@ -22,6 +22,8 @@ public class ContractDetailResponse
 
     public int Status { get; set; }
 
+    public int RevisionNumber { get; set; }
+
     public DateOnly? StartDate { get; set; }
 
     public DateOnly? EndDate { get; set; }

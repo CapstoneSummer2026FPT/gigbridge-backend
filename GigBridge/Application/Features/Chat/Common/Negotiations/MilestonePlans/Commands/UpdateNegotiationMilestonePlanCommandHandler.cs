@@ -68,20 +68,34 @@ public sealed class UpdateNegotiationMilestonePlanCommandHandler
         _context.Set<NegotiationMilestoneDraft>().RemoveRange(existing);
 
         var now = _dateTimeService.UtcNow;
-        var drafts = command.Request.Milestones.Select((item, index) => new NegotiationMilestoneDraft
+        var drafts = command.Request.Milestones.Select((item, index) =>
         {
-            NegotiationMilestoneDraftId = Guid.NewGuid(),
-            ConversationsId = command.ConversationId,
-            Title = item.Title?.Trim() ?? string.Empty,
-            Description = Clean(item.Description),
-            Amount = item.Amount,
-            EstimatedDuration = Clean(item.EstimatedDuration),
-            DueDate = item.DueDate,
-            Deliverables = item.Deliverables?.Trim() ?? string.Empty,
-            AcceptanceCriteria = item.AcceptanceCriteria?.Trim() ?? string.Empty,
-            OrderIndex = index,
-            CreatedAt = now,
-            UpdatedAt = now
+            var draft = new NegotiationMilestoneDraft
+            {
+                NegotiationMilestoneDraftId = Guid.NewGuid(),
+                ConversationsId = command.ConversationId,
+                Title = item.Title?.Trim() ?? string.Empty,
+                Description = Clean(item.Description),
+                Amount = item.Amount,
+                EstimatedDuration = Clean(item.EstimatedDuration),
+                DueDate = item.DueDate,
+                Deliverables = item.Deliverables?.Trim() ?? string.Empty,
+                AcceptanceCriteria = item.AcceptanceCriteria?.Trim() ?? string.Empty,
+                OrderIndex = index,
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+            draft.WorkItems = item.WorkItems.OrderBy(workItem => workItem.OrderIndex).Select((workItem, workIndex) => new NegotiationMilestoneDraftWorkItem
+            {
+                NegotiationMilestoneDraftWorkItemId = Guid.NewGuid(),
+                NegotiationMilestoneDraftId = draft.NegotiationMilestoneDraftId,
+                Title = workItem.Title?.Trim() ?? string.Empty,
+                Description = Clean(workItem.Description),
+                Deliverables = Clean(workItem.Deliverables),
+                EstimatedDuration = Clean(workItem.EstimatedDuration),
+                OrderIndex = workIndex
+            }).ToList();
+            return draft;
         }).ToList();
 
         _context.Set<NegotiationMilestoneDraft>().AddRange(drafts);
@@ -97,7 +111,16 @@ public sealed class UpdateNegotiationMilestonePlanCommandHandler
             DueDate = item.DueDate,
             Deliverables = item.Deliverables,
             AcceptanceCriteria = item.AcceptanceCriteria,
-            OrderIndex = item.OrderIndex
+            OrderIndex = item.OrderIndex,
+            WorkItems = item.WorkItems.OrderBy(workItem => workItem.OrderIndex).Select(workItem => new NegotiationWorkItemDto
+            {
+                Id = workItem.NegotiationMilestoneDraftWorkItemId,
+                Title = workItem.Title,
+                Description = workItem.Description,
+                Deliverables = workItem.Deliverables,
+                EstimatedDuration = workItem.EstimatedDuration,
+                OrderIndex = workItem.OrderIndex
+            }).ToList()
         }).ToList();
     }
 

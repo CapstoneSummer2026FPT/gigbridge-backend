@@ -71,7 +71,7 @@ public class ESignJobPostWorkflowTests
     }
 
     [Fact]
-    public async Task SubmitSignature_SignsDocumentAndOpensJobPost()
+    public async Task SubmitSignature_SignsLegacyJobPostDocumentWithoutCreatingContract()
     {
         var fixture = new ESignJobPostFixture();
         var document = fixture.AddPendingDocument();
@@ -108,11 +108,7 @@ public class ESignJobPostWorkflowTests
         Assert.Equal(fixture.Now, document.FinalizedAt);
         Assert.Equal(0, fixture.JobPost.Status);
 
-        var draftContract = fixture.Context.Set<Contract>()
-            .FirstOrDefault(c => c.JobPostsId == fixture.JobPostId);
-        Assert.NotNull(draftContract);
-        Assert.Equal((int)ContractStatus.PendingFreelancerSelection, draftContract.Status);
-        Assert.Null(draftContract.FreelancerProfilesId);
+        Assert.DoesNotContain(fixture.Context.Set<Contract>(), c => c.JobPostsId == fixture.JobPostId);
     }
 
     [Fact]

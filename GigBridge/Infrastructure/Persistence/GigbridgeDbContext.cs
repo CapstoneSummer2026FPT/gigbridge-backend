@@ -31,6 +31,20 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
     public virtual DbSet<Contract> Contracts { get; set; }
 
+    public virtual DbSet<ContractWorkItem> ContractWorkItems { get; set; }
+
+    public virtual DbSet<ContractChangeRequest> ContractChangeRequests { get; set; }
+
+    public virtual DbSet<ContractAmendment> ContractAmendments { get; set; }
+
+    public virtual DbSet<ContractAmendmentMilestone> ContractAmendmentMilestones { get; set; }
+
+    public virtual DbSet<ContractAmendmentWorkItem> ContractAmendmentWorkItems { get; set; }
+
+    public virtual DbSet<ContractAmendmentSignature> ContractAmendmentSignatures { get; set; }
+
+    public virtual DbSet<ContractPlanRevision> ContractPlanRevisions { get; set; }
+
     public virtual DbSet<ContractEscrow> ContractEscrows { get; set; }
 
     public virtual DbSet<ContractProductHandoff> ContractProductHandoffs { get; set; }
@@ -83,6 +97,10 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
     public virtual DbSet<JobPost> JobPosts { get; set; }
 
+    public virtual DbSet<JobPostMilestonePlan> JobPostMilestonePlans { get; set; }
+
+    public virtual DbSet<JobPostWorkItem> JobPostWorkItems { get; set; }
+
     public virtual DbSet<JobPostAttachment> JobPostAttachments { get; set; }
 
     public virtual DbSet<JobPostQuestion> JobPostQuestions { get; set; }
@@ -101,9 +119,15 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
     public virtual DbSet<NegotiationMilestoneDraft> NegotiationMilestoneDrafts { get; set; }
 
+    public virtual DbSet<NegotiationMilestoneDraftWorkItem> NegotiationMilestoneDraftWorkItems { get; set; }
+
     public virtual DbSet<NegotiationOfferMilestone> NegotiationOfferMilestones { get; set; }
 
+    public virtual DbSet<NegotiationOfferWorkItem> NegotiationOfferWorkItems { get; set; }
+
     public virtual DbSet<Milestone> Milestones { get; set; }
+
+    public virtual DbSet<MilestoneEarlyStartRequest> MilestoneEarlyStartRequests { get; set; }
 
     public virtual DbSet<MilestoneAttachment> MilestoneAttachments { get; set; }
 
@@ -351,6 +375,7 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.Property(e => e.Status).HasComment("Enum ContractStatus: 0=Draft, 1=PendingFreelancerSelection, 2=InNegotiation, 3=PendingContractDetails, 4=PendingContractConfirmation, 5=PendingEscrow, 6=PendingSignature, 7=Active, 8=Completed, 9=Cancelled, 10=Disputed");
             entity.Property(e => e.Title).HasMaxLength(500);
             entity.Property(e => e.TotalBudget).HasPrecision(18, 2);
+            entity.Property(e => e.RevisionNumber).HasDefaultValue(1);
 
             entity.HasOne(d => d.ClientProfiles).WithMany(p => p.Contracts)
                 .HasForeignKey(d => d.ClientProfilesId)
@@ -370,6 +395,99 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.HasOne(d => d.Proposals).WithOne(p => p.Contract)
                 .HasForeignKey<Contract>(d => d.ProposalsId)
                 .HasConstraintName("Contracts_propo_ProposalsId_fkey");
+        });
+
+        modelBuilder.Entity<ContractWorkItem>(entity =>
+        {
+            entity.HasKey(e => e.ContractWorkItemId);
+            entity.HasIndex(e => new { e.MilestonesId, e.OrderIndex }).IsUnique();
+            entity.Property(e => e.ContractWorkItemId).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.Title).HasMaxLength(200);
+            entity.Property(e => e.EstimatedDuration).HasMaxLength(100);
+            entity.Property(e => e.ProgressNote).HasMaxLength(2000);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.HasOne(e => e.Milestone).WithMany(e => e.WorkItems)
+                .HasForeignKey(e => e.MilestonesId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ContractChangeRequest>(entity =>
+        {
+            entity.HasKey(e => e.ContractChangeRequestId);
+            entity.Property(e => e.ContractChangeRequestId).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.Reason).HasMaxLength(2000);
+            entity.Property(e => e.RequestedChanges).HasColumnType("text");
+            entity.Property(e => e.ResponseNote).HasMaxLength(2000);
+            entity.Property(e => e.ClarificationRequestNote).HasMaxLength(2000);
+            entity.Property(e => e.ClarificationResponseNote).HasMaxLength(2000);
+            entity.Property(e => e.AffectedMilestoneIds).HasColumnType("uuid[]");
+            entity.Property(e => e.AffectedWorkItemIds).HasColumnType("uuid[]");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.HasOne(e => e.Contract).WithMany(e => e.ChangeRequests)
+                .HasForeignKey(e => e.ContractsId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ContractAmendment>(entity =>
+        {
+            entity.HasKey(e => e.ContractAmendmentId);
+            entity.HasIndex(e => e.ContractChangeRequestId).IsUnique();
+            entity.HasIndex(e => new { e.ContractsId, e.RevisionNumber }).IsUnique();
+            entity.Property(e => e.ContractAmendmentId).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.OriginalTotalBudget).HasPrecision(18, 2);
+            entity.Property(e => e.ProposedTotalBudget).HasPrecision(18, 2);
+            entity.Property(e => e.BudgetDelta).HasPrecision(18, 2);
+            entity.Property(e => e.Reason).HasMaxLength(2000);
+            entity.Property(e => e.ReviewNote).HasMaxLength(2000);
+            entity.Property(e => e.DocumentSnapshotJson).HasColumnType("jsonb");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.HasOne(e => e.Contract).WithMany(e => e.Amendments)
+                .HasForeignKey(e => e.ContractsId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.ChangeRequest).WithOne(e => e.Amendment)
+                .HasForeignKey<ContractAmendment>(e => e.ContractChangeRequestId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ContractAmendmentMilestone>(entity =>
+        {
+            entity.HasKey(e => e.ContractAmendmentMilestoneId);
+            entity.HasIndex(e => new { e.ContractAmendmentId, e.OrderIndex }).IsUnique();
+            entity.Property(e => e.ContractAmendmentMilestoneId).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.Title).HasMaxLength(500);
+            entity.Property(e => e.Amount).HasPrecision(18, 2);
+            entity.Property(e => e.EstimatedDuration).HasMaxLength(100);
+            entity.HasOne(e => e.Amendment).WithMany(e => e.Milestones)
+                .HasForeignKey(e => e.ContractAmendmentId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ContractAmendmentWorkItem>(entity =>
+        {
+            entity.HasKey(e => e.ContractAmendmentWorkItemId);
+            entity.HasIndex(e => new { e.ContractAmendmentMilestoneId, e.OrderIndex }).IsUnique();
+            entity.Property(e => e.ContractAmendmentWorkItemId).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.Title).HasMaxLength(200);
+            entity.Property(e => e.EstimatedDuration).HasMaxLength(100);
+            entity.HasOne(e => e.Milestone).WithMany(e => e.WorkItems)
+                .HasForeignKey(e => e.ContractAmendmentMilestoneId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ContractAmendmentSignature>(entity =>
+        {
+            entity.HasKey(e => e.ContractAmendmentSignatureId);
+            entity.HasIndex(e => new { e.ContractAmendmentId, e.UserId }).IsUnique();
+            entity.Property(e => e.ContractAmendmentSignatureId).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.SignatureData).HasColumnType("text");
+            entity.HasOne(e => e.Amendment).WithMany(e => e.Signatures)
+                .HasForeignKey(e => e.ContractAmendmentId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ContractPlanRevision>(entity =>
+        {
+            entity.HasKey(e => e.ContractPlanRevisionId);
+            entity.HasIndex(e => new { e.ContractsId, e.RevisionNumber }).IsUnique();
+            entity.Property(e => e.ContractPlanRevisionId).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.SnapshotJson).HasColumnType("jsonb");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.HasOne(e => e.Contract).WithMany(e => e.PlanRevisions)
+                .HasForeignKey(e => e.ContractsId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<ContractEscrow>(entity =>
@@ -1194,6 +1312,32 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
                 .HasConstraintName("JobPosts_clPro_ClientProfilesId_fkey");
         });
 
+        modelBuilder.Entity<JobPostMilestonePlan>(entity =>
+        {
+            entity.HasKey(e => e.JobPostMilestonePlanId);
+            entity.HasIndex(e => new { e.JobPostsId, e.OrderIndex }).IsUnique();
+            entity.Property(e => e.JobPostMilestonePlanId).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.Title).HasMaxLength(200);
+            entity.Property(e => e.Amount).HasPrecision(18, 2);
+            entity.Property(e => e.EstimatedDuration).HasMaxLength(100);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.HasOne(e => e.JobPost).WithMany(e => e.JobPostMilestonePlans)
+                .HasForeignKey(e => e.JobPostsId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<JobPostWorkItem>(entity =>
+        {
+            entity.HasKey(e => e.JobPostWorkItemId);
+            entity.HasIndex(e => new { e.JobPostMilestonePlanId, e.OrderIndex }).IsUnique();
+            entity.Property(e => e.JobPostWorkItemId).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.Title).HasMaxLength(200);
+            entity.Property(e => e.EstimatedDuration).HasMaxLength(100);
+            entity.HasOne(e => e.MilestonePlan).WithMany(e => e.WorkItems)
+                .HasForeignKey(e => e.JobPostMilestonePlanId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<JobPostPromotion>(entity =>
         {
             entity.ToTable("JobPostPromotions");
@@ -2008,6 +2152,9 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
                 .HasForeignKey(e => e.ProposalsId)
                 .OnDelete(DeleteBehavior.Cascade)
                 .HasConstraintName("ProposalWorkBreakdownItems_ProposalsId_fkey");
+            entity.HasOne(e => e.ProposalMilestonePlan).WithMany(e => e.WorkItems)
+                .HasForeignKey(e => e.ProposalMilestonePlansId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<ProposalMilestonePlan>(entity =>
@@ -2041,6 +2188,36 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
                 .HasConstraintName("NegotiationMilestoneDrafts_ConversationsId_fkey");
         });
 
+        modelBuilder.Entity<MilestoneEarlyStartRequest>(entity =>
+        {
+            entity.HasKey(e => e.MilestoneEarlyStartRequestId);
+            entity.HasIndex(e => new { e.MilestonesId, e.Status })
+                .IsUnique()
+                .HasFilter("\"Status\" = 0");
+            entity.Property(e => e.MilestoneEarlyStartRequestId).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.Reason).HasMaxLength(2000);
+            entity.Property(e => e.ResponseNote).HasMaxLength(2000);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.HasOne(e => e.Contract).WithMany()
+                .HasForeignKey(e => e.ContractsId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.Milestone).WithMany()
+                .HasForeignKey(e => e.MilestonesId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<NegotiationMilestoneDraftWorkItem>(entity =>
+        {
+            entity.HasKey(e => e.NegotiationMilestoneDraftWorkItemId);
+            entity.HasIndex(e => new { e.NegotiationMilestoneDraftId, e.OrderIndex }).IsUnique();
+            entity.Property(e => e.NegotiationMilestoneDraftWorkItemId).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.Title).HasMaxLength(200);
+            entity.Property(e => e.EstimatedDuration).HasMaxLength(100);
+            entity.HasOne(e => e.MilestoneDraft).WithMany(e => e.WorkItems)
+                .HasForeignKey(e => e.NegotiationMilestoneDraftId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<NegotiationOfferMilestone>(entity =>
         {
             entity.HasKey(e => e.NegotiationOfferMilestoneId).HasName("NegotiationOfferMilestones_pkey");
@@ -2053,6 +2230,18 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
                 .HasForeignKey(e => e.NegotiationOfferId)
                 .OnDelete(DeleteBehavior.Cascade)
                 .HasConstraintName("NegotiationOfferMilestones_NegotiationOfferId_fkey");
+        });
+
+        modelBuilder.Entity<NegotiationOfferWorkItem>(entity =>
+        {
+            entity.HasKey(e => e.NegotiationOfferWorkItemId);
+            entity.HasIndex(e => new { e.NegotiationOfferMilestoneId, e.OrderIndex }).IsUnique();
+            entity.Property(e => e.NegotiationOfferWorkItemId).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.Title).HasMaxLength(200);
+            entity.Property(e => e.EstimatedDuration).HasMaxLength(100);
+            entity.HasOne(e => e.Milestone).WithMany(e => e.WorkItems)
+                .HasForeignKey(e => e.NegotiationOfferMilestoneId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<ProposalCheatingEvent>(entity =>
@@ -2789,4 +2978,6 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
         OnModelCreatingPartial(modelBuilder);
     }
+
+    partial void OnModelCreatingPartial(ModelBuilder modelBuilder);
 }

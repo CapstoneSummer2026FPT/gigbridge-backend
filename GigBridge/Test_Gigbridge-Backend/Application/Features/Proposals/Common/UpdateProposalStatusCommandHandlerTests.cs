@@ -176,13 +176,7 @@ public class UpdateProposalStatusCommandHandlerTests
             Status = 0,
             JobPosts = jobPost
         };
-        proposal.ProposalWorkBreakdownItems.Add(new ProposalWorkBreakdownItem
-        {
-            ProposalWorkBreakdownItemsId = Guid.NewGuid(),
-            ProposalsId = proposalId,
-            Title = "Implementation"
-        });
-        proposal.ProposalMilestonePlans.Add(new ProposalMilestonePlan
+        var milestone = new ProposalMilestonePlan
         {
             ProposalMilestonePlansId = Guid.NewGuid(),
             ProposalsId = proposalId,
@@ -191,6 +185,15 @@ public class UpdateProposalStatusCommandHandlerTests
             EstimatedDuration = "1 week",
             Deliverables = "Production-ready implementation",
             AcceptanceCriteria = "All agreed acceptance tests pass"
+        };
+        proposal.ProposalMilestonePlans.Add(milestone);
+        proposal.ProposalWorkBreakdownItems.Add(new ProposalWorkBreakdownItem
+        {
+            ProposalWorkBreakdownItemsId = Guid.NewGuid(),
+            ProposalsId = proposalId,
+            ProposalMilestonePlansId = milestone.ProposalMilestonePlansId,
+            Title = "Implementation",
+            Description = "Implement and verify the agreed project scope."
         });
 
         context.AddSet(new FreelancerProfile
@@ -392,13 +395,7 @@ public class UpdateProposalStatusCommandHandlerTests
             Status = 0,
             JobPosts = jobPost
         };
-        proposal.ProposalWorkBreakdownItems.Add(new ProposalWorkBreakdownItem
-        {
-            ProposalWorkBreakdownItemsId = Guid.NewGuid(),
-            ProposalsId = proposal.ProposalsId,
-            Title = "Implementation"
-        });
-        proposal.ProposalMilestonePlans.Add(new ProposalMilestonePlan
+        var milestone = new ProposalMilestonePlan
         {
             ProposalMilestonePlansId = Guid.NewGuid(),
             ProposalsId = proposal.ProposalsId,
@@ -407,6 +404,15 @@ public class UpdateProposalStatusCommandHandlerTests
             EstimatedDuration = "1 week",
             Deliverables = "Production-ready implementation",
             AcceptanceCriteria = "All agreed acceptance tests pass"
+        };
+        proposal.ProposalMilestonePlans.Add(milestone);
+        proposal.ProposalWorkBreakdownItems.Add(new ProposalWorkBreakdownItem
+        {
+            ProposalWorkBreakdownItemsId = Guid.NewGuid(),
+            ProposalsId = proposal.ProposalsId,
+            ProposalMilestonePlansId = milestone.ProposalMilestonePlansId,
+            Title = "Implementation",
+            Description = "Implement and verify the agreed project scope."
         });
 
         context.AddSet(new FreelancerProfile

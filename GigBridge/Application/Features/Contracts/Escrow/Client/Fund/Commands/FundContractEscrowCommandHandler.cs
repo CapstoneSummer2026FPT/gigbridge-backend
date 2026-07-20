@@ -92,6 +92,7 @@ public sealed class FundContractEscrowCommandHandler :
         if (escrow.Status == (int)ContractEscrowStatus.Funded)
         {
             contract.Status = (int)ContractStatus.Active;
+            await StartFirstMilestoneAsync(contract.ContractsId, now, cancellationToken);
             await _context.SaveChangesAsync(cancellationToken);
             return new FundContractEscrowResponse(
                 contract.ContractsId,
@@ -136,6 +137,7 @@ public sealed class FundContractEscrowCommandHandler :
 
         contract.Status = (int)ContractStatus.Active;
         contract.UpdatedAt = now;
+        await StartFirstMilestoneAsync(contract.ContractsId, now, cancellationToken);
 
         _context.Set<WalletTransaction>().Add(new WalletTransaction
         {
@@ -252,5 +254,20 @@ public sealed class FundContractEscrowCommandHandler :
             .FirstOrDefaultAsync(escrow => escrow.ContractsId == contractId, cancellationToken);
 
         return escrow ?? throw new NotFoundException("Contract escrow does not exist.");
+    }
+
+    private async Task StartFirstMilestoneAsync(Guid contractId, DateTime now, CancellationToken cancellationToken)
+    {
+        var first = await _context.Set<Milestone>()
+            .Where(item => item.ContractsId == contractId)
+            .OrderBy(item => item.SortOrder ?? int.MaxValue)
+            .ThenBy(item => item.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (first is not null && first.Status == (int)MilestoneStatus.Pending)
+        {
+            first.Status = (int)MilestoneStatus.InProgress;
+            first.StartedAt = now;
+            first.UpdatedAt = now;
+        }
     }
 }

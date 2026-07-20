@@ -34,6 +34,7 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
     {
         var offer = await _context.Set<NegotiationOffer>()
             .Include(item => item.NegotiationOfferMilestones)
+                .ThenInclude(item => item.WorkItems)
             .FirstOrDefaultAsync(
                 offer => offer.NegotiationOfferId == command.Request.NegotiationOfferId,
                 cancellationToken);
@@ -166,7 +167,7 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
             await _chatRealtimeNotifier.SendUsersEventAsync(
                 participantUserIds,
                 eventName,
-                new { contractId = offer.ContractsId },
+            new { contractId = response.ContractId },
                 cancellationToken);
         }
 
@@ -249,22 +250,32 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
             throw new ConflictException("A final offer has already been accepted for this job post.");
         }
 
-        var contract = await _context.Set<Contract>()
-            .FirstOrDefaultAsync(
-                contract => contract.ContractsId == offer.ContractsId,
-                cancellationToken);
+        var existingContract = await _context.Set<Contract>()
+            .AnyAsync(contract => contract.JobPostsId == offer.JobPostsId, cancellationToken);
+        if (existingContract) throw new ConflictException("A contract already exists for this job post.");
 
-        if (contract is null)
-        {
-            throw new NotFoundException("Contract draft does not exist.");
-        }
+        var jobPost = await _context.Set<JobPost>()
+            .FirstOrDefaultAsync(item => item.JobPostsId == offer.JobPostsId, cancellationToken)
+            ?? throw new NotFoundException("Job post does not exist.");
 
-        if (contract.Status != (int)ContractStatus.Draft &&
-            contract.Status != (int)ContractStatus.PendingFreelancerSelection &&
-            contract.Status != (int)ContractStatus.InNegotiation)
+        var contract = new Contract
         {
-            throw new BadRequestException("The contract draft can no longer accept a final offer.");
-        }
+            ContractsId = Guid.NewGuid(),
+            JobPostsId = offer.JobPostsId,
+            ClientProfilesId = offer.ClientProfilesId,
+            FreelancerProfilesId = offer.FreelancerProfilesId,
+            ProposalsId = offer.ProposalsId,
+            Title = jobPost.Title,
+            Description = offer.ScopeSummary ?? jobPost.Description,
+            TotalBudget = offer.FinalPrice,
+            StartDate = offer.StartDate,
+            EndDate = offer.EndDate,
+            Status = (int)ContractStatus.PendingContractConfirmation,
+            RevisionNumber = 1,
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+        _context.Set<Contract>().Add(contract);
 
         if (offer.NegotiationOfferMilestones.Count == 0)
         {
@@ -276,14 +287,9 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
             throw new BadRequestException("The final offer milestone total does not match its final price.");
         }
 
-        var existingMilestones = await _context.Set<Milestone>()
-            .Where(milestone => milestone.ContractsId == contract.ContractsId)
-            .ToListAsync(cancellationToken);
-        _context.Set<Milestone>().RemoveRange(existingMilestones);
-
         foreach (var snapshot in offer.NegotiationOfferMilestones.OrderBy(item => item.OrderIndex))
         {
-            _context.Set<Milestone>().Add(new Milestone
+            var milestone = new Milestone
             {
                 MilestonesId = Guid.NewGuid(),
                 ContractsId = contract.ContractsId,
@@ -298,7 +304,20 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
                 SortOrder = snapshot.OrderIndex,
                 ReleasedAmount = 0m,
                 CreatedAt = now
-            });
+            };
+            milestone.WorkItems = snapshot.WorkItems.OrderBy(item => item.OrderIndex).Select((item, index) => new ContractWorkItem
+            {
+                ContractWorkItemId = Guid.NewGuid(),
+                MilestonesId = milestone.MilestonesId,
+                Title = item.Title,
+                Description = item.Description,
+                Deliverables = item.Deliverables,
+                EstimatedDuration = item.EstimatedDuration,
+                OrderIndex = index,
+                Status = (int)ContractWorkItemStatus.Todo,
+                CreatedAt = now
+            }).ToList();
+            _context.Set<Milestone>().Add(milestone);
         }
 
         await ServiceFeeWorkflow.ChargeAsync(
@@ -313,43 +332,8 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
 
         offer.Status = (int)NegotiationOfferStatus.Accepted;
         offer.RespondedAt = now;
-
-        contract.FreelancerProfilesId = offer.FreelancerProfilesId;
-        contract.ProposalsId = offer.ProposalsId;
-        contract.TotalBudget = offer.FinalPrice;
-        contract.StartDate = offer.StartDate;
-        contract.EndDate = offer.EndDate;
-        contract.Status = (int)ContractStatus.PendingSignature;
-        contract.UpdatedAt = now;
-
-        var escrow = await _context.Set<ContractEscrow>()
-            .FirstOrDefaultAsync(existing => existing.ContractsId == contract.ContractsId, cancellationToken);
-
-        if (escrow is null)
-        {
-            escrow = new ContractEscrow
-            {
-                ContractEscrowId = Guid.NewGuid(),
-                ContractsId = contract.ContractsId,
-                RequiredAmount = offer.FinalPrice,
-                FundedAmount = 0m,
-                RequiredPercentage = 1.0m,
-                Currency = "VND",
-                Status = (int)ContractEscrowStatus.PendingFunding,
-                CreatedAt = now
-            };
-            _context.Set<ContractEscrow>().Add(escrow);
-        }
-        else
-        {
-            escrow.RequiredAmount = offer.FinalPrice;
-            escrow.FundedAmount = 0m;
-            escrow.RequiredPercentage = 1.0m;
-            escrow.Currency = string.IsNullOrWhiteSpace(escrow.Currency) ? "VND" : escrow.Currency;
-            escrow.Status = (int)ContractEscrowStatus.PendingFunding;
-            escrow.FundedAt = null;
-            escrow.ReleasedAt = null;
-        }
+        offer.ContractsId = contract.ContractsId;
+        conversation.ContractsId = contract.ContractsId;
 
         if (offer.ProposalsId.HasValue)
         {
@@ -389,12 +373,12 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
             otherConv.UpdatedAt = now;
         }
 
-        AddSystemMessage(conversation, "Final offer accepted. Contract is ready for signatures.", now);
+        AddSystemMessage(conversation, "Final offer accepted. Contract plan is ready for freelancer review.", now);
 
         return new RespondFinalOfferResponse(
             contract.ContractsId,
             contract.Status,
-            "Final offer accepted. Contract is ready for signatures.");
+            "Final offer accepted. Review the contract plan before signing.");
     }
 
     private string ChangeOfferStatus(

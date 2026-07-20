@@ -41,7 +41,16 @@ public sealed class GetNegotiationMilestonePlanQueryHandler
                 DueDate = item.DueDate,
                 Deliverables = item.Deliverables,
                 AcceptanceCriteria = item.AcceptanceCriteria,
-                OrderIndex = item.OrderIndex
+                OrderIndex = item.OrderIndex,
+                WorkItems = item.WorkItems.OrderBy(workItem => workItem.OrderIndex).Select(workItem => new NegotiationWorkItemDto
+                {
+                    Id = workItem.NegotiationMilestoneDraftWorkItemId,
+                    Title = workItem.Title,
+                    Description = workItem.Description,
+                    Deliverables = workItem.Deliverables,
+                    EstimatedDuration = workItem.EstimatedDuration,
+                    OrderIndex = workItem.OrderIndex
+                }).ToList()
             })
             .ToListAsync(cancellationToken);
     }

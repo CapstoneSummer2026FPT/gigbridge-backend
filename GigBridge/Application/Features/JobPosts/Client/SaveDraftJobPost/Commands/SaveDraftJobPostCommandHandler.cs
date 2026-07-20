@@ -79,11 +79,65 @@ public sealed class SaveDraftJobPostCommandHandler
         ApplyDraftFields(jobPost, command.Request, normalizedSkills);
         await ReplaceJobPostSkills(jobPost.JobPostsId, normalizedSkills.SkillIds, cancellationToken);
         await ReplaceQuestionsIfProvided(jobPost.JobPostsId, command.Request.Questions, cancellationToken);
+        await ReplaceMilestonePlansIfProvided(jobPost, command.Request.MilestonePlans, cancellationToken);
 
         await _context.SaveChangesAsync(cancellationToken);
 
         return true;
     }
+
+    private async Task ReplaceMilestonePlansIfProvided(
+        JobPost jobPost,
+        List<Application.Features.JobPosts.Common.DTOs.JobPostMilestonePlanDto>? requests,
+        CancellationToken cancellationToken)
+    {
+        if (requests is null) return;
+
+        var existing = await _context.Set<JobPostMilestonePlan>()
+            .Where(item => item.JobPostsId == jobPost.JobPostsId)
+            .ToListAsync(cancellationToken);
+        _context.Set<JobPostMilestonePlan>().RemoveRange(existing);
+
+        var now = _dateTimeService.UtcNow;
+        foreach (var request in requests.OrderBy(item => item.OrderIndex).Select((item, index) => (item, index)))
+        {
+            var milestone = new JobPostMilestonePlan
+            {
+                JobPostMilestonePlanId = Guid.NewGuid(),
+                JobPostsId = jobPost.JobPostsId,
+                Title = request.item.Title?.Trim() ?? string.Empty,
+                Description = Clean(request.item.Description),
+                Amount = request.item.Amount,
+                EstimatedDuration = Clean(request.item.EstimatedDuration),
+                Deliverables = Clean(request.item.Deliverables),
+                AcceptanceCriteria = Clean(request.item.AcceptanceCriteria),
+                OrderIndex = request.index,
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+            milestone.WorkItems = request.item.WorkItems
+                .OrderBy(item => item.OrderIndex)
+                .Select((item, index) => new JobPostWorkItem
+                {
+                    JobPostWorkItemId = Guid.NewGuid(),
+                    JobPostMilestonePlanId = milestone.JobPostMilestonePlanId,
+                    Title = item.Title?.Trim() ?? string.Empty,
+                    Description = Clean(item.Description),
+                    Deliverables = Clean(item.Deliverables),
+                    EstimatedDuration = Clean(item.EstimatedDuration),
+                    OrderIndex = index
+                })
+                .ToList();
+            _context.Set<JobPostMilestonePlan>().Add(milestone);
+        }
+
+        var total = requests.Sum(item => item.Amount);
+        jobPost.BudgetMin = total > 0 ? total : null;
+        jobPost.BudgetMax = total > 0 ? total : null;
+    }
+
+    private static string? Clean(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private void ApplyDraftFields(
         JobPost jobPost,

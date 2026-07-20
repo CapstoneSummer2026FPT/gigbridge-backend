@@ -41,8 +41,8 @@ public sealed class AddDisputeEvidenceCommandHandlerTests
     }
 
     [Theory]
-    [InlineData(2)]
-    [InlineData(3)]
+    [InlineData((int)DisputeStatus.Resolved)]
+    [InlineData((int)DisputeStatus.Closed)]
     public async Task Handle_RejectsEvidenceAfterActiveDisputeStatuses(int status)
     {
         var fixture = CreateFixture(status);
@@ -59,7 +59,7 @@ public sealed class AddDisputeEvidenceCommandHandlerTests
                     1)]),
             CancellationToken.None));
 
-        Assert.Equal("Evidence can only be added while the dispute is open or under review.", exception.Message);
+        Assert.Equal("Evidence can only be added while the dispute is active.", exception.Message);
         Assert.Empty(fixture.Evidences.Entities);
         Assert.Equal(0, fixture.Context.SaveChangesCount);
     }

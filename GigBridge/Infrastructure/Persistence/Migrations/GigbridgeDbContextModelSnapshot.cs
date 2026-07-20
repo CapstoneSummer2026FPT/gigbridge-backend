@@ -178,9 +178,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<Guid>("ClientUserId")
                         .HasColumnType("uuid");
 
-                    b.Property<int>("ClickCount")
-                        .HasColumnType("integer");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -565,6 +562,11 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("ProposalsId");
 
+                    b.Property<int>("RevisionNumber")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1);
+
                     b.Property<DateOnly?>("StartDate")
                         .HasColumnType("date");
 
@@ -604,6 +606,256 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "Status" }, "IX_Contracts_Status");
 
                     b.ToTable("Contracts");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ContractAmendment", b =>
+                {
+                    b.Property<Guid>("ContractAmendmentId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateTime?>("AppliedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("BudgetDelta")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid>("ContractChangeRequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ContractsId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DocumentSnapshotJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<decimal>("OriginalTotalBudget")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("ProposedTotalBudget")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("ReviewNote")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.HasKey("ContractAmendmentId");
+
+                    b.HasIndex("ContractChangeRequestId")
+                        .IsUnique();
+
+                    b.HasIndex("ContractsId", "RevisionNumber")
+                        .IsUnique();
+
+                    b.ToTable("ContractAmendments");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ContractAmendmentMilestone", b =>
+                {
+                    b.Property<Guid>("ContractAmendmentMilestoneId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<string>("AcceptanceCriteria")
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid>("ContractAmendmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Deliverables")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<DateOnly?>("DueDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("EstimatedDuration")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("OrderIndex")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("SourceMilestoneId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.HasKey("ContractAmendmentMilestoneId");
+
+                    b.HasIndex("ContractAmendmentId", "OrderIndex")
+                        .IsUnique();
+
+                    b.ToTable("ContractAmendmentMilestones");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ContractAmendmentSignature", b =>
+                {
+                    b.Property<Guid>("ContractAmendmentSignatureId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<Guid>("ContractAmendmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SignatureData")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("SignedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("SignerRole")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("ContractAmendmentSignatureId");
+
+                    b.HasIndex("ContractAmendmentId", "UserId")
+                        .IsUnique();
+
+                    b.ToTable("ContractAmendmentSignatures");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ContractAmendmentWorkItem", b =>
+                {
+                    b.Property<Guid>("ContractAmendmentWorkItemId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<Guid>("ContractAmendmentMilestoneId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Deliverables")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<string>("EstimatedDuration")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("OrderIndex")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("SourceContractWorkItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("ContractAmendmentWorkItemId");
+
+                    b.HasIndex("ContractAmendmentMilestoneId", "OrderIndex")
+                        .IsUnique();
+
+                    b.ToTable("ContractAmendmentWorkItems");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ContractChangeRequest", b =>
+                {
+                    b.Property<Guid>("ContractChangeRequestId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<Guid[]>("AffectedMilestoneIds")
+                        .IsRequired()
+                        .HasColumnType("uuid[]");
+
+                    b.Property<Guid[]>("AffectedWorkItemIds")
+                        .IsRequired()
+                        .HasColumnType("uuid[]");
+
+                    b.Property<string>("ClarificationRequestNote")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("ClarificationResponseNote")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTime?>("ClarifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("ContractsId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<Guid>("RequestedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RequestedChanges")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("RespondedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("RespondedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ResponseNote")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.HasKey("ContractChangeRequestId");
+
+                    b.HasIndex("ContractsId");
+
+                    b.ToTable("ContractChangeRequests");
                 });
 
             modelBuilder.Entity("Domain.Entities.ContractEscrow", b =>
@@ -672,6 +924,39 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "Status" }, "IX_ContractEscrows_Status");
 
                     b.ToTable("ContractEscrows");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ContractPlanRevision", b =>
+                {
+                    b.Property<Guid>("ContractPlanRevisionId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<Guid>("ContractsId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SnapshotJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid>("SubmittedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("ContractPlanRevisionId");
+
+                    b.HasIndex("ContractsId", "RevisionNumber")
+                        .IsUnique();
+
+                    b.ToTable("ContractPlanRevisions");
                 });
 
             modelBuilder.Entity("Domain.Entities.ContractProductHandoff", b =>
@@ -751,6 +1036,60 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "ContractsId", "Version" }, "IX_ContractProductHandoffs_ContractsId_Version");
 
                     b.ToTable("ContractProductHandoffs");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ContractWorkItem", b =>
+                {
+                    b.Property<Guid>("ContractWorkItemId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("Deliverables")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<string>("EstimatedDuration")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("MilestonesId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("OrderIndex")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ProgressNote")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("ContractWorkItemId");
+
+                    b.HasIndex("MilestonesId", "OrderIndex")
+                        .IsUnique();
+
+                    b.ToTable("ContractWorkItems");
                 });
 
             modelBuilder.Entity("Domain.Entities.Conversation", b =>
@@ -974,6 +1313,12 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnName("DisputesId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
+                    b.Property<int>("AiAnalysisStatus")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("AiSuggestedResolution")
+                        .HasColumnType("text");
+
                     b.Property<Guid?>("AssignedAdminId")
                         .HasColumnType("uuid")
                         .HasColumnName("AssignedAdminId");
@@ -984,11 +1329,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<decimal?>("ClaimedAmount")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)");
-                    b.Property<int>("AiAnalysisStatus")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("AiSuggestedResolution")
-                        .HasColumnType("text");
 
                     b.Property<Guid>("ContractsId")
                         .HasColumnType("uuid")
@@ -2416,11 +2756,65 @@ namespace Infrastructure.Persistence.Migrations
                     b.ToTable("JobPostAttachments");
                 });
 
+            modelBuilder.Entity("Domain.Entities.JobPostMilestonePlan", b =>
+                {
+                    b.Property<Guid>("JobPostMilestonePlanId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<string>("AcceptanceCriteria")
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("Deliverables")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<string>("EstimatedDuration")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("JobPostsId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("OrderIndex")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("JobPostMilestonePlanId");
+
+                    b.HasIndex("JobPostsId", "OrderIndex")
+                        .IsUnique();
+
+                    b.ToTable("JobPostMilestonePlans");
+                });
+
             modelBuilder.Entity("Domain.Entities.JobPostPromotion", b =>
                 {
                     b.Property<Guid>("JobPostPromotionsId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
+
+                    b.Property<int>("ClickCount")
+                        .HasColumnType("integer");
 
                     b.Property<Guid>("ClientUserId")
                         .HasColumnType("uuid");
@@ -2557,6 +2951,42 @@ namespace Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("JobPostSkills");
+                });
+
+            modelBuilder.Entity("Domain.Entities.JobPostWorkItem", b =>
+                {
+                    b.Property<Guid>("JobPostWorkItemId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<string>("Deliverables")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<string>("EstimatedDuration")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("JobPostMilestonePlanId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("OrderIndex")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("JobPostWorkItemId");
+
+                    b.HasIndex("JobPostMilestonePlanId", "OrderIndex")
+                        .IsUnique();
+
+                    b.ToTable("JobPostWorkItems");
                 });
 
             modelBuilder.Entity("Domain.Entities.Major", b =>
@@ -2916,6 +3346,56 @@ namespace Infrastructure.Persistence.Migrations
                     b.ToTable("MilestoneAttachments");
                 });
 
+            modelBuilder.Entity("Domain.Entities.MilestoneEarlyStartRequest", b =>
+                {
+                    b.Property<Guid>("MilestoneEarlyStartRequestId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<Guid>("ContractsId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid>("MilestonesId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<Guid>("RequestedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("RespondedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("RespondedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ResponseNote")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.HasKey("MilestoneEarlyStartRequestId");
+
+                    b.HasIndex("ContractsId");
+
+                    b.HasIndex("MilestonesId", "Status")
+                        .IsUnique()
+                        .HasFilter("\"Status\" = 0");
+
+                    b.ToTable("MilestoneEarlyStartRequests");
+                });
+
             modelBuilder.Entity("Domain.Entities.NegotiationMilestoneDraft", b =>
                 {
                     b.Property<Guid>("NegotiationMilestoneDraftId")
@@ -2976,6 +3456,42 @@ namespace Infrastructure.Persistence.Migrations
                     b.ToTable("NegotiationMilestoneDrafts");
                 });
 
+            modelBuilder.Entity("Domain.Entities.NegotiationMilestoneDraftWorkItem", b =>
+                {
+                    b.Property<Guid>("NegotiationMilestoneDraftWorkItemId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<string>("Deliverables")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<string>("EstimatedDuration")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("NegotiationMilestoneDraftId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("OrderIndex")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("NegotiationMilestoneDraftWorkItemId");
+
+                    b.HasIndex("NegotiationMilestoneDraftId", "OrderIndex")
+                        .IsUnique();
+
+                    b.ToTable("NegotiationMilestoneDraftWorkItems");
+                });
+
             modelBuilder.Entity("Domain.Entities.NegotiationOffer", b =>
                 {
                     b.Property<Guid>("NegotiationOfferId")
@@ -2991,7 +3507,7 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("ClientProfilesId");
 
-                    b.Property<Guid>("ContractsId")
+                    b.Property<Guid?>("ContractsId")
                         .HasColumnType("uuid")
                         .HasColumnName("ContractsId");
 
@@ -3112,6 +3628,42 @@ namespace Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("NegotiationOfferMilestones");
+                });
+
+            modelBuilder.Entity("Domain.Entities.NegotiationOfferWorkItem", b =>
+                {
+                    b.Property<Guid>("NegotiationOfferWorkItemId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<string>("Deliverables")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<string>("EstimatedDuration")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("NegotiationOfferMilestoneId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("OrderIndex")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("NegotiationOfferWorkItemId");
+
+                    b.HasIndex("NegotiationOfferMilestoneId", "OrderIndex")
+                        .IsUnique();
+
+                    b.ToTable("NegotiationOfferWorkItems");
                 });
 
             modelBuilder.Entity("Domain.Entities.Notification", b =>
@@ -3810,6 +4362,9 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<int>("OrderIndex")
                         .HasColumnType("integer");
 
+                    b.Property<Guid?>("ProposalMilestonePlansId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid>("ProposalsId")
                         .HasColumnType("uuid");
 
@@ -3820,6 +4375,8 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasKey("ProposalWorkBreakdownItemsId")
                         .HasName("ProposalWorkBreakdownItems_pkey");
+
+                    b.HasIndex("ProposalMilestonePlansId");
 
                     b.HasIndex(new[] { "ProposalsId", "OrderIndex" }, "IX_ProposalWorkBreakdownItems_Proposal_Order");
 
@@ -5259,6 +5816,69 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("Proposals");
                 });
 
+            modelBuilder.Entity("Domain.Entities.ContractAmendment", b =>
+                {
+                    b.HasOne("Domain.Entities.ContractChangeRequest", "ChangeRequest")
+                        .WithOne("Amendment")
+                        .HasForeignKey("Domain.Entities.ContractAmendment", "ContractChangeRequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Domain.Entities.Contract", "Contract")
+                        .WithMany("Amendments")
+                        .HasForeignKey("ContractsId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ChangeRequest");
+
+                    b.Navigation("Contract");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ContractAmendmentMilestone", b =>
+                {
+                    b.HasOne("Domain.Entities.ContractAmendment", "Amendment")
+                        .WithMany("Milestones")
+                        .HasForeignKey("ContractAmendmentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Amendment");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ContractAmendmentSignature", b =>
+                {
+                    b.HasOne("Domain.Entities.ContractAmendment", "Amendment")
+                        .WithMany("Signatures")
+                        .HasForeignKey("ContractAmendmentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Amendment");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ContractAmendmentWorkItem", b =>
+                {
+                    b.HasOne("Domain.Entities.ContractAmendmentMilestone", "Milestone")
+                        .WithMany("WorkItems")
+                        .HasForeignKey("ContractAmendmentMilestoneId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Milestone");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ContractChangeRequest", b =>
+                {
+                    b.HasOne("Domain.Entities.Contract", "Contract")
+                        .WithMany("ChangeRequests")
+                        .HasForeignKey("ContractsId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Contract");
+                });
+
             modelBuilder.Entity("Domain.Entities.ContractEscrow", b =>
                 {
                     b.HasOne("Domain.Entities.Contract", "Contract")
@@ -5266,6 +5886,17 @@ namespace Infrastructure.Persistence.Migrations
                         .HasForeignKey("Domain.Entities.ContractEscrow", "ContractsId")
                         .IsRequired()
                         .HasConstraintName("ContractEscrows_cont_ContractsId_fkey");
+
+                    b.Navigation("Contract");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ContractPlanRevision", b =>
+                {
+                    b.HasOne("Domain.Entities.Contract", "Contract")
+                        .WithMany("PlanRevisions")
+                        .HasForeignKey("ContractsId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("Contract");
                 });
@@ -5294,6 +5925,17 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("ReceivedByUser");
 
                     b.Navigation("SubmittedByUser");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ContractWorkItem", b =>
+                {
+                    b.HasOne("Domain.Entities.Milestone", "Milestone")
+                        .WithMany("WorkItems")
+                        .HasForeignKey("MilestonesId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Milestone");
                 });
 
             modelBuilder.Entity("Domain.Entities.Conversation", b =>
@@ -5826,6 +6468,17 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("JobPosts");
                 });
 
+            modelBuilder.Entity("Domain.Entities.JobPostMilestonePlan", b =>
+                {
+                    b.HasOne("Domain.Entities.JobPost", "JobPost")
+                        .WithMany("JobPostMilestonePlans")
+                        .HasForeignKey("JobPostsId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("JobPost");
+                });
+
             modelBuilder.Entity("Domain.Entities.JobPostPromotion", b =>
                 {
                     b.HasOne("Domain.Entities.User", "ClientUser")
@@ -5881,6 +6534,17 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("JobPosts");
 
                     b.Navigation("Skills");
+                });
+
+            modelBuilder.Entity("Domain.Entities.JobPostWorkItem", b =>
+                {
+                    b.HasOne("Domain.Entities.JobPostMilestonePlan", "MilestonePlan")
+                        .WithMany("WorkItems")
+                        .HasForeignKey("JobPostMilestonePlanId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("MilestonePlan");
                 });
 
             modelBuilder.Entity("Domain.Entities.MajorCategory", b =>
@@ -5977,6 +6641,25 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("UploadedByUser");
                 });
 
+            modelBuilder.Entity("Domain.Entities.MilestoneEarlyStartRequest", b =>
+                {
+                    b.HasOne("Domain.Entities.Contract", "Contract")
+                        .WithMany()
+                        .HasForeignKey("ContractsId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Domain.Entities.Milestone", "Milestone")
+                        .WithMany()
+                        .HasForeignKey("MilestonesId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Contract");
+
+                    b.Navigation("Milestone");
+                });
+
             modelBuilder.Entity("Domain.Entities.NegotiationMilestoneDraft", b =>
                 {
                     b.HasOne("Domain.Entities.Conversation", "Conversations")
@@ -5987,6 +6670,17 @@ namespace Infrastructure.Persistence.Migrations
                         .HasConstraintName("NegotiationMilestoneDrafts_ConversationsId_fkey");
 
                     b.Navigation("Conversations");
+                });
+
+            modelBuilder.Entity("Domain.Entities.NegotiationMilestoneDraftWorkItem", b =>
+                {
+                    b.HasOne("Domain.Entities.NegotiationMilestoneDraft", "MilestoneDraft")
+                        .WithMany("WorkItems")
+                        .HasForeignKey("NegotiationMilestoneDraftId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("MilestoneDraft");
                 });
 
             modelBuilder.Entity("Domain.Entities.NegotiationOffer", b =>
@@ -6000,7 +6694,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasOne("Domain.Entities.Contract", "Contracts")
                         .WithMany("NegotiationOffers")
                         .HasForeignKey("ContractsId")
-                        .IsRequired()
                         .HasConstraintName("NegotiationOffers_cont_ContractsId_fkey");
 
                     b.HasOne("Domain.Entities.Conversation", "Conversations")
@@ -6049,6 +6742,17 @@ namespace Infrastructure.Persistence.Migrations
                         .HasConstraintName("NegotiationOfferMilestones_NegotiationOfferId_fkey");
 
                     b.Navigation("NegotiationOffer");
+                });
+
+            modelBuilder.Entity("Domain.Entities.NegotiationOfferWorkItem", b =>
+                {
+                    b.HasOne("Domain.Entities.NegotiationOfferMilestone", "Milestone")
+                        .WithMany("WorkItems")
+                        .HasForeignKey("NegotiationOfferMilestoneId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Milestone");
                 });
 
             modelBuilder.Entity("Domain.Entities.Notification", b =>
@@ -6267,12 +6971,19 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.ProposalWorkBreakdownItem", b =>
                 {
+                    b.HasOne("Domain.Entities.ProposalMilestonePlan", "ProposalMilestonePlan")
+                        .WithMany("WorkItems")
+                        .HasForeignKey("ProposalMilestonePlansId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("Domain.Entities.Proposal", "Proposals")
                         .WithMany("ProposalWorkBreakdownItems")
                         .HasForeignKey("ProposalsId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("ProposalWorkBreakdownItems_ProposalsId_fkey");
+
+                    b.Navigation("ProposalMilestonePlan");
 
                     b.Navigation("Proposals");
                 });
@@ -6616,6 +7327,10 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.Contract", b =>
                 {
+                    b.Navigation("Amendments");
+
+                    b.Navigation("ChangeRequests");
+
                     b.Navigation("ContractEscrow");
 
                     b.Navigation("ContractProductHandoffs");
@@ -6630,11 +7345,30 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.Navigation("NegotiationOffers");
 
+                    b.Navigation("PlanRevisions");
+
                     b.Navigation("ReportContracts");
 
                     b.Navigation("Reviews");
 
                     b.Navigation("WalletTransactions");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ContractAmendment", b =>
+                {
+                    b.Navigation("Milestones");
+
+                    b.Navigation("Signatures");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ContractAmendmentMilestone", b =>
+                {
+                    b.Navigation("WorkItems");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ContractChangeRequest", b =>
+                {
+                    b.Navigation("Amendment");
                 });
 
             modelBuilder.Entity("Domain.Entities.ContractEscrow", b =>
@@ -6716,6 +7450,8 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.Navigation("JobPostAttachments");
 
+                    b.Navigation("JobPostMilestonePlans");
+
                     b.Navigation("JobPostPromotions");
 
                     b.Navigation("JobPostQuestions");
@@ -6727,6 +7463,11 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("Proposals");
 
                     b.Navigation("SavedJobs");
+                });
+
+            modelBuilder.Entity("Domain.Entities.JobPostMilestonePlan", b =>
+                {
+                    b.Navigation("WorkItems");
                 });
 
             modelBuilder.Entity("Domain.Entities.JobPostQuestion", b =>
@@ -6772,11 +7513,23 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("PaymentProofs");
 
                     b.Navigation("ReportContracts");
+
+                    b.Navigation("WorkItems");
+                });
+
+            modelBuilder.Entity("Domain.Entities.NegotiationMilestoneDraft", b =>
+                {
+                    b.Navigation("WorkItems");
                 });
 
             modelBuilder.Entity("Domain.Entities.NegotiationOffer", b =>
                 {
                     b.Navigation("NegotiationOfferMilestones");
+                });
+
+            modelBuilder.Entity("Domain.Entities.NegotiationOfferMilestone", b =>
+                {
+                    b.Navigation("WorkItems");
                 });
 
             modelBuilder.Entity("Domain.Entities.Proposal", b =>
@@ -6798,6 +7551,11 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("ProposalQuestionTimers");
 
                     b.Navigation("ProposalWorkBreakdownItems");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ProposalMilestonePlan", b =>
+                {
+                    b.Navigation("WorkItems");
                 });
 
             modelBuilder.Entity("Domain.Entities.ReportContract", b =>

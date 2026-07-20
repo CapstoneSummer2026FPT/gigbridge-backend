@@ -56,6 +56,14 @@ public sealed class SubmitMilestoneCommandHandler :
             throw new BadRequestException("Only in-progress milestones can be submitted.");
         }
 
+        var workItems = await _context.Set<ContractWorkItem>()
+            .Where(item => item.MilestonesId == milestone.MilestonesId)
+            .ToListAsync(cancellationToken);
+        if (workItems.Count == 0 || workItems.Any(item => item.Status != (int)ContractWorkItemStatus.Completed))
+        {
+            throw new BadRequestException("All milestone work items must be completed before submitting deliverables.");
+        }
+
         ValidateRequest(command);
 
         var now = _dateTimeService.UtcNow;
@@ -93,28 +101,19 @@ public sealed class SubmitMilestoneCommandHandler :
 
     private static void ValidateRequest(SubmitMilestoneCommand command)
     {
-        var hasFile = command.File is not null;
-        var hasExternalUrl = !string.IsNullOrWhiteSpace(command.ExternalUrl);
-
-        if (hasFile == hasExternalUrl)
+        if (!string.IsNullOrWhiteSpace(command.ExternalUrl))
         {
-            throw new BadRequestException("Provide exactly one milestone file or external URL.");
+            throw new BadRequestException("External deliverable URLs are not accepted. Upload the deliverable to the platform.");
+        }
+
+        if (command.File is null)
+        {
+            throw new BadRequestException("A milestone deliverable file is required.");
         }
 
         if (command.Description is not null && command.Description.Length > 5000)
         {
             throw new BadRequestException("Submission description exceeds 5000 characters.");
-        }
-
-        if (command.File is null)
-        {
-            if (!Uri.TryCreate(command.ExternalUrl, UriKind.Absolute, out var uri) ||
-                (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
-            {
-                throw new BadRequestException("External URL must be a valid HTTP or HTTPS URL.");
-            }
-
-            return;
         }
 
         if (command.File.Length <= 0 || command.File.Length > MaxFileSizeBytes)
@@ -134,31 +133,16 @@ public sealed class SubmitMilestoneCommandHandler :
         DateTime now,
         CancellationToken cancellationToken)
     {
-        if (command.File is null)
-        {
-            return new MilestoneAttachment
-            {
-                MilestoneAttachmentsId = Guid.NewGuid(),
-                MilestonesId = milestoneId,
-                FileName = "External URL",
-                FileUrl = command.ExternalUrl!.Trim(),
-                FileSize = null,
-                SourceType = (int)MilestoneSubmissionSourceType.Link,
-                MimeType = null,
-                UploadedByUserId = command.UserId,
-                CreatedAt = now
-            };
-        }
-
+        var file = command.File ?? throw new BadRequestException("A milestone deliverable file is required.");
         if (_mediaService == null)
         {
             throw new InvalidOperationException("MediaService is not configured for file uploads.");
         }
 
         var fileUrl = await _mediaService.UploadFileAsync(
-            command.File.Content,
-            command.File.FileName,
-            command.File.ContentType,
+            file.Content,
+            file.FileName,
+            file.ContentType,
             "milestones",
             cancellationToken);
 
@@ -166,13 +150,13 @@ public sealed class SubmitMilestoneCommandHandler :
         {
             MilestoneAttachmentsId = Guid.NewGuid(),
             MilestonesId = milestoneId,
-            FileName = command.File.FileName.Trim(),
+            FileName = file.FileName.Trim(),
             FileUrl = fileUrl,
-            FileSize = command.File.Length,
+            FileSize = file.Length,
             SourceType = (int)MilestoneSubmissionSourceType.File,
-            MimeType = string.IsNullOrWhiteSpace(command.File.ContentType)
+            MimeType = string.IsNullOrWhiteSpace(file.ContentType)
                 ? null
-                : command.File.ContentType.Trim(),
+                : file.ContentType.Trim(),
             UploadedByUserId = command.UserId,
             CreatedAt = now
         };

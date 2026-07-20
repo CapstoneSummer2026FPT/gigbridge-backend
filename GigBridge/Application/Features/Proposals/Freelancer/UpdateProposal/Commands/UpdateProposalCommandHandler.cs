@@ -72,11 +72,18 @@ public class UpdateProposalCommandHandler : IRequestHandler<UpdateProposalComman
         _context.Set<ProposalWorkBreakdownItem>().RemoveRange(proposal.ProposalWorkBreakdownItems);
         _context.Set<ProposalMilestonePlan>().RemoveRange(proposal.ProposalMilestonePlans);
 
-        proposal.ProposalWorkBreakdownItems = (command.Request.WorkBreakdownItems ?? [])
-            .Select((item, index) => ProposalPlanMapper.ToEntity(proposal.ProposalsId, item, index))
-            .ToList();
         proposal.ProposalMilestonePlans = milestonePlans
             .Select((item, index) => ProposalPlanMapper.ToEntity(proposal.ProposalsId, item, index))
+            .ToList();
+        var milestoneIdsByOrder = proposal.ProposalMilestonePlans.ToDictionary(item => item.OrderIndex, item => item.ProposalMilestonePlansId);
+        proposal.ProposalWorkBreakdownItems = ProposalPlanMapper.ResolveWorkItems(command.Request.WorkBreakdownItems, milestonePlans)
+            .Select((item, index) => ProposalPlanMapper.ToEntity(
+                proposal.ProposalsId,
+                item,
+                index,
+                item.MilestoneOrderIndex.HasValue && milestoneIdsByOrder.TryGetValue(item.MilestoneOrderIndex.Value, out var milestoneId)
+                    ? milestoneId
+                    : null))
             .ToList();
 
         proposal.UpdatedAt = _dateTimeService.UtcNow;

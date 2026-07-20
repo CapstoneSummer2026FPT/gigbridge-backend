@@ -59,4 +59,6 @@ public partial class Milestone
     public virtual ICollection<MilestoneAttachment> MilestoneAttachments { get; set; } = new List<MilestoneAttachment>();
 
     public virtual ICollection<PaymentProof> PaymentProofs { get; set; } = new List<PaymentProof>();
+
+    public virtual ICollection<ContractWorkItem> WorkItems { get; set; } = new List<ContractWorkItem>();
 }

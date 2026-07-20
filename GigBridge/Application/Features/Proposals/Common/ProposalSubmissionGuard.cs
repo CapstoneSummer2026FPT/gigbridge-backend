@@ -28,9 +28,19 @@ internal static class ProposalSubmissionGuard
         }
 
         if (proposal.ProposalWorkBreakdownItems.Count == 0 ||
-            proposal.ProposalWorkBreakdownItems.Any(item => string.IsNullOrWhiteSpace(item.Title)))
+            proposal.ProposalWorkBreakdownItems.Any(item =>
+                string.IsNullOrWhiteSpace(item.Title) ||
+                string.IsNullOrWhiteSpace(item.Description) ||
+                !item.ProposalMilestonePlansId.HasValue))
         {
-            throw new BadRequestException("At least one titled work breakdown item is required before submission.");
+            throw new BadRequestException("Every work breakdown item must have a title, description, and belong to a milestone before submission.");
+        }
+
+        if (proposal.ProposalMilestonePlans.Any(milestone =>
+                !proposal.ProposalWorkBreakdownItems.Any(item =>
+                    item.ProposalMilestonePlansId == milestone.ProposalMilestonePlansId)))
+        {
+            throw new BadRequestException("Each milestone requires at least one work breakdown item before submission.");
         }
 
         if (proposal.ProposalMilestonePlans.Count == 0 ||
