@@ -30,7 +30,10 @@ internal static class DisputeAccess
     public static readonly int[] ActiveStatuses =
     [
         (int)DisputeStatus.Open,
-        (int)DisputeStatus.UnderReview
+        (int)DisputeStatus.WaitingAdmin,
+        (int)DisputeStatus.UnderReview,
+        (int)DisputeStatus.WaitingEvidence,
+        (int)DisputeStatus.DecisionPending
     ];
 
     public static bool CanCreateForContractStatus(int status) =>
@@ -40,6 +43,11 @@ internal static class DisputeAccess
 
     public static void EnsureCreationAllowed(Contract contract)
     {
+        if (contract.Status == (int)ContractStatus.Disputed)
+        {
+            throw new BadRequestException("A dispute already exists for this contract.");
+        }
+
         if (!CanCreateForContractStatus(contract.Status))
         {
             throw new BadRequestException(

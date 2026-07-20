@@ -33,16 +33,25 @@ internal sealed class InMemoryApplicationDbContext : IApplicationDbContext
 
     public int SaveChangesCount { get; private set; }
 
+    public int TransactionBeginCount { get; private set; }
+
+    public int TransactionCommitCount { get; private set; }
+
+    public Action<int>? OnSaveChanges { get; set; }
+
     public Exception? SaveChangesException { get; set; }
 
     public Task<IApplicationDbContextTransaction> BeginTransactionAsync(CancellationToken cancellationToken)
     {
-        return Task.FromResult<IApplicationDbContextTransaction>(new NoopApplicationDbContextTransaction());
+        TransactionBeginCount++;
+        return Task.FromResult<IApplicationDbContextTransaction>(
+            new NoopApplicationDbContextTransaction(() => TransactionCommitCount++));
     }
 
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken)
     {
         SaveChangesCount++;
+        OnSaveChanges?.Invoke(SaveChangesCount);
         if (SaveChangesException is not null)
         {
             return Task.FromException<int>(SaveChangesException);
@@ -54,8 +63,16 @@ internal sealed class InMemoryApplicationDbContext : IApplicationDbContext
 
 internal sealed class NoopApplicationDbContextTransaction : IApplicationDbContextTransaction
 {
+    private readonly Action? _onCommit;
+
+    public NoopApplicationDbContextTransaction(Action? onCommit = null)
+    {
+        _onCommit = onCommit;
+    }
+
     public Task CommitAsync(CancellationToken cancellationToken)
     {
+        _onCommit?.Invoke();
         return Task.CompletedTask;
     }
 

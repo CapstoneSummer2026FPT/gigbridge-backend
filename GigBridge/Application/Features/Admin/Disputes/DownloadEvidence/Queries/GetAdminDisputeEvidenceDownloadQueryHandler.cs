@@ -37,7 +37,9 @@ public sealed class GetAdminDisputeEvidenceDownloadQueryHandler :
             .FirstOrDefaultAsync(cancellationToken)
             ?? throw new NotFoundException("Dispute evidence does not exist.");
 
-        if (string.IsNullOrWhiteSpace(evidence.FileUrl))
+        if (!evidence.IsRequestFulfilled && evidence.IsRequestedByAdmin ||
+            string.IsNullOrWhiteSpace(evidence.FileUrl) ||
+            string.IsNullOrWhiteSpace(evidence.FileName))
             throw new BadRequestException("Dispute evidence does not have a downloadable URL.");
 
         return new DisputeEvidenceDownloadResponse(

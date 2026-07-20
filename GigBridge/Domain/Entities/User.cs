@@ -71,6 +71,10 @@ public partial class User
 
     public virtual ICollection<Dispute> DisputeInitiators { get; set; } = new List<Dispute>();
 
+    public virtual ICollection<Dispute> DisputeRespondents { get; set; } = new List<Dispute>();
+
+    public virtual ICollection<Dispute> DisputeAssignedByAdmins { get; set; } = new List<Dispute>();
+
     public virtual ICollection<EsignSignature> EsignSignatures { get; set; } = new List<EsignSignature>();
 
     public virtual ICollection<EsignTemplate> EsignTemplates { get; set; } = new List<EsignTemplate>();
@@ -108,6 +112,12 @@ public partial class User
     public virtual ICollection<Report> ReportResolvedByAdmins { get; set; } = new List<Report>();
 
     public virtual ICollection<Report> ReportReporters { get; set; } = new List<Report>();
+
+    public virtual ICollection<ReportContract> ReportContractReporters { get; set; } = new List<ReportContract>();
+
+    public virtual ICollection<ReportContract> ReportContractRespondents { get; set; } = new List<ReportContract>();
+
+    public virtual ICollection<ReportContract> ReportContractResolvedBy { get; set; } = new List<ReportContract>();
 
     public virtual ICollection<Review> ReviewReviewees { get; set; } = new List<Review>();
 

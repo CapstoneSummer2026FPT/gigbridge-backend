@@ -1,0 +1,27 @@
+namespace Application.Features.ReportContracts.Common.DTOs;
+
+public sealed record ReportContractResponse(
+    Guid ReportContractId,
+    Guid ContractId,
+    Guid ReporterId,
+    string? ReporterName,
+    string? ReporterRole,
+    Guid? RespondentId,
+    string? RespondentName,
+    string? RespondentRole,
+    Guid? MilestoneId,
+    string? MilestoneTitle,
+    int IssueType,
+    string Description,
+    string DesiredResolution,
+    int Status,
+    int? ResolutionAction,
+    string? Explanation,
+    string? ProposedResolution,
+    string? RejectReason,
+    Guid? ResolvedBy,
+    DateTime CreatedAt,
+    DateTime? RespondedAt,
+    DateTime? ResolvedAt,
+    bool IsEscalatedToDispute,
+    IReadOnlyList<ReportContractAttachmentResponse> Attachments);
