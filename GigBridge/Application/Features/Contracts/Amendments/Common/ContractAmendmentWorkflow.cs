@@ -4,6 +4,7 @@ using Application.Common.Interfaces.IService;
 using Application.Features.Wallets.Common;
 using Domain.Entities;
 using Domain.Enums;
+using Domain.Services.Payments;
 using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.Contracts.Amendments.Common;
@@ -104,25 +105,24 @@ internal static class ContractAmendmentWorkflow
         var escrow = await context.Set<ContractEscrow>()
             .SingleAsync(item => item.ContractsId == contract.ContractsId, cancellationToken);
 
-        if (wallet.HeldTokens < refund || escrow.FundedAmount - escrow.ReleasedAmount < refund)
+        if (escrow.FundedAmount - escrow.ReleasedAmount < refund)
         {
             throw new BadRequestException("Held escrow is insufficient for this amendment refund.");
         }
 
-        wallet.HeldTokens -= refund;
-        wallet.AvailableTokens += refund;
-        wallet.UpdatedAt = clock.UtcNow;
+        ContractEscrowWalletWorkflow.Refund(
+            context,
+            wallet,
+            contract.ContractsId,
+            escrow.ContractEscrowId,
+            null,
+            refund,
+            transactionCode,
+            "InternalTokenWallet",
+            "Contract amendment budget decrease.",
+            clock.UtcNow);
         escrow.RequiredAmount -= refund;
         escrow.FundedAmount -= refund;
-
-        context.Set<WalletTransaction>().Add(new WalletTransaction
-        {
-            WalletTransactionsId = Guid.NewGuid(), UserWalletsId = wallet.UserWalletsId,
-            UserId = clientUserId, ContractsId = contract.ContractsId, ContractEscrowId = escrow.ContractEscrowId,
-            TokenAmount = refund, VndAmount = refund, Type = (int)WalletTransactionType.EscrowRefund,
-            Status = (int)WalletTransactionStatus.Succeeded, GatewayProvider = "InternalTokenWallet",
-            GatewayTransactionCode = transactionCode, CreatedAt = clock.UtcNow, CompletedAt = clock.UtcNow
-        });
         context.Set<EscrowTransaction>().Add(new EscrowTransaction
         {
             EscrowTransactionId = Guid.NewGuid(), ContractEscrowId = escrow.ContractEscrowId,
@@ -159,8 +159,18 @@ internal static class ContractAmendmentWorkflow
             ?? throw new BadRequestException("Wallet balance is insufficient to fund the amendment.");
         var escrow = await context.Set<ContractEscrow>()
             .SingleAsync(item => item.ContractsId == contract.ContractsId, cancellationToken);
-        WalletWorkflow.DebitAvailable(wallet, amount, clock.UtcNow, "Wallet balance is insufficient to fund the amendment.");
-        wallet.HeldTokens += amount;
+        var tokens = TokenWalletRules.ToTokens(amount);
+        WalletWorkflow.DebitAvailable(wallet, tokens, clock.UtcNow, "Wallet balance is insufficient to fund the amendment.");
+        wallet.HeldTokens += tokens;
+        await ServiceFeeWorkflow.ChargeAsync(
+            context,
+            clientUserId,
+            contract.ContractsId,
+            amount,
+            $"{ServiceFeeWorkflow.ClientFundingFeePrefix}{amendment.ContractAmendmentId:N}",
+            $"1% client service fee for funding contract amendment: {contract.Title}.",
+            clock.UtcNow,
+            cancellationToken);
         escrow.RequiredAmount += amount;
         escrow.FundedAmount += amount;
 
@@ -168,7 +178,7 @@ internal static class ContractAmendmentWorkflow
         {
             WalletTransactionsId = Guid.NewGuid(), UserWalletsId = wallet.UserWalletsId,
             UserId = clientUserId, ContractsId = contract.ContractsId, ContractEscrowId = escrow.ContractEscrowId,
-            TokenAmount = amount, VndAmount = amount, Type = (int)WalletTransactionType.EscrowHold,
+            TokenAmount = tokens, VndAmount = amount, Type = (int)WalletTransactionType.EscrowHold,
             Status = (int)WalletTransactionStatus.Succeeded, GatewayProvider = "InternalTokenWallet",
             GatewayTransactionCode = transactionCode, CreatedAt = clock.UtcNow, CompletedAt = clock.UtcNow
         });

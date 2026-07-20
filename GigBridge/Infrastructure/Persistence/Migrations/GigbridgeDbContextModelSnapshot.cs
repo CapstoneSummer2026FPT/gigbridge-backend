@@ -1285,7 +1285,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<Guid>("RecipientUserId")
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("ScheduleId")
+                    b.Property<Guid?>("ScheduleId")
                         .HasColumnType("uuid");
 
                     b.Property<int>("Status")
@@ -1674,6 +1674,9 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnName("ESignDocumentsId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
+                    b.Property<string>("ContractSnapshotJson")
+                        .HasColumnType("jsonb");
+
                     b.Property<Guid?>("ContractsId")
                         .HasColumnType("uuid")
                         .HasColumnName("ContractsId");
@@ -1705,6 +1708,20 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("FinalizedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<byte[]>("FinalizedDocumentContent")
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("FinalizedDocumentFileName")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("FinalizedDocumentMimeType")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<long?>("FinalizedDocumentSizeBytes")
+                        .HasColumnType("bigint");
+
                     b.Property<Guid>("JobPostsId")
                         .HasColumnType("uuid")
                         .HasColumnName("JobPostsId");
@@ -1727,8 +1744,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex("EsignTemplatesId");
 
-                    b.HasIndex(new[] { "ContractsId" }, "ESignDocuments_cont_ContractsId_key")
-                        .IsUnique();
+                    b.HasIndex(new[] { "ContractsId" }, "IX_ESignDocuments_ContractsId");
 
                     b.HasIndex(new[] { "DocumentCode" }, "IX_ESignDocuments_DocumentCode")
                         .IsUnique();
@@ -1769,6 +1785,13 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<string>("IpAddress")
                         .HasMaxLength(45)
                         .HasColumnType("character varying(45)");
+
+                    b.Property<DateTime?>("PolicyAcceptedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PolicyVersion")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
 
                     b.Property<int?>("SignatureHeight")
                         .HasColumnType("integer");
@@ -6021,8 +6044,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasOne("Domain.Entities.Schedule", null)
                         .WithMany()
                         .HasForeignKey("ScheduleId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("Domain.Entities.Dispute", b =>
@@ -6181,8 +6203,8 @@ namespace Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Domain.Entities.EsignDocument", b =>
                 {
                     b.HasOne("Domain.Entities.Contract", "Contracts")
-                        .WithOne("EsignDocument")
-                        .HasForeignKey("Domain.Entities.EsignDocument", "ContractsId")
+                        .WithMany("EsignDocuments")
+                        .HasForeignKey("ContractsId")
                         .HasConstraintName("ESignDocuments_cont_ContractsId_fkey");
 
                     b.HasOne("Domain.Entities.EsignTemplate", "EsignTemplates")
@@ -7339,7 +7361,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.Navigation("Disputes");
 
-                    b.Navigation("EsignDocument");
+                    b.Navigation("EsignDocuments");
 
                     b.Navigation("Milestones");
 

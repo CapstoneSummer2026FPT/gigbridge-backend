@@ -94,12 +94,6 @@ public sealed class AdminOverrideMilestoneCommandHandler :
                 throw new BadRequestException("Escrow balance is insufficient for this release.");
             }
 
-            var releasedTokens = releasableVnd;
-            if (clientWallet.HeldTokens < releasedTokens)
-            {
-                throw new BadRequestException("Client held wallet balance is insufficient for this release.");
-            }
-
             if (!contract.FreelancerProfilesId.HasValue)
             {
                 throw new BadRequestException("Contract does not have a freelancer assigned.");
@@ -127,10 +121,19 @@ public sealed class AdminOverrideMilestoneCommandHandler :
                 _context.Set<UserWallet>().Add(freelancerWallet);
             }
 
-            // Move tokens
-            clientWallet.HeldTokens -= releasedTokens;
-            clientWallet.UpdatedAt = now;
-            WalletWorkflow.CreditWithdrawable(freelancerWallet, releasedTokens, now);
+            var transactionCode = $"ESCROW-FORCE-RELEASE-{escrow.ContractEscrowId:N}-{milestone.MilestonesId:N}";
+            ContractEscrowWalletWorkflow.Release(
+                _context,
+                clientWallet,
+                freelancerWallet,
+                contract.ContractsId,
+                escrow.ContractEscrowId,
+                milestone.MilestonesId,
+                releasableVnd,
+                transactionCode,
+                "AdminForceRelease",
+                request.Note ?? "Force released from escrow by Admin.",
+                now);
 
             milestone.ReleasedAmount += releasableVnd;
             milestone.LastReleasedAt = now;
@@ -144,45 +147,6 @@ public sealed class AdminOverrideMilestoneCommandHandler :
             escrow.ReleasedAt = escrow.Status == (int)ContractEscrowStatus.Released ? now : escrow.ReleasedAt;
 
             contract.UpdatedAt = now;
-
-            var transactionCode = $"ESCROW-FORCE-RELEASE-{escrow.ContractEscrowId:N}-{milestone.MilestonesId:N}";
-            _context.Set<WalletTransaction>().Add(new WalletTransaction
-            {
-                WalletTransactionsId = Guid.NewGuid(),
-                UserWalletsId = clientWallet.UserWalletsId,
-                UserId = clientWallet.UserId,
-                ContractsId = contract.ContractsId,
-                ContractEscrowId = escrow.ContractEscrowId,
-                MilestonesId = milestone.MilestonesId,
-                TokenAmount = releasedTokens,
-                VndAmount = releasableVnd,
-                Type = (int)WalletTransactionType.EscrowRelease,
-                Status = (int)WalletTransactionStatus.Succeeded,
-                GatewayProvider = "AdminForceRelease",
-                GatewayTransactionCode = transactionCode,
-                Note = request.Note ?? "Force released from client escrow to freelancer by Admin.",
-                CreatedAt = now,
-                CompletedAt = now
-            });
-
-            _context.Set<WalletTransaction>().Add(new WalletTransaction
-            {
-                WalletTransactionsId = Guid.NewGuid(),
-                UserWalletsId = freelancerWallet.UserWalletsId,
-                UserId = freelancerWallet.UserId,
-                ContractsId = contract.ContractsId,
-                ContractEscrowId = escrow.ContractEscrowId,
-                MilestonesId = milestone.MilestonesId,
-                TokenAmount = releasedTokens,
-                VndAmount = releasableVnd,
-                Type = (int)WalletTransactionType.EscrowRelease,
-                Status = (int)WalletTransactionStatus.Succeeded,
-                GatewayProvider = "AdminForceRelease",
-                GatewayTransactionCode = transactionCode,
-                Note = request.Note ?? "Force released from escrow by Admin.",
-                CreatedAt = now,
-                CompletedAt = now
-            });
 
             _context.Set<EscrowTransaction>().Add(new EscrowTransaction
             {
@@ -219,16 +183,18 @@ public sealed class AdminOverrideMilestoneCommandHandler :
                 throw new BadRequestException("Escrow balance is insufficient for this refund.");
             }
 
-            var refundedTokens = refundableVnd;
-            if (clientWallet.HeldTokens < refundedTokens)
-            {
-                throw new BadRequestException("Client held wallet balance is insufficient for this refund.");
-            }
-
-            // Refund tokens back to Client
-            clientWallet.HeldTokens -= refundedTokens;
-            clientWallet.AvailableTokens += refundedTokens;
-            clientWallet.UpdatedAt = now;
+            var transactionCode = $"ESCROW-REFUND-{escrow.ContractEscrowId:N}-{milestone.MilestonesId:N}";
+            ContractEscrowWalletWorkflow.Refund(
+                _context,
+                clientWallet,
+                contract.ContractsId,
+                escrow.ContractEscrowId,
+                milestone.MilestonesId,
+                refundableVnd,
+                transactionCode,
+                "AdminRefund",
+                request.Note ?? "Refunded from escrow back to client by Admin.",
+                now);
 
             milestone.Status = (int)MilestoneStatus.InProgress;
             milestone.UpdatedAt = now;
@@ -239,26 +205,6 @@ public sealed class AdminOverrideMilestoneCommandHandler :
                 : (int)ContractEscrowStatus.PartiallyReleased;
 
             contract.UpdatedAt = now;
-
-            var transactionCode = $"ESCROW-REFUND-{escrow.ContractEscrowId:N}-{milestone.MilestonesId:N}";
-            _context.Set<WalletTransaction>().Add(new WalletTransaction
-            {
-                WalletTransactionsId = Guid.NewGuid(),
-                UserWalletsId = clientWallet.UserWalletsId,
-                UserId = clientWallet.UserId,
-                ContractsId = contract.ContractsId,
-                ContractEscrowId = escrow.ContractEscrowId,
-                MilestonesId = milestone.MilestonesId,
-                TokenAmount = refundedTokens,
-                VndAmount = refundableVnd,
-                Type = (int)WalletTransactionType.EscrowRefund,
-                Status = (int)WalletTransactionStatus.Succeeded,
-                GatewayProvider = "AdminRefund",
-                GatewayTransactionCode = transactionCode,
-                Note = request.Note ?? "Refunded from escrow back to client by Admin.",
-                CreatedAt = now,
-                CompletedAt = now
-            });
 
             _context.Set<EscrowTransaction>().Add(new EscrowTransaction
             {

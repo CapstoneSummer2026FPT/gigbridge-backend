@@ -6,6 +6,7 @@ using Application.Features.Contracts.Escrow.Client.Fund.DTOs;
 using Application.Features.Wallets.Common;
 using Domain.Entities;
 using Domain.Enums;
+using Domain.Services.Payments;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -52,7 +53,7 @@ public sealed class FundContractEscrowCommandHandler :
                 contract.ContractsId,
                 fundedEscrow.ContractEscrowId,
                 fundedEscrow.RequiredAmount,
-                fundedEscrow.RequiredAmount,
+                TokenWalletRules.ToTokens(fundedEscrow.RequiredAmount),
                 contract.Status,
                 fundedEscrow.Status);
         }
@@ -98,7 +99,7 @@ public sealed class FundContractEscrowCommandHandler :
                 contract.ContractsId,
                 escrow.ContractEscrowId,
                 escrow.RequiredAmount,
-                escrow.RequiredAmount,
+                TokenWalletRules.ToTokens(escrow.RequiredAmount),
                 contract.Status,
                 escrow.Status);
         }
@@ -127,9 +128,18 @@ public sealed class FundContractEscrowCommandHandler :
         }
 
         var requiredAmount = escrow.RequiredAmount;
-        var requiredTokens = requiredAmount;
+        var requiredTokens = TokenWalletRules.ToTokens(requiredAmount);
         WalletWorkflow.DebitAvailable(wallet, requiredTokens, now, "Wallet balance is insufficient to fund escrow.");
         wallet.HeldTokens += requiredTokens;
+        await ServiceFeeWorkflow.ChargeAsync(
+            _context,
+            command.UserId,
+            contract.ContractsId,
+            requiredAmount,
+            $"{ServiceFeeWorkflow.ClientFundingFeePrefix}{contract.ContractsId:N}",
+            $"1% client service fee for funding contract: {contract.Title}.",
+            now,
+            cancellationToken);
 
         escrow.FundedAmount = escrow.RequiredAmount;
         escrow.Status = (int)ContractEscrowStatus.Funded;

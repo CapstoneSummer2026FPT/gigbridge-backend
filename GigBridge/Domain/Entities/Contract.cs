@@ -48,7 +48,7 @@ public partial class Contract
 
     public virtual ContractEscrow? ContractEscrow { get; set; }
 
-    public virtual EsignDocument? EsignDocument { get; set; }
+    public virtual ICollection<EsignDocument> EsignDocuments { get; set; } = new List<EsignDocument>();
 
     public virtual FreelancerProfile? FreelancerProfiles { get; set; }
 

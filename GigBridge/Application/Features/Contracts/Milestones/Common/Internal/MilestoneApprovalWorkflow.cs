@@ -9,6 +9,8 @@ namespace Application.Features.Contracts.Milestones.Common.Internal;
 
 internal static class MilestoneApprovalWorkflow
 {
+    private const decimal InitialReleaseRate = 0.8m;
+
     public static async Task ReleaseAsync(
         IApplicationDbContext context,
         Contract contract,
@@ -16,7 +18,11 @@ internal static class MilestoneApprovalWorkflow
         DateTime now,
         CancellationToken cancellationToken)
     {
-        var amount = milestone.Amount - milestone.ReleasedAmount;
+        var releaseCap = decimal.Round(
+            milestone.Amount * InitialReleaseRate,
+            2,
+            MidpointRounding.AwayFromZero);
+        var amount = releaseCap - milestone.ReleasedAmount;
         if (amount <= 0) return;
 
         var escrow = await context.Set<ContractEscrow>()
@@ -38,9 +44,6 @@ internal static class MilestoneApprovalWorkflow
         var clientWallet = await context.Set<UserWallet>()
             .FirstOrDefaultAsync(item => item.UserId == clientUserId, cancellationToken)
             ?? throw new BadRequestException("Client escrow wallet does not exist.");
-        if (clientWallet.HeldTokens < amount)
-            throw new BadRequestException("Client held wallet balance is insufficient for milestone release.");
-
         var freelancerWallet = await context.Set<UserWallet>()
             .FirstOrDefaultAsync(item => item.UserId == freelancerUserId, cancellationToken);
         if (freelancerWallet is null)
@@ -54,9 +57,19 @@ internal static class MilestoneApprovalWorkflow
             context.Set<UserWallet>().Add(freelancerWallet);
         }
 
-        clientWallet.HeldTokens -= amount;
-        clientWallet.UpdatedAt = now;
-        WalletWorkflow.CreditWithdrawable(freelancerWallet, amount, now);
+        var code = $"ESCROW-APPROVE-{escrow.ContractEscrowId:N}-{milestone.MilestonesId:N}";
+        ContractEscrowWalletWorkflow.Release(
+            context,
+            clientWallet,
+            freelancerWallet,
+            contract.ContractsId,
+            escrow.ContractEscrowId,
+            milestone.MilestonesId,
+            amount,
+            code,
+            "InternalTokenWallet",
+            "Released automatically when the client approved the milestone.",
+            now);
         milestone.ReleasedAmount += amount;
         milestone.LastReleasedAt = now;
         escrow.ReleasedAmount += amount;
@@ -65,10 +78,6 @@ internal static class MilestoneApprovalWorkflow
             : (int)ContractEscrowStatus.PartiallyReleased;
         escrow.ReleasedAt = escrow.Status == (int)ContractEscrowStatus.Released ? now : null;
 
-        var code = $"ESCROW-APPROVE-{escrow.ContractEscrowId:N}-{milestone.MilestonesId:N}";
-        context.Set<WalletTransaction>().AddRange(
-            CreateWalletTransaction(clientWallet, clientUserId, contract.ContractsId, escrow.ContractEscrowId, milestone.MilestonesId, amount, code, now, "Released from client escrow."),
-            CreateWalletTransaction(freelancerWallet, freelancerUserId, contract.ContractsId, escrow.ContractEscrowId, milestone.MilestonesId, amount, code, now, "Credited to freelancer withdrawable balance."));
         context.Set<EscrowTransaction>().Add(new EscrowTransaction
         {
             EscrowTransactionId = Guid.NewGuid(),
@@ -84,32 +93,4 @@ internal static class MilestoneApprovalWorkflow
             CompletedAt = now
         });
     }
-
-    private static WalletTransaction CreateWalletTransaction(
-        UserWallet wallet,
-        Guid userId,
-        Guid contractId,
-        Guid escrowId,
-        Guid milestoneId,
-        decimal amount,
-        string code,
-        DateTime now,
-        string note) => new()
-    {
-        WalletTransactionsId = Guid.NewGuid(),
-        UserWalletsId = wallet.UserWalletsId,
-        UserId = userId,
-        ContractsId = contractId,
-        ContractEscrowId = escrowId,
-        MilestonesId = milestoneId,
-        TokenAmount = amount,
-        VndAmount = amount,
-        Type = (int)WalletTransactionType.EscrowRelease,
-        Status = (int)WalletTransactionStatus.Succeeded,
-        GatewayProvider = "InternalTokenWallet",
-        GatewayTransactionCode = code,
-        Note = note,
-        CreatedAt = now,
-        CompletedAt = now
-    };
 }

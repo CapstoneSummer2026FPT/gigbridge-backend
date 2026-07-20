@@ -16,15 +16,18 @@ public sealed class ConfirmContractDetailsCommandHandler :
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
     private readonly IChatRealtimeNotifier _chatRealtimeNotifier;
+    private readonly IContractEsignDocumentGenerator _documentGenerator;
 
     public ConfirmContractDetailsCommandHandler(
         IApplicationDbContext context,
         IDateTimeService dateTimeService,
-        IChatRealtimeNotifier chatRealtimeNotifier)
+        IChatRealtimeNotifier chatRealtimeNotifier,
+        IContractEsignDocumentGenerator documentGenerator)
     {
         _context = context;
         _dateTimeService = dateTimeService;
         _chatRealtimeNotifier = chatRealtimeNotifier;
+        _documentGenerator = documentGenerator;
     }
 
     public async Task<ContractWorkflowResponse> Handle(
@@ -75,7 +78,8 @@ public sealed class ConfirmContractDetailsCommandHandler :
 
         contract.Status = (int)ContractStatus.PendingSignature;
         contract.UpdatedAt = now;
-        var document = await ContractEsignRenderer.EnsureDocumentAsync(_context, contract, now, cancellationToken);
+        var document = await ContractEsignRenderer.EnsureDocumentAsync(
+            _context, _documentGenerator, contract, now, cancellationToken);
 
         await ContractConversationEvents.AddSystemMessageAsync(
             _context,

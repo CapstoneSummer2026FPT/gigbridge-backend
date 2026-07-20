@@ -46,6 +46,10 @@ public sealed class GetESignDocumentByJobPostQueryHandler
             throw new NotFoundException("E-sign document does not exist for this job post.");
         }
 
-        return await ESignDocumentProjection.ToResponseAsync(_context, document, cancellationToken);
+        return await ESignDocumentProjection.ToResponseAsync(
+            _context,
+            document,
+            request.UserId,
+            cancellationToken);
     }
 }

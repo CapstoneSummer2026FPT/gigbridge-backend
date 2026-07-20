@@ -3,7 +3,7 @@ using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.Contracts.Completion.Client.DTOs;
-using Application.Features.Wallets.Common;
+using Application.Features.Contracts.Completion.Common.Internal;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
@@ -77,13 +77,11 @@ public sealed class EndProjectCommandHandler : IRequestHandler<EndProjectCommand
             throw new BadRequestException("Escrow funding must match the contract milestone total.");
 
         var now = _dateTimeService.UtcNow;
-        await ServiceFeeWorkflow.ChargeAsync(
+        var payout = await FinalPayoutWorkflow.ReleaseRemainingAsync(
             _context,
-            command.UserId,
-            contract.ContractsId,
-            milestoneTotal,
-            $"{ServiceFeeWorkflow.EndProjectFeePrefix}{contract.ContractsId:N}",
-            $"1% service fee for ending the project: {contract.Title}.",
+            contract,
+            escrow,
+            milestones,
             now,
             cancellationToken);
 
@@ -94,7 +92,7 @@ public sealed class EndProjectCommandHandler : IRequestHandler<EndProjectCommand
         await ContractConversationEvents.AddSystemMessageAsync(
             _context,
             contract.ContractsId,
-            "Project ended. Final payout is ready for freelancer claim.",
+            "Project ended. Final 20% retention released to freelancer.",
             now,
             cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
@@ -121,6 +119,11 @@ public sealed class EndProjectCommandHandler : IRequestHandler<EndProjectCommand
             cancellationToken);
 
         return new EndProjectResponse(
-            contract.ContractsId, contract.Status, 0m, 0m, escrow.ReleasedAmount, contract.CompletedAt);
+            contract.ContractsId,
+            contract.Status,
+            payout.ReleasedVnd,
+            payout.ReleasedTokens,
+            escrow.ReleasedAmount,
+            contract.CompletedAt);
     }
 }

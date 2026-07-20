@@ -87,8 +87,8 @@ public sealed class ContractAmendmentWorkflowTests
         Assert.Equal(2, fixture.Contract.RevisionNumber);
         Assert.Equal(1_200m, fixture.Escrow.FundedAmount);
         Assert.Equal(1_200m, fixture.Escrow.RequiredAmount);
-        Assert.Equal(800m, fixture.ClientWallet.AvailableTokens);
-        Assert.Equal(1_200m, fixture.ClientWallet.HeldTokens);
+        Assert.Equal(0.798m, fixture.ClientWallet.AvailableTokens);
+        Assert.Equal(1.2m, fixture.ClientWallet.HeldTokens);
         Assert.Contains(fixture.Context.Set<WalletTransaction>(), item =>
             item.GatewayTransactionCode == $"AMENDMENT-FUND-{amendment.ContractAmendmentId:N}");
     }
@@ -115,8 +115,8 @@ public sealed class ContractAmendmentWorkflowTests
         Assert.Equal(900m, fixture.Contract.TotalBudget);
         Assert.Equal(900m, fixture.Escrow.FundedAmount);
         Assert.Equal(900m, fixture.Escrow.RequiredAmount);
-        Assert.Equal(1_100m, fixture.ClientWallet.AvailableTokens);
-        Assert.Equal(900m, fixture.ClientWallet.HeldTokens);
+        Assert.Equal(1.1m, fixture.ClientWallet.AvailableTokens);
+        Assert.Equal(0.9m, fixture.ClientWallet.HeldTokens);
         Assert.Contains(fixture.Context.Set<EscrowTransaction>(), item =>
             item.GatewayTransactionCode == $"AMENDMENT-REFUND-{amendment.ContractAmendmentId:N}");
     }
@@ -182,8 +182,8 @@ public sealed class ContractAmendmentWorkflowTests
             {
                 UserWalletsId = Guid.NewGuid(),
                 UserId = ClientUserId,
-                AvailableTokens = 1_000m,
-                HeldTokens = 1_000m,
+                AvailableTokens = 1m,
+                HeldTokens = 1m,
                 CreatedAt = Clock.UtcNow
             };
 

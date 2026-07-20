@@ -87,6 +87,7 @@ public sealed class GetMySignedESignDocumentsQueryHandler
                 document.Status,
                 currentSignature.SignerRole,
                 currentSignature.SignedAt,
+                false,
                 _context.Set<EsignSignature>().Any(signature =>
                     signature.EsignDocumentsId == document.EsignDocumentsId &&
                     signature.SignerRole == (int)ESignerRole.Client &&
@@ -100,6 +101,8 @@ public sealed class GetMySignedESignDocumentsQueryHandler
                     signature.Status == (int)ESignSignatureStatus.Signed),
                 document.FinalizedAt,
                 document.ExportedPdfUrl,
+                document.FinalizedDocumentContent != null,
+                document.FinalizedDocumentFileName,
                 document.CreatedAt,
                 document.UpdatedAt);
 

@@ -3,6 +3,7 @@ using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Features.Auth.Shared.DTOs;
 using Application.Features.Chat.Common.Schedules;
+using Application.Features.Contracts.Common.DTOs;
 using Application.Features.Notifications.Common.DTOs;
 using Domain.Entities;
 using Domain.Enums;
@@ -11,6 +12,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using System.Net;
 
 namespace Application.Common.Services;
 
@@ -39,7 +41,7 @@ public sealed class DeliveryOutboxService : BackgroundService
         while (!stoppingToken.IsCancellationRequested)
         {
             try { await ProcessBatch(stoppingToken); }
-            catch (Exception ex) when (ex is not OperationCanceledException) { _logger.LogError(ex, "Schedule delivery outbox batch failed."); }
+            catch (Exception ex) when (ex is not OperationCanceledException) { _logger.LogError(ex, "Delivery outbox batch failed."); }
             await Task.Delay(TimeSpan.FromSeconds(15), stoppingToken);
         }
     }
@@ -69,62 +71,70 @@ public sealed class DeliveryOutboxService : BackgroundService
             var job = await context.Set<DeliveryOutbox>().FirstAsync(x => x.DeliveryOutboxId == jobId, ct);
             try
             {
-                var payload = JsonSerializer.Deserialize<ScheduleDeliveryPayload>(job.Payload, JsonOptions)
-                    ?? throw new InvalidOperationException("Invalid schedule delivery payload.");
-                if (job.Channel == (int)DeliveryChannel.Email)
+                if (job.ScheduleId is null)
                 {
-                    var email = scope.ServiceProvider.GetRequiredService<IEmailService>();
-                    await email.SendEmailAsync(new EmailRequest { To = payload.Email, Subject = payload.Subject,
-                        Body = payload.HtmlBody, TextBody = payload.TextBody, IsHtml = true,
-                        MessageId = $"<{job.DeliveryKey.Replace(':', '.')}@gigbridge.local>" }, ct);
+                    await SendFinalContractEmailAsync(context, scope, job, ct);
                 }
                 else
                 {
-                    var notification = await context.Set<Notification>()
-                        .FirstOrDefaultAsync(x => x.NotificationsId == payload.NotificationId, ct);
-                    if (notification is null && payload.CreateNotificationAtDelivery)
+                    var payload = JsonSerializer.Deserialize<ScheduleDeliveryPayload>(job.Payload, JsonOptions)
+                        ?? throw new InvalidOperationException("Invalid schedule delivery payload.");
+                    if (job.Channel == (int)DeliveryChannel.Email)
                     {
-                        notification = await context.Set<Notification>().FirstOrDefaultAsync(x =>
-                            x.UserId == payload.UserId && x.Type == (int)NotificationType.Schedule &&
-                            x.ReferenceId == payload.ReferenceId && x.IsRead != true, ct);
-                        if (notification is null)
-                        {
-                            notification = new Notification
-                            {
-                                NotificationsId = payload.NotificationId,
-                                UserId = payload.UserId
-                            };
-                            context.Set<Notification>().Add(notification);
-                        }
-
-                        notification.Type = (int)NotificationType.Schedule;
-                        notification.Title = payload.NotificationTitle ?? "Meeting time reached";
-                        notification.Content = payload.NotificationContent ?? "Your scheduled meeting is starting now.";
-                        notification.ReferenceId = payload.ReferenceId;
-                        notification.ReferenceType = "Schedule";
-                        notification.Metadata = payload.Metadata;
-                        notification.Revision = payload.Revision;
-                        notification.IsRead = false;
-                        notification.ReadAt = null;
-                        notification.CreatedAt = DateTime.UtcNow;
-                        await context.SaveChangesAsync(ct);
-                    }
-                    if (notification is not null)
-                    {
-                        var sender = scope.ServiceProvider.GetRequiredService<INotificationSender>();
-                        await sender.SendToUserAsync(payload.UserId, new NotificationDto
-                        {
-                            Id = notification.NotificationsId, Source = "Personal", NotificationId = notification.NotificationsId,
-                            ReadTargetId = notification.NotificationsId, Type = (NotificationType)notification.Type,
-                            Title = notification.Title, Content = notification.Content, ReferenceId = notification.ReferenceId,
-                            ReferenceType = notification.ReferenceType, Metadata = notification.Metadata, Revision = notification.Revision,
-                            IsRead = notification.IsRead ?? false, ReadAt = notification.ReadAt, CreatedAt = notification.CreatedAt
-                        }, ct);
+                        var email = scope.ServiceProvider.GetRequiredService<IEmailService>();
+                        await email.SendEmailAsync(new EmailRequest { To = payload.Email, Subject = payload.Subject,
+                            Body = payload.HtmlBody, TextBody = payload.TextBody, IsHtml = true,
+                            IdempotencyKey = job.DeliveryKey,
+                            MessageId = $"<{job.DeliveryKey.Replace(':', '.')}@gigbridge.local>" }, ct);
                     }
                     else
                     {
-                        _logger.LogWarning("Notification {NotificationId} for schedule delivery {DeliveryKey} was not found; marking the delivery as completed.",
-                            payload.NotificationId, job.DeliveryKey);
+                        var notification = await context.Set<Notification>()
+                            .FirstOrDefaultAsync(x => x.NotificationsId == payload.NotificationId, ct);
+                        if (notification is null && payload.CreateNotificationAtDelivery)
+                        {
+                            notification = await context.Set<Notification>().FirstOrDefaultAsync(x =>
+                                x.UserId == payload.UserId && x.Type == (int)NotificationType.Schedule &&
+                                x.ReferenceId == payload.ReferenceId && x.IsRead != true, ct);
+                            if (notification is null)
+                            {
+                                notification = new Notification
+                                {
+                                    NotificationsId = payload.NotificationId,
+                                    UserId = payload.UserId
+                                };
+                                context.Set<Notification>().Add(notification);
+                            }
+
+                            notification.Type = (int)NotificationType.Schedule;
+                            notification.Title = payload.NotificationTitle ?? "Meeting time reached";
+                            notification.Content = payload.NotificationContent ?? "Your scheduled meeting is starting now.";
+                            notification.ReferenceId = payload.ReferenceId;
+                            notification.ReferenceType = "Schedule";
+                            notification.Metadata = payload.Metadata;
+                            notification.Revision = payload.Revision;
+                            notification.IsRead = false;
+                            notification.ReadAt = null;
+                            notification.CreatedAt = DateTime.UtcNow;
+                            await context.SaveChangesAsync(ct);
+                        }
+                        if (notification is not null)
+                        {
+                            var sender = scope.ServiceProvider.GetRequiredService<INotificationSender>();
+                            await sender.SendToUserAsync(payload.UserId, new NotificationDto
+                            {
+                                Id = notification.NotificationsId, Source = "Personal", NotificationId = notification.NotificationsId,
+                                ReadTargetId = notification.NotificationsId, Type = (NotificationType)notification.Type,
+                                Title = notification.Title, Content = notification.Content, ReferenceId = notification.ReferenceId,
+                                ReferenceType = notification.ReferenceType, Metadata = notification.Metadata, Revision = notification.Revision,
+                                IsRead = notification.IsRead ?? false, ReadAt = notification.ReadAt, CreatedAt = notification.CreatedAt
+                            }, ct);
+                        }
+                        else
+                        {
+                            _logger.LogWarning("Notification {NotificationId} for schedule delivery {DeliveryKey} was not found; marking the delivery as completed.",
+                                payload.NotificationId, job.DeliveryKey);
+                        }
                     }
                 }
                 job.Status = (int)DeliveryOutboxStatus.Delivered; job.DeliveredAt = DateTime.UtcNow; job.LastError = null;
@@ -136,17 +146,64 @@ public sealed class DeliveryOutboxService : BackgroundService
                 if (job.AttemptCount > RetryDelays.Length)
                 {
                     job.Status = (int)DeliveryOutboxStatus.DeadLettered;
-                    _logger.LogError(ex, "Schedule delivery {DeliveryKey} dead-lettered after {Attempts} attempts.", job.DeliveryKey, job.AttemptCount);
+                    _logger.LogError(ex, "Delivery {DeliveryKey} dead-lettered after {Attempts} attempts.", job.DeliveryKey, job.AttemptCount);
                 }
                 else
                 {
                     job.Status = (int)DeliveryOutboxStatus.Pending;
                     job.NextAttemptAt = DateTime.UtcNow.Add(RetryDelays[job.AttemptCount - 1]);
-                    _logger.LogWarning(ex, "Schedule delivery {DeliveryKey} failed; attempt {Attempt} scheduled.", job.DeliveryKey, job.AttemptCount);
+                    _logger.LogWarning(ex, "Delivery {DeliveryKey} failed; attempt {Attempt} scheduled.", job.DeliveryKey, job.AttemptCount);
                 }
             }
             await context.SaveChangesAsync(ct);
         }
+    }
+
+    private static async Task SendFinalContractEmailAsync(
+        IApplicationDbContext context,
+        IServiceScope scope,
+        DeliveryOutbox job,
+        CancellationToken ct)
+    {
+        if (job.Channel != (int)DeliveryChannel.Email)
+        {
+            throw new InvalidOperationException("ESign outbox deliveries only support email.");
+        }
+
+        var payload = JsonSerializer.Deserialize<ContractEsignDeliveryPayload>(job.Payload, JsonOptions)
+            ?? throw new InvalidOperationException("Invalid ESign contract delivery payload.");
+        var document = await context.Set<EsignDocument>().AsNoTracking()
+            .FirstOrDefaultAsync(item => item.EsignDocumentsId == payload.DocumentId, ct)
+            ?? throw new InvalidOperationException("The finalized ESign document no longer exists.");
+        if (document.Status != (int)ESignDocumentStatus.FullySigned ||
+            document.FinalizedDocumentContent is not { Length: > 0 } ||
+            string.IsNullOrWhiteSpace(document.FinalizedDocumentFileName) ||
+            string.IsNullOrWhiteSpace(document.FinalizedDocumentMimeType))
+        {
+            throw new InvalidOperationException("The finalized ESign DOCX artifact is not available.");
+        }
+
+        var recipientName = WebUtility.HtmlEncode(payload.RecipientName);
+        var contractTitle = WebUtility.HtmlEncode(payload.ContractTitle);
+        var code = WebUtility.HtmlEncode(document.DocumentCode);
+        var email = scope.ServiceProvider.GetRequiredService<IEmailService>();
+        await email.SendEmailAsync(new EmailRequest
+        {
+            To = payload.Email,
+            Subject = $"[GigBridge] Hợp đồng {document.DocumentCode} đã hoàn tất",
+            Body = $"<p>Xin chào {recipientName},</p><p>Hợp đồng <strong>{contractTitle}</strong> ({code}) đã được Client và Freelancer ký đầy đủ.</p><p>Bản DOCX hoàn tất được đính kèm email này.</p>",
+            TextBody = $"Xin chào {payload.RecipientName}, hợp đồng {payload.ContractTitle} ({document.DocumentCode}) đã được ký đầy đủ. Bản DOCX hoàn tất được đính kèm email này.",
+            IsHtml = true,
+            IdempotencyKey = job.DeliveryKey,
+            MessageId = $"<{job.DeliveryKey.Replace(':', '.')}@gigbridge.local>",
+            ByteAttachments =
+            [
+                new EmailByteAttachment(
+                    document.FinalizedDocumentFileName,
+                    document.FinalizedDocumentContent,
+                    document.FinalizedDocumentMimeType)
+            ]
+        }, ct);
     }
 
     private static async Task EnsureAcceptedSchedulesHaveStartDeliveries(

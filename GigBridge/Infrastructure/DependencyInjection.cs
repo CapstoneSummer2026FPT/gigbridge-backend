@@ -15,6 +15,7 @@ using Infrastructure.Services.Auth;
 using Infrastructure.Services.Common;
 using Infrastructure.Services.ContentModerationService;
 using Infrastructure.Services.Email;
+using Infrastructure.Services.ESign;
 using Infrastructure.Services.GoogleMeet;
 using Infrastructure.Services.Media;
 using Infrastructure.Services.Notification;
@@ -166,6 +167,8 @@ public static class DependencyInjection
             options.ApiToken = resendApiToken;
         });
         services.AddScoped<IEmailService, EmailService>();
+        services.AddHttpClient<IContractEsignDocumentGenerator, ContractEsignDocumentGenerator>(client =>
+            client.Timeout = TimeSpan.FromSeconds(15));
         services.AddScoped<IAuthEmailSender, AuthEmailSender>();
         services.AddSingleton<IScheduleEmailRenderer, ScheduleEmailRenderer>();
         services.AddSingleton<IProposalNegotiationEmailRenderer, ProposalNegotiationEmailRenderer>();

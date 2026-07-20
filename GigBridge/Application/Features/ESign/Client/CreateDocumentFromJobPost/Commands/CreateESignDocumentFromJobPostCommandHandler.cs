@@ -43,6 +43,10 @@ public sealed class CreateESignDocumentFromJobPostCommandHandler
 
         await _context.SaveChangesAsync(cancellationToken);
 
-        return await ESignDocumentProjection.ToResponseAsync(_context, document, cancellationToken);
+        return await ESignDocumentProjection.ToResponseAsync(
+            _context,
+            document,
+            request.UserId,
+            cancellationToken);
     }
 }

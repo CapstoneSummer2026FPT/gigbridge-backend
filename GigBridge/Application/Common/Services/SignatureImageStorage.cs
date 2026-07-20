@@ -7,6 +7,7 @@ namespace Application.Common.Services;
 public static partial class SignatureImageStorage
 {
     private const string SignatureFolder = "esign/signatures";
+    private const int MaxSignatureBytes = 5 * 1024 * 1024;
 
     public static async Task<string> UploadSignatureImageAsync(
         IMediaService mediaService,
@@ -52,12 +53,18 @@ public static partial class SignatureImageStorage
             throw new BadRequestException("Signature image data is not valid base64.");
         }
 
-        if (bytes.Length == 0)
+        if (bytes.Length == 0 || bytes.Length > MaxSignatureBytes)
         {
-            throw new BadRequestException("Signature image data is empty.");
+            throw new BadRequestException("Signature image must be between 1 byte and 5 MB.");
         }
 
-        return new ParsedDataUri(match.Groups["contentType"].Value.ToLowerInvariant(), bytes);
+        var contentType = match.Groups["contentType"].Value.ToLowerInvariant();
+        if (contentType is not ("image/png" or "image/jpeg"))
+        {
+            throw new BadRequestException("Signature image must be PNG or JPEG.");
+        }
+
+        return new ParsedDataUri(contentType, bytes);
     }
 
     private static string ToFileExtension(string contentType)

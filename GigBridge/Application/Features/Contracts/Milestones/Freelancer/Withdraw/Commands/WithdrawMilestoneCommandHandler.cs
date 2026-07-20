@@ -58,23 +58,11 @@ public sealed class WithdrawMilestoneCommandHandler :
             .Where(milestone => milestone.ContractsId == contract.ContractsId)
             .ToListAsync(cancellationToken);
 
-        var requiredApprovedCount = (int)Math.Ceiling(milestones.Count * 0.5m);
-        var approvedCount = milestones.Count(milestone => milestone.Status == (int)MilestoneStatus.Approved);
-        if (approvedCount < requiredApprovedCount)
-        {
-            throw new BadRequestException("At least 50% of contract milestones must be approved before withdrawal.");
-        }
-
         var releaseCapVnd = decimal.Round(
             milestone.Amount * NormalFreelancerReleasePercentage,
             2,
             MidpointRounding.AwayFromZero);
         var releasableVnd = releaseCapVnd - milestone.ReleasedAmount;
-        if (releasableVnd <= 0)
-        {
-            throw new ConflictException("This milestone has no remaining withdrawable amount.");
-        }
-
         var escrow = await _context.Set<ContractEscrow>()
             .FirstOrDefaultAsync(
                 escrow => escrow.ContractsId == contract.ContractsId,
@@ -83,6 +71,26 @@ public sealed class WithdrawMilestoneCommandHandler :
         if (escrow is null)
         {
             throw new NotFoundException("Contract escrow does not exist.");
+        }
+
+        if (releasableVnd <= 0)
+        {
+            return new WithdrawMilestoneResponse(
+                contract.ContractsId,
+                milestone.MilestonesId,
+                escrow.ContractEscrowId,
+                0m,
+                0m,
+                milestone.ReleasedAmount,
+                escrow.ReleasedAmount,
+                escrow.Status);
+        }
+
+        var requiredApprovedCount = (int)Math.Ceiling(milestones.Count * 0.5m);
+        var approvedCount = milestones.Count(milestone => milestone.Status == (int)MilestoneStatus.Approved);
+        if (approvedCount < requiredApprovedCount)
+        {
+            throw new BadRequestException("At least 50% of contract milestones must be approved before withdrawal.");
         }
 
         if (escrow.Status != (int)ContractEscrowStatus.Funded &&
@@ -114,12 +122,6 @@ public sealed class WithdrawMilestoneCommandHandler :
             throw new BadRequestException("Client escrow wallet does not exist.");
         }
 
-        var releasedTokens = releasableVnd;
-        if (clientWallet.HeldTokens < releasedTokens)
-        {
-            throw new BadRequestException("Client held wallet balance is insufficient for this withdrawal.");
-        }
-
         var freelancerWallet = await _context.Set<UserWallet>()
             .FirstOrDefaultAsync(wallet => wallet.UserId == command.UserId, cancellationToken);
 
@@ -138,9 +140,19 @@ public sealed class WithdrawMilestoneCommandHandler :
             _context.Set<UserWallet>().Add(freelancerWallet);
         }
 
-        clientWallet.HeldTokens -= releasedTokens;
-        clientWallet.UpdatedAt = now;
-        WalletWorkflow.CreditWithdrawable(freelancerWallet, releasedTokens, now);
+        var transactionCode = $"ESCROW-RELEASE-{escrow.ContractEscrowId:N}-{milestone.MilestonesId:N}";
+        var transfer = ContractEscrowWalletWorkflow.Release(
+            _context,
+            clientWallet,
+            freelancerWallet,
+            contract.ContractsId,
+            escrow.ContractEscrowId,
+            milestone.MilestonesId,
+            releasableVnd,
+            transactionCode,
+            "InternalTokenWallet",
+            "Released from escrow to freelancer wallet.",
+            now);
 
         milestone.ReleasedAmount += releasableVnd;
         milestone.LastReleasedAt = now;
@@ -155,43 +167,6 @@ public sealed class WithdrawMilestoneCommandHandler :
             : escrow.ReleasedAt;
         contract.UpdatedAt = now;
 
-        var transactionCode = $"ESCROW-RELEASE-{escrow.ContractEscrowId:N}-{milestone.MilestonesId:N}";
-        _context.Set<WalletTransaction>().Add(new WalletTransaction
-        {
-            WalletTransactionsId = Guid.NewGuid(),
-            UserWalletsId = clientWallet.UserWalletsId,
-            UserId = clientWallet.UserId,
-            ContractsId = contract.ContractsId,
-            ContractEscrowId = escrow.ContractEscrowId,
-            MilestonesId = milestone.MilestonesId,
-            TokenAmount = releasedTokens,
-            VndAmount = releasableVnd,
-            Type = (int)WalletTransactionType.EscrowRelease,
-            Status = (int)WalletTransactionStatus.Succeeded,
-            GatewayProvider = "InternalTokenWallet",
-            GatewayTransactionCode = transactionCode,
-            Note = "Released from client held escrow to freelancer.",
-            CreatedAt = now,
-            CompletedAt = now
-        });
-        _context.Set<WalletTransaction>().Add(new WalletTransaction
-        {
-            WalletTransactionsId = Guid.NewGuid(),
-            UserWalletsId = freelancerWallet.UserWalletsId,
-            UserId = freelancerWallet.UserId,
-            ContractsId = contract.ContractsId,
-            ContractEscrowId = escrow.ContractEscrowId,
-            MilestonesId = milestone.MilestonesId,
-            TokenAmount = releasedTokens,
-            VndAmount = releasableVnd,
-            Type = (int)WalletTransactionType.EscrowRelease,
-            Status = (int)WalletTransactionStatus.Succeeded,
-            GatewayProvider = "InternalTokenWallet",
-            GatewayTransactionCode = transactionCode,
-            Note = "Released from escrow to freelancer wallet.",
-            CreatedAt = now,
-            CompletedAt = now
-        });
         _context.Set<EscrowTransaction>().Add(new EscrowTransaction
         {
             EscrowTransactionId = Guid.NewGuid(),
@@ -221,7 +196,7 @@ public sealed class WithdrawMilestoneCommandHandler :
             milestone.MilestonesId,
             escrow.ContractEscrowId,
             releasableVnd,
-            releasedTokens,
+            transfer.GrossTokens,
             milestone.ReleasedAmount,
             escrow.ReleasedAmount,
             escrow.Status);

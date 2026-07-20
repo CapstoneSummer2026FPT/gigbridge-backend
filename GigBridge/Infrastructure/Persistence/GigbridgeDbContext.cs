@@ -873,7 +873,7 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
             entity.ToTable("ESignDocuments");
 
-            entity.HasIndex(e => e.ContractsId, "ESignDocuments_cont_ContractsId_key").IsUnique();
+            entity.HasIndex(e => e.ContractsId, "IX_ESignDocuments_ContractsId");
 
             entity.HasIndex(e => e.DocumentCode, "IX_ESignDocuments_DocumentCode").IsUnique();
 
@@ -887,17 +887,21 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
                 .HasDefaultValueSql("gen_random_uuid()")
                 .HasColumnName("ESignDocumentsId");
             entity.Property(e => e.ContractsId).HasColumnName("ContractsId");
+            entity.Property(e => e.ContractSnapshotJson).HasColumnType("jsonb");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.DocumentCode).HasMaxLength(50);
             entity.Property(e => e.DocumentHash).HasMaxLength(128);
             entity.Property(e => e.EsignTemplatesId).HasColumnName("ESignTemplatesId");
+            entity.Property(e => e.FinalizedDocumentContent).HasColumnType("bytea");
+            entity.Property(e => e.FinalizedDocumentFileName).HasMaxLength(255);
+            entity.Property(e => e.FinalizedDocumentMimeType).HasMaxLength(150);
             entity.Property(e => e.JobPostsId).HasColumnName("JobPostsId");
             entity.Property(e => e.Status)
                 .HasDefaultValue(0)
                 .HasComment("Enum ESignDocumentStatus: 0=Draft, 1=PendingSignatures, 2=PartiallySigned, 3=FullySigned, 4=Expired, 5=Voided");
 
-            entity.HasOne(d => d.Contracts).WithOne(p => p.EsignDocument)
-                .HasForeignKey<EsignDocument>(d => d.ContractsId)
+            entity.HasOne(d => d.Contracts).WithMany(p => p.EsignDocuments)
+                .HasForeignKey(d => d.ContractsId)
                 .HasConstraintName("ESignDocuments_cont_ContractsId_fkey");
 
             entity.HasOne(d => d.EsignTemplates).WithMany(p => p.EsignDocuments)
@@ -933,6 +937,7 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.EsignDocumentsId).HasColumnName("ESignDocumentsId");
             entity.Property(e => e.IpAddress).HasMaxLength(45);
+            entity.Property(e => e.PolicyVersion).HasMaxLength(50);
             entity.Property(e => e.SignerRole).HasComment("Enum ESignerRole: 0=Client, 1=Freelancer");
             entity.Property(e => e.Status)
                 .HasDefaultValue(0)

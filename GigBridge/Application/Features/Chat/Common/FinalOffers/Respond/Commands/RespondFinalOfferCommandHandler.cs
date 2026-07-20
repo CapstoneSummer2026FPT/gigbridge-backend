@@ -320,16 +320,6 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
             _context.Set<Milestone>().Add(milestone);
         }
 
-        await ServiceFeeWorkflow.ChargeAsync(
-            _context,
-            userId,
-            contract.ContractsId,
-            offer.FinalPrice,
-            $"{ServiceFeeWorkflow.AcceptJobFeePrefix}{offer.NegotiationOfferId:N}",
-            $"1% service fee for accepting the job: {contract.Title}.",
-            now,
-            cancellationToken);
-
         offer.Status = (int)NegotiationOfferStatus.Accepted;
         offer.RespondedAt = now;
         offer.ContractsId = contract.ContractsId;
