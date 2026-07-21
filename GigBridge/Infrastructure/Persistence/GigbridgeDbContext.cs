@@ -2789,4 +2789,6 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
         OnModelCreatingPartial(modelBuilder);
     }
+
+    partial void OnModelCreatingPartial(ModelBuilder modelBuilder);
 }

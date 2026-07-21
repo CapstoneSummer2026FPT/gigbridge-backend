@@ -1,7 +1,9 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Application.Features.Auth.Shared.DTOs;
 using Application.Features.Chat.Common.FinalOffers.Respond.DTOs;
+using Application.Features.Chat.Common.FinalOffers.Shared.Email;
 using Application.Features.Chat.Common.Messages.Send.DTOs;
 using Application.Features.JobPosts.Common;
 using Application.Features.Wallets.Common;
@@ -9,6 +11,8 @@ using Domain.Entities;
 using Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 
 namespace Application.Features.Chat.Common.FinalOffers.Respond.Commands;
 
@@ -17,15 +21,30 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
     private readonly IChatRealtimeNotifier _chatRealtimeNotifier;
+    private readonly INotificationService? _notificationService;
+    private readonly IEmailService? _emailService;
+    private readonly IJobAcceptanceEmailRenderer? _emailRenderer;
+    private readonly IConfiguration? _configuration;
+    private readonly ILogger<RespondFinalOfferCommandHandler>? _logger;
 
     public RespondFinalOfferCommandHandler(
         IApplicationDbContext context,
         IDateTimeService dateTimeService,
-        IChatRealtimeNotifier chatRealtimeNotifier)
+        IChatRealtimeNotifier chatRealtimeNotifier,
+        INotificationService? notificationService = null,
+        IEmailService? emailService = null,
+        IJobAcceptanceEmailRenderer? emailRenderer = null,
+        IConfiguration? configuration = null,
+        ILogger<RespondFinalOfferCommandHandler>? logger = null)
     {
         _context = context;
         _dateTimeService = dateTimeService;
         _chatRealtimeNotifier = chatRealtimeNotifier;
+        _notificationService = notificationService;
+        _emailService = emailService;
+        _emailRenderer = emailRenderer;
+        _configuration = configuration;
+        _logger = logger;
     }
 
     public async Task<RespondFinalOfferResponse> Handle(
@@ -168,9 +187,72 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
                 eventName,
                 new { contractId = offer.ContractsId },
                 cancellationToken);
+
+            await SendJobAcceptanceUpdates(offer, command.UserId, cancellationToken);
         }
 
         return response;
+    }
+
+    private async Task SendJobAcceptanceUpdates(
+        NegotiationOffer offer,
+        Guid freelancerUserId,
+        CancellationToken cancellationToken)
+    {
+        var jobTitle = await _context.Set<JobPost>()
+            .AsNoTracking()
+            .Where(job => job.JobPostsId == offer.JobPostsId)
+            .Select(job => job.Title)
+            .FirstOrDefaultAsync(cancellationToken) ?? "your GigBridge job";
+
+        if (_notificationService is not null)
+        {
+            try
+            {
+                await _notificationService.CreateNotificationAsync(
+                    freelancerUserId,
+                    NotificationType.ContractStarted,
+                    $"You were accepted for {jobTitle}",
+                    "Congratulations! Your application was accepted and your contract is ready for signatures.",
+                    offer.ContractsId,
+                    "Contract",
+                    cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger?.LogError(ex, "Failed to create job acceptance notification for freelancer {FreelancerUserId}", freelancerUserId);
+            }
+        }
+
+        if (_emailService is null || _emailRenderer is null) return;
+
+        var freelancer = await _context.Set<User>()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(user => user.UserId == freelancerUserId, cancellationToken);
+        if (freelancer is null || string.IsNullOrWhiteSpace(freelancer.Email)) return;
+
+        try
+        {
+            var frontendUrl = (_configuration?["FrontendBaseUrl"] ?? "http://localhost:5173").TrimEnd('/');
+            var email = _emailRenderer.Render(new JobAcceptanceEmailModel(
+                freelancer.FullName,
+                jobTitle,
+                $"{offer.FinalPrice:N0} VND",
+                $"{frontendUrl}/contracts/{offer.ContractsId}"));
+
+            await _emailService.SendEmailAsync(new EmailRequest
+            {
+                To = freelancer.Email,
+                Subject = email.Subject,
+                Body = email.HtmlBody,
+                TextBody = email.TextBody,
+                IsHtml = true
+            }, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger?.LogError(ex, "Failed to send job acceptance email to freelancer {FreelancerUserId}", freelancerUserId);
+        }
     }
 
     private Task<List<ConversationParticipant>> GetActiveParticipants(

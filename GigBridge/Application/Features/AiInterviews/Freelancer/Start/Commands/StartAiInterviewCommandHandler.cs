@@ -37,10 +37,33 @@ public sealed class StartAiInterviewCommandHandler(
                 .OrderByDescending(x => x.CreatedAt)
                 .FirstOrDefaultAsync(cancellationToken);
 
+        if (definition is null)
+            throw new BadRequestException("This job does not have an AI interview enabled.");
+        AiInterviewDefinition activeDefinition = definition;
+
+        var hasSubmittedProposal = await context.Set<Proposal>()
+            .AsNoTracking()
+            .AnyAsync(proposal => proposal.JobPostsId == command.JobPostId &&
+                proposal.FreelancerProfiles.UserId == command.UserId &&
+                (proposal.Status == 1 || proposal.Status == 2 || proposal.Status == 3),
+                cancellationToken);
+        if (!hasSubmittedProposal)
+            throw new ForbiddenAccessException(
+                "Submit a proposal for this job before starting its AI interview.");
+
+        var alreadyCompleted = await context.Set<AiInterviewAttempt>()
+            .AsNoTracking()
+            .AnyAsync(attempt => attempt.AiInterviewDefinitionId == activeDefinition.AiInterviewDefinitionsId &&
+                attempt.FreelancerUserId == command.UserId &&
+                attempt.Status == AiInterviewAttemptStatus.Completed,
+                cancellationToken);
+        if (alreadyCompleted)
+            throw new ConflictException("This AI interview has already been completed.");
+
         var skills = jobPost.JobPostSkills.Where(x => x.Skills is not null)
             .Select(x => x.Skills.Name).Concat(jobPost.CustomSkillNames ?? [])
             .Where(x => !string.IsNullOrWhiteSpace(x)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-        if (definition is not null && string.IsNullOrWhiteSpace(definition.ExternalReference))
+        if (string.IsNullOrWhiteSpace(activeDefinition.ExternalReference))
         {
             var registered = await aiServiceClient.CreateInterviewDefinitionAsync(
                 new AiInterviewDefinitionRequestDto
@@ -49,17 +72,17 @@ public sealed class StartAiInterviewCommandHandler(
                     JobTitle = jobPost.Title,
                     JobDescription = jobPost.Description,
                     JobSkills = skills,
-                    Mode = definition.Mode,
-                    Language = definition.Language,
-                    QuestionCount = definition.QuestionCount
+                    Mode = activeDefinition.Mode,
+                    Language = activeDefinition.Language,
+                    QuestionCount = activeDefinition.QuestionCount
                 },
                 cancellationToken);
-            definition.ExternalReference = registered.DefinitionReference;
-            definition.Mode = registered.Mode;
-            definition.Language = registered.Language;
-            definition.QuestionCount = registered.QuestionCount;
-            definition.Status = AiInterviewDefinitionStatus.Active;
-            definition.UpdatedAt = clock.UtcNow;
+            activeDefinition.ExternalReference = registered.DefinitionReference;
+            activeDefinition.Mode = registered.Mode;
+            activeDefinition.Language = registered.Language;
+            activeDefinition.QuestionCount = registered.QuestionCount;
+            activeDefinition.Status = AiInterviewDefinitionStatus.Active;
+            activeDefinition.UpdatedAt = clock.UtcNow;
         }
         var result = await aiServiceClient.StartInterviewAsync(new AiInterviewStartRequestDto
         {
@@ -68,37 +91,34 @@ public sealed class StartAiInterviewCommandHandler(
             JobTitle = jobPost.Title,
             JobDescription = jobPost.Description,
             JobSkills = skills,
-            Mode = definition?.Mode ?? command.Mode,
-            Language = definition?.Language ?? command.Language,
-            QuestionCount = definition?.QuestionCount,
-            DefinitionReference = definition?.ExternalReference
+            Mode = activeDefinition.Mode,
+            Language = activeDefinition.Language,
+            QuestionCount = activeDefinition.QuestionCount,
+            DefinitionReference = activeDefinition.ExternalReference
         }, cancellationToken);
 
-        if (definition is not null)
+        activeDefinition.Status = AiInterviewDefinitionStatus.Active;
+        activeDefinition.UpdatedAt = clock.UtcNow;
+        var attempt = new AiInterviewAttempt
         {
-            definition.Status = AiInterviewDefinitionStatus.Active;
-            definition.UpdatedAt = clock.UtcNow;
-            var attempt = new AiInterviewAttempt
+            AiInterviewAttemptsId = Guid.NewGuid(),
+            AiInterviewDefinitionId = activeDefinition.AiInterviewDefinitionsId,
+            FreelancerUserId = command.UserId,
+            ExternalSessionId = result.SessionId,
+            Status = AiInterviewAttemptStatus.InProgress,
+            StartedAt = clock.UtcNow
+        };
+        context.Set<AiInterviewAttempt>().Add(attempt);
+        if (!string.IsNullOrWhiteSpace(result.QuestionText))
+            context.Set<AiInterviewAnswerResult>().Add(new AiInterviewAnswerResult
             {
-                AiInterviewAttemptsId = Guid.NewGuid(),
-                AiInterviewDefinitionId = definition.AiInterviewDefinitionsId,
-                FreelancerUserId = command.UserId,
-                ExternalSessionId = result.SessionId,
-                Status = AiInterviewAttemptStatus.InProgress,
-                StartedAt = clock.UtcNow
-            };
-            context.Set<AiInterviewAttempt>().Add(attempt);
-            if (!string.IsNullOrWhiteSpace(result.QuestionText))
-                context.Set<AiInterviewAnswerResult>().Add(new AiInterviewAnswerResult
-                {
-                    AiInterviewAnswerResultsId = Guid.NewGuid(),
-                    AiInterviewAttemptId = attempt.AiInterviewAttemptsId,
-                    QuestionIndex = result.QuestionIndex,
-                    QuestionText = result.QuestionText,
-                    CreatedAt = clock.UtcNow
-                });
-            await context.SaveChangesAsync(cancellationToken);
-        }
+                AiInterviewAnswerResultsId = Guid.NewGuid(),
+                AiInterviewAttemptId = attempt.AiInterviewAttemptsId,
+                QuestionIndex = result.QuestionIndex,
+                QuestionText = result.QuestionText,
+                CreatedAt = clock.UtcNow
+            });
+        await context.SaveChangesAsync(cancellationToken);
         return result;
     }
 }
