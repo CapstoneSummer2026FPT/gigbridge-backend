@@ -25,6 +25,16 @@ public static class ESignTemplateInitializationExtensions
             using var scope = app.Services.CreateScope();
             var context = scope.ServiceProvider.GetRequiredService<GigbridgeDbContext>();
 
+            // Automatically apply any pending EF Core database migrations on startup
+            try
+            {
+                await context.Database.MigrateAsync();
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Auto-migration attempt encountered an issue or database is up to date.");
+            }
+
             var hasActiveFixedPriceTemplate = await context.EsignTemplates
                 .AnyAsync(template =>
                     template.TemplateCode == FixedPriceTemplateCode &&

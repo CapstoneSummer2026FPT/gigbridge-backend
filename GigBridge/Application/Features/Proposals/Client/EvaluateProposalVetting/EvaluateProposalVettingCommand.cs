@@ -85,6 +85,49 @@ public class EvaluateProposalVettingCommandHandler : IRequestHandler<EvaluatePro
         };
 
         // 6. Call the AI service via HttpClient
-        return await _aiServiceClient.AnalyzeVettingAsync(requestDto, cancellationToken);
+        var evalResult = await _aiServiceClient.AnalyzeVettingAsync(requestDto, cancellationToken);
+
+        // 7. Persist or update evaluation in database (cached until re-judged)
+        var existingJudging = await _context.Set<ProposalAiJudging>()
+            .FirstOrDefaultAsync(j => j.ProposalId == request.ProposalId, cancellationToken);
+
+        var techSkillsJson = System.Text.Json.JsonSerializer.Serialize(evalResult.TechnicalSkills ?? new List<string>());
+        var softSkillsJson = System.Text.Json.JsonSerializer.Serialize(evalResult.SoftSkills ?? new List<string>());
+        var gradedQuestionsJson = System.Text.Json.JsonSerializer.Serialize(evalResult.GradedQuestions ?? new List<GradedQuestionDto>());
+
+        if (existingJudging == null)
+        {
+            var newJudging = new ProposalAiJudging
+            {
+                ProposalAiJudgingsId = Guid.NewGuid(),
+                ProposalId = request.ProposalId,
+                Score = evalResult.Score,
+                Summary = evalResult.Summary ?? string.Empty,
+                RecommendedHire = evalResult.RecommendedHire,
+                TechnicalSkillsJson = techSkillsJson,
+                SoftSkillsJson = softSkillsJson,
+                HolisticAdjustment = evalResult.HolisticAdjustment,
+                HolisticAdjustmentReason = evalResult.HolisticAdjustmentReason,
+                GradedQuestionsJson = gradedQuestionsJson,
+                EvaluatedAt = DateTime.UtcNow
+            };
+            _context.Set<ProposalAiJudging>().Add(newJudging);
+        }
+        else
+        {
+            existingJudging.Score = evalResult.Score;
+            existingJudging.Summary = evalResult.Summary ?? string.Empty;
+            existingJudging.RecommendedHire = evalResult.RecommendedHire;
+            existingJudging.TechnicalSkillsJson = techSkillsJson;
+            existingJudging.SoftSkillsJson = softSkillsJson;
+            existingJudging.HolisticAdjustment = evalResult.HolisticAdjustment;
+            existingJudging.HolisticAdjustmentReason = evalResult.HolisticAdjustmentReason;
+            existingJudging.GradedQuestionsJson = gradedQuestionsJson;
+            existingJudging.UpdatedAt = DateTime.UtcNow;
+        }
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return evalResult;
     }
 }

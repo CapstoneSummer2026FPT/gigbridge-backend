@@ -1,3 +1,7 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text.Json;
 using Application.Features.Proposals.Common.DTOs;
 using Domain.Entities;
 
@@ -12,6 +16,20 @@ internal static class ProposalProjection
 
     private static ProposalDto ToDto(Proposal proposal)
     {
+        var judging = proposal.ProposalAiJudging;
+        List<string>? techSkills = null;
+        List<string>? softSkills = null;
+
+        if (!string.IsNullOrEmpty(judging?.TechnicalSkillsJson))
+        {
+            try { techSkills = JsonSerializer.Deserialize<List<string>>(judging.TechnicalSkillsJson); } catch { }
+        }
+
+        if (!string.IsNullOrEmpty(judging?.SoftSkillsJson))
+        {
+            try { softSkills = JsonSerializer.Deserialize<List<string>>(judging.SoftSkillsJson); } catch { }
+        }
+
         return new ProposalDto
         {
             ProposalsId = proposal.ProposalsId,
@@ -32,7 +50,15 @@ internal static class ProposalProjection
             FirstMilestoneAmount = proposal.ProposalMilestonePlans
                 .OrderBy(item => item.OrderIndex)
                 .Select(item => (decimal?)item.Amount)
-                .FirstOrDefault()
+                .FirstOrDefault(),
+
+            // AI Judging Fields
+            AiScore = judging?.Score,
+            AiSummary = judging?.Summary,
+            AiRecommendedHire = judging?.RecommendedHire,
+            AiEvaluatedAt = judging?.EvaluatedAt,
+            AiTechnicalSkills = techSkills,
+            AiSoftSkills = softSkills
         };
     }
 
