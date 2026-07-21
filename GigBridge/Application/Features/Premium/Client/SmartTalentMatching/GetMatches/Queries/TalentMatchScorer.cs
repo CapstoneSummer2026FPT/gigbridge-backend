@@ -57,16 +57,13 @@ public static class TalentMatchScorer
         var verifiedSkillScore = job.Skills.Count == 0 ? 0m :
             5m * matched.Count(skill => verifiedSkillIds.Contains(skill.SkillId)) / job.Skills.Count;
         var structuredSkillFit = coverageScore + expertiseScore + verifiedSkillScore;
-        var taxonomyScore = exactCategory ? 15m : sameMajor ? 8m : 0m;
-        var bayesianRating = CalculateBayesianRating(candidate.AverageRating, candidate.ReviewCount);
-        var completedContractsScore = Math.Min(Math.Max(candidate.CompletedContractCount, 0), 5);
-        var reliabilityScore = bayesianRating + completedContractsScore;
-        var availabilityScore = candidate.Availability == 0 ? 10m : candidate.Availability == 1 ? 6m : 0m;
-        var eloScore = Math.Clamp(candidate.EloPoints, 0, 500) / 500m * 7m;
-        var completionScore = Math.Clamp(candidate.ProfileCompletionScore, 0, 100) / 100m * 3m;
-        var reputationScore = eloScore + completionScore;
-        var total = Round(Math.Clamp(structuredSkillFit + taxonomyScore + reliabilityScore +
-            availabilityScore + reputationScore, 0m, 95m));
+        var ratingScore = candidate.ReviewCount > 0
+            ? Math.Clamp((decimal)candidate.AverageRating * 3m, 0m, 15m)
+            : 10m;
+        var eloScore = Math.Clamp((decimal)candidate.EloPoints, 0m, 1000m) / 100m;
+        var budgetScore = 15m;
+        var availabilityScore = candidate.Availability == 0 ? 10m : candidate.Availability == 1 ? 5m : 0m;
+        var total = Round(Math.Clamp(ratingScore + eloScore + budgetScore + availabilityScore, 0m, 50m));
 
         var matchedNames = matched.Select(skill => skill.Name).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(x => x).ToList();
         var missingNames = job.Skills.Where(skill => !effectiveSkillIds.Contains(skill.SkillId))
@@ -80,10 +77,19 @@ public static class TalentMatchScorer
             candidate.CompletedContractCount, candidate.AverageRating, candidate.ReviewCount, candidate.Availability);
         var confidence = verifiedSkillContracts > 0 && requiredCoverage == 100m ? "high" :
             requiredCoverage >= RequiredSkillCoverageThreshold && (exactCategory || sameMajor) ? "medium" : "low";
-        var breakdown = new TalentMatchScoreBreakdownDto(Round(structuredSkillFit), Round(coverageScore),
-            Round(expertiseScore), Round(verifiedSkillScore), Round(taxonomyScore), Round(reliabilityScore),
-            Round(bayesianRating), Round(completedContractsScore), Round(availabilityScore),
-            Round(reputationScore), Round(eloScore), Round(completionScore));
+        var breakdown = new TalentMatchScoreBreakdownDto(
+            StructuredSkillFit: Round(structuredSkillFit),
+            SkillCoverage: Round(coverageScore),
+            SkillExpertise: Round(expertiseScore),
+            VerifiedSkillEvidence: Round(verifiedSkillScore),
+            TaxonomyFit: Round(exactCategory ? 15m : sameMajor ? 8m : 0m),
+            Reliability: Round(ratingScore),
+            BayesianRating: Round(ratingScore),
+            CompletedContracts: candidate.CompletedContractCount,
+            Availability: Round(availabilityScore),
+            ReputationAndProfile: Round(eloScore),
+            Elo: Round(eloScore),
+            ProfileCompleteness: Round(candidate.ProfileCompletionScore));
         var eligibility = new TalentMatchEligibilityEvidenceDto(Round(requiredCoverage),
             requiredMatched.Count, required.Count, meetsRequiredGate, singleRequiredSatisfied);
         var verifiedWork = new TalentMatchVerifiedWorkEvidenceDto(candidate.CompletedContractCount,

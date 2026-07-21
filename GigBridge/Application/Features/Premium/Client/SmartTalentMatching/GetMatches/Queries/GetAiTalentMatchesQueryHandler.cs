@@ -47,13 +47,13 @@ public sealed class GetAiTalentMatchesQueryHandler(
         {
             var deterministic = ranked.Scored.Match;
             semanticByFreelancer.TryGetValue(deterministic.FreelancerId, out var aiMatch);
-            var semanticPoints = Math.Round((decimal)(aiMatch?.SemanticScore ?? 0d) * 5m, 2);
+            var semanticPoints = Math.Round((decimal)(aiMatch?.SemanticScore ?? 0.5d) * 50m, 2);
             return deterministic with
             {
                 MatchPercentage = Math.Round(Math.Min(deterministic.MatchPercentage + semanticPoints, 100m), 2),
-                Reasons = deterministic.Reasons.Concat((aiMatch?.MatchReasons ?? [])
+                Reasons = (aiMatch?.MatchReasons ?? []).Concat(deterministic.Reasons)
                         .Where(reason => !string.IsNullOrWhiteSpace(reason) && reason.Length <= 300)
-                        .Select(reason => reason.Trim()).Take(3))
+                        .Select(reason => reason.Trim()).Take(5)
                     .Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
                 ScoreBreakdown = deterministic.ScoreBreakdown with { AiSemantic = semanticPoints }
             };
