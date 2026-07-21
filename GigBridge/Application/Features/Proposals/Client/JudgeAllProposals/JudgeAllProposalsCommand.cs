@@ -70,14 +70,14 @@ public class JudgeAllProposalsCommandHandler : IRequestHandler<JudgeAllProposals
 
         int maxBatch = request.BatchSize <= 0 || request.BatchSize > 20 ? 10 : request.BatchSize;
 
-        // 3. Fetch un-judged proposals for this job post (Status != Draft)
+        // 3. Fetch proposals for this job post (Status != Draft) - TEMPORARY: allow re-judging existing proposals
         var unjudgedProposals = await _context.Set<Proposal>()
             .Include(p => p.FreelancerProfiles)
             .Include(p => p.JobPosts)
                 .ThenInclude(j => j.JobPostSkills)
                     .ThenInclude(js => js.Skills)
             .Include(p => p.ProposalAiJudging)
-            .Where(p => p.JobPostsId == request.JobPostId && p.Status != 0 && p.ProposalAiJudging == null)
+            .Where(p => p.JobPostsId == request.JobPostId && p.Status != 0)
             .OrderBy(p => p.SubmittedAt)
             .Take(maxBatch)
             .ToListAsync(cancellationToken);
@@ -85,7 +85,7 @@ public class JudgeAllProposalsCommandHandler : IRequestHandler<JudgeAllProposals
         if (!unjudgedProposals.Any())
         {
             var remaining = await _context.Set<Proposal>()
-                .CountAsync(p => p.JobPostsId == request.JobPostId && p.Status != 0 && p.ProposalAiJudging == null, cancellationToken);
+                .CountAsync(p => p.JobPostsId == request.JobPostId && p.Status != 0, cancellationToken);
 
             return new BatchJudgeResultDto
             {
@@ -128,23 +128,40 @@ public class JudgeAllProposalsCommandHandler : IRequestHandler<JudgeAllProposals
                 var softSkillsJson = System.Text.Json.JsonSerializer.Serialize(evalResult.SoftSkills ?? new List<string>());
                 var gradedQuestionsJson = System.Text.Json.JsonSerializer.Serialize(evalResult.GradedQuestions ?? new List<GradedQuestionDto>());
 
-                var newJudging = new ProposalAiJudging
+                if (proposal.ProposalAiJudging != null)
                 {
-                    ProposalAiJudgingsId = Guid.NewGuid(),
-                    ProposalId = proposal.ProposalsId,
-                    Score = evalResult.Score,
-                    Summary = evalResult.Summary ?? string.Empty,
-                    RecommendedHire = evalResult.RecommendedHire,
-                    TechnicalSkillsJson = techSkillsJson,
-                    SoftSkillsJson = softSkillsJson,
-                    HolisticAdjustment = evalResult.HolisticAdjustment,
-                    HolisticAdjustmentReason = evalResult.HolisticAdjustmentReason,
-                    GradedQuestionsJson = gradedQuestionsJson,
-                    EvaluatedAt = DateTime.UtcNow
-                };
+                    // Update existing judging record for re-judging
+                    proposal.ProposalAiJudging.Score = evalResult.Score;
+                    proposal.ProposalAiJudging.Summary = evalResult.Summary ?? string.Empty;
+                    proposal.ProposalAiJudging.RecommendedHire = evalResult.RecommendedHire;
+                    proposal.ProposalAiJudging.TechnicalSkillsJson = techSkillsJson;
+                    proposal.ProposalAiJudging.SoftSkillsJson = softSkillsJson;
+                    proposal.ProposalAiJudging.HolisticAdjustment = evalResult.HolisticAdjustment;
+                    proposal.ProposalAiJudging.HolisticAdjustmentReason = evalResult.HolisticAdjustmentReason;
+                    proposal.ProposalAiJudging.GradedQuestionsJson = gradedQuestionsJson;
+                    proposal.ProposalAiJudging.EvaluatedAt = DateTime.UtcNow;
+                }
+                else
+                {
+                    // Insert new judging record
+                    var newJudging = new ProposalAiJudging
+                    {
+                        ProposalAiJudgingsId = Guid.NewGuid(),
+                        ProposalId = proposal.ProposalsId,
+                        Score = evalResult.Score,
+                        Summary = evalResult.Summary ?? string.Empty,
+                        RecommendedHire = evalResult.RecommendedHire,
+                        TechnicalSkillsJson = techSkillsJson,
+                        SoftSkillsJson = softSkillsJson,
+                        HolisticAdjustment = evalResult.HolisticAdjustment,
+                        HolisticAdjustmentReason = evalResult.HolisticAdjustmentReason,
+                        GradedQuestionsJson = gradedQuestionsJson,
+                        EvaluatedAt = DateTime.UtcNow
+                    };
 
-                _context.Set<ProposalAiJudging>().Add(newJudging);
-                proposal.ProposalAiJudging = newJudging;
+                    _context.Set<ProposalAiJudging>().Add(newJudging);
+                    proposal.ProposalAiJudging = newJudging;
+                }
             }
             catch
             {

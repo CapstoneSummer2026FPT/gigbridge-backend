@@ -62,14 +62,46 @@ public class EvaluateProposalVettingCommandHandler : IRequestHandler<EvaluatePro
             throw new ForbiddenAccessException("You do not have permission to evaluate vetting for this proposal.");
         }
 
-        // 4. Fetch the questions and candidate answers
+        // 4. Check if evaluation is already cached in database
+        var existingJudging = await _context.Set<ProposalAiJudging>()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(j => j.ProposalId == request.ProposalId, cancellationToken);
+
+        if (existingJudging != null)
+        {
+            var cachedTechSkills = string.IsNullOrEmpty(existingJudging.TechnicalSkillsJson)
+                ? new List<string>()
+                : System.Text.Json.JsonSerializer.Deserialize<List<string>>(existingJudging.TechnicalSkillsJson) ?? new List<string>();
+
+            var cachedSoftSkills = string.IsNullOrEmpty(existingJudging.SoftSkillsJson)
+                ? new List<string>()
+                : System.Text.Json.JsonSerializer.Deserialize<List<string>>(existingJudging.SoftSkillsJson) ?? new List<string>();
+
+            var cachedGradedQuestions = string.IsNullOrEmpty(existingJudging.GradedQuestionsJson)
+                ? new List<GradedQuestionDto>()
+                : System.Text.Json.JsonSerializer.Deserialize<List<GradedQuestionDto>>(existingJudging.GradedQuestionsJson) ?? new List<GradedQuestionDto>();
+
+            return new VettingEvaluationResponseDto
+            {
+                Score = existingJudging.Score,
+                Summary = existingJudging.Summary,
+                RecommendedHire = existingJudging.RecommendedHire,
+                TechnicalSkills = cachedTechSkills,
+                SoftSkills = cachedSoftSkills,
+                HolisticAdjustment = existingJudging.HolisticAdjustment,
+                HolisticAdjustmentReason = existingJudging.HolisticAdjustmentReason,
+                GradedQuestions = cachedGradedQuestions
+            };
+        }
+
+        // 5. Fetch questions and candidate answers if not yet judged
         var answers = await _context.Set<ProposalAnswer>()
             .AsNoTracking()
             .Include(pa => pa.JobPostQuestions)
             .Where(pa => pa.ProposalsId == request.ProposalId)
             .ToListAsync(cancellationToken);
 
-        // 5. Construct the AI request payload DTO
+        // 6. Construct AI request payload
         var requestDto = new AnalyzeVettingRequestDto
         {
             FreelancerId = proposal.FreelancerProfiles.UserId.ToString(),
@@ -84,48 +116,28 @@ public class EvaluateProposalVettingCommandHandler : IRequestHandler<EvaluatePro
             }).OrderBy(q => q.QuestionIndex).ToList()
         };
 
-        // 6. Call the AI service via HttpClient
+        // 7. Call AI service
         var evalResult = await _aiServiceClient.AnalyzeVettingAsync(requestDto, cancellationToken);
-
-        // 7. Persist or update evaluation in database (cached until re-judged)
-        var existingJudging = await _context.Set<ProposalAiJudging>()
-            .FirstOrDefaultAsync(j => j.ProposalId == request.ProposalId, cancellationToken);
 
         var techSkillsJson = System.Text.Json.JsonSerializer.Serialize(evalResult.TechnicalSkills ?? new List<string>());
         var softSkillsJson = System.Text.Json.JsonSerializer.Serialize(evalResult.SoftSkills ?? new List<string>());
         var gradedQuestionsJson = System.Text.Json.JsonSerializer.Serialize(evalResult.GradedQuestions ?? new List<GradedQuestionDto>());
 
-        if (existingJudging == null)
+        var newJudging = new ProposalAiJudging
         {
-            var newJudging = new ProposalAiJudging
-            {
-                ProposalAiJudgingsId = Guid.NewGuid(),
-                ProposalId = request.ProposalId,
-                Score = evalResult.Score,
-                Summary = evalResult.Summary ?? string.Empty,
-                RecommendedHire = evalResult.RecommendedHire,
-                TechnicalSkillsJson = techSkillsJson,
-                SoftSkillsJson = softSkillsJson,
-                HolisticAdjustment = evalResult.HolisticAdjustment,
-                HolisticAdjustmentReason = evalResult.HolisticAdjustmentReason,
-                GradedQuestionsJson = gradedQuestionsJson,
-                EvaluatedAt = DateTime.UtcNow
-            };
-            _context.Set<ProposalAiJudging>().Add(newJudging);
-        }
-        else
-        {
-            existingJudging.Score = evalResult.Score;
-            existingJudging.Summary = evalResult.Summary ?? string.Empty;
-            existingJudging.RecommendedHire = evalResult.RecommendedHire;
-            existingJudging.TechnicalSkillsJson = techSkillsJson;
-            existingJudging.SoftSkillsJson = softSkillsJson;
-            existingJudging.HolisticAdjustment = evalResult.HolisticAdjustment;
-            existingJudging.HolisticAdjustmentReason = evalResult.HolisticAdjustmentReason;
-            existingJudging.GradedQuestionsJson = gradedQuestionsJson;
-            existingJudging.UpdatedAt = DateTime.UtcNow;
-        }
-
+            ProposalAiJudgingsId = Guid.NewGuid(),
+            ProposalId = request.ProposalId,
+            Score = evalResult.Score,
+            Summary = evalResult.Summary ?? string.Empty,
+            RecommendedHire = evalResult.RecommendedHire,
+            TechnicalSkillsJson = techSkillsJson,
+            SoftSkillsJson = softSkillsJson,
+            HolisticAdjustment = evalResult.HolisticAdjustment,
+            HolisticAdjustmentReason = evalResult.HolisticAdjustmentReason,
+            GradedQuestionsJson = gradedQuestionsJson,
+            EvaluatedAt = DateTime.UtcNow
+        };
+        _context.Set<ProposalAiJudging>().Add(newJudging);
         await _context.SaveChangesAsync(cancellationToken);
 
         return evalResult;
