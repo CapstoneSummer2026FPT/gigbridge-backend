@@ -82,7 +82,7 @@ public class ClientProposalsController : BaseApiController
     }
 
     [HttpPost("{proposalId}/ai-interview-judging")]
-    public async Task<IActionResult> EvaluateVettingAnswers(Guid proposalId)
+    public async Task<IActionResult> EvaluateVettingAnswers(Guid proposalId, [FromQuery] bool onlyIfCached = false)
     {
         if (!TryGetCurrentUserId(out var userId))
         {
@@ -92,7 +92,8 @@ public class ClientProposalsController : BaseApiController
         var command = new EvaluateProposalVettingCommand
         {
             ProposalId = proposalId,
-            UserId = userId
+            UserId = userId,
+            OnlyIfCached = onlyIfCached
         };
 
         var result = await Mediator.Send(command);

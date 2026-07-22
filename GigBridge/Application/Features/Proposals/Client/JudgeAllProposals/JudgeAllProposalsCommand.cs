@@ -106,6 +106,11 @@ public class JudgeAllProposalsCommandHandler : IRequestHandler<JudgeAllProposals
                 .Where(pa => pa.ProposalsId == proposal.ProposalsId)
                 .ToListAsync(cancellationToken);
 
+            if (!answers.Any() || answers.All(pa => string.IsNullOrWhiteSpace(pa.AnswerText)))
+            {
+                continue;
+            }
+
             var requestDto = new AnalyzeVettingRequestDto
             {
                 FreelancerId = proposal.FreelancerProfiles.UserId.ToString(),
