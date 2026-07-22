@@ -44,7 +44,8 @@ public class SaveFreelancerCommandHandler : IRequestHandler<SaveFreelancerComman
             if (await AddMatchEventAsync(
                     request, existingSavedFreelancer.SavedFreelancersId, cancellationToken))
             {
-                await _context.SaveChangesAsync(cancellationToken);
+                await TalentMatchFeedbackWriter.TrySaveAddedEventAsync(
+                    _context, cancellationToken);
             }
             return existingSavedFreelancer.SavedFreelancersId;
         }
