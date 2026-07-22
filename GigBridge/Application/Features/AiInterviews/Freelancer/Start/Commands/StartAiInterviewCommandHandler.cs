@@ -2,6 +2,7 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Common.Models.Ai;
+using Application.Features.Premium.Client.SmartTalentMatching.Feedback;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
@@ -109,6 +110,22 @@ public sealed class StartAiInterviewCommandHandler(
             StartedAt = clock.UtcNow
         };
         context.Set<AiInterviewAttempt>().Add(attempt);
+        var freelancerProfileId = await context.Set<FreelancerProfile>()
+            .AsNoTracking()
+            .Where(profile => profile.UserId == command.UserId)
+            .Select(profile => (Guid?)profile.FreelancerProfilesId)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (freelancerProfileId.HasValue)
+        {
+            await TalentMatchFeedbackWriter.TryAddLatestAttributedAsync(
+                context,
+                command.JobPostId,
+                freelancerProfileId.Value,
+                TalentMatchEventType.InterviewStarted,
+                attempt.AiInterviewAttemptsId,
+                clock.UtcNow,
+                cancellationToken);
+        }
         if (!string.IsNullOrWhiteSpace(result.QuestionText))
             context.Set<AiInterviewAnswerResult>().Add(new AiInterviewAnswerResult
             {

@@ -1,96 +1,376 @@
+using System.Diagnostics;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Common.Models.Ai;
 using Application.Features.Premium.Client.SmartTalentMatching.GetMatches.DTOs;
+using Domain.Entities;
+using Domain.Enums;
 using MediatR;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 
 namespace Application.Features.Premium.Client.SmartTalentMatching.GetMatches.Queries;
 
 public sealed class GetAiTalentMatchesQueryHandler(
-    IApplicationDbContext context, IPremiumAccessService premiumAccess,
-    IDateTimeService clock, IAiServiceClient aiServiceClient)
-    : IRequestHandler<GetAiTalentMatchesQuery, TalentMatchingResultDto>
+    IApplicationDbContext context,
+    IPremiumAccessService premiumAccess,
+    IDateTimeService clock,
+    IAiServiceClient aiServiceClient,
+    IConfiguration configuration,
+    ILogger<GetAiTalentMatchesQueryHandler> logger)
+    : IRequestHandler<GetAiTalentMatchesQuery, AiTalentMatchingResultDto>
 {
-    public async Task<TalentMatchingResultDto> Handle(
-        GetAiTalentMatchesQuery query, CancellationToken cancellationToken)
+    private const string Mode = "ai-algorithm-v2";
+    private const string AlgorithmVersion = "2.0";
+    private const string ScoringVersion = "weighted-features-v1";
+
+    public async Task<AiTalentMatchingResultDto> Handle(
+        GetAiTalentMatchesQuery query,
+        CancellationToken cancellationToken)
     {
+        var featureEnabled = bool.TryParse(
+            configuration["FeatureFlags:AiSmartTalentMatchingV1"],
+            out var enabled) && enabled;
+        if (!featureEnabled)
+        {
+            throw new ForbiddenAccessException("AI smart talent matching is not enabled.");
+        }
+
         await premiumAccess.RequirePremiumClientAsync(query.UserId, cancellationToken);
-        var shortlistSize = Math.Min(Math.Max(query.TopK * 3, 10), 20);
-        var shortlist = await TalentMatchingCandidateLoader.LoadAsync(
-            context, query.UserId, query.JobPostId, clock.UtcNow, shortlistSize, query.Filters,
-            cancellationToken);
-        if (shortlist.Candidates.Count == 0)
-            return new TalentMatchingResultDto(query.JobPostId, "ai", false, []);
+        var stopwatch = Stopwatch.StartNew();
+        var candidateFilters = query.Filters is null
+            ? null
+            : new TalentMatchingFiltersDto(
+                Availability: query.Filters.Availability,
+                MajorCategoryId: query.Filters.MajorCategoryId,
+                SkillIds: query.Filters.SkillIds);
+        var pool = await TalentMatchingCandidateLoader.LoadAsync(
+            context, query.UserId, query.JobPostId, candidateFilters, cancellationToken);
+        var now = clock.UtcNow;
+        var run = new TalentMatchRun
+        {
+            TalentMatchRunId = Guid.NewGuid(),
+            ClientUserId = query.UserId,
+            JobPostId = query.JobPostId,
+            AlgorithmVersion = AlgorithmVersion,
+            ScoringVersion = ScoringVersion,
+            EligibleCandidateCount = pool.Candidates.Count,
+            Status = (int)TalentMatchRunStatus.Running,
+            CreatedAt = now
+        };
+        context.Set<TalentMatchRun>().Add(run);
+
+        if (pool.Candidates.Count == 0)
+        {
+            stopwatch.Stop();
+            run.Status = (int)TalentMatchRunStatus.NoCandidates;
+            run.CompletedAt = clock.UtcNow;
+            run.LatencyMilliseconds = stopwatch.ElapsedMilliseconds;
+            await context.SaveChangesAsync(cancellationToken);
+            return new AiTalentMatchingResultDto(run.TalentMatchRunId, query.JobPostId,
+                Mode, AlgorithmVersion, []);
+        }
 
         TalentRerankResponseDto aiResult;
         try
         {
-            aiResult = await aiServiceClient.RerankTalentAsync(BuildRequest(shortlist, query.TopK), cancellationToken);
+            var aiRerankCount = Math.Min(30, pool.Candidates.Count);
+            aiResult = await RequestValidAiResultAsync(pool, aiRerankCount, cancellationToken);
         }
-        catch (Exception exception) when (exception is ExternalServiceException or HttpRequestException or TaskCanceledException)
+        catch (Exception exception) when (
+            exception is ExternalServiceException or HttpRequestException or TaskCanceledException)
         {
-            return DeterministicFallback(shortlist, query.JobPostId, query.TopK);
+            stopwatch.Stop();
+            run.Status = (int)TalentMatchRunStatus.Failed;
+            run.CompletedAt = clock.UtcNow;
+            run.LatencyMilliseconds = stopwatch.ElapsedMilliseconds;
+            run.FailureCode = "AI_MATCHING_UNAVAILABLE";
+            await context.SaveChangesAsync(CancellationToken.None);
+            throw new ExternalServiceException(
+                "AI_MATCHING_UNAVAILABLE: Smart matching is temporarily unavailable. Please retry.", exception);
         }
 
-        var known = shortlist.Candidates.ToDictionary(item => item.Scored.Match.FreelancerId);
-        var semanticByFreelancer = new Dictionary<Guid, TalentRerankMatchDto>();
-        foreach (var aiMatch in aiResult.Matches)
+        var candidatesById = pool.Candidates.ToDictionary(candidate => candidate.FreelancerProfileId);
+        var evaluated = aiResult.Matches.Select(aiMatch =>
         {
-            if (!Guid.TryParse(aiMatch.FreelancerId, out var freelancerId) ||
-                !known.ContainsKey(freelancerId) || semanticByFreelancer.ContainsKey(freelancerId) ||
-                aiMatch.SemanticScore is < 0d or > 1d) continue;
-            semanticByFreelancer[freelancerId] = aiMatch;
+            var freelancerId = Guid.Parse(aiMatch.FreelancerId);
+            var candidate = candidatesById[freelancerId];
+            var evidence = AiTalentEvidenceScorer.Score(pool.Job, candidate);
+            var embedding = Round((decimal)aiMatch.EmbeddingScore);
+            var algorithm = Round((decimal)aiMatch.AlgorithmScore);
+            var finalScore = Round(Math.Clamp(
+                0.45m * embedding + 0.35m * algorithm + 0.20m * evidence.Score,
+                0m, 100m));
+            var agreement = Math.Clamp(100m - Math.Abs(embedding - algorithm), 0m, 100m);
+            var confidenceScore = 0.6m * evidence.DataCoverage + 0.4m * agreement;
+            var confidence = confidenceScore >= 75m ? "high" : confidenceScore >= 50m ? "medium" : "low";
+            var semanticStrengths = Clean(aiMatch.SemanticStrengths, 5, 200);
+            var reasons = evidence.Reasons.Concat(Clean(aiMatch.MatchReasons, 3, 300))
+                .Distinct(StringComparer.OrdinalIgnoreCase).Take(6).ToList();
+
+            return new PendingMatch(
+                candidate,
+                finalScore,
+                confidence,
+                embedding,
+                algorithm,
+                evidence,
+                semanticStrengths,
+                reasons);
+        })
+        .OrderByDescending(match => match.FinalScore)
+        .ThenBy(match => match.Candidate.FreelancerProfileId)
+        .Take(query.TopK)
+        .ToList();
+
+        var matches = evaluated.Select((match, index) => new AiTalentMatchDto(
+            match.Candidate.FreelancerProfileId,
+            match.Candidate.UserId,
+            match.Candidate.DisplayName,
+            match.Candidate.Title,
+            match.Candidate.AvatarUrl,
+            match.Candidate.Location,
+            match.Candidate.Availability,
+            index + 1,
+            match.FinalScore,
+            match.Confidence,
+            new AiTalentMatchScoreBreakdownDto(match.Embedding, match.Algorithm, match.Evidence.Score),
+            match.Evidence.MatchedSkills,
+            match.Evidence.MissingSkills,
+            match.SemanticStrengths,
+            match.Reasons,
+            match.Candidate.AverageRating,
+            match.Candidate.ReviewCount,
+            match.Candidate.CompletedContractCount,
+            match.Candidate.EloPoints)).ToList();
+
+        if (bool.TryParse(
+                configuration["FeatureFlags:AiSmartTalentMatchingShadowComparison"],
+                out var shadowEnabled) && shadowEnabled)
+        {
+            var shadowIds = RankWithLegacyScorer(pool, query.TopK);
+            var aiIds = matches.Select(match => match.FreelancerProfileId).ToHashSet();
+            logger.LogInformation(
+                "AI talent matching shadow comparison {MatchRunId} for job {JobPostId}: AI={AiCount}, Legacy={LegacyCount}, OverlapAtK={OverlapAtK}",
+                run.TalentMatchRunId,
+                query.JobPostId,
+                aiIds.Count,
+                shadowIds.Count,
+                shadowIds.Count(aiIds.Contains));
         }
 
-        var matches = shortlist.Candidates.Select(ranked =>
+        foreach (var match in matches)
         {
-            var deterministic = ranked.Scored.Match;
-            semanticByFreelancer.TryGetValue(deterministic.FreelancerId, out var aiMatch);
-            var semanticPoints = Math.Round((decimal)(aiMatch?.SemanticScore ?? 0d) * 5m, 2);
-            return deterministic with
+            context.Set<TalentMatchResult>().Add(new TalentMatchResult
             {
-                MatchPercentage = Math.Round(Math.Min(deterministic.MatchPercentage + semanticPoints, 100m), 2),
-                Reasons = deterministic.Reasons.Concat((aiMatch?.MatchReasons ?? [])
-                        .Where(reason => !string.IsNullOrWhiteSpace(reason) && reason.Length <= 300)
-                        .Select(reason => reason.Trim()).Take(3))
-                    .Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
-                ScoreBreakdown = deterministic.ScoreBreakdown with { AiSemantic = semanticPoints }
-            };
-        }).ToList();
-        var final = matches.OrderByDescending(match => match.MatchPercentage)
-            .ThenBy(match => match.FreelancerId).Take(query.TopK).ToList();
-        return new TalentMatchingResultDto(query.JobPostId, "ai", false, final);
+                TalentMatchResultId = Guid.NewGuid(),
+                TalentMatchRunId = run.TalentMatchRunId,
+                FreelancerProfileId = match.FreelancerProfileId,
+                Rank = match.Rank,
+                EmbeddingScore = match.ScoreBreakdown.Embedding,
+                AlgorithmScore = match.ScoreBreakdown.Algorithm,
+                EvidenceScore = match.ScoreBreakdown.Evidence,
+                FinalScore = match.FinalScore,
+                Confidence = match.Confidence,
+                MatchedSkills = match.MatchedSkills.ToArray(),
+                MissingSkills = match.MissingSkills.ToArray(),
+                SemanticStrengths = match.SemanticStrengths.ToArray(),
+                Reasons = match.Reasons.ToArray(),
+                CreatedAt = clock.UtcNow
+            });
+        }
+
+        stopwatch.Stop();
+        run.AlgorithmVersion = string.IsNullOrWhiteSpace(aiResult.AlgorithmVersion)
+            ? AlgorithmVersion
+            : aiResult.AlgorithmVersion;
+        run.EmbeddingModel = NullIfWhiteSpace(aiResult.EmbeddingModel);
+        run.ScoringVersion = string.IsNullOrWhiteSpace(aiResult.ScoringVersion)
+            ? ScoringVersion
+            : aiResult.ScoringVersion;
+        run.ReturnedCandidateCount = matches.Count;
+        run.LatencyMilliseconds = stopwatch.ElapsedMilliseconds;
+        run.Status = (int)TalentMatchRunStatus.Succeeded;
+        run.CompletedAt = clock.UtcNow;
+        await context.SaveChangesAsync(cancellationToken);
+
+        return new AiTalentMatchingResultDto(run.TalentMatchRunId, query.JobPostId,
+            Mode, run.AlgorithmVersion, matches);
     }
 
-    private static TalentRerankRequestDto BuildRequest(TalentMatchingShortlist shortlist, int topK) => new()
+    private async Task<TalentRerankResponseDto> RequestValidAiResultAsync(
+        AiTalentMatchingPool pool,
+        int topK,
+        CancellationToken cancellationToken)
+    {
+        Exception? lastException = null;
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            try
+            {
+                var response = await aiServiceClient.RerankTalentAsync(
+                    BuildRequest(pool, topK), cancellationToken);
+                ValidateAiResponse(response, pool, topK);
+                return response;
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception exception) when (
+                exception is ExternalServiceException or HttpRequestException or TaskCanceledException)
+            {
+                lastException = exception;
+                if (attempt == 0)
+                {
+                    await Task.Delay(150, cancellationToken);
+                }
+            }
+        }
+
+        throw new ExternalServiceException(
+            "AI matching failed after retry.", lastException ?? new InvalidOperationException());
+    }
+
+    private static void ValidateAiResponse(
+        TalentRerankResponseDto response,
+        AiTalentMatchingPool pool,
+        int topK)
+    {
+        var expected = Math.Min(topK, pool.Candidates.Count);
+        if (response.Matches.Count != expected)
+        {
+            throw new ExternalServiceException("AI matching returned an incomplete candidate set.");
+        }
+
+        var knownIds = pool.Candidates.Select(candidate => candidate.FreelancerProfileId).ToHashSet();
+        var returnedIds = new HashSet<Guid>();
+        foreach (var match in response.Matches)
+        {
+            if (!Guid.TryParse(match.FreelancerId, out var freelancerId) ||
+                !knownIds.Contains(freelancerId) ||
+                !returnedIds.Add(freelancerId) ||
+                match.EmbeddingScore is < 0d or > 100d ||
+                match.AlgorithmScore is < 0d or > 100d)
+            {
+                throw new ExternalServiceException("AI matching returned an invalid candidate result.");
+            }
+        }
+    }
+
+    private static TalentRerankRequestDto BuildRequest(AiTalentMatchingPool pool, int topK) => new()
     {
         TopK = topK,
+        AlgorithmVersion = AlgorithmVersion,
+        ScoringVersion = ScoringVersion,
         Job = new TalentRerankJobDto
         {
-            JobId = shortlist.Job.JobPostId.ToString(), Title = shortlist.JobTitle,
-            Description = shortlist.JobDescription, Industry = null,
-            Skills = shortlist.Job.Skills.Select(skill => skill.Name)
-                .Concat(shortlist.Job.CustomSkills).Distinct(StringComparer.OrdinalIgnoreCase).ToList()
+            JobId = pool.Job.JobPostId.ToString(),
+            Title = pool.Job.Title,
+            Description = Truncate(pool.Job.Description, 4000) ?? string.Empty,
+            Industry = pool.Job.ClientIndustry,
+            MajorId = pool.Job.MajorId?.ToString(),
+            MajorName = pool.Job.MajorName,
+            MajorCategoryId = pool.Job.MajorCategoryId?.ToString(),
+            CategoryName = pool.Job.CategoryName,
+            Skills = pool.Job.Skills.Select(skill => skill.Name).ToList(),
+            CustomSkills = pool.Job.CustomSkills.ToList(),
+            Location = pool.Job.Location,
+            EstimatedDuration = pool.Job.EstimatedDuration
         },
-        Candidates = shortlist.Candidates.Select(item => new TalentRerankCandidateDto
+        Candidates = pool.Candidates.Select(candidate => new TalentRerankCandidateDto
         {
-            FreelancerId = item.Scored.Match.FreelancerId.ToString(), Title = item.Candidate.Title,
-            Bio = Truncate(item.Candidate.Bio, 600),
-            Skills = item.Candidate.Skills.Select(skill => skill.Name)
-                .Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
-            WorkHistory = item.Candidate.WorkExperiences.Take(5)
-                .Select(experience => $"{experience.Title} at {experience.CompanyName}: {Truncate(experience.Description, 250)}")
-                .ToList(),
-            DeterministicScore = item.Scored.Match.MatchPercentage
+            FreelancerId = candidate.FreelancerProfileId.ToString(),
+            Title = Truncate(candidate.Title, 300),
+            Bio = Truncate(candidate.Bio, 1200),
+            Location = Truncate(candidate.Location, 300),
+            Availability = candidate.Availability,
+            MajorId = candidate.MajorId?.ToString(),
+            MajorName = candidate.MajorName,
+            Categories = candidate.CategoryNames.ToList(),
+            Skills = candidate.Skills.Select(skill => skill.Name).ToList(),
+            VerifiedWork = candidate.VerifiedWork.Select(work => new TalentRerankVerifiedWorkDto
+            {
+                ContractId = work.ContractId.ToString(),
+                Title = Truncate(work.Title, 300) ?? string.Empty,
+                Description = Truncate(work.Description, 500),
+                MajorName = work.MajorName,
+                CategoryName = work.CategoryName,
+                Skills = work.Skills.Select(skill => skill.Name).ToList()
+            }).ToList()
         }).ToList()
     };
+
+    private static IReadOnlyList<string> Clean(IEnumerable<string>? values, int limit, int maxLength) =>
+        (values ?? []).Where(value => !string.IsNullOrWhiteSpace(value))
+        .Select(value => value.Trim())
+        .Where(value => value.Length <= maxLength)
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .Take(limit)
+        .ToList();
 
     private static string? Truncate(string? value, int maximumLength) =>
         string.IsNullOrWhiteSpace(value) || value.Length <= maximumLength ? value : value[..maximumLength];
 
-    private static TalentMatchingResultDto DeterministicFallback(
-        TalentMatchingShortlist shortlist, Guid jobPostId, int topK) => new(jobPostId,
-        "deterministic-fallback", false, shortlist.Candidates.Take(topK)
-            .Select(item => item.Scored.Match).ToList());
+    private static string? NullIfWhiteSpace(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static decimal Round(decimal value) => Math.Round(value, 2);
+
+    private static IReadOnlyList<Guid> RankWithLegacyScorer(
+        AiTalentMatchingPool pool,
+        int topK)
+    {
+        var legacyJob = new TalentScoringJob(
+            pool.Job.JobPostId,
+            pool.Job.MajorCategoryId,
+            pool.Job.MajorId,
+            pool.Job.Skills.Select(skill =>
+                new TalentScoringSkill(skill.SkillId, skill.Name, IsRequired: false)).ToList(),
+            pool.Job.CustomSkills);
+
+        return pool.Candidates.Select(candidate =>
+            {
+                var legacyCandidate = new TalentScoringCandidate(
+                    candidate.FreelancerProfileId,
+                    candidate.UserId,
+                    candidate.DisplayName,
+                    candidate.Title,
+                    candidate.Bio,
+                    candidate.Availability,
+                    ProfileCompletionScore: 0,
+                    candidate.EloPoints,
+                    candidate.AverageRating,
+                    candidate.ReviewCount,
+                    candidate.CompletedContractCount,
+                    candidate.MajorId,
+                    candidate.MajorCategoryIds,
+                    candidate.Skills.Select(skill =>
+                        new TalentScoringSkill(skill.SkillId, skill.Name, IsRequired: false)).ToList(),
+                    [],
+                    candidate.VerifiedWork.Select(work => new TalentVerifiedContractEvidence(
+                        work.ContractId,
+                        work.MajorCategoryId,
+                        work.MajorId,
+                        work.Skills.Select(skill => skill.SkillId).ToHashSet())).ToList());
+                return TalentMatchScorer.Score(legacyJob, legacyCandidate);
+            })
+            .Where(result => result is not null)
+            .OrderByDescending(result => result!.Match.MatchPercentage)
+            .ThenBy(result => result!.Match.FreelancerId)
+            .Take(topK)
+            .Select(result => result!.Match.FreelancerId)
+            .ToList();
+    }
+
+    private sealed record PendingMatch(
+        AiTalentMatchingCandidate Candidate,
+        decimal FinalScore,
+        string Confidence,
+        decimal Embedding,
+        decimal Algorithm,
+        AiTalentEvidenceScore Evidence,
+        IReadOnlyList<string> SemanticStrengths,
+        IReadOnlyList<string> Reasons);
 }

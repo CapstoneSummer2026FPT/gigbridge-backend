@@ -3,6 +3,7 @@ using Application.Common.Interfaces;
 using Application.Features.JobPosts.Common.DTOs;
 using Application.Features.JobPosts.Public.GetJobPostDetail.DTOs;
 using Domain.Entities;
+using Domain.Enums;
 using Domain.Services;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -43,6 +44,12 @@ public class GetJobPostDetailQueryHandler : IRequestHandler<GetJobPostDetailQuer
             throw new NotFoundException("Job post does not exist.");
         }
 
+        var hasAiInterview = await _context.Set<AiInterviewDefinition>()
+            .AsNoTracking()
+            .AnyAsync(definition => definition.JobPostId == jobPost.JobPostsId &&
+                definition.Status != AiInterviewDefinitionStatus.Closed,
+                cancellationToken);
+
         return new JobPostDetailDto(
             JobPostsId: jobPost.JobPostsId,
             ClientProfilesId: jobPost.ClientProfilesId,
@@ -72,6 +79,7 @@ public class GetJobPostDetailQueryHandler : IRequestHandler<GetJobPostDetailQuer
             CustomSkillNames: jobPost.CustomSkillNames.ToList(),
             Attachments: jobPost.JobPostAttachments
                 .Select(attachment => new AttachmentDto(attachment.JobPostAttachmentsId, attachment.FileUrl, attachment.FileName))
-                .ToList());
+                .ToList(),
+            HasAiInterview: hasAiInterview);
     }
 }

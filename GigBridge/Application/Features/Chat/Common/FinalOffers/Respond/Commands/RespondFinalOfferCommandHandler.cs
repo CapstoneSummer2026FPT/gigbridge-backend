@@ -6,6 +6,7 @@ using Application.Features.Chat.Common.FinalOffers.Respond.DTOs;
 using Application.Features.Chat.Common.FinalOffers.Shared.Email;
 using Application.Features.Chat.Common.Messages.Send.DTOs;
 using Application.Features.JobPosts.Common;
+using Application.Features.Premium.Client.SmartTalentMatching.Feedback;
 using Application.Features.Wallets.Common;
 using Domain.Entities;
 using Domain.Enums;
@@ -403,6 +404,15 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
         contract.EndDate = offer.EndDate;
         contract.Status = (int)ContractStatus.PendingSignature;
         contract.UpdatedAt = now;
+
+        await TalentMatchFeedbackWriter.TryAddLatestAttributedAsync(
+            _context,
+            offer.JobPostsId,
+            offer.FreelancerProfilesId,
+            TalentMatchEventType.Hired,
+            contract.ContractsId,
+            now,
+            cancellationToken);
 
         var escrow = await _context.Set<ContractEscrow>()
             .FirstOrDefaultAsync(existing => existing.ContractsId == contract.ContractsId, cancellationToken);

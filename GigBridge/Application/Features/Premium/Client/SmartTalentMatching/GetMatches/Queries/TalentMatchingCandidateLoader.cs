@@ -2,120 +2,257 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Features.Premium.Client.SmartTalentMatching.GetMatches.DTOs;
 using Domain.Entities;
+using Domain.Enums;
+using Domain.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.Premium.Client.SmartTalentMatching.GetMatches.Queries;
 
-public sealed record TalentCandidateItem(
-    TalentScoredCandidate Scored,
-    TalentScoringCandidate Candidate);
+public sealed record AiTalentSkill(Guid SkillId, string Name);
 
-public sealed record TalentMatchingShortlist(
-    TalentScoringJob Job,
-    string JobTitle,
-    string? JobDescription,
-    IReadOnlyList<TalentCandidateItem> Candidates);
+public sealed record AiVerifiedWork(
+    Guid ContractId,
+    string Title,
+    string? Description,
+    Guid? MajorId,
+    string? MajorName,
+    Guid? MajorCategoryId,
+    string? CategoryName,
+    IReadOnlyList<AiTalentSkill> Skills);
+
+public sealed record AiTalentMatchingJob(
+    Guid JobPostId,
+    string Title,
+    string? Description,
+    string? ClientIndustry,
+    Guid? MajorId,
+    string? MajorName,
+    Guid? MajorCategoryId,
+    string? CategoryName,
+    IReadOnlyList<AiTalentSkill> Skills,
+    IReadOnlyList<string> CustomSkills,
+    string? Location,
+    string? EstimatedDuration);
+
+public sealed record AiTalentMatchingCandidate(
+    Guid FreelancerProfileId,
+    Guid UserId,
+    string DisplayName,
+    string? AvatarUrl,
+    string? Title,
+    string? Bio,
+    string? Location,
+    int Availability,
+    Guid? MajorId,
+    string? MajorName,
+    IReadOnlySet<Guid> MajorCategoryIds,
+    IReadOnlyList<string> CategoryNames,
+    IReadOnlyList<AiTalentSkill> Skills,
+    int CompletedContractCount,
+    IReadOnlyList<AiVerifiedWork> VerifiedWork,
+    int EloPoints,
+    double AverageRating,
+    int ReviewCount);
+
+public sealed record AiTalentMatchingPool(
+    AiTalentMatchingJob Job,
+    IReadOnlyList<AiTalentMatchingCandidate> Candidates);
 
 public static class TalentMatchingCandidateLoader
 {
-    public static async Task<TalentMatchingShortlist> LoadAsync(
+    public const int MaximumCandidatePoolSize = 500;
+
+    public static async Task<AiTalentMatchingPool> LoadAsync(
         IApplicationDbContext context,
         Guid userId,
         Guid jobPostId,
-        DateTime utcNow,
-        int shortlistSize,
         TalentMatchingFiltersDto? filters,
         CancellationToken cancellationToken)
     {
         var jobPost = await context.Set<JobPost>()
             .AsNoTracking()
-            .Include(j => j.JobPostSkills)
-                .ThenInclude(js => js.Skills)
-            .Include(j => j.MajorCategory)
-            .FirstOrDefaultAsync(j => j.JobPostsId == jobPostId && j.ClientProfiles.UserId == userId, cancellationToken);
-
+            .Include(job => job.ClientProfiles)
+            .Include(job => job.JobPostSkills)
+                .ThenInclude(selection => selection.Skills)
+            .Include(job => job.MajorCategory)
+                .ThenInclude(mapping => mapping!.Major)
+            .Include(job => job.MajorCategory)
+                .ThenInclude(mapping => mapping!.Category)
+            .FirstOrDefaultAsync(job =>
+                    job.JobPostsId == jobPostId &&
+                    job.Status == 1 &&
+                    job.ClientProfiles.UserId == userId,
+                cancellationToken);
         if (jobPost is null)
         {
-            throw new NotFoundException("Job post not found.");
+            throw new NotFoundException("Open job post not found.");
         }
 
         var jobSkills = jobPost.JobPostSkills
-            .Where(js => js.Skills is not null)
-            .Select(js => new TalentScoringSkill(js.SkillsId, js.Skills!.Name, js.IsRequired ?? false))
+            .Where(selection => selection.Skills is not null)
+            .Select(selection => new AiTalentSkill(selection.SkillsId, selection.Skills.Name))
+            .DistinctBy(skill => skill.SkillId)
+            .OrderBy(skill => skill.Name)
             .ToList();
-
-        var customSkills = jobPost.CustomSkillNames?.ToList() ?? new List<string>();
-
-        var scoringJob = new TalentScoringJob(
+        var job = new AiTalentMatchingJob(
             jobPost.JobPostsId,
-            jobPost.MajorCategoryId,
+            jobPost.Title,
+            jobPost.Description,
+            jobPost.ClientProfiles.Industry,
             jobPost.MajorCategory?.MajorId,
+            jobPost.MajorCategory?.Major?.Name,
+            jobPost.MajorCategoryId,
+            jobPost.MajorCategory?.Category?.Name,
             jobSkills,
-            customSkills);
+            (jobPost.CustomSkillNames ?? []).Where(value => !string.IsNullOrWhiteSpace(value))
+                .Select(value => value.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
+            jobPost.Location,
+            jobPost.EstimatedDuration);
 
-        var freelancers = await context.Set<FreelancerProfile>()
+        var query = context.Set<FreelancerProfile>()
             .AsNoTracking()
-            .Include(f => f.User)
-            .Include(f => f.FreelancerSkills)
-                .ThenInclude(fs => fs.Skills)
-            .Include(f => f.FreelancerProfileCategories)
-            .Include(f => f.WorkExperiences)
-            .Include(f => f.Contracts)
-            .Where(f => f.User.IsActive && (!f.Availability.HasValue || f.Availability.Value == 0 || f.Availability.Value == 1))
-            .ToListAsync(cancellationToken);
+            .Include(profile => profile.User)
+                .ThenInclude(user => user.UserEloScore)
+            .Include(profile => profile.Major)
+            .Include(profile => profile.FreelancerSkills)
+                .ThenInclude(selection => selection.Skills)
+            .Include(profile => profile.FreelancerProfileCategories)
+                .ThenInclude(selection => selection.MajorCategory)
+                    .ThenInclude(mapping => mapping.Category)
+            .Include(profile => profile.Contracts)
+                .ThenInclude(contract => contract.JobPosts)
+                    .ThenInclude(contractJob => contractJob.JobPostSkills)
+                        .ThenInclude(selection => selection.Skills)
+            .Include(profile => profile.Contracts)
+                .ThenInclude(contract => contract.JobPosts)
+                    .ThenInclude(contractJob => contractJob.MajorCategory)
+                        .ThenInclude(mapping => mapping!.Major)
+            .Include(profile => profile.Contracts)
+                .ThenInclude(contract => contract.JobPosts)
+                    .ThenInclude(contractJob => contractJob.MajorCategory)
+                        .ThenInclude(mapping => mapping!.Category)
+            .Where(profile =>
+                profile.User.IsActive &&
+                profile.Availability.HasValue &&
+                (profile.Availability.Value == 0 || profile.Availability.Value == 1));
 
-        var items = new List<TalentCandidateItem>();
-
-        foreach (var f in freelancers)
+        if (filters?.Availability is { } availability)
         {
-            var skills = f.FreelancerSkills
-                .Where(fs => fs.Skills is not null)
-                .Select(fs => new TalentScoringSkill(fs.SkillsId, fs.Skills!.Name, false, (int)fs.ProficiencyLevel, fs.YearsOfExperience))
-                .ToList();
-
-            var workExps = f.WorkExperiences
-                .Select(we => new TalentScoringWorkExperience(we.Title, we.CompanyName, we.Description))
-                .ToList();
-
-            var verifiedContracts = f.Contracts
-                .Where(c => c.Status == 4) // Completed
-                .Select(c => new TalentVerifiedContractEvidence(c.ContractsId, null, null, new HashSet<Guid>()))
-                .ToList();
-
-            var majorCategoryIds = f.FreelancerProfileCategories
-                .Select(fc => fc.MajorCategoryId)
-                .ToHashSet();
-
-            var candidate = new TalentScoringCandidate(
-                f.FreelancerProfilesId,
-                f.UserId,
-                f.User.FullName ?? "Freelancer",
-                f.Title,
-                f.Bio,
-                f.Availability ?? 0,
-                f.ProfileCompletionScore ?? 100,
-                0, // EloPoints
-                5.0, // AverageRating
-                0, // ReviewCount
-                verifiedContracts.Count, // CompletedContractCount
-                f.MajorId,
-                majorCategoryIds,
-                skills,
-                workExps,
-                verifiedContracts);
-
-            var scored = TalentMatchScorer.Score(scoringJob, candidate);
-            if (scored is not null)
-            {
-                items.Add(new TalentCandidateItem(scored, candidate));
-            }
+            query = query.Where(profile => profile.Availability == availability);
+        }
+        if (filters?.MajorId is { } majorId)
+        {
+            query = query.Where(profile => profile.MajorId == majorId);
+        }
+        if (filters?.MajorCategoryId is { } majorCategoryId)
+        {
+            query = query.Where(profile => profile.FreelancerProfileCategories
+                .Any(selection => selection.MajorCategoryId == majorCategoryId));
+        }
+        if (filters?.SkillIds is { Count: > 0 })
+        {
+            var requestedSkillIds = filters.SkillIds.Distinct().ToArray();
+            query = query.Where(profile => profile.FreelancerSkills
+                .Count(selection => requestedSkillIds.Contains(selection.SkillsId)) == requestedSkillIds.Length);
+        }
+        if (filters?.MinimumCompletedContracts is { } minimumCompletedContracts)
+        {
+            query = query.Where(profile => profile.Contracts
+                .Count(contract => contract.Status == (int)ContractStatus.Completed) >= minimumCompletedContracts);
+        }
+        if (filters?.MinimumProficiency.HasValue == true || filters?.MinimumYears.HasValue == true)
+        {
+            query = query.Where(profile => profile.FreelancerSkills.Any(selection =>
+                (!filters!.MinimumProficiency.HasValue ||
+                    selection.ProficiencyLevel >= filters.MinimumProficiency.Value) &&
+                (!filters.MinimumYears.HasValue ||
+                    selection.YearsOfExperience >= filters.MinimumYears.Value)));
         }
 
-        var sorted = items
-            .OrderByDescending(i => i.Scored.Match.MatchPercentage)
-            .Take(shortlistSize)
-            .ToList();
+        var profiles = await query
+            .OrderBy(profile => profile.FreelancerProfilesId)
+            .Take(MaximumCandidatePoolSize)
+            .ToListAsync(cancellationToken);
+        var userIds = profiles.Select(profile => profile.UserId).ToArray();
+        var reviewStats = userIds.Length == 0
+            ? new Dictionary<Guid, ReviewAggregate>()
+            : await context.Set<Review>()
+                .AsNoTracking()
+                .Where(review => userIds.Contains(review.RevieweeId) && review.IsVisible != false)
+                .GroupBy(review => review.RevieweeId)
+                .Select(group => new ReviewAggregate(group.Key, group.Average(review => review.Rating), group.Count()))
+                .ToDictionaryAsync(item => item.UserId, cancellationToken);
 
-        return new TalentMatchingShortlist(scoringJob, jobPost.Title, jobPost.Description, sorted);
+        var candidates = profiles.Select(profile =>
+        {
+            reviewStats.TryGetValue(profile.UserId, out var reviews);
+            var categories = profile.FreelancerProfileCategories
+                .Where(selection => selection.MajorCategory?.Category is not null)
+                .OrderBy(selection => selection.MajorCategory.Category.Name)
+                .ToList();
+            var skills = profile.FreelancerSkills
+                .Where(selection => selection.Skills is not null)
+                .Select(selection => new AiTalentSkill(selection.SkillsId, selection.Skills.Name))
+                .DistinctBy(skill => skill.SkillId)
+                .OrderBy(skill => skill.Name)
+                .ToList();
+            var completedContracts = profile.Contracts
+                .Where(contract => contract.Status == (int)ContractStatus.Completed)
+                .OrderByDescending(contract => contract.CompletedAt)
+                .ThenByDescending(contract => contract.UpdatedAt)
+                .ToList();
+            var verifiedWork = completedContracts
+                .Take(5)
+                .Select(contract =>
+                {
+                    var contractJob = contract.JobPosts;
+                    var workSkills = contractJob.JobPostSkills
+                        .Where(selection => selection.Skills is not null)
+                        .Select(selection => new AiTalentSkill(selection.SkillsId, selection.Skills.Name))
+                        .DistinctBy(skill => skill.SkillId)
+                        .OrderBy(skill => skill.Name)
+                        .ToList();
+                    return new AiVerifiedWork(
+                        contract.ContractsId,
+                        contract.Title,
+                        contract.Description,
+                        contractJob.MajorCategory?.MajorId,
+                        contractJob.MajorCategory?.Major?.Name,
+                        contractJob.MajorCategoryId,
+                        contractJob.MajorCategory?.Category?.Name,
+                        workSkills);
+                })
+                .ToList();
+
+            return new AiTalentMatchingCandidate(
+                profile.FreelancerProfilesId,
+                profile.UserId,
+                profile.User.FullName ?? "Freelancer",
+                profile.User.Avatar,
+                profile.Title,
+                profile.Bio,
+                profile.Location,
+                profile.Availability!.Value,
+                profile.MajorId,
+                profile.Major?.Name,
+                categories.Select(selection => selection.MajorCategoryId).ToHashSet(),
+                categories.Select(selection => selection.MajorCategory.Category.Name)
+                    .Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
+                skills,
+                completedContracts.Count,
+                verifiedWork,
+                profile.User.UserEloScore?.CurrentPoints ?? UserEloCalculator.DefaultPoints,
+                reviews?.AverageRating ?? 0d,
+                reviews?.ReviewCount ?? 0);
+        }).ToList();
+
+        if (filters?.MinimumRating is { } minimumRating)
+        {
+            candidates = candidates.Where(candidate => candidate.AverageRating >= minimumRating).ToList();
+        }
+
+        return new AiTalentMatchingPool(job, candidates);
     }
+
+    private sealed record ReviewAggregate(Guid UserId, double AverageRating, int ReviewCount);
 }

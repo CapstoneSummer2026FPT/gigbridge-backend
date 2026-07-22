@@ -28,6 +28,7 @@ using Application.Features.Premium.Client.JobPostPromotion.DTOs;
 using Application.Features.Premium.Client.JobPostPromotion.Queries;
 using Application.Features.Premium.Client.SmartTalentMatching.GetMatches.DTOs;
 using Application.Features.Premium.Client.SmartTalentMatching.GetMatches.Queries;
+using Application.Features.Premium.Client.SmartTalentMatching.Feedback;
 using Application.Features.Premium.Client.AiInterviews.Create.Commands;
 using Application.Features.Premium.Client.AiInterviews.DTOs;
 using Application.Features.Premium.Client.AiInterviews.GetResults.Queries;
@@ -146,8 +147,25 @@ public class ClientJobPostsController : BaseApiController
         if (!TryGetCurrentUserId(out var userId)) return InvalidTokenResponse();
         var result = await Mediator.Send(
             new GetAiTalentMatchesQuery(userId, jobPostId, request.TopK, request.Filters), cancellationToken);
-        return Ok(ApiResponse<TalentMatchingResultDto>.Ok(
+        return Ok(ApiResponse<AiTalentMatchingResultDto>.Ok(
             result, "Experimental AI talent recommendation complete"));
+    }
+
+    [HttpPost("{jobPostId:guid}/talent-matches/events")]
+    public async Task<IActionResult> RecordTalentMatchEvent(
+        Guid jobPostId,
+        [FromBody] TalentMatchEventRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetCurrentUserId(out var userId)) return InvalidTokenResponse();
+        await Mediator.Send(new CreateTalentMatchEventCommand(
+            userId,
+            jobPostId,
+            request.MatchRunId,
+            request.FreelancerProfileId,
+            request.EventType,
+            request.IdempotencyKey), cancellationToken);
+        return Ok(ApiResponse<object>.Ok(new { }, "Talent match event recorded"));
     }
 
     [HttpPost("{jobPostId:guid}/ai-interviews")]
