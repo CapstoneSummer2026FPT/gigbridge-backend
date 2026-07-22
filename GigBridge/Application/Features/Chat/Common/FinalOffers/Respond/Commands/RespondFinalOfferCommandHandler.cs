@@ -7,7 +7,6 @@ using Application.Features.Chat.Common.FinalOffers.Shared.Email;
 using Application.Features.Chat.Common.Messages.Send.DTOs;
 using Application.Features.JobPosts.Common;
 using Application.Features.Premium.Client.SmartTalentMatching.Feedback;
-using Application.Features.Wallets.Common;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
@@ -114,7 +113,7 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
         switch (command.Request.Response)
         {
             case FinalOfferResponse.Accept:
-                response = await AcceptOffer(offer, conversation, command.UserId, now, cancellationToken);
+                response = await AcceptOffer(offer, conversation, now, cancellationToken);
                 eventName = "ContractDraftUpdated";
                 break;
             case FinalOfferResponse.RequestChange:
@@ -187,7 +186,7 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
             await _chatRealtimeNotifier.SendUsersEventAsync(
                 participantUserIds,
                 eventName,
-            new { contractId = response.ContractId },
+                new { contractId = response.ContractId },
                 cancellationToken);
 
             await SendJobAcceptanceUpdates(offer, command.UserId, cancellationToken);
@@ -215,7 +214,7 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
                     freelancerUserId,
                     NotificationType.ContractStarted,
                     $"You were accepted for {jobTitle}",
-                    "Congratulations! Your application was accepted and your contract is ready for signatures.",
+                    "Congratulations! Your application was accepted and your contract plan is ready for review.",
                     offer.ContractsId,
                     "Contract",
                     cancellationToken);
@@ -316,7 +315,6 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
     private async Task<RespondFinalOfferResponse> AcceptOffer(
         NegotiationOffer offer,
         Conversation conversation,
-        Guid userId,
         DateTime now,
         CancellationToken cancellationToken)
     {
@@ -408,14 +406,6 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
         offer.ContractsId = contract.ContractsId;
         conversation.ContractsId = contract.ContractsId;
 
-        contract.FreelancerProfilesId = offer.FreelancerProfilesId;
-        contract.ProposalsId = offer.ProposalsId;
-        contract.TotalBudget = offer.FinalPrice;
-        contract.StartDate = offer.StartDate;
-        contract.EndDate = offer.EndDate;
-        contract.Status = (int)ContractStatus.PendingSignature;
-        contract.UpdatedAt = now;
-
         await TalentMatchFeedbackWriter.TryAddLatestAttributedAsync(
             _context,
             offer.JobPostsId,
@@ -424,35 +414,6 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
             contract.ContractsId,
             now,
             cancellationToken);
-
-        var escrow = await _context.Set<ContractEscrow>()
-            .FirstOrDefaultAsync(existing => existing.ContractsId == contract.ContractsId, cancellationToken);
-
-        if (escrow is null)
-        {
-            escrow = new ContractEscrow
-            {
-                ContractEscrowId = Guid.NewGuid(),
-                ContractsId = contract.ContractsId,
-                RequiredAmount = offer.FinalPrice,
-                FundedAmount = 0m,
-                RequiredPercentage = 1.0m,
-                Currency = "VND",
-                Status = (int)ContractEscrowStatus.PendingFunding,
-                CreatedAt = now
-            };
-            _context.Set<ContractEscrow>().Add(escrow);
-        }
-        else
-        {
-            escrow.RequiredAmount = offer.FinalPrice;
-            escrow.FundedAmount = 0m;
-            escrow.RequiredPercentage = 1.0m;
-            escrow.Currency = string.IsNullOrWhiteSpace(escrow.Currency) ? "VND" : escrow.Currency;
-            escrow.Status = (int)ContractEscrowStatus.PendingFunding;
-            escrow.FundedAt = null;
-            escrow.ReleasedAt = null;
-        }
 
         if (offer.ProposalsId.HasValue)
         {

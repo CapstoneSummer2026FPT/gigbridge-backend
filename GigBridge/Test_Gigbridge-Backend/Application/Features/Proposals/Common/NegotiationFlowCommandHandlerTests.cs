@@ -268,7 +268,7 @@ public class NegotiationFlowCommandHandlerTests
             NotificationType.ContractStarted,
             Arg.Is<string>(title => title.Contains("Fixed job")),
             Arg.Any<string>(),
-            fixture.ContractId,
+            contract.ContractsId,
             "Contract",
             Arg.Any<CancellationToken>());
         await emailService.Received(1).SendEmailAsync(
