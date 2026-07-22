@@ -168,10 +168,51 @@ public static class TalentMatchingCandidateLoader
                 (!filters.MinimumYears.HasValue ||
                     selection.YearsOfExperience >= filters.MinimumYears.Value)));
         }
+        if (filters?.MinimumRating is { } minimumRating)
+        {
+            query = query.Where(profile => context.Set<Review>()
+                .Where(review => review.RevieweeId == profile.UserId && review.IsVisible != false)
+                .Average(review => (double?)review.Rating) >= minimumRating);
+        }
+
+        var jobSkillIds = job.Skills.Select(skill => skill.SkillId).ToArray();
+        var shortlistedProfileIds = await query
+            .Select(profile => new
+            {
+                ProfileId = profile.FreelancerProfilesId,
+                DeclaredSkillMatches = profile.FreelancerSkills
+                    .Count(selection => jobSkillIds.Contains(selection.SkillsId)),
+                VerifiedSkillMatches = profile.Contracts.Count(contract =>
+                    contract.Status == (int)ContractStatus.Completed &&
+                    contract.JobPosts.JobPostSkills.Any(selection =>
+                        jobSkillIds.Contains(selection.SkillsId))),
+                ExactCategoryMatch = job.MajorCategoryId.HasValue &&
+                    (profile.FreelancerProfileCategories.Any(selection =>
+                         selection.MajorCategoryId == job.MajorCategoryId.Value) ||
+                     profile.Contracts.Any(contract =>
+                         contract.Status == (int)ContractStatus.Completed &&
+                         contract.JobPosts.MajorCategoryId == job.MajorCategoryId.Value)),
+                SameMajorMatch = job.MajorId.HasValue &&
+                    (profile.MajorId == job.MajorId.Value ||
+                     profile.Contracts.Any(contract =>
+                         contract.Status == (int)ContractStatus.Completed &&
+                         contract.JobPosts.MajorCategory != null &&
+                         contract.JobPosts.MajorCategory.MajorId == job.MajorId.Value)),
+                CompletedContracts = profile.Contracts.Count(contract =>
+                    contract.Status == (int)ContractStatus.Completed)
+            })
+            .OrderByDescending(candidate => candidate.DeclaredSkillMatches)
+            .ThenByDescending(candidate => candidate.VerifiedSkillMatches)
+            .ThenByDescending(candidate => candidate.ExactCategoryMatch)
+            .ThenByDescending(candidate => candidate.SameMajorMatch)
+            .ThenByDescending(candidate => candidate.CompletedContracts)
+            .ThenBy(candidate => candidate.ProfileId)
+            .Take(MaximumCandidatePoolSize)
+            .Select(candidate => candidate.ProfileId)
+            .ToListAsync(cancellationToken);
 
         var profiles = await query
-            .OrderBy(profile => profile.FreelancerProfilesId)
-            .Take(MaximumCandidatePoolSize)
+            .Where(profile => shortlistedProfileIds.Contains(profile.FreelancerProfilesId))
             .ToListAsync(cancellationToken);
         var userIds = profiles.Select(profile => profile.UserId).ToArray();
         var reviewStats = userIds.Length == 0
@@ -245,11 +286,6 @@ public static class TalentMatchingCandidateLoader
                 reviews?.AverageRating ?? 0d,
                 reviews?.ReviewCount ?? 0);
         }).ToList();
-
-        if (filters?.MinimumRating is { } minimumRating)
-        {
-            candidates = candidates.Where(candidate => candidate.AverageRating >= minimumRating).ToList();
-        }
 
         return new AiTalentMatchingPool(job, candidates);
     }

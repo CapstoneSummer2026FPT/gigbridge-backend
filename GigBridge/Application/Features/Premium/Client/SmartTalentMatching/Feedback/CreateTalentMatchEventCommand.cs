@@ -52,7 +52,7 @@ public sealed class CreateTalentMatchEventCommandHandler(
             cancellationToken);
         if (added)
         {
-            await context.SaveChangesAsync(cancellationToken);
+            await TalentMatchFeedbackWriter.TrySaveAddedEventAsync(context, cancellationToken);
         }
     }
 

@@ -8,6 +8,8 @@ namespace Application.Features.Premium.Client.SmartTalentMatching.Feedback;
 public static class TalentMatchFeedbackWriter
 {
     private static readonly TimeSpan AttributionWindow = TimeSpan.FromDays(30);
+    private const string UniqueViolationSqlState = "23505";
+    private const string IdempotencyConstraintName = "UX_TalentMatchEvents_IdempotencyKey";
 
     public static async Task<bool> TryAddForRunAsync(
         IApplicationDbContext context,
@@ -73,6 +75,22 @@ public static class TalentMatchFeedbackWriter
             idempotencyKey, sourceEntityId, now, cancellationToken);
     }
 
+    public static async Task<bool> TrySaveAddedEventAsync(
+        IApplicationDbContext context,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await context.SaveChangesAsync(cancellationToken);
+            return true;
+        }
+        catch (DbUpdateException exception) when (IsIdempotencyKeyConflict(exception))
+        {
+            // The competing request committed the same logical event first.
+            return false;
+        }
+    }
+
     private static async Task<bool> TryAddAsync(
         IApplicationDbContext context,
         Guid matchRunId,
@@ -108,5 +126,22 @@ public static class TalentMatchFeedbackWriter
             CreatedAt = now
         });
         return true;
+    }
+
+    private static bool IsIdempotencyKeyConflict(Exception exception)
+    {
+        for (Exception? current = exception; current is not null; current = current.InnerException)
+        {
+            var exceptionType = current.GetType();
+            var sqlState = exceptionType.GetProperty("SqlState")?.GetValue(current) as string;
+            var constraintName = exceptionType.GetProperty("ConstraintName")?.GetValue(current) as string;
+            if (string.Equals(sqlState, UniqueViolationSqlState, StringComparison.Ordinal) &&
+                string.Equals(constraintName, IdempotencyConstraintName, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
