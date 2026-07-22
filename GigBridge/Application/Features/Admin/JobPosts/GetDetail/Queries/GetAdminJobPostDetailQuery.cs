@@ -57,6 +57,12 @@ public sealed class GetAdminJobPostDetailQueryHandler :
             throw new NotFoundException("Job post does not exist.");
         }
 
+        var hasAiInterview = await _context.Set<AiInterviewDefinition>()
+            .AsNoTracking()
+            .AnyAsync(definition => definition.JobPostId == jobPost.JobPostsId &&
+                definition.Status != AiInterviewDefinitionStatus.Closed,
+                cancellationToken);
+
         return new JobPostDetailDto(
             JobPostsId: jobPost.JobPostsId,
             ClientProfilesId: jobPost.ClientProfilesId,
@@ -87,6 +93,7 @@ public sealed class GetAdminJobPostDetailQueryHandler :
             Attachments: jobPost.JobPostAttachments
                 .Select(attachment => new AttachmentDto(attachment.JobPostAttachmentsId, attachment.FileUrl, attachment.FileName))
                 .ToList(),
-            MilestonePlans: Application.Features.JobPosts.Common.JobPostPlanProjection.ToDtos(jobPost.JobPostMilestonePlans));
+            MilestonePlans: Application.Features.JobPosts.Common.JobPostPlanProjection.ToDtos(jobPost.JobPostMilestonePlans),
+            HasAiInterview: hasAiInterview);
     }
 }

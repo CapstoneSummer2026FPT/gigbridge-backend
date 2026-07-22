@@ -9,6 +9,7 @@ using Application.Features.Auth.Shared.DTOs;
 using Application.Features.JobPosts.Common;
 using Application.Features.Proposals.Common.Email;
 using Application.Features.Proposals.Common;
+using Application.Features.Premium.Client.SmartTalentMatching.Feedback;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
@@ -88,6 +89,24 @@ public class AcceptProposalForNegotiationCommandHandler : IRequestHandler<Accept
         var shouldNotifyNegotiationStart = proposal.Status is 1 or 2;
 
         var now = _dateTimeService.UtcNow;
+
+        await TalentMatchFeedbackWriter.TryAddLatestAttributedAsync(
+            _context,
+            proposal.JobPostsId,
+            proposal.FreelancerProfilesId,
+            TalentMatchEventType.Shortlisted,
+            proposal.ProposalsId,
+            now,
+            cancellationToken);
+
+        var contract = await _context.Set<Contract>()
+            .FirstOrDefaultAsync(c => c.JobPostsId == proposal.JobPostsId, cancellationToken);
+
+        if (contract is null)
+        {
+            contract = CreateDraftContract(proposal, now);
+            _context.Set<Contract>().Add(contract);
+        }
 
         var existingConversation = await _context.Set<Conversation>()
             .FirstOrDefaultAsync(

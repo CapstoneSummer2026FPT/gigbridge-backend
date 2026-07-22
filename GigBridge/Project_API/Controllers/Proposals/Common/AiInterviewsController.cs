@@ -21,19 +21,13 @@ public sealed class AiInterviewsController : BaseApiController
 {
     private const long MaxAudioUploadBytes = 4 * 1024 * 1024; // 4mb
     private readonly IApplicationDbContext _context;
-    private readonly IAiServiceClient _aiServiceClient;
-    private readonly ILogger<AiInterviewsController> _logger;
     private readonly IDateTimeService _dateTimeService;
 
     public AiInterviewsController(
         IApplicationDbContext context,
-        IAiServiceClient aiServiceClient,
-        ILogger<AiInterviewsController> logger,
         IDateTimeService dateTimeService)
     {
         _context = context;
-        _aiServiceClient = aiServiceClient;
-        _logger = logger;
         _dateTimeService = dateTimeService;
     }
 
@@ -42,59 +36,17 @@ public sealed class AiInterviewsController : BaseApiController
         [FromBody] StartAiInterviewRequest request,
         CancellationToken cancellationToken)
     {
-        var total = System.Diagnostics.Stopwatch.StartNew();
         if (!TryGetCurrentUserId(out var userId))
         {
             return InvalidTokenResponse();
         }
 
-        var jobPost = await _context.Set<Domain.Entities.JobPost>()
-            .AsNoTracking()
-            .Include(item => item.JobPostSkills)
-                .ThenInclude(item => item.Skills)
-            .Include(item => item.JobPostQuestions)
-            .FirstOrDefaultAsync(item => item.JobPostsId == request.JobPostId, cancellationToken);
-
-        if (jobPost is null)
-        {
-            return NotFound(ApiResponse<object>.NotFound("Job post not found"));
-        }
-
-        var skills = jobPost.JobPostSkills
-            .Where(item => item.Skills is not null)
-            .Select(item => item.Skills.Name)
-            .Concat(jobPost.CustomSkillNames ?? [])
-            .Where(skill => !string.IsNullOrWhiteSpace(skill))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
-        var jobQuestions = jobPost.JobPostQuestions
-            .OrderBy(q => q.OrderIndex)
-            .Select(q => q.QuestionText)
-            .ToList();
-
-        var aiRequest = new AiInterviewStartRequestDto
-        {
-            JobId = jobPost.JobPostsId.ToString(),
-            FreelancerId = userId.ToString(),
-            JobTitle = jobPost.Title,
-            JobDescription = jobPost.Description,
-            JobSkills = skills,
-            JobQuestions = jobQuestions,
-            Mode = NormalizeMode(request.Mode),
-            Language = NormalizeLanguage(request.Language)
-        };
-
-        var result = await _aiServiceClient.StartInterviewAsync(aiRequest, cancellationToken);
-        total.Stop();
-
-        _logger.LogInformation(
-            "AI interview started in {ElapsedMs}ms for job {JobPostId}, freelancer {FreelancerId}, language {Language}, skills {SkillCount}",
-            total.ElapsedMilliseconds,
-            request.JobPostId,
+        var result = await Mediator.Send(new StartAiInterviewCommand(
             userId,
-            aiRequest.Language,
-            skills.Count);
+            request.JobPostId,
+            request.InterviewDefinitionId,
+            NormalizeMode(request.Mode),
+            NormalizeLanguage(request.Language)), cancellationToken);
 
         return StatusCode(
             StatusCodes.Status201Created,
@@ -125,18 +77,15 @@ public sealed class AiInterviewsController : BaseApiController
         [FromBody] ConfirmAiInterviewAnswerRequest request,
         CancellationToken cancellationToken)
     {
-        if (!TryGetCurrentUserId(out _))
+        if (!TryGetCurrentUserId(out var userId))
         {
             return InvalidTokenResponse();
         }
 
-        var result = await _aiServiceClient.ConfirmInterviewAnswerAsync(
-            new AiInterviewConfirmRequestDto
-            {
-                SessionId = request.SessionId,
-                CorrectedText = request.CorrectedText
-            },
-            cancellationToken);
+        var result = await Mediator.Send(new ConfirmAiInterviewAnswerCommand(
+            userId,
+            request.SessionId,
+            request.CorrectedText), cancellationToken);
 
         // Map answer back to database if there's an associated proposal
         if (!string.IsNullOrEmpty(result.JobId) && !string.IsNullOrEmpty(result.FreelancerId))

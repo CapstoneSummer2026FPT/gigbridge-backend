@@ -20,4 +20,8 @@ public class ProposalDto
     public int MilestoneCount { get; set; }
     public decimal MilestoneTotal { get; set; }
     public decimal? FirstMilestoneAmount { get; set; }
+    public bool HasAiInterview { get; set; }
+    public bool AiInterviewCompleted { get; set; }
+    public bool AiInterviewInProgress { get; set; }
+    public Guid? AiInterviewDefinitionId { get; set; }
 }

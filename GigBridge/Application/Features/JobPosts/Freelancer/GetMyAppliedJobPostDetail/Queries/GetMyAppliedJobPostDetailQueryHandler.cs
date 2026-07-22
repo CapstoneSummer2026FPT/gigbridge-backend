@@ -66,6 +66,12 @@ public sealed class GetMyAppliedJobPostDetailQueryHandler
             throw new NotFoundException("Job post does not exist or you do not have permission to view it.");
         }
 
+        var hasAiInterview = await _context.Set<AiInterviewDefinition>()
+            .AsNoTracking()
+            .AnyAsync(definition => definition.JobPostId == jobPost.JobPostsId &&
+                definition.Status != AiInterviewDefinitionStatus.Closed,
+                cancellationToken);
+
         return new JobPostDetailDto(
             JobPostsId: jobPost.JobPostsId,
             ClientProfilesId: jobPost.ClientProfilesId,
@@ -96,6 +102,7 @@ public sealed class GetMyAppliedJobPostDetailQueryHandler
             Attachments: jobPost.JobPostAttachments
                 .Select(attachment => new AttachmentDto(attachment.JobPostAttachmentsId, attachment.FileUrl, attachment.FileName))
                 .ToList(),
-            MilestonePlans: Application.Features.JobPosts.Common.JobPostPlanProjection.ToDtos(jobPost.JobPostMilestonePlans));
+            MilestonePlans: Application.Features.JobPosts.Common.JobPostPlanProjection.ToDtos(jobPost.JobPostMilestonePlans),
+            HasAiInterview: hasAiInterview);
     }
 }

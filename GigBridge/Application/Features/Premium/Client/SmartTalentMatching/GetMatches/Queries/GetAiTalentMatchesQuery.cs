@@ -4,5 +4,5 @@ using MediatR;
 namespace Application.Features.Premium.Client.SmartTalentMatching.GetMatches.Queries;
 
 public sealed record GetAiTalentMatchesQuery(Guid UserId, Guid JobPostId, int TopK = 10,
-    TalentMatchingFiltersDto? Filters = null)
-    : IRequest<TalentMatchingResultDto>;
+    AiTalentMatchingFiltersDto? Filters = null)
+    : IRequest<AiTalentMatchingResultDto>;

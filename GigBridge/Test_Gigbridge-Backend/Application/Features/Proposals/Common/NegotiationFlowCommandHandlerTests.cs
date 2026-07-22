@@ -1,9 +1,11 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces.IService;
+using Application.Features.Auth.Shared.DTOs;
 using Application.Features.Chat.Common.FinalOffers.Create.Commands;
 using Application.Features.Chat.Common.FinalOffers.Create.DTOs;
 using Application.Features.Chat.Common.FinalOffers.Respond.Commands;
 using Application.Features.Chat.Common.FinalOffers.Respond.DTOs;
+using Application.Features.Chat.Common.FinalOffers.Shared.Email;
 using Application.Features.Chat.Common.Negotiations.MilestonePlans.Commands;
 using Application.Features.Chat.Common.Negotiations.StartFromProposal.Commands;
 using Application.Features.Chat.Common.Negotiations.MilestonePlans.DTOs;
@@ -11,6 +13,8 @@ using Application.Features.Proposals.Common.AcceptForNegotiation.Commands;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Test_Gigbridge_Backend.TestSupport;
 
@@ -221,10 +225,23 @@ public class NegotiationFlowCommandHandlerTests
         fixture.Context.Set<Proposal>().Add(waitlistedProposal);
         fixture.AddOfferWithSnapshot(1500m, 600m, 900m);
 
+        var notifications = Substitute.For<INotificationService>();
+        var emailService = Substitute.For<IEmailService>();
+        var emailRenderer = Substitute.For<IJobAcceptanceEmailRenderer>();
+        emailRenderer.Render(Arg.Any<JobAcceptanceEmailModel>()).Returns(
+            new RenderedJobAcceptanceEmail("Accepted", "<p>Accepted</p>", "Accepted"));
+        var configuration = Substitute.For<IConfiguration>();
+        configuration["FrontendBaseUrl"].Returns("https://gigbridge.test");
+
         var handler = new RespondFinalOfferCommandHandler(
             fixture.Context,
             new FixedDateTimeService(fixture.Now),
-            new NoopChatRealtimeNotifier());
+            new NoopChatRealtimeNotifier(),
+            notifications,
+            emailService,
+            emailRenderer,
+            configuration,
+            Substitute.For<ILogger<RespondFinalOfferCommandHandler>>());
 
         var result = await handler.Handle(
             new RespondFinalOfferCommand(
@@ -243,9 +260,27 @@ public class NegotiationFlowCommandHandlerTests
         Assert.Equal((int)ContractStatus.PendingContractConfirmation, contract.Status);
         Assert.Equal(3, fixture.Proposal.Status);
         Assert.Equal(1, waitlistedProposal.Status);
-        Assert.Equal(contract.ContractsId, result.ContractId);
-        Assert.Equal((int)ContractStatus.PendingContractConfirmation, result.ContractStatus);
-        Assert.Empty(fixture.Escrows.Entities);
+        Assert.Equal(fixture.ContractId, result.ContractId);
+        Assert.Equal((int)ContractStatus.PendingSignature, result.ContractStatus);
+        var escrow = Assert.Single(fixture.Escrows.Entities);
+        Assert.Equal(1500m, escrow.RequiredAmount);
+        Assert.Equal(0m, escrow.FundedAmount);
+        Assert.Equal(1.0m, escrow.RequiredPercentage);
+        Assert.Equal((int)ContractEscrowStatus.PendingFunding, escrow.Status);
+        await notifications.Received(1).CreateNotificationAsync(
+            fixture.FreelancerUserId,
+            NotificationType.ContractStarted,
+            Arg.Is<string>(title => title.Contains("Fixed job")),
+            Arg.Any<string>(),
+            fixture.ContractId,
+            "Contract",
+            Arg.Any<CancellationToken>());
+        await emailService.Received(1).SendEmailAsync(
+            Arg.Is<EmailRequest>(email =>
+                email.To == "freelancer@example.com" &&
+                email.Subject == "Accepted" &&
+                email.IsHtml),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]

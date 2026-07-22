@@ -7,13 +7,21 @@ namespace Application.Features.JobPosts.Common;
 
 internal static class JobPostProjection
 {
-    public static List<JobPostSummaryDto> ToSummaryDtos(IEnumerable<JobPost> jobPosts, DateTime? utcNow = null)
+    public static List<JobPostSummaryDto> ToSummaryDtos(
+        IEnumerable<JobPost> jobPosts,
+        DateTime? utcNow = null,
+        IReadOnlySet<Guid>? aiInterviewJobIds = null)
     {
         var effectiveNow = utcNow ?? DateTime.UtcNow;
-        return jobPosts.Select(jobPost => ToSummaryDto(jobPost, effectiveNow)).ToList();
+        return jobPosts
+            .Select(jobPost => ToSummaryDto(jobPost, effectiveNow, aiInterviewJobIds))
+            .ToList();
     }
 
-    private static JobPostSummaryDto ToSummaryDto(JobPost jobPost, DateTime utcNow)
+    private static JobPostSummaryDto ToSummaryDto(
+        JobPost jobPost,
+        DateTime utcNow,
+        IReadOnlySet<Guid>? aiInterviewJobIds)
     {
         var officialSkills = jobPost.JobPostSkills
             .Where(jobPostSkill => jobPostSkill.Skills is not null)
@@ -44,7 +52,8 @@ internal static class JobPostProjection
                 .Select(skill => skill.SkillName)
                 .ToList(),
             IsFeatured: jobPost.IsFeatured && jobPost.FeaturedUntil > utcNow,
-            FeaturedUntil: jobPost.FeaturedUntil);
+            FeaturedUntil: jobPost.FeaturedUntil,
+            HasAiInterview: aiInterviewJobIds?.Contains(jobPost.JobPostsId) == true);
     }
 
     private static string CreatePreview(string? description)

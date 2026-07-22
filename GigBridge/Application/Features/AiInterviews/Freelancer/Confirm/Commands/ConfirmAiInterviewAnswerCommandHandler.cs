@@ -2,6 +2,7 @@ using System.Text.Json;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Common.Models.Ai;
+using Application.Features.Premium.Client.SmartTalentMatching.Feedback;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
@@ -37,6 +38,27 @@ public sealed class ConfirmAiInterviewAnswerCommandHandler(
             attempt.SoftSkillsJson = JsonSerializer.Serialize(result.Feedback.SoftSkills);
             attempt.RecommendedHire = result.Feedback.RecommendedHire;
             attempt.CompletedAt = clock.UtcNow;
+            var jobPostId = await context.Set<AiInterviewDefinition>()
+                .AsNoTracking()
+                .Where(item => item.AiInterviewDefinitionsId == attempt.AiInterviewDefinitionId)
+                .Select(item => (Guid?)item.JobPostId)
+                .FirstOrDefaultAsync(cancellationToken);
+            var freelancerProfileId = await context.Set<FreelancerProfile>()
+                .AsNoTracking()
+                .Where(profile => profile.UserId == command.UserId)
+                .Select(profile => (Guid?)profile.FreelancerProfilesId)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (jobPostId.HasValue && freelancerProfileId.HasValue)
+            {
+                await TalentMatchFeedbackWriter.TryAddLatestAttributedAsync(
+                    context,
+                    jobPostId.Value,
+                    freelancerProfileId.Value,
+                    TalentMatchEventType.InterviewCompleted,
+                    attempt.AiInterviewAttemptsId,
+                    clock.UtcNow,
+                    cancellationToken);
+            }
         }
         else if (!string.IsNullOrWhiteSpace(result.QuestionText))
         {

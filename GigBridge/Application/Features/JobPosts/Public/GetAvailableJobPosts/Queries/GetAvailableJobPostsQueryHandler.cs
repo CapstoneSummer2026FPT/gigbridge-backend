@@ -3,6 +3,7 @@ using Application.Features.JobPosts.Common;
 using Application.Features.JobPosts.Public.GetAvailableJobPosts.DTOs;
 using Application.Common.Interfaces.IService;
 using Domain.Entities;
+using Domain.Enums;
 using Domain.Services;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -43,7 +44,19 @@ public class GetAvailableJobPostsQueryHandler : IRequestHandler<GetAvailableJobP
             .Take(NormalizePageSize(request.PageSize))
             .ToListAsync(cancellationToken);
 
-        return JobPostProjection.ToSummaryDtos(jobPosts, _clock.UtcNow);
+        var jobPostIds = jobPosts.Select(jobPost => jobPost.JobPostsId).ToList();
+        var aiInterviewJobIds = jobPostIds.Count == 0
+            ? new HashSet<Guid>()
+            : (await _context.Set<AiInterviewDefinition>()
+                .AsNoTracking()
+                .Where(definition => jobPostIds.Contains(definition.JobPostId) &&
+                    definition.Status != AiInterviewDefinitionStatus.Closed)
+                .Select(definition => definition.JobPostId)
+                .Distinct()
+                .ToListAsync(cancellationToken))
+                .ToHashSet();
+
+        return JobPostProjection.ToSummaryDtos(jobPosts, _clock.UtcNow, aiInterviewJobIds);
     }
 
     private static IQueryable<JobPost> ApplyFilters(IQueryable<JobPost> query, GetAvailableJobPostsQuery request)

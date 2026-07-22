@@ -17,14 +17,16 @@ namespace Project_API.Controllers.Freelancer;
 public class ClientSavedFreelancersController : BaseApiController
 {
     [HttpPost("{freelancerProfileId}")]
-    public async Task<IActionResult> SaveFreelancer(Guid freelancerProfileId)
+    public async Task<IActionResult> SaveFreelancer(
+        Guid freelancerProfileId,
+        [FromQuery] Guid? matchRunId = null)
     {
         if (!TryGetCurrentUserId(out var userId))
         {
             return InvalidTokenResponse();
         }
 
-        var command = new SaveFreelancerCommand(userId, freelancerProfileId);
+        var command = new SaveFreelancerCommand(userId, freelancerProfileId, matchRunId);
         var result = await Mediator.Send(command);
 
         return Ok(ApiResponse<Guid>.Ok(result, "Freelancer saved successfully"));

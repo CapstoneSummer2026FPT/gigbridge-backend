@@ -4,6 +4,7 @@ using Application.Common.Models;
 using System.Net;
 using System.Net.Sockets;
 using Application.Features.Chat.Common.Schedules;
+using Application.Features.Chat.Common.FinalOffers.Shared.Email;
 using Application.Features.JobInvitations.Common.Email;
 using Application.Features.Proposals.Common.Email;
 using Infrastructure.BackgroundJobs;
@@ -172,6 +173,7 @@ public static class DependencyInjection
         services.AddScoped<IAuthEmailSender, AuthEmailSender>();
         services.AddSingleton<IScheduleEmailRenderer, ScheduleEmailRenderer>();
         services.AddSingleton<IProposalNegotiationEmailRenderer, ProposalNegotiationEmailRenderer>();
+        services.AddSingleton<IJobAcceptanceEmailRenderer, JobAcceptanceEmailRenderer>();
         services.AddSingleton<IJobInvitationEmailRenderer, JobInvitationEmailRenderer>();
         services.AddScoped<IMediaService, MediaService>();
         services.AddScoped<INotificationService, NotificationService>();
