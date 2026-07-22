@@ -4,6 +4,7 @@ using Application.Features.Auth.Shared.DTOs;
 using Application.Features.JobInvitations.Common;
 using Application.Features.JobInvitations.Common.DTOs;
 using Application.Features.JobInvitations.Common.Email;
+using Application.Features.Premium.Client.SmartTalentMatching.Feedback;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
@@ -145,6 +146,20 @@ public sealed class BulkCreateJobInvitationsCommandHandler
                 };
 
                 _context.Set<JobInvitation>().Add(invitation);
+                if (command.Request.MatchRunId.HasValue)
+                {
+                    await TalentMatchFeedbackWriter.TryAddForRunAsync(
+                        _context,
+                        command.Request.MatchRunId.Value,
+                        command.UserId,
+                        jobPostId,
+                        freelancerProfileId,
+                        TalentMatchEventType.Invited,
+                        $"match:{command.Request.MatchRunId.Value:N}:invited:{invitation.JobInvitationsId:N}",
+                        invitation.JobInvitationsId,
+                        now,
+                        cancellationToken);
+                }
                 createdIds.Add(invitation.JobInvitationsId);
                 existingPairs.Add((jobPostId, freelancerProfileId));
                 notificationPayloads.Add((freelancerProfile.UserId, invitation.JobInvitationsId, jobPost.Title));

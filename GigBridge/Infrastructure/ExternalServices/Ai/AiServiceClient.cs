@@ -305,8 +305,15 @@ public class AiServiceClient : IAiServiceClient
                 ? errorResponse.Message
                 : $"AI interview service returned {(int)response.StatusCode}.";
 
-            throw new ExternalServiceException(
-                "AI service is temporarily unavailable. Please try again later.");
+            throw response.StatusCode switch
+            {
+                System.Net.HttpStatusCode.BadRequest or
+                System.Net.HttpStatusCode.RequestEntityTooLarge or
+                System.Net.HttpStatusCode.UnsupportedMediaType or
+                System.Net.HttpStatusCode.UnprocessableEntity => new BadRequestException(message),
+                System.Net.HttpStatusCode.Conflict => new ConflictException(message),
+                _ => new ExternalServiceException(message)
+            };
         }
 
         var apiResponse = await response.Content.ReadFromJsonAsync<ApiResponse<T>>(

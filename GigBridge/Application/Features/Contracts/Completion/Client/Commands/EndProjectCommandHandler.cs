@@ -3,6 +3,7 @@ using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.Contracts.Completion.Client.DTOs;
+using Application.Features.Premium.Client.SmartTalentMatching.Feedback;
 using Application.Features.Contracts.Completion.Common.Internal;
 using Domain.Entities;
 using Domain.Enums;
@@ -88,6 +89,15 @@ public sealed class EndProjectCommandHandler : IRequestHandler<EndProjectCommand
         contract.Status = (int)ContractStatus.Completed;
         contract.CompletedAt = now;
         contract.UpdatedAt = now;
+
+        await TalentMatchFeedbackWriter.TryAddLatestAttributedAsync(
+            _context,
+            contract.JobPostsId,
+            freelancerProfile.FreelancerProfilesId,
+            TalentMatchEventType.ContractCompleted,
+            contract.ContractsId,
+            now,
+            cancellationToken);
 
         await ContractConversationEvents.AddSystemMessageAsync(
             _context,
