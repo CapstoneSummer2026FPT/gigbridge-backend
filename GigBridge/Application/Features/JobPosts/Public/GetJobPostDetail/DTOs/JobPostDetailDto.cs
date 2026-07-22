@@ -27,5 +27,6 @@ public record JobPostDetailDto(
     int EloPoints,
     List<JobPostSkillDto> Skills,
     List<string> CustomSkillNames,
-    List<AttachmentDto> Attachments
+    List<AttachmentDto> Attachments,
+    bool HasAiInterview
 );

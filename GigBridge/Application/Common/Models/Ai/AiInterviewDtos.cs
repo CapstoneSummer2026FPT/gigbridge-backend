@@ -100,6 +100,9 @@ public class AiInterviewQuestionResponseDto
     [JsonPropertyName("question_index")]
     public int QuestionIndex { get; set; }
 
+    [JsonPropertyName("question_count")]
+    public int QuestionCount { get; set; }
+
     [JsonPropertyName("question_text")]
     public string? QuestionText { get; set; }
 

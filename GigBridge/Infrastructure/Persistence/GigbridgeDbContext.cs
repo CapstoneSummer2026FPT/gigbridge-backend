@@ -89,6 +89,12 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
     public virtual DbSet<JobPostSkill> JobPostSkills { get; set; }
 
+    public virtual DbSet<TalentMatchRun> TalentMatchRuns { get; set; }
+
+    public virtual DbSet<TalentMatchResult> TalentMatchResults { get; set; }
+
+    public virtual DbSet<TalentMatchEvent> TalentMatchEvents { get; set; }
+
     public virtual DbSet<Major> Majors { get; set; }
 
     public virtual DbSet<MajorCategory> MajorCategories { get; set; }
@@ -2787,6 +2793,78 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
                 .HasConstraintName("ReportContractAttachments_rc_ReportContractId_fkey");
         });
 
+        modelBuilder.Entity<TalentMatchRun>(entity =>
+        {
+            entity.ToTable("TalentMatchRuns");
+            entity.HasKey(e => e.TalentMatchRunId);
+            entity.HasIndex(e => new { e.ClientUserId, e.JobPostId, e.CreatedAt },
+                "IX_TalentMatchRuns_ClientUserId_JobPostId_CreatedAt");
+            entity.Property(e => e.TalentMatchRunId).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.AlgorithmVersion).HasMaxLength(64);
+            entity.Property(e => e.EmbeddingModel).HasMaxLength(200);
+            entity.Property(e => e.ScoringVersion).HasMaxLength(64);
+            entity.Property(e => e.FailureCode).HasMaxLength(100);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.Status)
+                .HasComment("Enum TalentMatchRunStatus: 0=Running, 1=Succeeded, 2=NoCandidates, 3=Failed");
+
+            entity.HasOne(e => e.ClientUser).WithMany()
+                .HasForeignKey(e => e.ClientUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.JobPost).WithMany()
+                .HasForeignKey(e => e.JobPostId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<TalentMatchResult>(entity =>
+        {
+            entity.ToTable("TalentMatchResults");
+            entity.HasKey(e => e.TalentMatchResultId);
+            entity.HasIndex(e => new { e.TalentMatchRunId, e.FreelancerProfileId },
+                "UX_TalentMatchResults_Run_Freelancer").IsUnique();
+            entity.Property(e => e.TalentMatchResultId).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.EmbeddingScore).HasPrecision(5, 2);
+            entity.Property(e => e.AlgorithmScore).HasPrecision(5, 2);
+            entity.Property(e => e.EvidenceScore).HasPrecision(5, 2);
+            entity.Property(e => e.FinalScore).HasPrecision(5, 2);
+            entity.Property(e => e.Confidence).HasMaxLength(16);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+
+            entity.HasOne(e => e.TalentMatchRun).WithMany(e => e.Results)
+                .HasForeignKey(e => e.TalentMatchRunId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.FreelancerProfile).WithMany()
+                .HasForeignKey(e => e.FreelancerProfileId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<TalentMatchEvent>(entity =>
+        {
+            entity.ToTable("TalentMatchEvents");
+            entity.HasKey(e => e.TalentMatchEventId);
+            entity.HasIndex(e => e.IdempotencyKey, "UX_TalentMatchEvents_IdempotencyKey").IsUnique();
+            entity.HasIndex(e => new { e.TalentMatchRunId, e.EventType, e.CreatedAt },
+                "IX_TalentMatchEvents_Run_Type_CreatedAt");
+            entity.Property(e => e.TalentMatchEventId).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.IdempotencyKey).HasMaxLength(200);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.EventType)
+                .HasComment("Enum TalentMatchEventType: 0=Impression, 1=ProfileOpened, 2=Saved, 3=Invited, 4=ProposalSubmitted, 5=Shortlisted, 6=InterviewStarted, 7=InterviewCompleted, 8=Hired, 9=ContractCompleted");
+
+            entity.HasOne(e => e.TalentMatchRun).WithMany(e => e.Events)
+                .HasForeignKey(e => e.TalentMatchRunId)
+                .OnDelete(DeleteBehavior.NoAction);
+            entity.HasOne(e => e.TalentMatchResult).WithMany(e => e.Events)
+                .HasForeignKey(e => new { e.TalentMatchRunId, e.FreelancerProfileId })
+                .HasPrincipalKey(e => new { e.TalentMatchRunId, e.FreelancerProfileId })
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.FreelancerProfile).WithMany()
+                .HasForeignKey(e => e.FreelancerProfileId)
+                .OnDelete(DeleteBehavior.NoAction);
+        });
+
         OnModelCreatingPartial(modelBuilder);
     }
+
+    partial void OnModelCreatingPartial(ModelBuilder modelBuilder);
 }
