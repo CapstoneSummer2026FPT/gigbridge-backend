@@ -4,6 +4,7 @@ using Application.Common.Interfaces.IService;
 using Application.Features.JobPosts.Common;
 using Application.Features.Proposals.Common.UpdateProposalStatus.Commands.DTOs;
 using Application.Features.Proposals.Common;
+using Application.Features.Premium.Client.SmartTalentMatching.Feedback;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
@@ -106,6 +107,17 @@ public class UpdateProposalStatusCommandHandler
             }
 
             UpdateStatusByFreelancer(proposal, requestedStatus);
+            if (isDraftSubmission)
+            {
+                await TalentMatchFeedbackWriter.TryAddLatestAttributedAsync(
+                    _context,
+                    proposal.JobPostsId,
+                    proposal.FreelancerProfilesId,
+                    TalentMatchEventType.ProposalSubmitted,
+                    proposal.ProposalsId,
+                    _dateTimeService.UtcNow,
+                    cancellationToken);
+            }
             var cheatingPenalty = isDraftSubmission && _proposalCheatingService is not null
                 ? await _proposalCheatingService.ApplySubmissionPenaltyIfNeededAsync(
                     proposal,
@@ -125,6 +137,18 @@ public class UpdateProposalStatusCommandHandler
         }
 
         proposal.UpdatedAt = _dateTimeService.UtcNow;
+
+        if (requestedStatus == 2)
+        {
+            await TalentMatchFeedbackWriter.TryAddLatestAttributedAsync(
+                _context,
+                proposal.JobPostsId,
+                proposal.FreelancerProfilesId,
+                TalentMatchEventType.Shortlisted,
+                proposal.ProposalsId,
+                _dateTimeService.UtcNow,
+                cancellationToken);
+        }
 
         await _context.SaveChangesAsync(cancellationToken);
 

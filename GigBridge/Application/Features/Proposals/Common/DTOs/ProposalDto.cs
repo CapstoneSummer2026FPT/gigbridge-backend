@@ -21,12 +21,8 @@ public class ProposalDto
     public int MilestoneCount { get; set; }
     public decimal MilestoneTotal { get; set; }
     public decimal? FirstMilestoneAmount { get; set; }
-
-    // AI Judging Metrics
-    public int? AiScore { get; set; }
-    public string? AiSummary { get; set; }
-    public bool? AiRecommendedHire { get; set; }
-    public DateTime? AiEvaluatedAt { get; set; }
-    public List<string>? AiTechnicalSkills { get; set; }
-    public List<string>? AiSoftSkills { get; set; }
+    public bool HasAiInterview { get; set; }
+    public bool AiInterviewCompleted { get; set; }
+    public bool AiInterviewInProgress { get; set; }
+    public Guid? AiInterviewDefinitionId { get; set; }
 }

@@ -1,6 +1,8 @@
 ﻿using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Domain.Entities;
+using Domain.Enums;
+using Application.Features.Premium.Client.SmartTalentMatching.Feedback;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -39,6 +41,12 @@ public class SaveFreelancerCommandHandler : IRequestHandler<SaveFreelancerComman
 
         if (existingSavedFreelancer != null)
         {
+            if (await AddMatchEventAsync(
+                    request, existingSavedFreelancer.SavedFreelancersId, cancellationToken))
+            {
+                await TalentMatchFeedbackWriter.TrySaveAddedEventAsync(
+                    _context, cancellationToken);
+            }
             return existingSavedFreelancer.SavedFreelancersId;
         }
 
@@ -52,8 +60,33 @@ public class SaveFreelancerCommandHandler : IRequestHandler<SaveFreelancerComman
 
         _context.Set<SavedFreelancer>().Add(savedFreelancer);
 
+        await AddMatchEventAsync(request, savedFreelancer.SavedFreelancersId, cancellationToken);
+
         await _context.SaveChangesAsync(cancellationToken);
 
         return savedFreelancer.SavedFreelancersId;
+    }
+
+    private async Task<bool> AddMatchEventAsync(
+        SaveFreelancerCommand request,
+        Guid savedFreelancerId,
+        CancellationToken cancellationToken)
+    {
+        if (!request.MatchRunId.HasValue)
+        {
+            return false;
+        }
+
+        return await TalentMatchFeedbackWriter.TryAddForRunAsync(
+            _context,
+            request.MatchRunId.Value,
+            request.UserId,
+            null,
+            request.FreelancerProfileId,
+            TalentMatchEventType.Saved,
+            $"match:{request.MatchRunId.Value:N}:saved:{savedFreelancerId:N}",
+            savedFreelancerId,
+            DateTime.UtcNow,
+            cancellationToken);
     }
 }

@@ -58,7 +58,3 @@ public sealed record TalentMatchingFiltersDto(
     Guid? MajorCategoryId = null,
     Guid? MajorId = null,
     IReadOnlyList<Guid>? SkillIds = null);
-
-public sealed record AiTalentMatchingRequest(
-    int TopK = 10,
-    TalentMatchingFiltersDto? Filters = null);

@@ -9,4 +9,6 @@ public sealed class BulkCreateJobInvitationsRequest
     public string? Message { get; set; }
 
     public DateTime? ExpiresAt { get; set; }
+
+    public Guid? MatchRunId { get; set; }
 }

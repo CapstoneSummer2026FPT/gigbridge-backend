@@ -221,6 +221,26 @@ public class AiServiceClientTests
     }
 
     [Fact]
+    public async Task TranscribeInterviewAudioAsync_PreservesAudioValidationMessage()
+    {
+        var errorResponse = ApiResponse<object>.BadRequest("Audio Decode Failed");
+        var handler = new MockHttpMessageHandler(HttpStatusCode.BadRequest, errorResponse);
+        var client = new AiServiceClient(new HttpClient(handler), _options);
+        await using var audio = new MemoryStream(new byte[] { 1, 2, 3, 4 });
+
+        var exception = await Assert.ThrowsAsync<BadRequestException>(() =>
+            client.TranscribeInterviewAudioAsync(
+                "session-123",
+                audio,
+                "answer.webm",
+                "audio/webm",
+                "en",
+                CancellationToken.None));
+
+        Assert.Equal("Audio Decode Failed", exception.Message);
+    }
+
+    [Fact]
     public async Task ConfirmInterviewAnswerAsync_ReturnsNextQuestion()
     {
         var expectedResponse = new ApiResponse<AiInterviewQuestionResponseDto>

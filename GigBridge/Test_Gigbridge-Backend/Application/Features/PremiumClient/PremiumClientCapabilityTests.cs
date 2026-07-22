@@ -124,6 +124,11 @@ public sealed class PremiumClientCapabilityTests
         var freelancerId = Guid.NewGuid();
         var jobId = Guid.NewGuid();
         var definitionId = Guid.NewGuid();
+        var freelancerProfile = new FreelancerProfile
+        {
+            FreelancerProfilesId = Guid.NewGuid(),
+            UserId = freelancerId
+        };
         var context = new InMemoryApplicationDbContext();
         context.AddSet(new JobPost
         {
@@ -146,6 +151,14 @@ public sealed class PremiumClientCapabilityTests
         });
         context.AddSet<AiInterviewAttempt>();
         context.AddSet<AiInterviewAnswerResult>();
+        context.AddSet(new Proposal
+        {
+            ProposalsId = Guid.NewGuid(),
+            JobPostsId = jobId,
+            FreelancerProfilesId = freelancerProfile.FreelancerProfilesId,
+            FreelancerProfiles = freelancerProfile,
+            Status = 1
+        });
         var aiService = Substitute.For<IAiServiceClient>();
         aiService.StartInterviewAsync(
                 Arg.Any<AiInterviewStartRequestDto>(), Arg.Any<CancellationToken>())
@@ -168,6 +181,47 @@ public sealed class PremiumClientCapabilityTests
                 request.Language == "en" &&
                 request.QuestionCount == 7 &&
                 request.DefinitionReference == "aidef_registered-reference"),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task StartAiInterview_RequiresSubmittedProposal()
+    {
+        var now = DateTime.UtcNow;
+        var freelancerId = Guid.NewGuid();
+        var jobId = Guid.NewGuid();
+        var context = new InMemoryApplicationDbContext();
+        context.AddSet(new JobPost
+        {
+            JobPostsId = jobId,
+            Status = 1,
+            Title = "Backend Engineer",
+            Description = "Build APIs"
+        });
+        context.AddSet(new AiInterviewDefinition
+        {
+            AiInterviewDefinitionsId = Guid.NewGuid(),
+            JobPostId = jobId,
+            ClientUserId = Guid.NewGuid(),
+            Language = "en",
+            Mode = "voice",
+            QuestionCount = 5,
+            Status = AiInterviewDefinitionStatus.Active,
+            ExternalReference = "aidef_registered-reference",
+            CreatedAt = now
+        });
+        context.AddSet<Proposal>();
+        context.AddSet<AiInterviewAttempt>();
+        context.AddSet<AiInterviewAnswerResult>();
+        var aiService = Substitute.For<IAiServiceClient>();
+        var handler = new StartAiInterviewCommandHandler(context, aiService, new Clock(now));
+
+        await Assert.ThrowsAsync<ForbiddenAccessException>(() => handler.Handle(
+            new StartAiInterviewCommand(freelancerId, jobId, null, "voice", "en"),
+            CancellationToken.None));
+
+        await aiService.DidNotReceive().StartInterviewAsync(
+            Arg.Any<AiInterviewStartRequestDto>(),
             Arg.Any<CancellationToken>());
     }
 
