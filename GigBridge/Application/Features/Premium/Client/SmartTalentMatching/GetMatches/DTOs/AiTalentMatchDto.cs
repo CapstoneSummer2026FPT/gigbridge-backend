@@ -5,6 +5,11 @@ public sealed record AiTalentMatchScoreBreakdownDto(
     decimal Algorithm,
     decimal Evidence);
 
+public sealed record AiTalentMatchConfidenceBreakdownDto(
+    decimal DataCoverage,
+    decimal ScoreAgreement,
+    decimal ConfidenceScore);
+
 public sealed record AiTalentMatchDto(
     Guid FreelancerProfileId,
     Guid UserId,
@@ -16,6 +21,7 @@ public sealed record AiTalentMatchDto(
     int Rank,
     decimal FinalScore,
     string Confidence,
+    AiTalentMatchConfidenceBreakdownDto ConfidenceBreakdown,
     AiTalentMatchScoreBreakdownDto ScoreBreakdown,
     IReadOnlyList<string> MatchedSkills,
     IReadOnlyList<string> MissingSkills,

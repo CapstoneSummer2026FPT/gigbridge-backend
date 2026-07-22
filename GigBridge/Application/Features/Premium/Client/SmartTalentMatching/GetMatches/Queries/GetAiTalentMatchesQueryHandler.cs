@@ -116,6 +116,8 @@ public sealed class GetAiTalentMatchesQueryHandler(
                 embedding,
                 algorithm,
                 evidence,
+                Round(agreement),
+                Round(confidenceScore),
                 semanticStrengths,
                 reasons);
         })
@@ -135,6 +137,10 @@ public sealed class GetAiTalentMatchesQueryHandler(
             index + 1,
             match.FinalScore,
             match.Confidence,
+            new AiTalentMatchConfidenceBreakdownDto(
+                match.Evidence.DataCoverage,
+                match.ScoreAgreement,
+                match.ConfidenceScore),
             new AiTalentMatchScoreBreakdownDto(match.Embedding, match.Algorithm, match.Evidence.Score),
             match.Evidence.MatchedSkills,
             match.Evidence.MissingSkills,
@@ -371,6 +377,8 @@ public sealed class GetAiTalentMatchesQueryHandler(
         decimal Embedding,
         decimal Algorithm,
         AiTalentEvidenceScore Evidence,
+        decimal ScoreAgreement,
+        decimal ConfidenceScore,
         IReadOnlyList<string> SemanticStrengths,
         IReadOnlyList<string> Reasons);
 }
