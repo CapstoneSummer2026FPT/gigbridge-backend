@@ -26,7 +26,9 @@ public sealed class GetESignDocumentByContractQueryHandler
         CancellationToken cancellationToken)
     {
         var document = await _context.Set<EsignDocument>()
-            .FirstOrDefaultAsync(d => d.ContractsId == request.ContractId, cancellationToken);
+            .Where(d => d.ContractsId == request.ContractId)
+            .OrderByDescending(d => d.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
 
         if (document == null)
         {
@@ -39,6 +41,10 @@ public sealed class GetESignDocumentByContractQueryHandler
             request.UserId,
             cancellationToken);
 
-        return await ESignDocumentProjection.ToResponseAsync(_context, document, cancellationToken);
+        return await ESignDocumentProjection.ToResponseAsync(
+            _context,
+            document,
+            request.UserId,
+            cancellationToken);
     }
 }

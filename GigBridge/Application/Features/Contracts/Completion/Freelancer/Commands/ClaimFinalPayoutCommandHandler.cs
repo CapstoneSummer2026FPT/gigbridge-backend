@@ -2,8 +2,8 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Features.Contracts.Common.Internal;
+using Application.Features.Contracts.Completion.Common.Internal;
 using Application.Features.Contracts.Completion.Freelancer.DTOs;
-using Application.Features.Wallets.Common;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
@@ -13,7 +13,6 @@ namespace Application.Features.Contracts.Completion.Freelancer.Commands;
 
 public sealed class ClaimFinalPayoutCommandHandler : IRequestHandler<ClaimFinalPayoutCommand, ClaimFinalPayoutResponse>
 {
-    private const string GatewayProvider = "InternalTokenWallet";
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
     private readonly IChatRealtimeNotifier _chatRealtimeNotifier;
@@ -64,26 +63,6 @@ public sealed class ClaimFinalPayoutCommandHandler : IRequestHandler<ClaimFinalP
         if (Math.Abs(escrow.FundedAmount - milestoneTotal) > 0.01m)
             throw new BadRequestException("Escrow funding must match the contract milestone total.");
 
-        var remaining = milestones.Select(item => new
-        {
-            Milestone = item,
-            Amount = Math.Max(0m, item.Amount - item.ReleasedAmount)
-        }).ToList();
-        var releaseVnd = remaining.Sum(item => item.Amount);
-
-        // Compatibility for projects completed by the previous implementation.
-        if (releaseVnd <= 0m && escrow.ReleasedAmount >= escrow.FundedAmount)
-        {
-            return new ClaimFinalPayoutResponse(
-                contract.ContractsId, 0m, 0m, escrow.ReleasedAmount,
-                escrow.Status, true, escrow.ReleasedAt ?? contract.CompletedAt);
-        }
-
-        if (releaseVnd <= 0m)
-            throw new BadRequestException("Escrow release amounts are inconsistent.");
-        if (Math.Abs((escrow.FundedAmount - escrow.ReleasedAmount) - releaseVnd) > 0.01m)
-            throw new BadRequestException("Escrow balance is inconsistent with milestone release amounts.");
-
         var clientUserId = await _context.Set<ClientProfile>()
             .Where(profile => profile.ClientProfilesId == contract.ClientProfilesId)
             .Select(profile => profile.UserId)
@@ -91,57 +70,26 @@ public sealed class ClaimFinalPayoutCommandHandler : IRequestHandler<ClaimFinalP
         if (clientUserId == Guid.Empty)
             throw new NotFoundException("Contract client profile does not exist.");
 
-        var clientWallet = await _context.Set<UserWallet>()
-            .FirstOrDefaultAsync(wallet => wallet.UserId == clientUserId, cancellationToken)
-            ?? throw new BadRequestException("Client escrow wallet does not exist.");
-        var freelancerWallet = await _context.Set<UserWallet>()
-            .FirstOrDefaultAsync(wallet => wallet.UserId == freelancer.UserId, cancellationToken);
         var now = _dateTimeService.UtcNow;
-        var releaseTokens = releaseVnd;
-        if (clientWallet.HeldTokens < releaseTokens)
-            throw new BadRequestException("Client held wallet balance is insufficient for final payout.");
-
-        if (freelancerWallet is null)
+        var payout = await FinalPayoutWorkflow.ReleaseRemainingAsync(
+            _context,
+            contract,
+            escrow,
+            milestones,
+            now,
+            cancellationToken);
+        if (payout.ReleasedVnd <= 0m)
         {
-            freelancerWallet = new UserWallet
-            {
-                UserWalletsId = Guid.NewGuid(), UserId = freelancer.UserId,
-                AvailableTokens = 0m, WithdrawableTokens = 0m, HeldTokens = 0m, CreatedAt = now
-            };
-            _context.Set<UserWallet>().Add(freelancerWallet);
+            return new ClaimFinalPayoutResponse(
+                contract.ContractsId,
+                0m,
+                0m,
+                escrow.ReleasedAmount,
+                escrow.Status,
+                true,
+                escrow.ReleasedAt ?? contract.CompletedAt);
         }
 
-        clientWallet.HeldTokens -= releaseTokens;
-        clientWallet.UpdatedAt = now;
-        WalletWorkflow.CreditWithdrawable(freelancerWallet, releaseTokens, now);
-
-        foreach (var item in remaining)
-        {
-            item.Milestone.ReleasedAmount = item.Milestone.Amount;
-            item.Milestone.LastReleasedAt = now;
-            item.Milestone.UpdatedAt = now;
-            if (item.Amount <= 0m) continue;
-
-            var itemTokens = item.Amount;
-            var code = $"ESCROW-FINAL-CLAIM-{escrow.ContractEscrowId:N}-{item.Milestone.MilestonesId:N}";
-            AddWalletTransaction(clientWallet, contract, escrow, item.Milestone, item.Amount, itemTokens, code,
-                "Final payout released from client held wallet.", now);
-            AddWalletTransaction(freelancerWallet, contract, escrow, item.Milestone, item.Amount, itemTokens, code,
-                "Final payout claimed by freelancer.", now);
-            _context.Set<EscrowTransaction>().Add(new EscrowTransaction
-            {
-                EscrowTransactionId = Guid.NewGuid(), ContractEscrowId = escrow.ContractEscrowId,
-                MilestonesId = item.Milestone.MilestonesId, Amount = item.Amount,
-                Type = (int)EscrowTransactionType.ReleaseToFreelancer,
-                Status = (int)EscrowTransactionStatus.Succeeded,
-                PaymentGateway = GatewayProvider, GatewayTransactionCode = code,
-                Note = "Final payout claimed by freelancer.", CreatedAt = now, CompletedAt = now
-            });
-        }
-
-        escrow.ReleasedAmount = escrow.FundedAmount;
-        escrow.Status = (int)ContractEscrowStatus.Released;
-        escrow.ReleasedAt = now;
         contract.UpdatedAt = now;
         await ContractConversationEvents.AddSystemMessageAsync(
             _context, contract.ContractsId, "Final payout claimed by freelancer.", now, cancellationToken);
@@ -149,8 +97,8 @@ public sealed class ClaimFinalPayoutCommandHandler : IRequestHandler<ClaimFinalP
 
         var payload = new
         {
-            contractId = contract.ContractsId, releasedAmountVnd = releaseVnd,
-            releasedTokens = releaseTokens, escrowReleasedAmountVnd = escrow.ReleasedAmount,
+            contractId = contract.ContractsId, releasedAmountVnd = payout.ReleasedVnd,
+            releasedTokens = payout.ReleasedTokens, escrowReleasedAmountVnd = escrow.ReleasedAmount,
             escrowStatus = escrow.Status, claimedAt = now
         };
         var conversationIds = await _context.Set<Conversation>()
@@ -164,23 +112,7 @@ public sealed class ClaimFinalPayoutCommandHandler : IRequestHandler<ClaimFinalP
             new[] { clientUserId, freelancer.UserId }, "FinalPayoutClaimed", payload, cancellationToken);
 
         return new ClaimFinalPayoutResponse(
-            contract.ContractsId, releaseVnd, releaseTokens, escrow.ReleasedAmount,
+            contract.ContractsId, payout.ReleasedVnd, payout.ReleasedTokens, escrow.ReleasedAmount,
             escrow.Status, false, now);
-    }
-
-    private void AddWalletTransaction(
-        UserWallet wallet, Contract contract, ContractEscrow escrow, Milestone milestone,
-        decimal amountVnd, decimal tokens, string code, string note, DateTime now)
-    {
-        _context.Set<WalletTransaction>().Add(new WalletTransaction
-        {
-            WalletTransactionsId = Guid.NewGuid(), UserWalletsId = wallet.UserWalletsId,
-            UserId = wallet.UserId, ContractsId = contract.ContractsId,
-            ContractEscrowId = escrow.ContractEscrowId, MilestonesId = milestone.MilestonesId,
-            TokenAmount = tokens, VndAmount = amountVnd, Type = (int)WalletTransactionType.EscrowRelease,
-            Status = (int)WalletTransactionStatus.Succeeded, IdempotencyKey = code,
-            GatewayProvider = GatewayProvider, GatewayTransactionCode = code, Note = note,
-            CreatedAt = now, CompletedAt = now
-        });
     }
 }

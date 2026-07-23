@@ -87,7 +87,9 @@ public class UpdateProposalStatusCommandHandler
             if (isDraftSubmission)
             {
                 EnsureJobPostAcceptsProposalSubmission(proposal.JobPosts);
-                ProposalSubmissionGuard.EnsureCanSubmit(proposal);
+                ProposalSubmissionGuard.EnsureCanSubmit(
+                    proposal,
+                    DateOnly.FromDateTime(_dateTimeService.UtcNow));
                 proposal.SubmittedAt = _dateTimeService.UtcNow;
             }
             if (isDraftSubmission && _proposalQuestionTimerService is not null)

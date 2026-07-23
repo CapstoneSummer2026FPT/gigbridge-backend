@@ -7,6 +7,7 @@ using Domain.Entities;
 using Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace Application.Features.Contracts.Details.Client.Submit.Commands;
 
@@ -47,12 +48,45 @@ public sealed class SubmitContractDetailsCommandHandler :
         await ContractParticipantGuard.EnsureClientAsync(_context, contract, command.UserId, cancellationToken);
 
         var milestones = await _context.Set<Milestone>()
+            .Include(item => item.WorkItems)
             .Where(milestone => milestone.ContractsId == contract.ContractsId)
             .ToListAsync(cancellationToken);
 
         ContractDetailsValidator.ValidateMilestonesForSubmitOrPublish(contract, milestones);
 
         var now = _dateTimeService.UtcNow;
+        var snapshot = JsonSerializer.Serialize(milestones
+            .OrderBy(item => item.SortOrder)
+            .Select(item => new
+            {
+                item.MilestonesId,
+                item.Title,
+                item.Description,
+                item.Amount,
+                item.EstimatedDuration,
+                item.DueDate,
+                item.Deliverables,
+                item.AcceptanceCriteria,
+                item.SortOrder,
+                WorkItems = item.WorkItems.OrderBy(workItem => workItem.OrderIndex).Select(workItem => new
+                {
+                    workItem.ContractWorkItemId,
+                    workItem.Title,
+                    workItem.Description,
+                    workItem.Deliverables,
+                    workItem.EstimatedDuration,
+                    workItem.OrderIndex
+                })
+            }));
+        _context.Set<ContractPlanRevision>().Add(new ContractPlanRevision
+        {
+            ContractPlanRevisionId = Guid.NewGuid(),
+            ContractsId = contract.ContractsId,
+            RevisionNumber = contract.RevisionNumber,
+            SubmittedByUserId = command.UserId,
+            SnapshotJson = snapshot,
+            CreatedAt = now
+        });
         contract.Status = (int)ContractStatus.PendingContractConfirmation;
         contract.UpdatedAt = now;
 

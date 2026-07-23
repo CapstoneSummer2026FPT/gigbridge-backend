@@ -110,13 +110,6 @@ public sealed class SubmitESignSignatureCommandHandler
         document.FinalizedAt = now;
         document.UpdatedAt = now;
 
-        // Ensure a draft contract exists for the job post. Do NOT change jobPost.Status to Open here!
-        await Application.Features.Contracts.Common.Internal.JobPostDraftContractHelper.EnsureDraftContractForJobPostAsync(
-            _context,
-            jobPost,
-            now,
-            cancellationToken);
-
         await _context.SaveChangesAsync(cancellationToken);
 
         return ESignDocumentProjection.ToSignatureResponse(signature);

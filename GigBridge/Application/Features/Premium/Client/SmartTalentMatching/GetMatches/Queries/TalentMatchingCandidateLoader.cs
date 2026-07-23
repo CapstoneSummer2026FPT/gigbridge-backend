@@ -109,28 +109,8 @@ public static class TalentMatchingCandidateLoader
             jobPost.Location,
             jobPost.EstimatedDuration);
 
-        var query = context.Set<FreelancerProfile>()
+        var eligibleQuery = context.Set<FreelancerProfile>()
             .AsNoTracking()
-            .Include(profile => profile.User)
-                .ThenInclude(user => user.UserEloScore)
-            .Include(profile => profile.Major)
-            .Include(profile => profile.FreelancerSkills)
-                .ThenInclude(selection => selection.Skills)
-            .Include(profile => profile.FreelancerProfileCategories)
-                .ThenInclude(selection => selection.MajorCategory)
-                    .ThenInclude(mapping => mapping.Category)
-            .Include(profile => profile.Contracts)
-                .ThenInclude(contract => contract.JobPosts)
-                    .ThenInclude(contractJob => contractJob.JobPostSkills)
-                        .ThenInclude(selection => selection.Skills)
-            .Include(profile => profile.Contracts)
-                .ThenInclude(contract => contract.JobPosts)
-                    .ThenInclude(contractJob => contractJob.MajorCategory)
-                        .ThenInclude(mapping => mapping!.Major)
-            .Include(profile => profile.Contracts)
-                .ThenInclude(contract => contract.JobPosts)
-                    .ThenInclude(contractJob => contractJob.MajorCategory)
-                        .ThenInclude(mapping => mapping!.Category)
             .Where(profile =>
                 profile.User.IsActive &&
                 profile.Availability.HasValue &&
@@ -138,31 +118,31 @@ public static class TalentMatchingCandidateLoader
 
         if (filters?.Availability is { } availability)
         {
-            query = query.Where(profile => profile.Availability == availability);
+            eligibleQuery = eligibleQuery.Where(profile => profile.Availability == availability);
         }
         if (filters?.MajorId is { } majorId)
         {
-            query = query.Where(profile => profile.MajorId == majorId);
+            eligibleQuery = eligibleQuery.Where(profile => profile.MajorId == majorId);
         }
         if (filters?.MajorCategoryId is { } majorCategoryId)
         {
-            query = query.Where(profile => profile.FreelancerProfileCategories
+            eligibleQuery = eligibleQuery.Where(profile => profile.FreelancerProfileCategories
                 .Any(selection => selection.MajorCategoryId == majorCategoryId));
         }
         if (filters?.SkillIds is { Count: > 0 })
         {
             var requestedSkillIds = filters.SkillIds.Distinct().ToArray();
-            query = query.Where(profile => profile.FreelancerSkills
+            eligibleQuery = eligibleQuery.Where(profile => profile.FreelancerSkills
                 .Count(selection => requestedSkillIds.Contains(selection.SkillsId)) == requestedSkillIds.Length);
         }
         if (filters?.MinimumCompletedContracts is { } minimumCompletedContracts)
         {
-            query = query.Where(profile => profile.Contracts
+            eligibleQuery = eligibleQuery.Where(profile => profile.Contracts
                 .Count(contract => contract.Status == (int)ContractStatus.Completed) >= minimumCompletedContracts);
         }
         if (filters?.MinimumProficiency.HasValue == true || filters?.MinimumYears.HasValue == true)
         {
-            query = query.Where(profile => profile.FreelancerSkills.Any(selection =>
+            eligibleQuery = eligibleQuery.Where(profile => profile.FreelancerSkills.Any(selection =>
                 (!filters!.MinimumProficiency.HasValue ||
                     selection.ProficiencyLevel >= filters.MinimumProficiency.Value) &&
                 (!filters.MinimumYears.HasValue ||
@@ -170,13 +150,13 @@ public static class TalentMatchingCandidateLoader
         }
         if (filters?.MinimumRating is { } minimumRating)
         {
-            query = query.Where(profile => context.Set<Review>()
+            eligibleQuery = eligibleQuery.Where(profile => context.Set<Review>()
                 .Where(review => review.RevieweeId == profile.UserId && review.IsVisible != false)
                 .Average(review => (double?)review.Rating) >= minimumRating);
         }
 
         var jobSkillIds = job.Skills.Select(skill => skill.SkillId).ToArray();
-        var shortlistedProfileIds = await query
+        var shortlistedProfileIds = await eligibleQuery
             .Select(profile => new
             {
                 ProfileId = profile.FreelancerProfilesId,
@@ -211,7 +191,29 @@ public static class TalentMatchingCandidateLoader
             .Select(candidate => candidate.ProfileId)
             .ToListAsync(cancellationToken);
 
-        var profiles = await query
+        var profiles = await context.Set<FreelancerProfile>()
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Include(profile => profile.User)
+                .ThenInclude(user => user.UserEloScore)
+            .Include(profile => profile.Major)
+            .Include(profile => profile.FreelancerSkills)
+                .ThenInclude(selection => selection.Skills)
+            .Include(profile => profile.FreelancerProfileCategories)
+                .ThenInclude(selection => selection.MajorCategory)
+                    .ThenInclude(mapping => mapping.Category)
+            .Include(profile => profile.Contracts)
+                .ThenInclude(contract => contract.JobPosts)
+                    .ThenInclude(contractJob => contractJob.JobPostSkills)
+                        .ThenInclude(selection => selection.Skills)
+            .Include(profile => profile.Contracts)
+                .ThenInclude(contract => contract.JobPosts)
+                    .ThenInclude(contractJob => contractJob.MajorCategory)
+                        .ThenInclude(mapping => mapping!.Major)
+            .Include(profile => profile.Contracts)
+                .ThenInclude(contract => contract.JobPosts)
+                    .ThenInclude(contractJob => contractJob.MajorCategory)
+                        .ThenInclude(mapping => mapping!.Category)
             .Where(profile => shortlistedProfileIds.Contains(profile.FreelancerProfilesId))
             .ToListAsync(cancellationToken);
         var userIds = profiles.Select(profile => profile.UserId).ToArray();

@@ -14,6 +14,19 @@ public sealed record MilestoneAttachmentResponse(
     Guid? UploadedByUserId,
     DateTime CreatedAt);
 
+public sealed record ContractWorkItemResponse(
+    Guid WorkItemId,
+    Guid MilestoneId,
+    string Title,
+    string? Description,
+    string? Deliverables,
+    string? EstimatedDuration,
+    int OrderIndex,
+    int Status,
+    string? ProgressNote,
+    DateTime? CompletedAt,
+    DateTime? UpdatedAt);
+
 public sealed record ContractMilestoneResponse(
     Guid MilestoneId,
     Guid ContractId,
@@ -32,4 +45,5 @@ public sealed record ContractMilestoneResponse(
     decimal ReleasedAmount,
     DateTime? LastReleasedAt,
     string? SubmissionDescription,
-    IReadOnlyList<MilestoneAttachmentResponse> Attachments);
+    IReadOnlyList<MilestoneAttachmentResponse> Attachments,
+    IReadOnlyList<ContractWorkItemResponse> WorkItems);

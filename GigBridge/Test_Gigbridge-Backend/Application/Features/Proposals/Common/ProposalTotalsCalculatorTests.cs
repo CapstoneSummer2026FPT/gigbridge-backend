@@ -11,6 +11,7 @@ public class ProposalTotalsCalculatorTests
         Assert.Equal("20 days", ProposalTotalsCalculator.CalculateDuration(["5 days", "8 days", "7 days"]));
         Assert.Equal("4 weeks", ProposalTotalsCalculator.CalculateDuration(["3 weeks", "5 days"]));
         Assert.Equal("3 months", ProposalTotalsCalculator.CalculateDuration(["1 month", "6 weeks"]));
+        Assert.Equal("2 years", ProposalTotalsCalculator.CalculateDuration(["1 year", "6 months"]));
     }
 
     [Fact]
@@ -31,6 +32,7 @@ public class ProposalTotalsCalculatorTests
     [Theory]
     [InlineData("1 day", true)]
     [InlineData("2 weeks", true)]
+    [InlineData("2 years", true)]
     [InlineData("1.5 weeks", false)]
     [InlineData("0 months", false)]
     public void IsValidDuration_RequiresPositiveWholeNumber(string value, bool expected)

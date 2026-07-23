@@ -156,6 +156,20 @@ internal static class MilestoneWorkflowGuard
                 a.UploadedByUserId,
                 a.CreatedAt)))
             : new System.Collections.Generic.List<MilestoneAttachmentResponse>();
+        var workItems = milestone.WorkItems != null
+            ? milestone.WorkItems.OrderBy(item => item.OrderIndex).Select(item => new ContractWorkItemResponse(
+                item.ContractWorkItemId,
+                item.MilestonesId,
+                item.Title,
+                item.Description,
+                item.Deliverables,
+                item.EstimatedDuration,
+                item.OrderIndex,
+                item.Status,
+                item.ProgressNote,
+                item.CompletedAt,
+                item.UpdatedAt)).ToList()
+            : [];
 
         return new ContractMilestoneResponse(
             milestone.MilestonesId,
@@ -175,7 +189,8 @@ internal static class MilestoneWorkflowGuard
             milestone.ReleasedAmount,
             milestone.LastReleasedAt,
             milestone.SubmissionDescription,
-            attachments);
+            attachments,
+            workItems);
     }
 
     public static IOrderedQueryable<Milestone> OrderMilestones(IQueryable<Milestone> milestones)

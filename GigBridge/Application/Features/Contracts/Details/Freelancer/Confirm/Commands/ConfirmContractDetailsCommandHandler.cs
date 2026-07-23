@@ -16,15 +16,18 @@ public sealed class ConfirmContractDetailsCommandHandler :
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
     private readonly IChatRealtimeNotifier _chatRealtimeNotifier;
+    private readonly IContractEsignDocumentGenerator _documentGenerator;
 
     public ConfirmContractDetailsCommandHandler(
         IApplicationDbContext context,
         IDateTimeService dateTimeService,
-        IChatRealtimeNotifier chatRealtimeNotifier)
+        IChatRealtimeNotifier chatRealtimeNotifier,
+        IContractEsignDocumentGenerator documentGenerator)
     {
         _context = context;
         _dateTimeService = dateTimeService;
         _chatRealtimeNotifier = chatRealtimeNotifier;
+        _documentGenerator = documentGenerator;
     }
 
     public async Task<ContractWorkflowResponse> Handle(
@@ -47,6 +50,7 @@ public sealed class ConfirmContractDetailsCommandHandler :
         await ContractParticipantGuard.EnsureFreelancerAsync(_context, contract, command.UserId, cancellationToken);
 
         var milestones = await _context.Set<Milestone>()
+            .Include(item => item.WorkItems)
             .Where(milestone => milestone.ContractsId == contract.ContractsId)
             .ToListAsync(cancellationToken);
 
@@ -74,6 +78,8 @@ public sealed class ConfirmContractDetailsCommandHandler :
 
         contract.Status = (int)ContractStatus.PendingSignature;
         contract.UpdatedAt = now;
+        var document = await ContractEsignRenderer.EnsureDocumentAsync(
+            _context, _documentGenerator, contract, now, cancellationToken);
 
         await ContractConversationEvents.AddSystemMessageAsync(
             _context,
@@ -100,6 +106,6 @@ public sealed class ConfirmContractDetailsCommandHandler :
                 cancellationToken);
         }
 
-        return new ContractWorkflowResponse(contract.ContractsId, contract.Status, escrow.ContractEscrowId, null);
+        return new ContractWorkflowResponse(contract.ContractsId, contract.Status, escrow.ContractEscrowId, document.EsignDocumentsId);
     }
 }

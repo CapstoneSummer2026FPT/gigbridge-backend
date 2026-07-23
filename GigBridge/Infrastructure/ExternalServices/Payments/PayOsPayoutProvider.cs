@@ -1,5 +1,8 @@
 using Application.Common.Interfaces.IService;
+using System.Globalization;
+using Microsoft.Extensions.Caching.Memory;
 using PayOS;
+using PayOS.Exceptions;
 using PayOS.Models;
 using PayOS.Models.V1.Payouts;
 
@@ -7,11 +10,14 @@ namespace Infrastructure.ExternalServices.Payments;
 
 public sealed class PayOsPayoutProvider : IPayoutProvider
 {
+    private const string AvailabilityCacheKey = "payos:payout:availability";
     private readonly PayOSClient _client;
+    private readonly IMemoryCache _cache;
 
-    public PayOsPayoutProvider(PayOSClient client)
+    public PayOsPayoutProvider(PayOSClient client, IMemoryCache cache)
     {
         _client = client;
+        _cache = cache;
     }
 
     public string ProviderName => "PayOS";
@@ -48,11 +54,15 @@ public sealed class PayOsPayoutProvider : IPayoutProvider
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return SyncRequired("PayOS payout request timed out.");
+            return SyncRequired("PayOS payout request timed out.", "TIMEOUT");
+        }
+        catch (UserAbortException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw new OperationCanceledException(cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            return SyncRequired($"PayOS payout request failed ({ex.GetType().Name}).");
+            return MapException("payout request", ex);
         }
     }
 
@@ -74,12 +84,77 @@ public sealed class PayOsPayoutProvider : IPayoutProvider
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return SyncRequired("PayOS payout status request timed out.");
+            return SyncRequired("PayOS payout status request timed out.", "TIMEOUT");
+        }
+        catch (UserAbortException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw new OperationCanceledException(cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            return SyncRequired($"PayOS payout status request failed ({ex.GetType().Name}).");
+            return MapException("payout status request", ex);
         }
+    }
+
+    public async Task<PayoutProviderAvailability> CheckAvailabilityAsync(
+        CancellationToken cancellationToken)
+    {
+        if (_cache.TryGetValue<PayoutProviderAvailability>(AvailabilityCacheKey, out var cached))
+        {
+            return cached!;
+        }
+
+        PayoutProviderAvailability result;
+        try
+        {
+            var account = await _client.PayoutsAccount.GetBalanceAsync(
+                new RequestOptions
+                {
+                    CancellationToken = cancellationToken,
+                    MaxRetries = 0
+                });
+            if (!string.Equals(account.Currency, "VND", StringComparison.OrdinalIgnoreCase) ||
+                !decimal.TryParse(
+                    account.Balance,
+                    NumberStyles.Number,
+                    CultureInfo.InvariantCulture,
+                    out var balance))
+            {
+                result = new PayoutProviderAvailability(
+                    false,
+                    null,
+                    "INVALID_BALANCE_RESPONSE",
+                    "PayOS payout account returned an invalid balance response.");
+            }
+            else
+            {
+                result = new PayoutProviderAvailability(true, balance, null, null);
+            }
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            result = new PayoutProviderAvailability(
+                false,
+                null,
+                "TIMEOUT",
+                "PayOS payout availability check timed out.");
+        }
+        catch (UserAbortException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw new OperationCanceledException(cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            var mapped = MapException("payout availability check", ex);
+            result = new PayoutProviderAvailability(
+                false,
+                null,
+                mapped.RawStatus,
+                mapped.FailureReason);
+        }
+
+        _cache.Set(AvailabilityCacheKey, result, TimeSpan.FromSeconds(30));
+        return result;
     }
 
     private async Task<Payout?> FindByReferenceIdAsync(
@@ -125,13 +200,56 @@ public sealed class PayOsPayoutProvider : IPayoutProvider
             failureReason);
     }
 
-    private static PayoutProviderResult SyncRequired(string reason)
+    internal static PayoutProviderResult MapException(string operation, Exception exception)
+    {
+        if (exception is ConnectionTimeoutException or TimeoutException)
+        {
+            return SyncRequired($"PayOS {operation} timed out.", "TIMEOUT");
+        }
+
+        if (exception is ConnectionException)
+        {
+            return SyncRequired($"PayOS {operation} failed: network connection unavailable.", "NETWORK_ERROR");
+        }
+
+        var apiException = exception as ApiException;
+        int? statusCode = apiException is null
+            ? null
+            : Convert.ToInt32(apiException.StatusCode, CultureInfo.InvariantCulture);
+        var providerCode = SanitizeMessage(apiException?.ErrorCode);
+        var providerMessage = SanitizeMessage(apiException?.Message);
+
+        var safeMessage = statusCode switch
+        {
+            401 => "PayOS rejected the payout channel credentials.",
+            403 => "PayOS denied access. Whitelist the backend outbound IP in the payout channel.",
+            _ when !string.IsNullOrWhiteSpace(providerMessage) => providerMessage,
+            _ => $"PayOS {operation} failed ({exception.GetType().Name})."
+        };
+        var rawStatus = statusCode.HasValue
+            ? $"HTTP_{statusCode.Value}"
+            : providerCode ?? exception.GetType().Name;
+
+        return SyncRequired($"PayOS {operation} failed: {safeMessage}", rawStatus);
+    }
+
+    private static string? SanitizeMessage(string? message)
+    {
+        if (string.IsNullOrWhiteSpace(message)) return null;
+
+        var sanitized = string.Join(' ', message.Split(
+            ['\r', '\n', '\t'],
+            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        return sanitized.Length <= 240 ? sanitized : sanitized[..240];
+    }
+
+    private static PayoutProviderResult SyncRequired(string reason, string? rawStatus = null)
     {
         return new PayoutProviderResult(
             PayoutProviderOutcome.SyncRequired,
             null,
             null,
-            null,
+            rawStatus,
             reason);
     }
 }

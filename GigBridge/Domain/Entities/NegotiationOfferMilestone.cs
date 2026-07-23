@@ -14,4 +14,5 @@ public class NegotiationOfferMilestone
     public int OrderIndex { get; set; }
 
     public virtual NegotiationOffer NegotiationOffer { get; set; } = null!;
+    public virtual ICollection<NegotiationOfferWorkItem> WorkItems { get; set; } = new List<NegotiationOfferWorkItem>();
 }

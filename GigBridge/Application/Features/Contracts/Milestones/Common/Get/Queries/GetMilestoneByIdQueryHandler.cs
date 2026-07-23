@@ -26,6 +26,8 @@ public sealed class GetMilestoneByIdQueryHandler :
         CancellationToken cancellationToken)
     {
         var milestone = await _context.Set<Milestone>()
+            .Include(item => item.MilestoneAttachments)
+            .Include(item => item.WorkItems)
             .Include(m => m.MilestoneAttachments)
             .FirstOrDefaultAsync(m => m.MilestonesId == query.MilestoneId, cancellationToken);
 

@@ -5,7 +5,7 @@ namespace Application.Features.Proposals.Common;
 
 internal static class ProposalSubmissionGuard
 {
-    public static void EnsureCanSubmit(Proposal proposal)
+    public static void EnsureCanSubmit(Proposal proposal, DateOnly today)
     {
         if (string.IsNullOrWhiteSpace(proposal.CoverLetter) || proposal.CoverLetter.Trim().Length < 50)
         {
@@ -28,9 +28,19 @@ internal static class ProposalSubmissionGuard
         }
 
         if (proposal.ProposalWorkBreakdownItems.Count == 0 ||
-            proposal.ProposalWorkBreakdownItems.Any(item => string.IsNullOrWhiteSpace(item.Title)))
+            proposal.ProposalWorkBreakdownItems.Any(item =>
+                string.IsNullOrWhiteSpace(item.Title) ||
+                string.IsNullOrWhiteSpace(item.Description) ||
+                !item.ProposalMilestonePlansId.HasValue))
         {
-            throw new BadRequestException("At least one titled work breakdown item is required before submission.");
+            throw new BadRequestException("Every work breakdown item must have a title, description, and belong to a milestone before submission.");
+        }
+
+        if (proposal.ProposalMilestonePlans.Any(milestone =>
+                !proposal.ProposalWorkBreakdownItems.Any(item =>
+                    item.ProposalMilestonePlansId == milestone.ProposalMilestonePlansId)))
+        {
+            throw new BadRequestException("Each milestone requires at least one work breakdown item before submission.");
         }
 
         if (proposal.ProposalMilestonePlans.Count == 0 ||
@@ -38,10 +48,35 @@ internal static class ProposalSubmissionGuard
                 string.IsNullOrWhiteSpace(item.Title) ||
                 string.IsNullOrWhiteSpace(item.Deliverables) ||
                 string.IsNullOrWhiteSpace(item.AcceptanceCriteria) ||
-                !ProposalTotalsCalculator.IsValidDuration(item.EstimatedDuration) ||
+                !ProposalTotalsCalculator.IsValidProjectDuration(item.EstimatedDuration) ||
+                !item.DueDate.HasValue ||
                 item.Amount <= 0))
         {
-            throw new BadRequestException("Each milestone requires a title, positive amount, positive whole-number duration, deliverables, and acceptance criteria before submission.");
+            throw new BadRequestException("Each milestone requires a title, positive amount, week/month/year duration, deadline, deliverables, and acceptance criteria before submission.");
+        }
+
+        var applicationDeadline = proposal.JobPosts.EndDate.HasValue
+            ? DateOnly.FromDateTime(proposal.JobPosts.EndDate.Value)
+            : (DateOnly?)null;
+        DateOnly? previousDueDate = null;
+        foreach (var milestone in proposal.ProposalMilestonePlans.OrderBy(item => item.OrderIndex))
+        {
+            var dueDate = milestone.DueDate.GetValueOrDefault();
+            if (dueDate < today)
+            {
+                throw new BadRequestException("Proposal milestone deadlines cannot be in the past.");
+            }
+
+            if (applicationDeadline.HasValue && dueDate <= applicationDeadline.Value)
+            {
+                throw new BadRequestException("Proposal milestone deadlines must be after the project request application deadline.");
+            }
+
+            if (previousDueDate.HasValue && dueDate <= previousDueDate.Value)
+            {
+                throw new BadRequestException("Proposal milestone deadlines must increase according to milestone order.");
+            }
+            previousDueDate = dueDate;
         }
     }
 }

@@ -75,7 +75,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "EntityId", "EntityType" }, "IX_AdminAuditLogs_EntityId_EntityType");
 
-                    b.ToTable("AdminAuditLogs", (string)null);
+                    b.ToTable("AdminAuditLogs");
                 });
 
             modelBuilder.Entity("Domain.Entities.AiInterviewAnswerResult", b =>
@@ -283,7 +283,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "UserId", "Status" }, "IX_BankAccounts_UserId_Status");
 
-                    b.ToTable("BankAccounts", (string)null);
+                    b.ToTable("BankAccounts");
                 });
 
             modelBuilder.Entity("Domain.Entities.BroadcastNotification", b =>
@@ -340,7 +340,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "CreatedByAdminId" }, "IX_BroadcastNotifications_CreatedByAdminId");
 
-                    b.ToTable("BroadcastNotifications", (string)null);
+                    b.ToTable("BroadcastNotifications");
                 });
 
             modelBuilder.Entity("Domain.Entities.BroadcastNotificationRecipient", b =>
@@ -381,7 +381,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "UserId", "IsRead" }, "IX_BroadcastRecipients_UserId_IsRead");
 
-                    b.ToTable("BroadcastNotificationRecipients", (string)null);
+                    b.ToTable("BroadcastNotificationRecipients");
                 });
 
             modelBuilder.Entity("Domain.Entities.Category", b =>
@@ -428,7 +428,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "Slug" }, "IX_Categories_Slug")
                         .IsUnique();
 
-                    b.ToTable("Categories", (string)null);
+                    b.ToTable("Categories");
                 });
 
             modelBuilder.Entity("Domain.Entities.CategorySkill", b =>
@@ -462,7 +462,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "SkillId" }, "IX_CategorySkills_SkillId");
 
-                    b.ToTable("CategorySkills", (string)null);
+                    b.ToTable("CategorySkills");
                 });
 
             modelBuilder.Entity("Domain.Entities.ClientProfile", b =>
@@ -516,7 +516,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "UserId" }, "IX_ClientProfiles_UserId")
                         .IsUnique();
 
-                    b.ToTable("ClientProfiles", (string)null);
+                    b.ToTable("ClientProfiles");
                 });
 
             modelBuilder.Entity("Domain.Entities.Contract", b =>
@@ -562,6 +562,11 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("ProposalsId");
 
+                    b.Property<int>("RevisionNumber")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1);
+
                     b.Property<DateOnly?>("StartDate")
                         .HasColumnType("date");
 
@@ -600,7 +605,257 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "Status" }, "IX_Contracts_Status");
 
-                    b.ToTable("Contracts", (string)null);
+                    b.ToTable("Contracts");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ContractAmendment", b =>
+                {
+                    b.Property<Guid>("ContractAmendmentId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateTime?>("AppliedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("BudgetDelta")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid>("ContractChangeRequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ContractsId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DocumentSnapshotJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<decimal>("OriginalTotalBudget")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("ProposedTotalBudget")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("ReviewNote")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.HasKey("ContractAmendmentId");
+
+                    b.HasIndex("ContractChangeRequestId")
+                        .IsUnique();
+
+                    b.HasIndex("ContractsId", "RevisionNumber")
+                        .IsUnique();
+
+                    b.ToTable("ContractAmendments");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ContractAmendmentMilestone", b =>
+                {
+                    b.Property<Guid>("ContractAmendmentMilestoneId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<string>("AcceptanceCriteria")
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<Guid>("ContractAmendmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Deliverables")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<DateOnly?>("DueDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("EstimatedDuration")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("OrderIndex")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("SourceMilestoneId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.HasKey("ContractAmendmentMilestoneId");
+
+                    b.HasIndex("ContractAmendmentId", "OrderIndex")
+                        .IsUnique();
+
+                    b.ToTable("ContractAmendmentMilestones");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ContractAmendmentSignature", b =>
+                {
+                    b.Property<Guid>("ContractAmendmentSignatureId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<Guid>("ContractAmendmentId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SignatureData")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("SignedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("SignerRole")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("ContractAmendmentSignatureId");
+
+                    b.HasIndex("ContractAmendmentId", "UserId")
+                        .IsUnique();
+
+                    b.ToTable("ContractAmendmentSignatures");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ContractAmendmentWorkItem", b =>
+                {
+                    b.Property<Guid>("ContractAmendmentWorkItemId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<Guid>("ContractAmendmentMilestoneId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Deliverables")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<string>("EstimatedDuration")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("OrderIndex")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("SourceContractWorkItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("ContractAmendmentWorkItemId");
+
+                    b.HasIndex("ContractAmendmentMilestoneId", "OrderIndex")
+                        .IsUnique();
+
+                    b.ToTable("ContractAmendmentWorkItems");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ContractChangeRequest", b =>
+                {
+                    b.Property<Guid>("ContractChangeRequestId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<Guid[]>("AffectedMilestoneIds")
+                        .IsRequired()
+                        .HasColumnType("uuid[]");
+
+                    b.Property<Guid[]>("AffectedWorkItemIds")
+                        .IsRequired()
+                        .HasColumnType("uuid[]");
+
+                    b.Property<string>("ClarificationRequestNote")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("ClarificationResponseNote")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTime?>("ClarifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("ContractsId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<Guid>("RequestedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RequestedChanges")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("RespondedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("RespondedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ResponseNote")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.HasKey("ContractChangeRequestId");
+
+                    b.HasIndex("ContractsId");
+
+                    b.ToTable("ContractChangeRequests");
                 });
 
             modelBuilder.Entity("Domain.Entities.ContractEscrow", b =>
@@ -668,7 +923,40 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "Status" }, "IX_ContractEscrows_Status");
 
-                    b.ToTable("ContractEscrows", (string)null);
+                    b.ToTable("ContractEscrows");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ContractPlanRevision", b =>
+                {
+                    b.Property<Guid>("ContractPlanRevisionId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<Guid>("ContractsId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SnapshotJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid>("SubmittedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("ContractPlanRevisionId");
+
+                    b.HasIndex("ContractsId", "RevisionNumber")
+                        .IsUnique();
+
+                    b.ToTable("ContractPlanRevisions");
                 });
 
             modelBuilder.Entity("Domain.Entities.ContractProductHandoff", b =>
@@ -747,7 +1035,61 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "ContractsId", "Version" }, "IX_ContractProductHandoffs_ContractsId_Version");
 
-                    b.ToTable("ContractProductHandoffs", (string)null);
+                    b.ToTable("ContractProductHandoffs");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ContractWorkItem", b =>
+                {
+                    b.Property<Guid>("ContractWorkItemId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("Deliverables")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<string>("EstimatedDuration")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("MilestonesId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("OrderIndex")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ProgressNote")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("ContractWorkItemId");
+
+                    b.HasIndex("MilestonesId", "OrderIndex")
+                        .IsUnique();
+
+                    b.ToTable("ContractWorkItems");
                 });
 
             modelBuilder.Entity("Domain.Entities.Conversation", b =>
@@ -830,7 +1172,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "ProposalsId" }, "IX_Conversations_ProposalsId");
 
-                    b.ToTable("Conversations", (string)null);
+                    b.ToTable("Conversations");
                 });
 
             modelBuilder.Entity("Domain.Entities.ConversationParticipant", b =>
@@ -897,7 +1239,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "UserId" }, "IX_ConversationParticipants_UserId");
 
-                    b.ToTable("ConversationParticipants", (string)null);
+                    b.ToTable("ConversationParticipants");
                 });
 
             modelBuilder.Entity("Domain.Entities.DeliveryOutbox", b =>
@@ -943,7 +1285,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<Guid>("RecipientUserId")
                         .HasColumnType("uuid");
 
-                    b.Property<Guid>("ScheduleId")
+                    b.Property<Guid?>("ScheduleId")
                         .HasColumnType("uuid");
 
                     b.Property<int>("Status")
@@ -960,7 +1302,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex("Status", "NextAttemptAt");
 
-                    b.ToTable("DeliveryOutboxes", (string)null);
+                    b.ToTable("DeliveryOutboxes");
                 });
 
             modelBuilder.Entity("Domain.Entities.Dispute", b =>
@@ -1087,7 +1429,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "Status", "IsVipPriority", "ResolutionTargetAt" }, "IX_Disputes_Status_Vip_ResolutionTarget");
 
-                    b.ToTable("Disputes", (string)null);
+                    b.ToTable("Disputes");
                 });
 
             modelBuilder.Entity("Domain.Entities.DisputeEvidence", b =>
@@ -1208,7 +1550,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "DisputesId", "CreatedAt" }, "IX_DisputeMessages_DisputesId_CreatedAt");
 
-                    b.ToTable("DisputeMessages", (string)null);
+                    b.ToTable("DisputeMessages");
                 });
 
             modelBuilder.Entity("Domain.Entities.DisputeMilestoneDecision", b =>
@@ -1260,7 +1602,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex("DisputesId", "MilestonesId")
                         .IsUnique();
 
-                    b.ToTable("DisputeMilestoneDecisions", (string)null);
+                    b.ToTable("DisputeMilestoneDecisions");
                 });
 
             modelBuilder.Entity("Domain.Entities.EscrowTransaction", b =>
@@ -1321,7 +1663,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "Status" }, "IX_EscrowTransactions_Status");
 
-                    b.ToTable("EscrowTransactions", (string)null);
+                    b.ToTable("EscrowTransactions");
                 });
 
             modelBuilder.Entity("Domain.Entities.EsignDocument", b =>
@@ -1331,6 +1673,9 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("ESignDocumentsId")
                         .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<string>("ContractSnapshotJson")
+                        .HasColumnType("jsonb");
 
                     b.Property<Guid?>("ContractsId")
                         .HasColumnType("uuid")
@@ -1363,6 +1708,20 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("FinalizedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<byte[]>("FinalizedDocumentContent")
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("FinalizedDocumentFileName")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("FinalizedDocumentMimeType")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<long?>("FinalizedDocumentSizeBytes")
+                        .HasColumnType("bigint");
+
                     b.Property<Guid>("JobPostsId")
                         .HasColumnType("uuid")
                         .HasColumnName("JobPostsId");
@@ -1385,8 +1744,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex("EsignTemplatesId");
 
-                    b.HasIndex(new[] { "ContractsId" }, "ESignDocuments_cont_ContractsId_key")
-                        .IsUnique();
+                    b.HasIndex(new[] { "ContractsId" }, "IX_ESignDocuments_ContractsId");
 
                     b.HasIndex(new[] { "DocumentCode" }, "IX_ESignDocuments_DocumentCode")
                         .IsUnique();
@@ -1427,6 +1785,13 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<string>("IpAddress")
                         .HasMaxLength(45)
                         .HasColumnType("character varying(45)");
+
+                    b.Property<DateTime?>("PolicyAcceptedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PolicyVersion")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
 
                     b.Property<int?>("SignatureHeight")
                         .HasColumnType("integer");
@@ -1716,7 +2081,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "ProposalsId" }, "IX_FreelancerCheatingViolations_ProposalsId")
                         .IsUnique();
 
-                    b.ToTable("FreelancerCheatingViolations", (string)null);
+                    b.ToTable("FreelancerCheatingViolations");
                 });
 
             modelBuilder.Entity("Domain.Entities.FreelancerProfile", b =>
@@ -1776,7 +2141,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "UserId" }, "IX_FreelancerProfiles_UserId")
                         .IsUnique();
 
-                    b.ToTable("FreelancerProfiles", (string)null);
+                    b.ToTable("FreelancerProfiles");
                 });
 
             modelBuilder.Entity("Domain.Entities.FreelancerProfileCategory", b =>
@@ -1810,7 +2175,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "MajorCategoryId" }, "IX_FreelancerProfileCategories_MajorCategoryId");
 
-                    b.ToTable("FreelancerProfileCategories", (string)null);
+                    b.ToTable("FreelancerProfileCategories");
                 });
 
             modelBuilder.Entity("Domain.Entities.FreelancerProfilePromotion", b =>
@@ -1923,7 +2288,7 @@ namespace Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasFilter("\"Status\" = 1");
 
-                    b.ToTable("FreelancerProfilePromotions", (string)null);
+                    b.ToTable("FreelancerProfilePromotions");
                 });
 
             modelBuilder.Entity("Domain.Entities.FreelancerRankProtection", b =>
@@ -1962,7 +2327,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "FreelancerProfileId", "IsVacationModeEnabled" }, "IX_FreelancerRankProtections_Profile_Active");
 
-                    b.ToTable("FreelancerRankProtections", (string)null);
+                    b.ToTable("FreelancerRankProtections");
                 });
 
             modelBuilder.Entity("Domain.Entities.FreelancerSkill", b =>
@@ -1998,7 +2363,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "SkillsId" }, "IX_FreelancerSkills_SkillsId");
 
-                    b.ToTable("FreelancerSkills", (string)null);
+                    b.ToTable("FreelancerSkills");
                 });
 
             modelBuilder.Entity("Domain.Entities.GoogleMeetConnection", b =>
@@ -2064,7 +2429,7 @@ namespace Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasFilter("\"DisconnectedAt\" IS NULL");
 
-                    b.ToTable("GoogleMeetConnections", (string)null);
+                    b.ToTable("GoogleMeetConnections");
                 });
 
             modelBuilder.Entity("Domain.Entities.GoogleMeetOAuthState", b =>
@@ -2120,7 +2485,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("GoogleMeetOAuthStates", (string)null);
+                    b.ToTable("GoogleMeetOAuthStates");
                 });
 
             modelBuilder.Entity("Domain.Entities.GoogleMeetProvisioningJob", b =>
@@ -2184,7 +2549,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex("Status", "CreatedAt");
 
-                    b.ToTable("GoogleMeetProvisioningJobs", (string)null);
+                    b.ToTable("GoogleMeetProvisioningJobs");
                 });
 
             modelBuilder.Entity("Domain.Entities.JobInvitation", b =>
@@ -2260,7 +2625,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "JobPostsId", "FreelancerProfilesId" }, "JobInvitations_jp_JobPostsId_flPro_FreelancerProfilesId_key")
                         .IsUnique();
 
-                    b.ToTable("JobInvitations", (string)null);
+                    b.ToTable("JobInvitations");
                 });
 
             modelBuilder.Entity("Domain.Entities.JobPost", b =>
@@ -2374,7 +2739,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "Status", "Visibility", "CreatedAt" }, "IX_JobPosts_Status_Visibility_CreatedAt")
                         .IsDescending(false, false, true);
 
-                    b.ToTable("JobPosts", (string)null);
+                    b.ToTable("JobPosts");
                 });
 
             modelBuilder.Entity("Domain.Entities.JobPostAttachment", b =>
@@ -2411,7 +2776,61 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "JobPostsId" }, "IX_JobPostAttachments_JobPostsId");
 
-                    b.ToTable("JobPostAttachments", (string)null);
+                    b.ToTable("JobPostAttachments");
+                });
+
+            modelBuilder.Entity("Domain.Entities.JobPostMilestonePlan", b =>
+                {
+                    b.Property<Guid>("JobPostMilestonePlanId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<string>("AcceptanceCriteria")
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("Deliverables")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<DateOnly?>("DueDate")
+                        .HasColumnType("date");
+
+                    b.Property<string>("EstimatedDuration")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("JobPostsId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("OrderIndex")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("JobPostMilestonePlanId");
+
+                    b.HasIndex("JobPostsId", "OrderIndex")
+                        .IsUnique();
+
+                    b.ToTable("JobPostMilestonePlans");
                 });
 
             modelBuilder.Entity("Domain.Entities.JobPostPromotion", b =>
@@ -2523,7 +2942,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "JobPostsId", "OrderIndex" }, "IX_JobPostQuestions_JobPostsId_OrderIndex")
                         .IsUnique();
 
-                    b.ToTable("JobPostQuestions", (string)null);
+                    b.ToTable("JobPostQuestions");
                 });
 
             modelBuilder.Entity("Domain.Entities.JobPostSkill", b =>
@@ -2557,7 +2976,43 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "JobPostsId", "SkillsId" }, "JobPostSkills_jp_JobPostsId_sk_SkillsId_key")
                         .IsUnique();
 
-                    b.ToTable("JobPostSkills", (string)null);
+                    b.ToTable("JobPostSkills");
+                });
+
+            modelBuilder.Entity("Domain.Entities.JobPostWorkItem", b =>
+                {
+                    b.Property<Guid>("JobPostWorkItemId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<string>("Deliverables")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<string>("EstimatedDuration")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("JobPostMilestonePlanId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("OrderIndex")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("JobPostWorkItemId");
+
+                    b.HasIndex("JobPostMilestonePlanId", "OrderIndex")
+                        .IsUnique();
+
+                    b.ToTable("JobPostWorkItems");
                 });
 
             modelBuilder.Entity("Domain.Entities.Major", b =>
@@ -2604,7 +3059,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "Slug" }, "IX_Majors_Slug")
                         .IsUnique();
 
-                    b.ToTable("Majors", (string)null);
+                    b.ToTable("Majors");
                 });
 
             modelBuilder.Entity("Domain.Entities.MajorCategory", b =>
@@ -2638,7 +3093,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "MajorId", "CategoryId" }, "MajorCategories_MajorId_CategoryId_key")
                         .IsUnique();
 
-                    b.ToTable("MajorCategories", (string)null);
+                    b.ToTable("MajorCategories");
                 });
 
             modelBuilder.Entity("Domain.Entities.Message", b =>
@@ -2716,7 +3171,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "ConversationsId", "SenderUserId", "ClientMessageId" }, "Messages_conv_sender_client_key")
                         .IsUnique();
 
-                    b.ToTable("Messages", (string)null);
+                    b.ToTable("Messages");
                 });
 
             modelBuilder.Entity("Domain.Entities.MessageAttachment", b =>
@@ -2772,7 +3227,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "MessagesId" }, "IX_MessageAttachments_MessagesId");
 
-                    b.ToTable("MessageAttachments", (string)null);
+                    b.ToTable("MessageAttachments");
                 });
 
             modelBuilder.Entity("Domain.Entities.Milestone", b =>
@@ -2862,7 +3317,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "Status" }, "IX_Milestones_Status");
 
-                    b.ToTable("Milestones", (string)null);
+                    b.ToTable("Milestones");
                 });
 
             modelBuilder.Entity("Domain.Entities.MilestoneAttachment", b =>
@@ -2914,7 +3369,57 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "MilestonesId" }, "IX_MilestoneAttachments_MilestonesId");
 
-                    b.ToTable("MilestoneAttachments", (string)null);
+                    b.ToTable("MilestoneAttachments");
+                });
+
+            modelBuilder.Entity("Domain.Entities.MilestoneEarlyStartRequest", b =>
+                {
+                    b.Property<Guid>("MilestoneEarlyStartRequestId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<Guid>("ContractsId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid>("MilestonesId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<Guid>("RequestedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("RespondedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("RespondedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ResponseNote")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.HasKey("MilestoneEarlyStartRequestId");
+
+                    b.HasIndex("ContractsId");
+
+                    b.HasIndex("MilestonesId", "Status")
+                        .IsUnique()
+                        .HasFilter("\"Status\" = 0");
+
+                    b.ToTable("MilestoneEarlyStartRequests");
                 });
 
             modelBuilder.Entity("Domain.Entities.NegotiationMilestoneDraft", b =>
@@ -2974,7 +3479,43 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "ConversationsId", "OrderIndex" }, "IX_NegotiationMilestoneDrafts_Conversation_Order")
                         .IsUnique();
 
-                    b.ToTable("NegotiationMilestoneDrafts", (string)null);
+                    b.ToTable("NegotiationMilestoneDrafts");
+                });
+
+            modelBuilder.Entity("Domain.Entities.NegotiationMilestoneDraftWorkItem", b =>
+                {
+                    b.Property<Guid>("NegotiationMilestoneDraftWorkItemId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<string>("Deliverables")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<string>("EstimatedDuration")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("NegotiationMilestoneDraftId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("OrderIndex")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("NegotiationMilestoneDraftWorkItemId");
+
+                    b.HasIndex("NegotiationMilestoneDraftId", "OrderIndex")
+                        .IsUnique();
+
+                    b.ToTable("NegotiationMilestoneDraftWorkItems");
                 });
 
             modelBuilder.Entity("Domain.Entities.NegotiationOffer", b =>
@@ -2992,7 +3533,7 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("ClientProfilesId");
 
-                    b.Property<Guid>("ContractsId")
+                    b.Property<Guid?>("ContractsId")
                         .HasColumnType("uuid")
                         .HasColumnName("ContractsId");
 
@@ -3063,7 +3604,7 @@ namespace Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasFilter("\"Status\" = 0");
 
-                    b.ToTable("NegotiationOffers", (string)null);
+                    b.ToTable("NegotiationOffers");
                 });
 
             modelBuilder.Entity("Domain.Entities.NegotiationOfferMilestone", b =>
@@ -3112,7 +3653,43 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "NegotiationOfferId", "OrderIndex" }, "IX_NegotiationOfferMilestones_Offer_Order")
                         .IsUnique();
 
-                    b.ToTable("NegotiationOfferMilestones", (string)null);
+                    b.ToTable("NegotiationOfferMilestones");
+                });
+
+            modelBuilder.Entity("Domain.Entities.NegotiationOfferWorkItem", b =>
+                {
+                    b.Property<Guid>("NegotiationOfferWorkItemId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<string>("Deliverables")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<string>("EstimatedDuration")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("NegotiationOfferMilestoneId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("OrderIndex")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.HasKey("NegotiationOfferWorkItemId");
+
+                    b.HasIndex("NegotiationOfferMilestoneId", "OrderIndex")
+                        .IsUnique();
+
+                    b.ToTable("NegotiationOfferWorkItems");
                 });
 
             modelBuilder.Entity("Domain.Entities.Notification", b =>
@@ -3183,7 +3760,7 @@ namespace Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasFilter("\"Type\" = 13 AND \"ReferenceId\" IS NOT NULL AND \"IsRead\" IS NOT TRUE");
 
-                    b.ToTable("Notifications", (string)null);
+                    b.ToTable("Notifications");
                 });
 
             modelBuilder.Entity("Domain.Entities.PaymentProof", b =>
@@ -3243,7 +3820,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "UploadedById" }, "IX_PaymentProofs_UploadedById");
 
-                    b.ToTable("PaymentProofs", (string)null);
+                    b.ToTable("PaymentProofs");
                 });
 
             modelBuilder.Entity("Domain.Entities.PayoutOutbox", b =>
@@ -3293,7 +3870,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "WalletWithdrawalId" }, "IX_PayoutOutboxes_WalletWithdrawalId");
 
-                    b.ToTable("PayoutOutboxes", (string)null);
+                    b.ToTable("PayoutOutboxes");
                 });
 
             modelBuilder.Entity("Domain.Entities.PayoutWebhookLog", b =>
@@ -3348,7 +3925,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "WalletWithdrawalId" }, "IX_PayoutWebhookLogs_WalletWithdrawalId");
 
-                    b.ToTable("PayoutWebhookLogs", (string)null);
+                    b.ToTable("PayoutWebhookLogs");
                 });
 
             modelBuilder.Entity("Domain.Entities.PlatformSetting", b =>
@@ -3391,7 +3968,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "Key" }, "IX_PlatformSettings_Key")
                         .IsUnique();
 
-                    b.ToTable("PlatformSettings", (string)null);
+                    b.ToTable("PlatformSettings");
                 });
 
             modelBuilder.Entity("Domain.Entities.PortfolioItem", b =>
@@ -3419,7 +3996,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "FreelancerId" }, "IX_PortfolioItems_FreelancerId");
 
-                    b.ToTable("PortfolioItems", (string)null);
+                    b.ToTable("PortfolioItems");
                 });
 
             modelBuilder.Entity("Domain.Entities.Proposal", b =>
@@ -3496,7 +4073,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "JobPostsId", "FreelancerProfilesId" }, "Proposals_jp_JobPostsId_flPro_FreelancerProfilesId_key")
                         .IsUnique();
 
-                    b.ToTable("Proposals", (string)null);
+                    b.ToTable("Proposals");
                 });
 
             modelBuilder.Entity("Domain.Entities.ProposalAnswer", b =>
@@ -3538,7 +4115,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "ProposalsId", "JobPostQuestionsId" }, "ProposalAnswers_propo_ProposalsId_jpq_JobPostQuestionsId_key")
                         .IsUnique();
 
-                    b.ToTable("ProposalAnswers", (string)null);
+                    b.ToTable("ProposalAnswers");
                 });
 
             modelBuilder.Entity("Domain.Entities.ProposalAttachment", b =>
@@ -3575,7 +4152,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "ProposalsId" }, "IX_ProposalAttachments_ProposalsId");
 
-                    b.ToTable("ProposalAttachments", (string)null);
+                    b.ToTable("ProposalAttachments");
                 });
 
             modelBuilder.Entity("Domain.Entities.ProposalCheatingEvent", b =>
@@ -3635,7 +4212,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "ProposalsId", "ClientEventId" }, "IX_ProposalCheatingEvents_ProposalsId_ClientEventId")
                         .IsUnique();
 
-                    b.ToTable("ProposalCheatingEvents", (string)null);
+                    b.ToTable("ProposalCheatingEvents");
                 });
 
             modelBuilder.Entity("Domain.Entities.ProposalInterviewReviewSession", b =>
@@ -3688,7 +4265,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "ProposalsId" }, "IX_ProposalInterviewReviewSessions_ProposalsId")
                         .IsUnique();
 
-                    b.ToTable("ProposalInterviewReviewSessions", (string)null);
+                    b.ToTable("ProposalInterviewReviewSessions");
                 });
 
             modelBuilder.Entity("Domain.Entities.ProposalMilestonePlan", b =>
@@ -3711,6 +4288,9 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<string>("Description")
                         .HasColumnType("text");
 
+                    b.Property<DateOnly?>("DueDate")
+                        .HasColumnType("date");
+
                     b.Property<string>("EstimatedDuration")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
@@ -3731,7 +4311,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "ProposalsId", "OrderIndex" }, "IX_ProposalMilestonePlans_Proposal_Order");
 
-                    b.ToTable("ProposalMilestonePlans", (string)null);
+                    b.ToTable("ProposalMilestonePlans");
                 });
 
             modelBuilder.Entity("Domain.Entities.ProposalQuestionTimer", b =>
@@ -3788,7 +4368,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "ProposalsId", "JobPostQuestionsId" }, "IX_ProposalQuestionTimers_ProposalsId_JobPostQuestionsId")
                         .IsUnique();
 
-                    b.ToTable("ProposalQuestionTimers", (string)null);
+                    b.ToTable("ProposalQuestionTimers");
                 });
 
             modelBuilder.Entity("Domain.Entities.ProposalWorkBreakdownItem", b =>
@@ -3811,6 +4391,9 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<int>("OrderIndex")
                         .HasColumnType("integer");
 
+                    b.Property<Guid?>("ProposalMilestonePlansId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid>("ProposalsId")
                         .HasColumnType("uuid");
 
@@ -3822,9 +4405,11 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasKey("ProposalWorkBreakdownItemsId")
                         .HasName("ProposalWorkBreakdownItems_pkey");
 
+                    b.HasIndex("ProposalMilestonePlansId");
+
                     b.HasIndex(new[] { "ProposalsId", "OrderIndex" }, "IX_ProposalWorkBreakdownItems_Proposal_Order");
 
-                    b.ToTable("ProposalWorkBreakdownItems", (string)null);
+                    b.ToTable("ProposalWorkBreakdownItems");
                 });
 
             modelBuilder.Entity("Domain.Entities.RefreshToken", b =>
@@ -3864,7 +4449,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "UserId" }, "IX_RefreshTokens_UserId");
 
-                    b.ToTable("RefreshTokens", (string)null);
+                    b.ToTable("RefreshTokens");
                 });
 
             modelBuilder.Entity("Domain.Entities.Report", b =>
@@ -3937,7 +4522,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "Status" }, "IX_Reports_Status");
 
-                    b.ToTable("Reports", (string)null);
+                    b.ToTable("Reports");
                 });
 
             modelBuilder.Entity("Domain.Entities.ReportContract", b =>
@@ -4032,7 +4617,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "Status" }, "IX_ReportContracts_Status");
 
-                    b.ToTable("ReportContracts", (string)null);
+                    b.ToTable("ReportContracts");
                 });
 
             modelBuilder.Entity("Domain.Entities.ReportContractAttachment", b =>
@@ -4079,7 +4664,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "ReportContractId" }, "IX_ReportContractAttachments_ReportContractId");
 
-                    b.ToTable("ReportContractAttachments", (string)null);
+                    b.ToTable("ReportContractAttachments");
                 });
 
             modelBuilder.Entity("Domain.Entities.Review", b =>
@@ -4144,7 +4729,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "ContractsId", "ReviewerId" }, "Reviews_cont_ContractsId_usr_ReviewerId_key")
                         .IsUnique();
 
-                    b.ToTable("Reviews", (string)null);
+                    b.ToTable("Reviews");
                 });
 
             modelBuilder.Entity("Domain.Entities.SavedFreelancer", b =>
@@ -4178,7 +4763,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "UserId", "FreelancerProfilesId" }, "SavedFreelancers_usr_UserId_flPro_FreelancerProfilesId_key")
                         .IsUnique();
 
-                    b.ToTable("SavedFreelancers", (string)null);
+                    b.ToTable("SavedFreelancers");
                 });
 
             modelBuilder.Entity("Domain.Entities.SavedJob", b =>
@@ -4212,7 +4797,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "UserId", "JobPostsId" }, "SavedJobs_usr_UserId_jp_JobPostsId_key")
                         .IsUnique();
 
-                    b.ToTable("SavedJobs", (string)null);
+                    b.ToTable("SavedJobs");
                 });
 
             modelBuilder.Entity("Domain.Entities.Schedule", b =>
@@ -4333,7 +4918,7 @@ namespace Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasFilter("\"Status\" = 0");
 
-                    b.ToTable("Schedules", (string)null);
+                    b.ToTable("Schedules");
                 });
 
             modelBuilder.Entity("Domain.Entities.Skill", b =>
@@ -4366,7 +4951,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "Name" }, "IX_Skills_Name");
 
-                    b.ToTable("Skills", (string)null);
+                    b.ToTable("Skills");
                 });
 
             modelBuilder.Entity("Domain.Entities.Subscription", b =>
@@ -4424,7 +5009,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "UserId", "Status" }, "IX_Subscriptions_UserId_Status");
 
-                    b.ToTable("Subscriptions", (string)null);
+                    b.ToTable("Subscriptions");
                 });
 
             modelBuilder.Entity("Domain.Entities.SubscriptionPlan", b =>
@@ -4488,7 +5073,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "TargetRole" }, "IX_SubscriptionPlans_TargetRole");
 
-                    b.ToTable("SubscriptionPlans", (string)null);
+                    b.ToTable("SubscriptionPlans");
                 });
 
             modelBuilder.Entity("Domain.Entities.TalentMatchEvent", b =>
@@ -4542,6 +5127,10 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasDefaultValueSql("gen_random_uuid()");
 
+                    b.Property<decimal>("AlgorithmScore")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)");
+
                     b.Property<string>("Confidence")
                         .IsRequired()
                         .HasMaxLength(16)
@@ -4566,10 +5155,6 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.Property<Guid>("FreelancerProfileId")
                         .HasColumnType("uuid");
-
-                    b.Property<decimal>("AlgorithmScore")
-                        .HasPrecision(5, 2)
-                        .HasColumnType("numeric(5,2)");
 
                     b.Property<string[]>("MatchedSkills")
                         .IsRequired()
@@ -4646,12 +5231,12 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<long>("LatencyMilliseconds")
                         .HasColumnType("bigint");
 
+                    b.Property<int>("ReturnedCandidateCount")
+                        .HasColumnType("integer");
+
                     b.Property<string>("ScoringVersion")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
-
-                    b.Property<int>("ReturnedCandidateCount")
-                        .HasColumnType("integer");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer")
@@ -4764,7 +5349,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "Role" }, "IX_Users_Role");
 
-                    b.ToTable("Users", (string)null);
+                    b.ToTable("Users");
                 });
 
             modelBuilder.Entity("Domain.Entities.UserEloPointTransaction", b =>
@@ -4825,7 +5410,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "UserId", "CreatedAt" }, "IX_UserEloPointTransactions_UserId_CreatedAt")
                         .IsDescending(false, true);
 
-                    b.ToTable("UserEloPointTransactions", null, t =>
+                    b.ToTable("UserEloPointTransactions", t =>
                         {
                             t.HasCheckConstraint("CK_UserEloPointTransactions_PointsAfter_NonNegative", "\"PointsAfter\" >= 0");
                         });
@@ -4876,7 +5461,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "UserId" }, "IX_UserEloScores_UserId")
                         .IsUnique();
 
-                    b.ToTable("UserEloScores", null, t =>
+                    b.ToTable("UserEloScores", t =>
                         {
                             t.HasCheckConstraint("CK_UserEloScores_CurrentPoints_NonNegative", "\"CurrentPoints\" >= 0");
                         });
@@ -4938,7 +5523,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "UserId" }, "IX_UserWallets_UserId")
                         .IsUnique();
 
-                    b.ToTable("UserWallets", null, t =>
+                    b.ToTable("UserWallets", t =>
                         {
                             t.HasCheckConstraint("CK_UserWallets_AvailableTokens_NonNegative", "\"AvailableTokens\" >= 0");
 
@@ -5052,7 +5637,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "UserWalletsId" }, "IX_WalletTransactions_UserWalletsId");
 
-                    b.ToTable("WalletTransactions", (string)null);
+                    b.ToTable("WalletTransactions");
                 });
 
             modelBuilder.Entity("Domain.Entities.WalletWithdrawal", b =>
@@ -5196,7 +5781,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "UserWalletsId" }, "IX_WalletWithdrawals_UserWalletsId");
 
-                    b.ToTable("WalletWithdrawals", null, t =>
+                    b.ToTable("WalletWithdrawals", t =>
                         {
                             t.HasCheckConstraint("CK_WalletWithdrawals_NetVndAmount_Positive", "\"NetVndAmount\" > 0");
 
@@ -5247,7 +5832,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "FreelancerId" }, "IX_WorkExperiences_FreelancerId");
 
-                    b.ToTable("WorkExperiences", (string)null);
+                    b.ToTable("WorkExperiences");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.DataProtection.EntityFrameworkCore.DataProtectionKey", b =>
@@ -5266,7 +5851,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("DataProtectionKeys", (string)null);
+                    b.ToTable("DataProtectionKeys");
                 });
 
             modelBuilder.Entity("Domain.Entities.AdminAuditLog", b =>
@@ -5435,6 +6020,69 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("Proposals");
                 });
 
+            modelBuilder.Entity("Domain.Entities.ContractAmendment", b =>
+                {
+                    b.HasOne("Domain.Entities.ContractChangeRequest", "ChangeRequest")
+                        .WithOne("Amendment")
+                        .HasForeignKey("Domain.Entities.ContractAmendment", "ContractChangeRequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Domain.Entities.Contract", "Contract")
+                        .WithMany("Amendments")
+                        .HasForeignKey("ContractsId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ChangeRequest");
+
+                    b.Navigation("Contract");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ContractAmendmentMilestone", b =>
+                {
+                    b.HasOne("Domain.Entities.ContractAmendment", "Amendment")
+                        .WithMany("Milestones")
+                        .HasForeignKey("ContractAmendmentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Amendment");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ContractAmendmentSignature", b =>
+                {
+                    b.HasOne("Domain.Entities.ContractAmendment", "Amendment")
+                        .WithMany("Signatures")
+                        .HasForeignKey("ContractAmendmentId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Amendment");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ContractAmendmentWorkItem", b =>
+                {
+                    b.HasOne("Domain.Entities.ContractAmendmentMilestone", "Milestone")
+                        .WithMany("WorkItems")
+                        .HasForeignKey("ContractAmendmentMilestoneId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Milestone");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ContractChangeRequest", b =>
+                {
+                    b.HasOne("Domain.Entities.Contract", "Contract")
+                        .WithMany("ChangeRequests")
+                        .HasForeignKey("ContractsId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Contract");
+                });
+
             modelBuilder.Entity("Domain.Entities.ContractEscrow", b =>
                 {
                     b.HasOne("Domain.Entities.Contract", "Contract")
@@ -5442,6 +6090,17 @@ namespace Infrastructure.Persistence.Migrations
                         .HasForeignKey("Domain.Entities.ContractEscrow", "ContractsId")
                         .IsRequired()
                         .HasConstraintName("ContractEscrows_cont_ContractsId_fkey");
+
+                    b.Navigation("Contract");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ContractPlanRevision", b =>
+                {
+                    b.HasOne("Domain.Entities.Contract", "Contract")
+                        .WithMany("PlanRevisions")
+                        .HasForeignKey("ContractsId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
 
                     b.Navigation("Contract");
                 });
@@ -5470,6 +6129,17 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("ReceivedByUser");
 
                     b.Navigation("SubmittedByUser");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ContractWorkItem", b =>
+                {
+                    b.HasOne("Domain.Entities.Milestone", "Milestone")
+                        .WithMany("WorkItems")
+                        .HasForeignKey("MilestonesId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Milestone");
                 });
 
             modelBuilder.Entity("Domain.Entities.Conversation", b =>
@@ -5555,8 +6225,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasOne("Domain.Entities.Schedule", null)
                         .WithMany()
                         .HasForeignKey("ScheduleId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("Domain.Entities.Dispute", b =>
@@ -5715,8 +6384,8 @@ namespace Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Domain.Entities.EsignDocument", b =>
                 {
                     b.HasOne("Domain.Entities.Contract", "Contracts")
-                        .WithOne("EsignDocument")
-                        .HasForeignKey("Domain.Entities.EsignDocument", "ContractsId")
+                        .WithMany("EsignDocuments")
+                        .HasForeignKey("ContractsId")
                         .HasConstraintName("ESignDocuments_cont_ContractsId_fkey");
 
                     b.HasOne("Domain.Entities.EsignTemplate", "EsignTemplates")
@@ -6002,6 +6671,17 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("JobPosts");
                 });
 
+            modelBuilder.Entity("Domain.Entities.JobPostMilestonePlan", b =>
+                {
+                    b.HasOne("Domain.Entities.JobPost", "JobPost")
+                        .WithMany("JobPostMilestonePlans")
+                        .HasForeignKey("JobPostsId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("JobPost");
+                });
+
             modelBuilder.Entity("Domain.Entities.JobPostPromotion", b =>
                 {
                     b.HasOne("Domain.Entities.User", "ClientUser")
@@ -6057,6 +6737,17 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("JobPosts");
 
                     b.Navigation("Skills");
+                });
+
+            modelBuilder.Entity("Domain.Entities.JobPostWorkItem", b =>
+                {
+                    b.HasOne("Domain.Entities.JobPostMilestonePlan", "MilestonePlan")
+                        .WithMany("WorkItems")
+                        .HasForeignKey("JobPostMilestonePlanId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("MilestonePlan");
                 });
 
             modelBuilder.Entity("Domain.Entities.MajorCategory", b =>
@@ -6153,6 +6844,25 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("UploadedByUser");
                 });
 
+            modelBuilder.Entity("Domain.Entities.MilestoneEarlyStartRequest", b =>
+                {
+                    b.HasOne("Domain.Entities.Contract", "Contract")
+                        .WithMany()
+                        .HasForeignKey("ContractsId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Domain.Entities.Milestone", "Milestone")
+                        .WithMany()
+                        .HasForeignKey("MilestonesId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Contract");
+
+                    b.Navigation("Milestone");
+                });
+
             modelBuilder.Entity("Domain.Entities.NegotiationMilestoneDraft", b =>
                 {
                     b.HasOne("Domain.Entities.Conversation", "Conversations")
@@ -6163,6 +6873,17 @@ namespace Infrastructure.Persistence.Migrations
                         .HasConstraintName("NegotiationMilestoneDrafts_ConversationsId_fkey");
 
                     b.Navigation("Conversations");
+                });
+
+            modelBuilder.Entity("Domain.Entities.NegotiationMilestoneDraftWorkItem", b =>
+                {
+                    b.HasOne("Domain.Entities.NegotiationMilestoneDraft", "MilestoneDraft")
+                        .WithMany("WorkItems")
+                        .HasForeignKey("NegotiationMilestoneDraftId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("MilestoneDraft");
                 });
 
             modelBuilder.Entity("Domain.Entities.NegotiationOffer", b =>
@@ -6176,7 +6897,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasOne("Domain.Entities.Contract", "Contracts")
                         .WithMany("NegotiationOffers")
                         .HasForeignKey("ContractsId")
-                        .IsRequired()
                         .HasConstraintName("NegotiationOffers_cont_ContractsId_fkey");
 
                     b.HasOne("Domain.Entities.Conversation", "Conversations")
@@ -6225,6 +6945,17 @@ namespace Infrastructure.Persistence.Migrations
                         .HasConstraintName("NegotiationOfferMilestones_NegotiationOfferId_fkey");
 
                     b.Navigation("NegotiationOffer");
+                });
+
+            modelBuilder.Entity("Domain.Entities.NegotiationOfferWorkItem", b =>
+                {
+                    b.HasOne("Domain.Entities.NegotiationOfferMilestone", "Milestone")
+                        .WithMany("WorkItems")
+                        .HasForeignKey("NegotiationOfferMilestoneId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Milestone");
                 });
 
             modelBuilder.Entity("Domain.Entities.Notification", b =>
@@ -6443,12 +7174,19 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.ProposalWorkBreakdownItem", b =>
                 {
+                    b.HasOne("Domain.Entities.ProposalMilestonePlan", "ProposalMilestonePlan")
+                        .WithMany("WorkItems")
+                        .HasForeignKey("ProposalMilestonePlansId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("Domain.Entities.Proposal", "Proposals")
                         .WithMany("ProposalWorkBreakdownItems")
                         .HasForeignKey("ProposalsId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("ProposalWorkBreakdownItems_ProposalsId_fkey");
+
+                    b.Navigation("ProposalMilestonePlan");
 
                     b.Navigation("Proposals");
                 });
@@ -6858,6 +7596,10 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.Contract", b =>
                 {
+                    b.Navigation("Amendments");
+
+                    b.Navigation("ChangeRequests");
+
                     b.Navigation("ContractEscrow");
 
                     b.Navigation("ContractProductHandoffs");
@@ -6866,17 +7608,36 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.Navigation("Disputes");
 
-                    b.Navigation("EsignDocument");
+                    b.Navigation("EsignDocuments");
 
                     b.Navigation("Milestones");
 
                     b.Navigation("NegotiationOffers");
+
+                    b.Navigation("PlanRevisions");
 
                     b.Navigation("ReportContracts");
 
                     b.Navigation("Reviews");
 
                     b.Navigation("WalletTransactions");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ContractAmendment", b =>
+                {
+                    b.Navigation("Milestones");
+
+                    b.Navigation("Signatures");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ContractAmendmentMilestone", b =>
+                {
+                    b.Navigation("WorkItems");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ContractChangeRequest", b =>
+                {
+                    b.Navigation("Amendment");
                 });
 
             modelBuilder.Entity("Domain.Entities.ContractEscrow", b =>
@@ -6958,6 +7719,8 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.Navigation("JobPostAttachments");
 
+                    b.Navigation("JobPostMilestonePlans");
+
                     b.Navigation("JobPostPromotions");
 
                     b.Navigation("JobPostQuestions");
@@ -6969,6 +7732,11 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("Proposals");
 
                     b.Navigation("SavedJobs");
+                });
+
+            modelBuilder.Entity("Domain.Entities.JobPostMilestonePlan", b =>
+                {
+                    b.Navigation("WorkItems");
                 });
 
             modelBuilder.Entity("Domain.Entities.JobPostQuestion", b =>
@@ -7014,11 +7782,23 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("PaymentProofs");
 
                     b.Navigation("ReportContracts");
+
+                    b.Navigation("WorkItems");
+                });
+
+            modelBuilder.Entity("Domain.Entities.NegotiationMilestoneDraft", b =>
+                {
+                    b.Navigation("WorkItems");
                 });
 
             modelBuilder.Entity("Domain.Entities.NegotiationOffer", b =>
                 {
                     b.Navigation("NegotiationOfferMilestones");
+                });
+
+            modelBuilder.Entity("Domain.Entities.NegotiationOfferMilestone", b =>
+                {
+                    b.Navigation("WorkItems");
                 });
 
             modelBuilder.Entity("Domain.Entities.Proposal", b =>
@@ -7040,6 +7820,11 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("ProposalQuestionTimers");
 
                     b.Navigation("ProposalWorkBreakdownItems");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ProposalMilestonePlan", b =>
+                {
+                    b.Navigation("WorkItems");
                 });
 
             modelBuilder.Entity("Domain.Entities.ReportContract", b =>

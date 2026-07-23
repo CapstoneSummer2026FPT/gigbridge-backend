@@ -28,5 +28,6 @@ public record JobPostDetailDto(
     List<JobPostSkillDto> Skills,
     List<string> CustomSkillNames,
     List<AttachmentDto> Attachments,
+    List<JobPostMilestonePlanDto> MilestonePlans,
     bool HasAiInterview
 );

@@ -1,5 +1,6 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
+using Application.Features.Proposals.Common;
 using Domain.Entities;
 using Domain.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -12,7 +13,7 @@ internal static class JobPostSetupPublishGuard
     public const int OpenStatus = 1;
     private const string DefaultDraftTitle = "Untitled Job Post";
 
-    public static void EnsureProjectRequestCanPublish(JobPost jobPost)
+    public static void EnsureProjectRequestCanPublish(JobPost jobPost, DateOnly today)
     {
         if (jobPost.Status != DraftStatus && jobPost.Status != OpenStatus)
         {
@@ -33,6 +34,60 @@ internal static class JobPostSetupPublishGuard
         if (!jobPost.MajorCategoryId.HasValue)
         {
             throw new BadRequestException("Project request category is required before publishing.");
+        }
+
+
+        var milestones = jobPost.JobPostMilestonePlans.OrderBy(item => item.OrderIndex).ToList();
+        if (milestones.Select(item => item.OrderIndex).Distinct().Count() != milestones.Count)
+        {
+            throw new BadRequestException("Milestone order indexes must be unique.");
+        }
+
+        var applicationDeadline = jobPost.EndDate.HasValue
+            ? DateOnly.FromDateTime(jobPost.EndDate.Value)
+            : (DateOnly?)null;
+        DateOnly? previousDueDate = null;
+
+        foreach (var milestone in milestones)
+        {
+            if (string.IsNullOrWhiteSpace(milestone.Title) ||
+                milestone.Amount <= 0 ||
+                !ProposalTotalsCalculator.IsValidProjectDuration(milestone.EstimatedDuration) ||
+                !milestone.DueDate.HasValue ||
+                string.IsNullOrWhiteSpace(milestone.Deliverables) ||
+                string.IsNullOrWhiteSpace(milestone.AcceptanceCriteria))
+            {
+                throw new BadRequestException("Each client milestone requires a title, positive amount, week/month/year duration, deadline, deliverables, and acceptance criteria.");
+            }
+
+            var dueDate = milestone.DueDate.Value;
+            if (dueDate < today)
+            {
+                throw new BadRequestException("Milestone deadlines cannot be in the past.");
+            }
+
+            if (applicationDeadline.HasValue && dueDate <= applicationDeadline.Value)
+            {
+                throw new BadRequestException("Milestone deadlines must be after the project request application deadline.");
+            }
+
+            if (previousDueDate.HasValue && dueDate <= previousDueDate.Value)
+            {
+                throw new BadRequestException("Milestone deadlines must increase according to milestone order.");
+            }
+            previousDueDate = dueDate;
+
+            if (milestone.WorkItems.Select(item => item.OrderIndex).Distinct().Count() != milestone.WorkItems.Count)
+            {
+                throw new BadRequestException("Work item order indexes must be unique within each milestone.");
+            }
+
+            if (milestone.WorkItems.Any(item =>
+                    string.IsNullOrWhiteSpace(item.Title) ||
+                    string.IsNullOrWhiteSpace(item.Description)))
+            {
+                throw new BadRequestException("Each client work item requires a title and description.");
+            }
         }
     }
 

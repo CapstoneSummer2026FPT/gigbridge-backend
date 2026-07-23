@@ -76,6 +76,9 @@ public static class DependencyInjection
         services.AddSingleton<PayoutOutboxWorker>();
         services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<PayoutOutboxWorker>());
 
+        services.AddSingleton<ContractAutoCompletionWorker>();
+        services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<ContractAutoCompletionWorker>());
+
         return services;
     }
 

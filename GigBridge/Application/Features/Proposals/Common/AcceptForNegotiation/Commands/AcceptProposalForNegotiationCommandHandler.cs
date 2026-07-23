@@ -66,6 +66,7 @@ public class AcceptProposalForNegotiationCommandHandler : IRequestHandler<Accept
             .Include(p => p.FreelancerProfiles)
                 .ThenInclude(fp => fp.User)
             .Include(p => p.ProposalMilestonePlans)
+            .Include(p => p.ProposalWorkBreakdownItems)
             .FirstOrDefaultAsync(p => p.ProposalsId == command.ProposalId, cancellationToken);
 
         if (proposal is null)
@@ -97,16 +98,6 @@ public class AcceptProposalForNegotiationCommandHandler : IRequestHandler<Accept
             proposal.ProposalsId,
             now,
             cancellationToken);
-
-        var contract = await _context.Set<Contract>()
-            .FirstOrDefaultAsync(c => c.JobPostsId == proposal.JobPostsId, cancellationToken);
-
-        if (contract is null)
-        {
-            contract = CreateDraftContract(proposal, now);
-            _context.Set<Contract>().Add(contract);
-        }
-
         var existingConversation = await _context.Set<Conversation>()
             .FirstOrDefaultAsync(
                 c => c.ConversationType == (int)ConversationType.JobNegotiation &&
@@ -123,18 +114,6 @@ public class AcceptProposalForNegotiationCommandHandler : IRequestHandler<Accept
             conversationId = existingConversation.ConversationsId;
             await EnsureParticipants(conversationId, clientProfile.UserId, proposal.FreelancerProfiles.UserId, cancellationToken);
 
-            if (existingConversation.ContractsId is null)
-            {
-                existingConversation.ContractsId = contract.ContractsId;
-                existingConversation.UpdatedAt = now;
-            }
-
-            if (contract.Status == (int)ContractStatus.PendingFreelancerSelection || contract.Status == (int)ContractStatus.Draft)
-            {
-                contract.Status = (int)ContractStatus.InNegotiation;
-                contract.UpdatedAt = now;
-            }
-
             await ProposalMilestoneHandoff.SeedConversationDraftAsync(
                 _context, conversationId, proposal, now, cancellationToken);
 
@@ -149,7 +128,7 @@ public class AcceptProposalForNegotiationCommandHandler : IRequestHandler<Accept
                 ConversationType = (int)ConversationType.JobNegotiation,
                 JobPostsId = proposal.JobPostsId,
                 ProposalsId = proposal.ProposalsId,
-                ContractsId = contract.ContractsId,
+                ContractsId = null,
                 CreatedByUserId = command.UserId,
                 Status = (int)ConversationStatus.Active,
                 CreatedAt = now
@@ -160,9 +139,6 @@ public class AcceptProposalForNegotiationCommandHandler : IRequestHandler<Accept
 
             AddParticipant(conversationId, clientProfile.UserId, ParticipantRole.Client, now);
             AddParticipant(conversationId, proposal.FreelancerProfiles.UserId, ParticipantRole.Freelancer, now);
-
-            contract.Status = (int)ContractStatus.InNegotiation;
-            contract.UpdatedAt = now;
 
             await ProposalMilestoneHandoff.SeedConversationDraftAsync(
                 _context, conversationId, proposal, now, cancellationToken);
@@ -228,25 +204,6 @@ public class AcceptProposalForNegotiationCommandHandler : IRequestHandler<Accept
         }
 
         return conversationId;
-    }
-
-    private static Contract CreateDraftContract(Proposal proposal, DateTime now)
-    {
-        var jobPost = proposal.JobPosts;
-        return new Contract
-        {
-            ContractsId = Guid.NewGuid(),
-            JobPostsId = proposal.JobPostsId,
-            ClientProfilesId = jobPost.ClientProfilesId,
-            FreelancerProfilesId = null,
-            ProposalsId = null,
-            Title = jobPost.Title,
-            Description = jobPost.Description,
-            TotalBudget = jobPost.BudgetMin ?? jobPost.BudgetMax ?? proposal.ProposedBudget ?? 0m,
-            Status = (int)ContractStatus.PendingFreelancerSelection,
-            EndDate = jobPost.EndDate.HasValue ? DateOnly.FromDateTime(jobPost.EndDate.Value) : null,
-            CreatedAt = now
-        };
     }
 
     private async Task EnsureParticipants(Guid conversationId, Guid clientUserId, Guid freelancerUserId, CancellationToken cancellationToken)

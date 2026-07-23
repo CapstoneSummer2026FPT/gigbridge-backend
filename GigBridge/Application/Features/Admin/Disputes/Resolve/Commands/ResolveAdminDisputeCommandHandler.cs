@@ -124,8 +124,6 @@ public sealed class ResolveAdminDisputeCommandHandler :
         var clientWallet = await _context.Set<UserWallet>()
             .FirstOrDefaultAsync(item => item.UserId == contract.ClientProfiles.UserId, cancellationToken)
             ?? throw new BadRequestException("Client escrow wallet does not exist.");
-        if (clientWallet.HeldTokens + Tolerance < totalRelease + totalRefund)
-            throw new BadRequestException("Client held wallet balance is insufficient for this settlement.");
         var freelancerWallet = await WalletWorkflow.GetOrCreateWalletAsync(
             _context,
             contract.FreelancerProfiles.UserId,
@@ -136,12 +134,6 @@ public sealed class ResolveAdminDisputeCommandHandler :
         var systemMessages = new List<Message>();
         var notifications = new List<Notification>();
         await using var transaction = await _context.BeginTransactionAsync(cancellationToken);
-
-        clientWallet.HeldTokens -= totalRelease + totalRefund;
-        clientWallet.AvailableTokens += totalRefund;
-        clientWallet.UpdatedAt = now;
-        if (totalRelease > 0)
-            WalletWorkflow.CreditWithdrawable(freelancerWallet, totalRelease, now);
 
         foreach (var input in inputs.Values)
         {
@@ -226,8 +218,8 @@ public sealed class ResolveAdminDisputeCommandHandler :
         if (conversation is not null)
         {
             AddSystemMessage(conversation, $"Milestone decisions recorded for {inputs.Count} milestone(s).", now, systemMessages);
-            if (totalRefund > 0) AddSystemMessage(conversation, $"{totalRefund:N2} GigCoin refunded to the client.", now, systemMessages);
-            if (totalRelease > 0) AddSystemMessage(conversation, $"{totalRelease:N2} GigCoin released to the freelancer.", now, systemMessages);
+            if (totalRefund > 0) AddSystemMessage(conversation, $"{totalRefund:N2} VND refunded to the client.", now, systemMessages);
+            if (totalRelease > 0) AddSystemMessage(conversation, $"{totalRelease:N2} VND released to the freelancer.", now, systemMessages);
             AddSystemMessage(conversation,
                 command.ContractAction == AdminContractAction.Resume ? "Contract has been resumed." : "Contract has been terminated.",
                 now,
@@ -246,7 +238,7 @@ public sealed class ResolveAdminDisputeCommandHandler :
                 UserId = userId,
                 Type = (int)NotificationType.DisputeUpdate,
                 Title = "Dispute resolved",
-                Content = $"The dispute for '{contract.Title}' was resolved. Released: {totalRelease:N2}; refunded: {totalRefund:N2} GigCoin.",
+                Content = $"The dispute for '{contract.Title}' was resolved. Released: {totalRelease:N2} VND; refunded: {totalRefund:N2} VND.",
                 ReferenceId = contract.ContractsId,
                 ReferenceType = nameof(Contract),
                 IsRead = false,
@@ -289,18 +281,18 @@ public sealed class ResolveAdminDisputeCommandHandler :
         UserWallet clientWallet, UserWallet freelancerWallet, Dispute dispute, decimal amount, DateTime now)
     {
         var code = $"DISPUTE-RELEASE-{dispute.DisputesId:N}-{milestone.MilestonesId:N}";
-        foreach (var wallet in new[] { clientWallet, freelancerWallet })
-        {
-            _context.Set<WalletTransaction>().Add(new WalletTransaction
-            {
-                WalletTransactionsId = Guid.NewGuid(), UserWalletsId = wallet.UserWalletsId, UserId = wallet.UserId,
-                ContractsId = contract.ContractsId, ContractEscrowId = escrow.ContractEscrowId,
-                MilestonesId = milestone.MilestonesId, TokenAmount = amount, VndAmount = amount,
-                Type = (int)WalletTransactionType.EscrowRelease, Status = (int)WalletTransactionStatus.Succeeded,
-                IdempotencyKey = code, GatewayProvider = "AdminDisputeResolution", GatewayTransactionCode = code,
-                Note = "Released through dispute resolution.", CreatedAt = now, CompletedAt = now
-            });
-        }
+        ContractEscrowWalletWorkflow.Release(
+            _context,
+            clientWallet,
+            freelancerWallet,
+            contract.ContractsId,
+            escrow.ContractEscrowId,
+            milestone.MilestonesId,
+            amount,
+            code,
+            "AdminDisputeResolution",
+            "Released through dispute resolution.",
+            now);
         _context.Set<EscrowTransaction>().Add(new EscrowTransaction
         {
             EscrowTransactionId = Guid.NewGuid(), ContractEscrowId = escrow.ContractEscrowId,
@@ -315,16 +307,17 @@ public sealed class ResolveAdminDisputeCommandHandler :
         UserWallet clientWallet, Dispute dispute, decimal amount, DateTime now)
     {
         var code = $"DISPUTE-REFUND-{dispute.DisputesId:N}-{milestone.MilestonesId:N}";
-        _context.Set<WalletTransaction>().Add(new WalletTransaction
-        {
-            WalletTransactionsId = Guid.NewGuid(), UserWalletsId = clientWallet.UserWalletsId,
-            UserId = clientWallet.UserId, ContractsId = contract.ContractsId,
-            ContractEscrowId = escrow.ContractEscrowId, MilestonesId = milestone.MilestonesId,
-            TokenAmount = amount, VndAmount = amount, Type = (int)WalletTransactionType.EscrowRefund,
-            Status = (int)WalletTransactionStatus.Succeeded, IdempotencyKey = code,
-            GatewayProvider = "AdminDisputeResolution", GatewayTransactionCode = code,
-            Note = "Refunded through dispute resolution.", CreatedAt = now, CompletedAt = now
-        });
+        ContractEscrowWalletWorkflow.Refund(
+            _context,
+            clientWallet,
+            contract.ContractsId,
+            escrow.ContractEscrowId,
+            milestone.MilestonesId,
+            amount,
+            code,
+            "AdminDisputeResolution",
+            "Refunded through dispute resolution.",
+            now);
         _context.Set<EscrowTransaction>().Add(new EscrowTransaction
         {
             EscrowTransactionId = Guid.NewGuid(), ContractEscrowId = escrow.ContractEscrowId,

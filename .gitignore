@@ -35,3 +35,11 @@ GigBridge/Project_API/Properties/launchSettings.json
 *.csproj
 /docs
 *.tmp
+repomix-output.xml
+*.txt
+
+# Versioned ESign delivery documentation and SQL migration
+!/docs/
+!/docs/reviews/
+!/docs/reviews/review-esign.md
+!database/migrations/20260720-add-esign-docx-artifacts.sql
