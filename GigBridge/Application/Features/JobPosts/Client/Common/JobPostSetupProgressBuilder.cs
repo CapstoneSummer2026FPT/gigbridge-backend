@@ -1,6 +1,7 @@
 using Application.Common.Interfaces;
 using Application.Features.JobPosts.Client.GetMyJobPostDetail.DTOs;
 using Application.Features.JobPosts.Client.GetMyJobPosts.DTOs;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.JobPosts.Client.Common;
 
@@ -57,25 +58,42 @@ internal static class JobPostSetupProgressBuilder
         jobPost.SetupProgress = progressByJobPostId[jobPost.JobPostsId];
     }
 
-    private static Task<Dictionary<Guid, JobPostSetupProgressDto>> BuildAsync(
+    private static async Task<Dictionary<Guid, JobPostSetupProgressDto>> BuildAsync(
         IApplicationDbContext context,
         IEnumerable<JobPostSetupSource> sources,
         CancellationToken cancellationToken)
     {
         var sourceList = sources.ToList();
 
-        var progressByJobPostId = sourceList.ToDictionary(
-            source => source.JobPostId,
-            BuildProgress);
+        var jobPostIds = sourceList.Select(source => source.JobPostId).ToArray();
+        var plans = await context.Set<Domain.Entities.JobPostMilestonePlan>()
+            .AsNoTracking()
+            .Include(plan => plan.WorkItems)
+            .Where(plan => jobPostIds.Contains(plan.JobPostsId))
+            .ToListAsync(cancellationToken);
 
-        return Task.FromResult(progressByJobPostId);
+        return sourceList.ToDictionary(
+            source => source.JobPostId,
+            source => BuildProgress(source, plans.Where(plan => plan.JobPostsId == source.JobPostId).ToList()));
     }
 
-    private static JobPostSetupProgressDto BuildProgress(JobPostSetupSource source)
+    private static JobPostSetupProgressDto BuildProgress(
+        JobPostSetupSource source,
+        IReadOnlyCollection<Domain.Entities.JobPostMilestonePlan> milestones)
     {
         var isDetailsComplete = IsDetailsComplete(source);
+        var isMilestonePlanComplete = milestones.Count == 0 || milestones.All(milestone =>
+            !string.IsNullOrWhiteSpace(milestone.Title) &&
+            milestone.Amount > 0 &&
+            !string.IsNullOrWhiteSpace(milestone.EstimatedDuration) &&
+            !string.IsNullOrWhiteSpace(milestone.Deliverables) &&
+            !string.IsNullOrWhiteSpace(milestone.AcceptanceCriteria) &&
+            milestone.WorkItems.All(item =>
+                !string.IsNullOrWhiteSpace(item.Title) &&
+                !string.IsNullOrWhiteSpace(item.Description)));
         var canPublish = source.Status == DraftJobPostStatus &&
-            isDetailsComplete;
+            isDetailsComplete &&
+            isMilestonePlanComplete;
 
         return new JobPostSetupProgressDto
         {
@@ -83,11 +101,13 @@ internal static class JobPostSetupProgressBuilder
             ContractId = null,
             ESignDocumentId = null,
             ESignStatus = null,
-            HasMilestones = false,
+            HasMilestones = milestones.Count > 0,
+            IsMilestonePlanComplete = isMilestonePlanComplete,
             CanPublish = canPublish,
             NextIncompleteStep = GetNextStep(
                 source.Status,
                 isDetailsComplete,
+                isMilestonePlanComplete,
                 canPublish)
         };
     }
@@ -95,6 +115,7 @@ internal static class JobPostSetupProgressBuilder
     private static string GetNextStep(
         int jobPostStatus,
         bool isDetailsComplete,
+        bool isMilestonePlanComplete,
         bool canPublish)
     {
         if (jobPostStatus == OpenJobPostStatus)
@@ -105,6 +126,11 @@ internal static class JobPostSetupProgressBuilder
         if (!isDetailsComplete)
         {
             return JobPostSetupStepNames.Details;
+        }
+
+        if (!isMilestonePlanComplete)
+        {
+            return JobPostSetupStepNames.Milestones;
         }
 
         return canPublish

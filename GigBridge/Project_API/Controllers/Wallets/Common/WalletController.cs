@@ -132,10 +132,17 @@ public sealed class WalletController : BaseApiController
 
     [HttpGet("withdrawal-settings")]
     [Authorize(Roles = nameof(UserRole.Freelancer))]
-    public IActionResult GetWithdrawalSettings()
+    public async Task<IActionResult> GetWithdrawalSettings()
     {
+        var enabled = _withdrawalOptions.Enabled;
+        if (enabled)
+        {
+            var payoutProvider = HttpContext.RequestServices.GetRequiredService<IPayoutProvider>();
+            enabled = (await payoutProvider.CheckAvailabilityAsync(HttpContext.RequestAborted)).IsAvailable;
+        }
+
         var result = new WithdrawalSettingsResponse(
-            _withdrawalOptions.Enabled,
+            enabled,
             TokenWalletRules.VndPerToken,
             _withdrawalOptions.FixedFeeVnd,
             _withdrawalOptions.MinTokens,
@@ -206,7 +213,9 @@ public sealed class WalletController : BaseApiController
         }
 
         var result = await Mediator.Send(new CreateWithdrawalCommand(userId, request));
-        return Ok(ApiResponse<WithdrawalResponse>.Ok(result, "Withdrawal request created"));
+        return Accepted(ApiResponse<WithdrawalResponse>.Ok(
+            result,
+            "Withdrawal queued for automatic processing"));
     }
 
     [HttpGet("withdrawals")]

@@ -51,9 +51,9 @@ public sealed class GetFinancialOverviewQueryHandler :
             request.Period,
             _dateTimeService.UtcNow,
             timeZone);
-        var serviceFeePrefix = isClient
-            ? ServiceFeeWorkflow.EndProjectFeePrefix
-            : ServiceFeeWorkflow.AcceptJobFeePrefix;
+        IReadOnlyList<string> serviceFeePrefixes = isClient
+            ? [ServiceFeeWorkflow.ClientFundingFeePrefix, ServiceFeeWorkflow.EndProjectFeePrefix]
+            : [ServiceFeeWorkflow.FreelancerReleaseFeePrefix, ServiceFeeWorkflow.AcceptJobFeePrefix];
 
         var transactions = await _context.Set<WalletTransaction>()
             .AsNoTracking()
@@ -68,13 +68,14 @@ public sealed class GetFinancialOverviewQueryHandler :
                  (isClient && transaction.Type == (int)WalletTransactionType.EscrowRefund) ||
                  (transaction.Type == (int)WalletTransactionType.Adjustment &&
                   transaction.IdempotencyKey != null &&
-                  transaction.IdempotencyKey.StartsWith(serviceFeePrefix))))
+                  (transaction.IdempotencyKey.StartsWith(serviceFeePrefixes[0]) ||
+                   transaction.IdempotencyKey.StartsWith(serviceFeePrefixes[1])))))
             .Select(transaction => new FinancialTransactionRecord(
                 transaction.WalletTransactionsId,
                 transaction.ContractsId!.Value,
                 transaction.Contract != null ? transaction.Contract.Title : "Project",
                 transaction.Type,
-                transaction.TokenAmount,
+                transaction.VndAmount,
                 transaction.IdempotencyKey,
                 transaction.CompletedAt ?? transaction.CreatedAt))
             .ToListAsync(cancellationToken);
@@ -83,7 +84,7 @@ public sealed class GetFinancialOverviewQueryHandler :
             .Where(transaction => transaction.Type == (int)WalletTransactionType.EscrowRelease)
             .ToList();
         var serviceFeeTransactions = transactions
-            .Where(transaction => IsServiceFee(transaction, serviceFeePrefix))
+            .Where(transaction => IsServiceFee(transaction, serviceFeePrefixes))
             .ToList();
 
         var totalAmount = releaseTransactions.Sum(transaction => transaction.Amount);
@@ -119,15 +120,10 @@ public sealed class GetFinancialOverviewQueryHandler :
         var totalContractValue = relevantContracts.Sum(contract => contract.TotalBudget);
         var progressAmount = progressContractIds.Length == 0
             ? 0m
-            : await _context.Set<WalletTransaction>()
+            : await _context.Set<ContractEscrow>()
                 .AsNoTracking()
-                .Where(transaction =>
-                    transaction.UserId == request.UserId &&
-                    transaction.Status == (int)WalletTransactionStatus.Succeeded &&
-                    transaction.Type == (int)WalletTransactionType.EscrowRelease &&
-                    transaction.ContractsId.HasValue &&
-                    progressContractIds.Contains(transaction.ContractsId.Value))
-                .SumAsync(transaction => transaction.TokenAmount, cancellationToken);
+                .Where(escrow => progressContractIds.Contains(escrow.ContractsId))
+                .SumAsync(escrow => escrow.ReleasedAmount, cancellationToken);
         var progressPercentage = totalContractValue <= 0m
             ? 0m
             : decimal.Round(
@@ -141,11 +137,11 @@ public sealed class GetFinancialOverviewQueryHandler :
             localPeriodStart,
             localPeriodEnd,
             timeZone,
-            serviceFeePrefix);
+            serviceFeePrefixes);
         var recentTransactions = transactions
             .OrderByDescending(transaction => transaction.OccurredAt)
             .Take(RecentTransactionLimit)
-            .Select(transaction => ToTransactionItem(transaction, isClient, serviceFeePrefix))
+            .Select(transaction => ToTransactionItem(transaction, isClient, serviceFeePrefixes))
             .ToList();
 
         return new FinancialOverviewResponse(
@@ -188,7 +184,7 @@ public sealed class GetFinancialOverviewQueryHandler :
         DateTime localPeriodStart,
         DateTime localPeriodEnd,
         TimeZoneInfo timeZone,
-        string serviceFeePrefix)
+        IReadOnlyCollection<string> serviceFeePrefixes)
     {
         IReadOnlyList<DateTime> bucketStarts = period switch
         {
@@ -239,7 +235,7 @@ public sealed class GetFinancialOverviewQueryHandler :
                     .Where(transaction => transaction.Type == (int)WalletTransactionType.EscrowHold)
                     .Sum(transaction => transaction.Amount),
                 bucketTransactions
-                    .Where(transaction => IsServiceFee(transaction, serviceFeePrefix))
+                    .Where(transaction => IsServiceFee(transaction, serviceFeePrefixes))
                     .Sum(transaction => transaction.Amount));
         }).ToList();
     }
@@ -247,14 +243,14 @@ public sealed class GetFinancialOverviewQueryHandler :
     private static FinancialTransactionItem ToTransactionItem(
         FinancialTransactionRecord transaction,
         bool isClient,
-        string serviceFeePrefix)
+        IReadOnlyCollection<string> serviceFeePrefixes)
     {
         var category = transaction.Type switch
         {
             (int)WalletTransactionType.EscrowHold => "escrow",
             (int)WalletTransactionType.EscrowRelease => "released",
             (int)WalletTransactionType.EscrowRefund => "refund",
-            _ when IsServiceFee(transaction, serviceFeePrefix) => "serviceFee",
+            _ when IsServiceFee(transaction, serviceFeePrefixes) => "serviceFee",
             _ => "other"
         };
         var isPositive = transaction.Type == (int)WalletTransactionType.EscrowRefund ||
@@ -272,10 +268,12 @@ public sealed class GetFinancialOverviewQueryHandler :
 
     private static bool IsServiceFee(
         FinancialTransactionRecord transaction,
-        string serviceFeePrefix)
+        IReadOnlyCollection<string> serviceFeePrefixes)
     {
         return transaction.Type == (int)WalletTransactionType.Adjustment &&
-            transaction.IdempotencyKey?.StartsWith(serviceFeePrefix, StringComparison.Ordinal) == true;
+            transaction.IdempotencyKey is not null &&
+            serviceFeePrefixes.Any(prefix =>
+                transaction.IdempotencyKey.StartsWith(prefix, StringComparison.Ordinal));
     }
 
     private static (

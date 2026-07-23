@@ -46,7 +46,9 @@ public sealed class AdminWithdrawalsController : BaseApiController
         }
 
         var result = await Mediator.Send(new RetryWithdrawalCommand(adminUserId, withdrawalId));
-        return Ok(ApiResponse<WithdrawalResponse>.Ok(result, "Withdrawal retry scheduled"));
+        return Accepted(ApiResponse<WithdrawalResponse>.Ok(
+            result,
+            "Withdrawal retry queued; worker will process automatically"));
     }
 
 }

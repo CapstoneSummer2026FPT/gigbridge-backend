@@ -2,6 +2,7 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Domain.Entities;
 using Domain.Enums;
+using Domain.Services.Payments;
 using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.Wallets.Common;
@@ -10,11 +11,13 @@ internal static class ServiceFeeWorkflow
 {
     internal const string AcceptJobFeePrefix = "SERVICE-FEE-ACCEPT-";
     internal const string EndProjectFeePrefix = "SERVICE-FEE-END-";
+    internal const string ClientFundingFeePrefix = "SERVICE-FEE-FUND-";
+    internal const string FreelancerReleaseFeePrefix = "SERVICE-FEE-RELEASE-";
     private const decimal ServiceFeeRate = 0.01m;
 
-    public static decimal Calculate(decimal jobAmount)
+    public static decimal CalculateVnd(decimal amountVnd)
     {
-        return decimal.Round(jobAmount * ServiceFeeRate, 4, MidpointRounding.AwayFromZero);
+        return decimal.Round(amountVnd * ServiceFeeRate, 2, MidpointRounding.AwayFromZero);
     }
 
     public static async Task<decimal> ChargeAsync(
@@ -27,8 +30,9 @@ internal static class ServiceFeeWorkflow
         DateTime now,
         CancellationToken cancellationToken)
     {
-        var serviceFee = Calculate(jobAmount);
-        if (serviceFee <= 0)
+        var serviceFeeVnd = CalculateVnd(jobAmount);
+        var serviceFeeTokens = TokenWalletRules.ToTokens(serviceFeeVnd);
+        if (serviceFeeTokens <= 0)
         {
             throw new BadRequestException("The job amount must be greater than zero to calculate the service fee.");
         }
@@ -53,7 +57,7 @@ internal static class ServiceFeeWorkflow
             throw new BadRequestException("Insufficient GigCoin balance to pay the service fee.");
         }
 
-        WalletWorkflow.DebitAvailable(wallet, serviceFee, now, "Insufficient GigCoin balance to pay the service fee.");
+        WalletWorkflow.DebitAvailable(wallet, serviceFeeTokens, now, "Insufficient GigCoin balance to pay the service fee.");
 
         context.Set<WalletTransaction>().Add(new WalletTransaction
         {
@@ -61,8 +65,8 @@ internal static class ServiceFeeWorkflow
             UserWalletsId = wallet.UserWalletsId,
             UserId = userId,
             ContractsId = contractId,
-            TokenAmount = serviceFee,
-            VndAmount = decimal.Round(jobAmount * ServiceFeeRate, 2, MidpointRounding.AwayFromZero),
+            TokenAmount = serviceFeeTokens,
+            VndAmount = serviceFeeVnd,
             Type = (int)WalletTransactionType.Adjustment,
             Status = (int)WalletTransactionStatus.Succeeded,
             IdempotencyKey = idempotencyKey,
@@ -74,6 +78,6 @@ internal static class ServiceFeeWorkflow
             CompletedAt = now
         });
 
-        return serviceFee;
+        return serviceFeeTokens;
     }
 }

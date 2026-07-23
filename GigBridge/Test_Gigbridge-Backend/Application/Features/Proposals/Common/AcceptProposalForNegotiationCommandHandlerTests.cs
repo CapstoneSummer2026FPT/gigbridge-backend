@@ -74,6 +74,9 @@ public class AcceptProposalForNegotiationCommandHandlerTests
         Assert.Empty(fixture.Milestones.Entities);
         Assert.Equal(2, fixture.NegotiationDrafts.Entities.Count);
         Assert.Equal(1500m, fixture.NegotiationDrafts.Entities.Sum(milestone => milestone.Amount));
+        Assert.Equal(
+            new DateOnly?[] { new(2026, 7, 1), new(2026, 7, 15) },
+            fixture.NegotiationDrafts.Entities.OrderBy(milestone => milestone.OrderIndex).Select(milestone => milestone.DueDate));
         Assert.Empty(fixture.EscrowTransactions.Entities);
 
         // Assert realtime notification called
@@ -279,6 +282,7 @@ public class AcceptProposalForNegotiationCommandHandlerTests
                 ProposalsId = ProposalId,
                 Title = "Foundation",
                 Amount = 600m,
+                DueDate = new DateOnly(2026, 7, 1),
                 OrderIndex = 0
             });
             Proposal.ProposalMilestonePlans.Add(new ProposalMilestonePlan
@@ -287,6 +291,7 @@ public class AcceptProposalForNegotiationCommandHandlerTests
                 ProposalsId = ProposalId,
                 Title = "Final delivery",
                 Amount = 900m,
+                DueDate = new DateOnly(2026, 7, 15),
                 OrderIndex = 1
             });
             Contract = new Contract

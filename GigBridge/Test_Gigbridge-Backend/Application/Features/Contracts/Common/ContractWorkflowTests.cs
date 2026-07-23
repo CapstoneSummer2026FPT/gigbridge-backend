@@ -1,5 +1,6 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces.IService;
+using Application.Features.Contracts.Common.Internal;
 using Application.Features.Contracts.Details.Client.Update.Commands;
 using Application.Features.Contracts.Details.Client.Update.DTOs;
 using Application.Features.Contracts.Details.Client.Submit.Commands;
@@ -31,7 +32,8 @@ public class ContractWorkflowTests
 
         var request = new UpdateContractDetailsRequest(
             [
-                new ContractMilestoneRequest(null, "Milestone 1", 1_000_001m, DateOnly.FromDateTime(fixture.Now.AddDays(7)), 0)
+                new ContractMilestoneRequest(null, "Milestone 1", 1_000_001m, DateOnly.FromDateTime(fixture.Now.AddDays(7)), 0,
+                    WorkItems: [new ContractWorkItemRequest(null, "Implementation", "Complete implementation.", "Source code", "1 week", 0)])
             ]);
 
         var exception = await Assert.ThrowsAsync<BadRequestException>(() =>
@@ -44,7 +46,7 @@ public class ContractWorkflowTests
     }
     
     [Fact]
-    public async Task SubmitAndFreelancerConfirm_CreatesFullEscrowAndMovesToPendingSignature()
+    public async Task SubmitAndFreelancerConfirm_CreatesEsignDocumentAndPendingEscrow()
     {
         var fixture = new ContractWorkflowFixture();
         fixture.ApplyValidDetails();
@@ -58,11 +60,13 @@ public class ContractWorkflowTests
             CancellationToken.None);
 
         Assert.Equal((int)ContractStatus.PendingContractConfirmation, fixture.Contract.Status);
+        fixture.AddTemplate();
 
         var confirmHandler = new ConfirmContractDetailsCommandHandler(
             fixture.Context,
             new FixedDateTimeService(fixture.Now.AddMinutes(1)),
-            new NoopChatRealtimeNotifier());
+            new NoopChatRealtimeNotifier(),
+            fixture.DocumentGenerator);
 
         await confirmHandler.Handle(
             new ConfirmContractDetailsCommand(fixture.ContractId, fixture.FreelancerUserId),
@@ -74,9 +78,10 @@ public class ContractWorkflowTests
 
         var escrow = Assert.Single(fixture.Escrows.Entities);
         Assert.Equal(1_000m, escrow.RequiredAmount);
-        Assert.Equal(1.0m, escrow.RequiredPercentage);
         Assert.Equal(0m, escrow.FundedAmount);
         Assert.Equal((int)ContractEscrowStatus.PendingFunding, escrow.Status);
+        Assert.Single(fixture.EsignDocuments.Entities);
+        Assert.NotNull(fixture.EsignDocuments.Entities[0].ContractSnapshotJson);
         Assert.Equal((int)ContractStatus.PendingSignature, fixture.Contract.Status);
     }
 
@@ -98,6 +103,8 @@ public class ContractWorkflowTests
                 CancellationToken.None));
 
         fixture.MoveToFullySignedPendingEscrow();
+        fixture.Contract.TotalBudget = 1_000_000m;
+        fixture.Escrows.Entities[0].RequiredAmount = 1_000_000m;
 
         await Assert.ThrowsAsync<BadRequestException>(() =>
             handler.Handle(
@@ -108,7 +115,7 @@ public class ContractWorkflowTests
         {
             UserWalletsId = fixture.WalletId,
             UserId = fixture.ClientUserId,
-            AvailableTokens = 900m,
+            AvailableTokens = 999m,
             HeldTokens = 0m,
             CreatedAt = fixture.Now
         });
@@ -118,20 +125,27 @@ public class ContractWorkflowTests
                 new FundContractEscrowCommand(fixture.ContractId, fixture.ClientUserId),
                 CancellationToken.None));
 
-        fixture.Wallets.Entities[0].AvailableTokens = 1_000m;
+        fixture.Wallets.Entities[0].AvailableTokens = 1_010m;
 
         var result = await handler.Handle(
             new FundContractEscrowCommand(fixture.ContractId, fixture.ClientUserId),
             CancellationToken.None);
 
-        Assert.Equal(1_000m, result.RequiredAmountVnd);
+        Assert.Equal(1_000_000m, result.RequiredAmountVnd);
         Assert.Equal(1_000m, result.HeldTokens);
         Assert.Equal(0m, fixture.Wallets.Entities[0].AvailableTokens);
         Assert.Equal(1_000m, fixture.Wallets.Entities[0].HeldTokens);
         Assert.Equal((int)ContractEscrowStatus.Funded, fixture.Escrows.Entities[0].Status);
         Assert.Equal((int)ContractStatus.Active, fixture.Contract.Status);
         Assert.Single(fixture.EsignDocuments.Entities);
-        Assert.Single(fixture.WalletTransactions.Entities);
+        var fee = Assert.Single(fixture.WalletTransactions.Entities.Where(transaction =>
+            transaction.Type == (int)WalletTransactionType.Adjustment));
+        Assert.Equal(10m, fee.TokenAmount);
+        Assert.Equal(10_000m, fee.VndAmount);
+        var hold = Assert.Single(fixture.WalletTransactions.Entities.Where(transaction =>
+            transaction.Type == (int)WalletTransactionType.EscrowHold));
+        Assert.Equal(1_000m, hold.TokenAmount);
+        Assert.Equal(1_000_000m, hold.VndAmount);
         Assert.Single(fixture.EscrowTransactions.Entities);
     }
 
@@ -145,7 +159,7 @@ public class ContractWorkflowTests
         {
             UserWalletsId = fixture.WalletId,
             UserId = fixture.ClientUserId,
-            AvailableTokens = 1_000m,
+            AvailableTokens = 1.01m,
             HeldTokens = 0m,
             CreatedAt = fixture.Now
         });
@@ -163,19 +177,19 @@ public class ContractWorkflowTests
         Assert.Equal((int)ContractStatus.Active, result.ContractStatus);
         Assert.Equal((int)ContractStatus.Active, fixture.Contract.Status);
         Assert.Equal(1_000m, result.RequiredAmountVnd);
-        Assert.Equal(1_000m, result.HeldTokens);
+        Assert.Equal(1m, result.HeldTokens);
         Assert.Equal(0m, fixture.Wallets.Entities[0].AvailableTokens);
-        Assert.Equal(1_000m, fixture.Wallets.Entities[0].HeldTokens);
+        Assert.Equal(1m, fixture.Wallets.Entities[0].HeldTokens);
         Assert.Equal((int)ContractEscrowStatus.Funded, fixture.Escrows.Entities[0].Status);
         Assert.Equal(fixture.Contract.TotalBudget, fixture.Escrows.Entities[0].RequiredAmount);
         Assert.Equal((int)ESignDocumentStatus.FullySigned, fixture.EsignDocuments.Entities[0].Status);
         Assert.Equal(2, fixture.Context.Set<JobPost>().Single().Status);
-        Assert.Single(fixture.WalletTransactions.Entities);
+        Assert.Equal(2, fixture.WalletTransactions.Entities.Count);
         Assert.Single(fixture.EscrowTransactions.Entities);
     }
 
     [Fact]
-    public async Task FundEscrow_StuckPendingSignatureBridgesClientJobPostSignatureAndFunds()
+    public async Task FundEscrow_DoesNotBridgeLegacyJobPostSignature()
     {
         var fixture = new ContractWorkflowFixture();
         fixture.MoveToPendingSignatureWithDocument();
@@ -196,29 +210,25 @@ public class ContractWorkflowTests
             new NoopNotificationService(),
             new NoopChatRealtimeNotifier());
 
-        var result = await handler.Handle(
+        var exception = await Assert.ThrowsAsync<BadRequestException>(() => handler.Handle(
             new FundContractEscrowCommand(fixture.ContractId, fixture.ClientUserId),
-            CancellationToken.None);
+            CancellationToken.None));
 
         var contractDocument = fixture.GetContractDocument();
         var contractSignatures = fixture.EsignSignatures.Entities
             .Where(signature => signature.EsignDocumentsId == contractDocument.EsignDocumentsId)
             .ToList();
 
-        Assert.Equal((int)ContractStatus.Active, result.ContractStatus);
-        Assert.Equal((int)ContractStatus.Active, fixture.Contract.Status);
-        Assert.Equal((int)ESignDocumentStatus.FullySigned, contractDocument.Status);
-        Assert.Contains(contractSignatures, signature =>
-            signature.UserId == fixture.ClientUserId &&
-            signature.SignerRole == (int)ESignerRole.Client &&
-            signature.SignatureImageUrl == fixture.ClientSignatureUrl);
+        Assert.Contains("both parties sign", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal((int)ContractStatus.PendingSignature, fixture.Contract.Status);
+        Assert.Equal((int)ESignDocumentStatus.PartiallySigned, contractDocument.Status);
+        Assert.DoesNotContain(contractSignatures, signature => signature.UserId == fixture.ClientUserId);
         Assert.Contains(contractSignatures, signature =>
             signature.UserId == fixture.FreelancerUserId &&
             signature.SignerRole == (int)ESignerRole.Freelancer);
-        Assert.Equal((int)ContractEscrowStatus.Funded, fixture.Escrows.Entities[0].Status);
-        Assert.Equal(2, fixture.Context.Set<JobPost>().Single().Status);
-        Assert.Single(fixture.WalletTransactions.Entities);
-        Assert.Single(fixture.EscrowTransactions.Entities);
+        Assert.Equal((int)ContractEscrowStatus.PendingFunding, fixture.Escrows.Entities[0].Status);
+        Assert.Empty(fixture.WalletTransactions.Entities);
+        Assert.Empty(fixture.EscrowTransactions.Entities);
     }
 
     [Fact]
@@ -268,13 +278,14 @@ public class ContractWorkflowTests
             fixture.Context,
             new FixedDateTimeService(fixture.Now),
             new NoopChatRealtimeNotifier(),
-            fixture.MediaService);
+            fixture.MediaService,
+            fixture.DocumentGenerator);
 
         await handler.Handle(
             new SignContractCommand(
                 fixture.ContractId,
                 fixture.ClientUserId,
-                new SignContractRequest(SignatureDataUri, 300, 100),
+                new SignContractRequest(SignatureDataUri, 300, 100, true, "1.0-DATN"),
                 "127.0.0.1",
                 "test"),
             CancellationToken.None);
@@ -284,13 +295,17 @@ public class ContractWorkflowTests
         Assert.Equal(fixture.ClientSignatureUrl, fixture.EsignSignatures.Entities[0].SignatureImageUrl);
         Assert.Equal("esign/signatures", fixture.MediaService.Uploads[0].Folder);
         Assert.Equal("image/png", fixture.MediaService.Uploads[0].ContentType);
+        Assert.Equal("1.0-DATN", fixture.EsignSignatures.Entities[0].PolicyVersion);
+        Assert.Equal(fixture.Now, fixture.EsignSignatures.Entities[0].PolicyAcceptedAt);
+        Assert.Null(fixture.EsignDocuments.Entities[0].FinalizedDocumentContent);
+        Assert.Empty(fixture.DeliveryOutboxes.Entities);
 
         await Assert.ThrowsAsync<ConflictException>(() =>
             handler.Handle(
                 new SignContractCommand(
                     fixture.ContractId,
                     fixture.ClientUserId,
-                    new SignContractRequest(SignatureDataUri, null, null),
+                    new SignContractRequest(SignatureDataUri, null, null, true, "1.0-DATN"),
                     null,
                     null),
                 CancellationToken.None));
@@ -299,7 +314,7 @@ public class ContractWorkflowTests
             new SignContractCommand(
                 fixture.ContractId,
                 fixture.FreelancerUserId,
-                new SignContractRequest(SignatureDataUri, 300, 100),
+                new SignContractRequest(SignatureDataUri, 300, 100, true, "1.0-DATN"),
                 "127.0.0.1",
                 "test"),
             CancellationToken.None);
@@ -316,10 +331,29 @@ public class ContractWorkflowTests
         Assert.Equal(2, fixture.EsignSignatures.Entities.Count);
         Assert.Equal(fixture.FreelancerSignatureUrl, fixture.EsignSignatures.Entities[1].SignatureImageUrl);
         Assert.Equal(2, fixture.MediaService.Uploads.Count);
+        Assert.Equal(4, fixture.EsignDocuments.Entities[0].FinalizedDocumentContent?.Length);
+        Assert.Equal(4L, fixture.EsignDocuments.Entities[0].FinalizedDocumentSizeBytes);
+        Assert.EndsWith(".docx", fixture.EsignDocuments.Entities[0].FinalizedDocumentFileName);
+        Assert.Equal(64, fixture.EsignDocuments.Entities[0].DocumentHash?.Length);
+        Assert.Single(fixture.DocumentGenerator.GenerateCalls);
+        var generation = fixture.DocumentGenerator.GenerateCalls[0];
+        Assert.NotEqual(
+            generation.DocumentHash,
+            ContractEsignRenderer.ComputeFinalHash(
+                fixture.EsignDocuments.Entities[0],
+                generation.ClientSignature with { PolicyVersion = "changed" },
+                generation.FreelancerSignature));
+        Assert.Equal(2, fixture.DeliveryOutboxes.Entities.Count);
+        Assert.All(fixture.DeliveryOutboxes.Entities, delivery =>
+        {
+            Assert.Null(delivery.ScheduleId);
+            Assert.Equal((int)DeliveryChannel.Email, delivery.Channel);
+            Assert.Equal((int)DeliveryOutboxStatus.Pending, delivery.Status);
+        });
     }
 
     [Fact]
-    public async Task SignContract_FreelancerSignatureBridgesClientJobPostSignatureAndMovesToEscrow()
+    public async Task SignContract_FreelancerSignatureDoesNotBridgeLegacyClientSignature()
     {
         var fixture = new ContractWorkflowFixture();
         fixture.MoveToPendingSignatureWithDocument();
@@ -330,13 +364,14 @@ public class ContractWorkflowTests
             fixture.Context,
             new FixedDateTimeService(fixture.Now),
             new NoopChatRealtimeNotifier(),
-            mediaService);
+            mediaService,
+            fixture.DocumentGenerator);
 
         var result = await handler.Handle(
             new SignContractCommand(
                 fixture.ContractId,
                 fixture.FreelancerUserId,
-                new SignContractRequest(SignatureDataUri, 300, 100),
+                new SignContractRequest(SignatureDataUri, 300, 100, true, "1.0-DATN"),
                 "127.0.0.1",
                 "test"),
             CancellationToken.None);
@@ -346,20 +381,46 @@ public class ContractWorkflowTests
             .Where(signature => signature.EsignDocumentsId == contractDocument.EsignDocumentsId)
             .ToList();
 
-        Assert.Equal((int)ContractStatus.PendingEscrow, fixture.Contract.Status);
-        Assert.Equal((int)ContractStatus.PendingEscrow, result.Status);
-        Assert.Equal((int)ESignDocumentStatus.FullySigned, contractDocument.Status);
-        Assert.Equal(fixture.Escrows.Entities[0].ContractEscrowId, result.EscrowId);
-        Assert.Contains(contractSignatures, signature =>
-            signature.UserId == fixture.ClientUserId &&
-            signature.SignerRole == (int)ESignerRole.Client &&
-            signature.SignatureImageUrl == fixture.ClientSignatureUrl);
+        Assert.Equal((int)ContractStatus.PendingSignature, fixture.Contract.Status);
+        Assert.Equal((int)ContractStatus.PendingSignature, result.Status);
+        Assert.Equal((int)ESignDocumentStatus.PartiallySigned, contractDocument.Status);
+        Assert.Null(result.EscrowId);
+        Assert.DoesNotContain(contractSignatures, signature => signature.UserId == fixture.ClientUserId);
         Assert.Contains(contractSignatures, signature =>
             signature.UserId == fixture.FreelancerUserId &&
             signature.SignerRole == (int)ESignerRole.Freelancer &&
             signature.SignatureImageUrl == fixture.FreelancerSignatureUrl);
-        Assert.Equal(2, fixture.Context.Set<JobPost>().Single().Status);
+        Assert.Equal(1, fixture.Context.Set<JobPost>().Single().Status);
         Assert.Single(mediaService.Uploads);
+    }
+
+    [Theory]
+    [InlineData(false, null)]
+    [InlineData(true, null)]
+    [InlineData(true, "0.9")]
+    public async Task SignContract_RejectsMissingOrWrongPolicyAcceptance(bool accepted, string? version)
+    {
+        var fixture = new ContractWorkflowFixture();
+        fixture.MoveToPendingSignatureWithDocument();
+        var handler = new SignContractCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopChatRealtimeNotifier(),
+            fixture.MediaService,
+            fixture.DocumentGenerator);
+
+        await Assert.ThrowsAsync<BadRequestException>(() =>
+            handler.Handle(
+                new SignContractCommand(
+                    fixture.ContractId,
+                    fixture.ClientUserId,
+                    new SignContractRequest(SignatureDataUri, 300, 100, accepted, version),
+                    null,
+                    null),
+                CancellationToken.None));
+
+        Assert.Empty(fixture.MediaService.Uploads);
+        Assert.Empty(fixture.EsignSignatures.Entities);
     }
 
     [Fact]
@@ -372,14 +433,15 @@ public class ContractWorkflowTests
             fixture.Context,
             new FixedDateTimeService(fixture.Now),
             new NoopChatRealtimeNotifier(),
-            fixture.MediaService);
+            fixture.MediaService,
+            fixture.DocumentGenerator);
 
         await Assert.ThrowsAsync<BadRequestException>(() =>
             handler.Handle(
                 new SignContractCommand(
                     fixture.ContractId,
                     fixture.ClientUserId,
-                    new SignContractRequest("not-base64", null, null),
+                    new SignContractRequest("not-base64", null, null, true, "1.0-DATN"),
                     null,
                     null),
                 CancellationToken.None));
@@ -466,6 +528,28 @@ public class ContractWorkflowTests
         Assert.Contains("Please adjust the second milestone.", notification.Content);
         Assert.Equal(fixture.ContractId, notification.ReferenceId);
         Assert.Equal("Contract", notification.ReferenceType);
+
+        var submitHandler = new SubmitContractDetailsCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now.AddMinutes(1)),
+            new NoopChatRealtimeNotifier());
+        await submitHandler.Handle(
+            new SubmitContractDetailsCommand(fixture.ContractId, fixture.ClientUserId),
+            CancellationToken.None);
+        var confirmHandler = new ConfirmContractDetailsCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now.AddMinutes(2)),
+            new NoopChatRealtimeNotifier(),
+            fixture.DocumentGenerator);
+        await confirmHandler.Handle(
+            new ConfirmContractDetailsCommand(fixture.ContractId, fixture.FreelancerUserId),
+            CancellationToken.None);
+
+        Assert.Equal(2, fixture.EsignDocuments.Entities.Count);
+        Assert.Single(fixture.EsignDocuments.Entities.Where(document =>
+            document.Status == (int)ESignDocumentStatus.Voided));
+        Assert.Single(fixture.EsignDocuments.Entities.Where(document =>
+            document.Status == (int)ESignDocumentStatus.PendingSignatures));
     }
 
     private sealed class ContractWorkflowFixture
@@ -522,6 +606,7 @@ public class ContractWorkflowTests
             EsignTemplates = Context.AddSet<EsignTemplate>();
             EsignDocuments = Context.AddSet<EsignDocument>();
             EsignSignatures = Context.AddSet<EsignSignature>();
+            DeliveryOutboxes = Context.AddSet<DeliveryOutbox>();
         }
 
         public InMemoryApplicationDbContext Context { get; } = new();
@@ -540,6 +625,7 @@ public class ContractWorkflowTests
         public FakeMediaService MediaService { get; } = new(
             "https://res.cloudinary.com/gigbridge/esign/signatures/client.png",
             "https://res.cloudinary.com/gigbridge/esign/signatures/freelancer.png");
+        public FakeContractEsignDocumentGenerator DocumentGenerator { get; } = new();
         public Contract Contract { get; }
         public Conversation Conversation { get; }
         public TestDbSet<Milestone> Milestones { get; }
@@ -550,12 +636,13 @@ public class ContractWorkflowTests
         public TestDbSet<EsignTemplate> EsignTemplates { get; }
         public TestDbSet<EsignDocument> EsignDocuments { get; }
         public TestDbSet<EsignSignature> EsignSignatures { get; }
+        public TestDbSet<DeliveryOutbox> DeliveryOutboxes { get; }
 
  
         public void ApplyValidDetails()
         {
 
-            Milestones.Add(new Milestone
+            var firstMilestone = new Milestone
             {
                 MilestonesId = Guid.NewGuid(),
                 ContractsId = ContractId,
@@ -564,8 +651,10 @@ public class ContractWorkflowTests
                 Status = (int)MilestoneStatus.Pending,
                 SortOrder = 0,
                 CreatedAt = Now
-            });
-            Milestones.Add(new Milestone
+            };
+            firstMilestone.WorkItems.Add(CreateWorkItem(firstMilestone.MilestonesId, "Implementation", 0));
+            Milestones.Add(firstMilestone);
+            var secondMilestone = new Milestone
             {
                 MilestonesId = Guid.NewGuid(),
                 ContractsId = ContractId,
@@ -574,8 +663,24 @@ public class ContractWorkflowTests
                 Status = (int)MilestoneStatus.Pending,
                 SortOrder = 1,
                 CreatedAt = Now
-            });
+            };
+            secondMilestone.WorkItems.Add(CreateWorkItem(secondMilestone.MilestonesId, "Verification", 0));
+            Milestones.Add(secondMilestone);
         }
+
+        private ContractWorkItem CreateWorkItem(Guid milestoneId, string title, int orderIndex) => new()
+        {
+            ContractWorkItemId = Guid.NewGuid(),
+            MilestonesId = milestoneId,
+            Title = title,
+            Description = $"Complete {title.ToLowerInvariant()} scope.",
+            Deliverables = "Verified project output",
+            EstimatedDuration = "1 week",
+            OrderIndex = orderIndex,
+            Status = (int)ContractWorkItemStatus.Todo,
+            CreatedAt = Now,
+            UpdatedAt = Now
+        };
 
         public void MoveToPendingSignature()
         {

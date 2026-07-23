@@ -39,6 +39,8 @@ public class OpenNegotiationFromInviteCommandHandler
         }
 
         var jobPost = await _context.Set<JobPost>()
+            .Include(item => item.JobPostMilestonePlans)
+                .ThenInclude(item => item.WorkItems)
             .FirstOrDefaultAsync(
                 jobPost => jobPost.JobPostsId == command.JobPostId,
                 cancellationToken);
@@ -63,16 +65,6 @@ public class OpenNegotiationFromInviteCommandHandler
         if (freelancerProfile is null)
         {
             throw new NotFoundException("Freelancer profile does not exist.");
-        }
-
-        var contract = await _context.Set<Contract>()
-            .FirstOrDefaultAsync(
-                contract => contract.JobPostsId == command.JobPostId,
-                cancellationToken);
-
-        if (contract is null)
-        {
-            throw new NotFoundException("Contract draft does not exist for this job post.");
         }
 
         var freelancerConversationIds = await _context.Set<ConversationParticipant>()
@@ -108,7 +100,7 @@ public class OpenNegotiationFromInviteCommandHandler
             ConversationsId = Guid.NewGuid(),
             ConversationType = (int)ConversationType.JobNegotiation,
             JobPostsId = command.JobPostId,
-            ContractsId = contract.ContractsId,
+            ContractsId = null,
             CreatedByUserId = command.UserId,
             Status = (int)ConversationStatus.Active,
             CreatedAt = now
@@ -132,8 +124,34 @@ public class OpenNegotiationFromInviteCommandHandler
             JoinedAt = now
         });
 
-        contract.Status = (int)ContractStatus.InNegotiation;
-        contract.UpdatedAt = now;
+        foreach (var plan in jobPost.JobPostMilestonePlans.OrderBy(item => item.OrderIndex))
+        {
+            var draft = new NegotiationMilestoneDraft
+            {
+                NegotiationMilestoneDraftId = Guid.NewGuid(),
+                ConversationsId = conversation.ConversationsId,
+                Title = plan.Title,
+                Description = plan.Description,
+                Amount = plan.Amount,
+                EstimatedDuration = plan.EstimatedDuration,
+                DueDate = plan.DueDate,
+                Deliverables = plan.Deliverables ?? string.Empty,
+                AcceptanceCriteria = plan.AcceptanceCriteria ?? string.Empty,
+                OrderIndex = plan.OrderIndex,
+                CreatedAt = now
+            };
+            draft.WorkItems = plan.WorkItems.OrderBy(item => item.OrderIndex).Select((item, index) => new NegotiationMilestoneDraftWorkItem
+            {
+                NegotiationMilestoneDraftWorkItemId = Guid.NewGuid(),
+                NegotiationMilestoneDraftId = draft.NegotiationMilestoneDraftId,
+                Title = item.Title,
+                Description = item.Description,
+                Deliverables = item.Deliverables,
+                EstimatedDuration = item.EstimatedDuration,
+                OrderIndex = index
+            }).ToList();
+            _context.Set<NegotiationMilestoneDraft>().Add(draft);
+        }
 
         await _context.SaveChangesAsync(cancellationToken);
         await NotifyConversationUpdated(

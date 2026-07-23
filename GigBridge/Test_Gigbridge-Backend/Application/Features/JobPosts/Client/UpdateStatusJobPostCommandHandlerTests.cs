@@ -70,6 +70,59 @@ public class UpdateStatusJobPostCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_OpenStatusWithMilestoneWithoutDeadline_ThrowsBadRequest()
+    {
+        var fixture = new UpdateStatusFixture();
+        fixture.JobPost.JobPostMilestonePlans.Add(new JobPostMilestonePlan
+        {
+            Title = "Delivery",
+            Amount = 500m,
+            EstimatedDuration = "1 week",
+            Deliverables = "Working release",
+            AcceptanceCriteria = "Acceptance tests pass",
+            OrderIndex = 0
+        });
+
+        var exception = await Assert.ThrowsAsync<BadRequestException>(() =>
+            fixture.CreateHandler().Handle(
+                new UpdateStatusJobPostCommand(
+                    fixture.JobPostId,
+                    fixture.ClientUserId,
+                    new UpdateStatusJobPostRequest { Status = 1 }),
+                CancellationToken.None));
+
+        Assert.Contains("deadline", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(0, fixture.JobPost.Status);
+    }
+
+    [Fact]
+    public async Task Handle_OpenStatusWithValidYearDurationAndDeadline_UpdatesJobPostStatus()
+    {
+        var fixture = new UpdateStatusFixture();
+        fixture.JobPost.EndDate = fixture.Now.AddDays(7);
+        fixture.JobPost.JobPostMilestonePlans.Add(new JobPostMilestonePlan
+        {
+            Title = "Delivery",
+            Amount = 500m,
+            EstimatedDuration = "1 year",
+            DueDate = DateOnly.FromDateTime(fixture.Now.AddYears(1)),
+            Deliverables = "Working release",
+            AcceptanceCriteria = "Acceptance tests pass",
+            OrderIndex = 0
+        });
+
+        var result = await fixture.CreateHandler().Handle(
+            new UpdateStatusJobPostCommand(
+                fixture.JobPostId,
+                fixture.ClientUserId,
+                new UpdateStatusJobPostRequest { Status = 1 }),
+            CancellationToken.None);
+
+        Assert.True(result);
+        Assert.Equal(1, fixture.JobPost.Status);
+    }
+
+    [Fact]
     public async Task Handle_OpenStatusWithIllegalContent_ThrowsValidationException()
     {
         var fixture = new UpdateStatusFixture();

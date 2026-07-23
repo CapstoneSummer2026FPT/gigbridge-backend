@@ -50,22 +50,42 @@ public sealed class UpdateContractDetailsCommandHandler :
 
         var now = _dateTimeService.UtcNow;
         contract.UpdatedAt = now;
+        contract.RevisionNumber += 1;
 
         var newMilestones = command.Request.Milestones
-            .Select((milestone, index) => new Milestone
+            .Select((request, index) =>
             {
-                MilestonesId = milestone.MilestoneId ?? Guid.NewGuid(),
-                ContractsId = contract.ContractsId,
-                Title = milestone.Title,
-                Description = milestone.Description,
-                Amount = milestone.Amount,
-                EstimatedDuration = milestone.EstimatedDuration,
-                DueDate = milestone.DueDate,
-                Deliverables = milestone.Deliverables,
-                AcceptanceCriteria = milestone.AcceptanceCriteria,
-                SortOrder = milestone.SortOrder ?? index,
-                Status = (int)MilestoneStatus.Pending,
-                CreatedAt = now
+                var milestone = new Milestone
+                {
+                    MilestonesId = request.MilestoneId ?? Guid.NewGuid(),
+                    ContractsId = contract.ContractsId,
+                    Title = request.Title,
+                    Description = request.Description,
+                    Amount = request.Amount,
+                    EstimatedDuration = request.EstimatedDuration,
+                    DueDate = request.DueDate,
+                    Deliverables = request.Deliverables,
+                    AcceptanceCriteria = request.AcceptanceCriteria,
+                    SortOrder = request.SortOrder ?? index,
+                    Status = (int)MilestoneStatus.Pending,
+                    CreatedAt = now
+                };
+                milestone.WorkItems = (request.WorkItems ?? [])
+                    .OrderBy(item => item.OrderIndex)
+                    .Select((item, workIndex) => new ContractWorkItem
+                    {
+                        ContractWorkItemId = item.WorkItemId ?? Guid.NewGuid(),
+                        MilestonesId = milestone.MilestonesId,
+                        Title = item.Title.Trim(),
+                        Description = Clean(item.Description),
+                        Deliverables = Clean(item.Deliverables),
+                        EstimatedDuration = Clean(item.EstimatedDuration),
+                        OrderIndex = workIndex,
+                        Status = (int)ContractWorkItemStatus.Todo,
+                        CreatedAt = now
+                    })
+                    .ToList();
+                return milestone;
             })
             .ToList();
 
@@ -102,4 +122,6 @@ public sealed class UpdateContractDetailsCommandHandler :
 
         return new ContractWorkflowResponse(contract.ContractsId, contract.Status, null, null);
     }
+
+    private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

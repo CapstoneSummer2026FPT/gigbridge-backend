@@ -46,24 +46,14 @@ public sealed class ApproveMilestoneCommandHandler :
             command.MilestoneId,
             cancellationToken);
 
+        if (milestone.Status == (int)MilestoneStatus.Approved && milestone.ReleasedAmount >= milestone.Amount)
+        {
+            return MilestoneWorkflowGuard.ToResponse(milestone);
+        }
+
         if (milestone.Status != (int)MilestoneStatus.Submitted)
         {
             throw new BadRequestException("Only submitted milestones can be approved.");
-        }
-
-        var escrow = await _context.Set<ContractEscrow>()
-            .FirstOrDefaultAsync(e => e.ContractsId == contract.ContractsId, cancellationToken);
-
-        if (escrow is null)
-        {
-            throw new NotFoundException("Contract escrow does not exist. The contract must be funded before milestones can be approved.");
-        }
-
-        if (escrow.Status != (int)ContractEscrowStatus.Funded &&
-            escrow.Status != (int)ContractEscrowStatus.PartiallyReleased &&
-            escrow.Status != (int)ContractEscrowStatus.Released)
-        {
-            throw new BadRequestException("Escrow must be funded before milestone approval.");
         }
 
         var now = _dateTimeService.UtcNow;
@@ -71,6 +61,22 @@ public sealed class ApproveMilestoneCommandHandler :
         milestone.ApprovedAt = now;
         milestone.UpdatedAt = now;
         contract.UpdatedAt = now;
+
+        await MilestoneApprovalWorkflow.ReleaseAsync(_context, contract, milestone, now, cancellationToken);
+
+        var milestones = await MilestoneWorkflowGuard.OrderMilestones(
+                _context.Set<Milestone>().Where(item => item.ContractsId == contract.ContractsId))
+            .ToListAsync(cancellationToken);
+        var next = milestones.FirstOrDefault(candidate =>
+            candidate.Status == (int)MilestoneStatus.Pending &&
+            milestones.Where(previous => (previous.SortOrder ?? 0) < (candidate.SortOrder ?? 0))
+                .All(previous => previous.Status == (int)MilestoneStatus.Approved));
+        if (next is not null)
+        {
+            next.Status = (int)MilestoneStatus.InProgress;
+            next.StartedAt = now;
+            next.UpdatedAt = now;
+        }
 
         await ContractConversationEvents.AddSystemMessageAsync(
             _context,

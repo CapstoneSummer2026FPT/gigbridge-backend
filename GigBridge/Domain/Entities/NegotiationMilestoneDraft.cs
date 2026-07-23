@@ -17,4 +17,5 @@ public class NegotiationMilestoneDraft
     public DateTime? UpdatedAt { get; set; }
 
     public virtual Conversation Conversations { get; set; } = null!;
+    public virtual ICollection<NegotiationMilestoneDraftWorkItem> WorkItems { get; set; } = new List<NegotiationMilestoneDraftWorkItem>();
 }

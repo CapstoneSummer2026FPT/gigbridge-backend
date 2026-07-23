@@ -55,13 +55,30 @@ public class EmailService : IEmailService
         }
 
         var attachments = await LoadAttachmentsAsync(emailRequestDTO.Attachments, cancellationToken);
+        if (emailRequestDTO.ByteAttachments is { Count: > 0 })
+        {
+            attachments ??= new List<EmailAttachment>();
+            attachments.AddRange(emailRequestDTO.ByteAttachments.Select(attachment => new EmailAttachment
+            {
+                Filename = attachment.FileName,
+                Content = attachment.Content,
+                ContentType = attachment.ContentType
+            }));
+        }
         if (attachments != null)
         {
             message.Attachments ??= new List<EmailAttachment>();
             message.Attachments.AddRange(attachments);
         }
 
-        await _resend.EmailSendAsync(message, cancellationToken);
+        if (string.IsNullOrWhiteSpace(emailRequestDTO.IdempotencyKey))
+        {
+            await _resend.EmailSendAsync(message, cancellationToken);
+        }
+        else
+        {
+            await _resend.EmailSendAsync(emailRequestDTO.IdempotencyKey, message, cancellationToken);
+        }
     }
 
     private static async Task<List<EmailAttachment>?> LoadAttachmentsAsync(IEnumerable<string>? attachments, CancellationToken cancellationToken)

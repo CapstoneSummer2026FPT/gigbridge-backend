@@ -63,6 +63,8 @@ public partial class JobPost
 
     public virtual ICollection<JobPostQuestion> JobPostQuestions { get; set; } = new List<JobPostQuestion>();
 
+    public virtual ICollection<JobPostMilestonePlan> JobPostMilestonePlans { get; set; } = new List<JobPostMilestonePlan>();
+
     public virtual ICollection<Proposal> Proposals { get; set; } = new List<Proposal>();
 
     public virtual ICollection<SavedJob> SavedJobs { get; set; } = new List<SavedJob>();

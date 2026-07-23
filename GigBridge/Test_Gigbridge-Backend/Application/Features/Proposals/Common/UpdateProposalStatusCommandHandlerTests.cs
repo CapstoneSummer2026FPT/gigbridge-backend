@@ -176,21 +176,25 @@ public class UpdateProposalStatusCommandHandlerTests
             Status = 0,
             JobPosts = jobPost
         };
-        proposal.ProposalWorkBreakdownItems.Add(new ProposalWorkBreakdownItem
-        {
-            ProposalWorkBreakdownItemsId = Guid.NewGuid(),
-            ProposalsId = proposalId,
-            Title = "Implementation"
-        });
-        proposal.ProposalMilestonePlans.Add(new ProposalMilestonePlan
+        var milestone = new ProposalMilestonePlan
         {
             ProposalMilestonePlansId = Guid.NewGuid(),
             ProposalsId = proposalId,
             Title = "Delivery",
             Amount = 500m,
             EstimatedDuration = "1 week",
+            DueDate = DateOnly.FromDateTime(now.AddDays(14)),
             Deliverables = "Production-ready implementation",
             AcceptanceCriteria = "All agreed acceptance tests pass"
+        };
+        proposal.ProposalMilestonePlans.Add(milestone);
+        proposal.ProposalWorkBreakdownItems.Add(new ProposalWorkBreakdownItem
+        {
+            ProposalWorkBreakdownItemsId = Guid.NewGuid(),
+            ProposalsId = proposalId,
+            ProposalMilestonePlansId = milestone.ProposalMilestonePlansId,
+            Title = "Implementation",
+            Description = "Implement and verify the agreed project scope."
         });
 
         context.AddSet(new FreelancerProfile
@@ -306,6 +310,23 @@ public class UpdateProposalStatusCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_SubmitDraftWithoutMilestoneDeadline_ThrowsBadRequest()
+    {
+        var (handler, proposal, userId) = CreateDraftSubmissionHandler();
+        proposal.ProposalMilestonePlans.Single().DueDate = null;
+
+        var exception = await Assert.ThrowsAsync<BadRequestException>(() => handler.Handle(
+            new UpdateProposalStatusCommand(
+                proposal.ProposalsId,
+                userId,
+                new UpdateProposalStatusRequest { Status = 1 }),
+            CancellationToken.None));
+
+        Assert.Contains("deadline", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(0, proposal.Status);
+    }
+
+    [Fact]
     public async Task Handle_SubmitDraftWhenJobPostClosed_ThrowsBadRequest()
     {
         var (handler, proposal, userId) = CreateDraftSubmissionHandler();
@@ -392,21 +413,25 @@ public class UpdateProposalStatusCommandHandlerTests
             Status = 0,
             JobPosts = jobPost
         };
-        proposal.ProposalWorkBreakdownItems.Add(new ProposalWorkBreakdownItem
-        {
-            ProposalWorkBreakdownItemsId = Guid.NewGuid(),
-            ProposalsId = proposal.ProposalsId,
-            Title = "Implementation"
-        });
-        proposal.ProposalMilestonePlans.Add(new ProposalMilestonePlan
+        var milestone = new ProposalMilestonePlan
         {
             ProposalMilestonePlansId = Guid.NewGuid(),
             ProposalsId = proposal.ProposalsId,
             Title = "Delivery",
             Amount = 500m,
             EstimatedDuration = "1 week",
+            DueDate = DateOnly.FromDateTime(now.AddDays(14)),
             Deliverables = "Production-ready implementation",
             AcceptanceCriteria = "All agreed acceptance tests pass"
+        };
+        proposal.ProposalMilestonePlans.Add(milestone);
+        proposal.ProposalWorkBreakdownItems.Add(new ProposalWorkBreakdownItem
+        {
+            ProposalWorkBreakdownItemsId = Guid.NewGuid(),
+            ProposalsId = proposal.ProposalsId,
+            ProposalMilestonePlansId = milestone.ProposalMilestonePlansId,
+            Title = "Implementation",
+            Description = "Implement and verify the agreed project scope."
         });
 
         context.AddSet(new FreelancerProfile

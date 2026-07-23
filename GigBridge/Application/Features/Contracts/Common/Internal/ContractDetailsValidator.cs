@@ -17,6 +17,14 @@ internal static class ContractDetailsValidator
         {
             throw new BadRequestException("Milestone amount must be greater than zero.");
         }
+
+        if (milestones.Any(milestone => milestone.WorkItems.Count == 0 ||
+            milestone.WorkItems.Any(item =>
+                string.IsNullOrWhiteSpace(item.Title) ||
+                string.IsNullOrWhiteSpace(item.Description))))
+        {
+            throw new BadRequestException("Each milestone requires at least one titled and described work item.");
+        }
     }
 
     public static void ValidateMilestonesForSubmitOrPublish(Contract contract, IReadOnlyCollection<Milestone> milestones)

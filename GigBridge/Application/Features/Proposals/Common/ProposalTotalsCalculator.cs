@@ -44,6 +44,12 @@ public static partial class ProposalTotalsCalculator
 
     public static bool IsValidDuration(string? value) => TryParseDuration(value).HasValue;
 
+    public static bool IsValidProjectDuration(string? value)
+    {
+        var parsed = TryParseDuration(value);
+        return parsed.HasValue && parsed.Value.Unit.Days >= 7;
+    }
+
     public static bool IsValidAmount(decimal value) =>
         value > 0 && value <= MaxProposalAmount && decimal.Round(value, 2) == value;
 
@@ -65,13 +71,14 @@ public static partial class ProposalTotalsCalculator
             "day" or "days" => new DurationUnit("day", "days", 1, 0),
             "week" or "weeks" => new DurationUnit("week", "weeks", 7, 1),
             "month" or "months" => new DurationUnit("month", "months", 30, 2),
+            "year" or "years" => new DurationUnit("year", "years", 365, 3),
             _ => default
         };
 
         return unit.Days == 0 ? null : new ParsedDuration(amount, unit);
     }
 
-    [GeneratedRegex(@"^\s*(\d+)\s*(day|days|week|weeks|month|months)\s*$", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"^\s*(\d+)\s*(day|days|week|weeks|month|months|year|years)\s*$", RegexOptions.IgnoreCase)]
     private static partial Regex DurationPattern();
 
     private readonly record struct ParsedDuration(int Amount, DurationUnit Unit);

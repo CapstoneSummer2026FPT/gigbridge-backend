@@ -89,7 +89,28 @@ public class GetMyJobPostDetailQueryHandler
                         attachment.FileName))
                     .ToList(),
 
-                ProposalCount = jobPost.Proposals.Count(proposal => proposal.Status != 0)
+                ProposalCount = jobPost.Proposals.Count(proposal => proposal.Status != 0),
+                MilestonePlans = jobPost.JobPostMilestonePlans.OrderBy(plan => plan.OrderIndex).Select(plan => new JobPostMilestonePlanDto
+                {
+                    Id = plan.JobPostMilestonePlanId,
+                    Title = plan.Title,
+                    Description = plan.Description,
+                    Amount = plan.Amount,
+                    EstimatedDuration = plan.EstimatedDuration,
+                    DueDate = plan.DueDate,
+                    Deliverables = plan.Deliverables,
+                    AcceptanceCriteria = plan.AcceptanceCriteria,
+                    OrderIndex = plan.OrderIndex,
+                    WorkItems = plan.WorkItems.OrderBy(item => item.OrderIndex).Select(item => new JobPostWorkItemDto
+                    {
+                        Id = item.JobPostWorkItemId,
+                        Title = item.Title,
+                        Description = item.Description,
+                        Deliverables = item.Deliverables,
+                        EstimatedDuration = item.EstimatedDuration,
+                        OrderIndex = item.OrderIndex
+                    }).ToList()
+                }).ToList()
             })
             .FirstOrDefaultAsync(cancellationToken);
 

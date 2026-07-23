@@ -37,6 +37,10 @@ public partial class EsignSignature
 
     public string? UserAgent { get; set; }
 
+    public string? PolicyVersion { get; set; }
+
+    public DateTime? PolicyAcceptedAt { get; set; }
+
     public DateTime CreatedAt { get; set; }
 
     public virtual EsignDocument EsignDocuments { get; set; } = null!;

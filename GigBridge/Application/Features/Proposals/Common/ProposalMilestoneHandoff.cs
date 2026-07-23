@@ -20,7 +20,7 @@ internal static class ProposalMilestoneHandoff
 
         foreach (var plan in proposal.ProposalMilestonePlans.OrderBy(item => item.OrderIndex))
         {
-            context.Set<NegotiationMilestoneDraft>().Add(new NegotiationMilestoneDraft
+            var draft = new NegotiationMilestoneDraft
             {
                 NegotiationMilestoneDraftId = Guid.NewGuid(),
                 ConversationsId = conversationId,
@@ -29,11 +29,26 @@ internal static class ProposalMilestoneHandoff
                 Description = plan.Description,
                 Amount = plan.Amount,
                 EstimatedDuration = plan.EstimatedDuration,
+                DueDate = plan.DueDate,
                 Deliverables = plan.Deliverables ?? string.Empty,
                 AcceptanceCriteria = plan.AcceptanceCriteria ?? string.Empty,
                 OrderIndex = plan.OrderIndex,
                 CreatedAt = now
-            });
+            };
+            draft.WorkItems = proposal.ProposalWorkBreakdownItems
+                .Where(item => item.ProposalMilestonePlansId == plan.ProposalMilestonePlansId)
+                .OrderBy(item => item.OrderIndex)
+                .Select((item, index) => new NegotiationMilestoneDraftWorkItem
+                {
+                    NegotiationMilestoneDraftWorkItemId = Guid.NewGuid(),
+                    NegotiationMilestoneDraftId = draft.NegotiationMilestoneDraftId,
+                    Title = item.Title,
+                    Description = item.Description,
+                    Deliverables = item.Deliverables,
+                    EstimatedDuration = item.EstimatedDuration,
+                    OrderIndex = index
+                }).ToList();
+            context.Set<NegotiationMilestoneDraft>().Add(draft);
         }
     }
 }
