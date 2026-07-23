@@ -183,6 +183,7 @@ public class UpdateProposalStatusCommandHandlerTests
             Title = "Delivery",
             Amount = 500m,
             EstimatedDuration = "1 week",
+            DueDate = DateOnly.FromDateTime(now.AddDays(14)),
             Deliverables = "Production-ready implementation",
             AcceptanceCriteria = "All agreed acceptance tests pass"
         };
@@ -309,6 +310,23 @@ public class UpdateProposalStatusCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_SubmitDraftWithoutMilestoneDeadline_ThrowsBadRequest()
+    {
+        var (handler, proposal, userId) = CreateDraftSubmissionHandler();
+        proposal.ProposalMilestonePlans.Single().DueDate = null;
+
+        var exception = await Assert.ThrowsAsync<BadRequestException>(() => handler.Handle(
+            new UpdateProposalStatusCommand(
+                proposal.ProposalsId,
+                userId,
+                new UpdateProposalStatusRequest { Status = 1 }),
+            CancellationToken.None));
+
+        Assert.Contains("deadline", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(0, proposal.Status);
+    }
+
+    [Fact]
     public async Task Handle_SubmitDraftWhenJobPostClosed_ThrowsBadRequest()
     {
         var (handler, proposal, userId) = CreateDraftSubmissionHandler();
@@ -402,6 +420,7 @@ public class UpdateProposalStatusCommandHandlerTests
             Title = "Delivery",
             Amount = 500m,
             EstimatedDuration = "1 week",
+            DueDate = DateOnly.FromDateTime(now.AddDays(14)),
             Deliverables = "Production-ready implementation",
             AcceptanceCriteria = "All agreed acceptance tests pass"
         };

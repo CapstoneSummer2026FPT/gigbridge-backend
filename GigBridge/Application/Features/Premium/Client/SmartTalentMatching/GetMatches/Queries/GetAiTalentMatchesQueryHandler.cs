@@ -78,6 +78,10 @@ public sealed class GetAiTalentMatchesQueryHandler(
             var aiRerankCount = Math.Min(30, pool.Candidates.Count);
             aiResult = await RequestValidAiResultAsync(pool, aiRerankCount, cancellationToken);
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception exception) when (
             exception is ExternalServiceException or HttpRequestException or TaskCanceledException)
         {

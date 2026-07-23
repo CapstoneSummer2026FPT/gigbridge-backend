@@ -29,6 +29,7 @@ internal static class ProposalMilestoneHandoff
                 Description = plan.Description,
                 Amount = plan.Amount,
                 EstimatedDuration = plan.EstimatedDuration,
+                DueDate = plan.DueDate,
                 Deliverables = plan.Deliverables ?? string.Empty,
                 AcceptanceCriteria = plan.AcceptanceCriteria ?? string.Empty,
                 OrderIndex = plan.OrderIndex,

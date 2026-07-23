@@ -2,6 +2,7 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces.IService;
 using Application.Features.JobPosts.Client.SaveDraftJobPost.Commands;
 using Application.Features.JobPosts.Client.SaveDraftJobPost.DTOs;
+using Application.Features.JobPosts.Common.DTOs;
 using Domain.Entities;
 using Infrastructure.Services.ContentModerationService;
 using Test_Gigbridge_Backend.TestSupport;
@@ -49,6 +50,58 @@ public class SaveDraftJobPostCommandHandlerTests
         Assert.Equal("Draft body", jobPost.Description);
         Assert.Equal(now, jobPost.UpdatedAt);
         Assert.Equal(1, context.SaveChangesCount);
+    }
+
+    [Fact]
+    public async Task Handle_WithIncompleteMilestoneDraft_PreservesNullableDeadline()
+    {
+        var now = new DateTime(2026, 6, 15, 10, 0, 0, DateTimeKind.Utc);
+        var context = new InMemoryApplicationDbContext();
+        var userId = Guid.NewGuid();
+        var clientProfileId = Guid.NewGuid();
+        var jobPostId = Guid.NewGuid();
+
+        context.AddSet(new ClientProfile { ClientProfilesId = clientProfileId, UserId = userId });
+        context.AddSet(new JobPost
+        {
+            JobPostsId = jobPostId,
+            ClientProfilesId = clientProfileId,
+            Title = "Untitled Job Post",
+            Description = string.Empty,
+            Status = 0,
+            CreatedAt = now
+        });
+        context.AddSet<JobPostSkill>();
+        context.AddSet<JobPostQuestion>();
+        var milestoneSet = context.AddSet<JobPostMilestonePlan>();
+
+        var request = CreateValidRequest(now) with
+        {
+            MilestonePlans =
+            [
+                new JobPostMilestonePlanDto
+                {
+                    Title = "Draft milestone",
+                    Amount = 100m,
+                    EstimatedDuration = "2 months",
+                    DueDate = null,
+                    OrderIndex = 0
+                }
+            ]
+        };
+
+        var handler = new SaveDraftJobPostCommandHandler(
+            context,
+            new FixedDateTimeService(now),
+            new ContentModerationService());
+
+        await handler.Handle(
+            new SaveDraftJobPostCommand(jobPostId, userId, request),
+            CancellationToken.None);
+
+        var milestone = Assert.Single(milestoneSet.Entities);
+        Assert.Equal("2 months", milestone.EstimatedDuration);
+        Assert.Null(milestone.DueDate);
     }
 
     [Fact]

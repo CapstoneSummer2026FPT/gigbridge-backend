@@ -67,7 +67,9 @@ public class UpdateStatusJobPostCommandHandler
 
         if (command.Request.Status == JobPostSetupPublishGuard.OpenStatus)
         {
-            JobPostSetupPublishGuard.EnsureProjectRequestCanPublish(jobPost);
+            JobPostSetupPublishGuard.EnsureProjectRequestCanPublish(
+                jobPost,
+                DateOnly.FromDateTime(_dateTimeService.UtcNow));
             if (jobPost.JobPostMilestonePlans.Count > 0)
             {
                 var total = jobPost.JobPostMilestonePlans.Sum(item => item.Amount);

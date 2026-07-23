@@ -13,6 +13,7 @@ internal static class JobPostPlanProjection
             Description = plan.Description,
             Amount = plan.Amount,
             EstimatedDuration = plan.EstimatedDuration,
+            DueDate = plan.DueDate,
             Deliverables = plan.Deliverables,
             AcceptanceCriteria = plan.AcceptanceCriteria,
             OrderIndex = plan.OrderIndex,

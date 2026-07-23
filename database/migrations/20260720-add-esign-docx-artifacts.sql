@@ -1,5 +1,7 @@
 -- Private finalized DOCX artifacts and versioned contract ESign documents.
 
+ALTER TABLE "ESignDocuments"
+    DROP CONSTRAINT IF EXISTS "ESignDocuments_cont_ContractsId_key";
 DROP INDEX IF EXISTS "ESignDocuments_cont_ContractsId_key";
 
 ALTER TABLE "ESignSignatures"

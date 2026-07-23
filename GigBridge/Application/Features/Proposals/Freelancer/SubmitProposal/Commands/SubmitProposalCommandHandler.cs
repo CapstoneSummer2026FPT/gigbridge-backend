@@ -53,7 +53,7 @@ public class SubmitProposalCommandHandler : IRequestHandler<SubmitProposalComman
             {
                 Title = item.Title, Description = item.Description, Amount = item.Amount,
                 EstimatedDuration = item.EstimatedDuration, Deliverables = item.Deliverables,
-                AcceptanceCriteria = item.AcceptanceCriteria, OrderIndex = item.OrderIndex,
+                DueDate = item.DueDate, AcceptanceCriteria = item.AcceptanceCriteria, OrderIndex = item.OrderIndex,
                 WorkItems = item.WorkItems.OrderBy(workItem => workItem.OrderIndex).Select(workItem => new ProposalWorkBreakdownItemDto
                 {
                     Title = workItem.Title, Description = workItem.Description, Deliverables = workItem.Deliverables,

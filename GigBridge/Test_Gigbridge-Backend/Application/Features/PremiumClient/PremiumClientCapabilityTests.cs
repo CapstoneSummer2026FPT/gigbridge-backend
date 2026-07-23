@@ -9,8 +9,11 @@ using Application.Features.Disputes.Client.Create.Commands;
 using Application.Features.Disputes.Common.DTOs;
 using Application.Features.Premium.Client.JobPostPromotion.Commands;
 using Application.Features.Premium.Client.JobPostPromotion.DTOs;
+using Application.Features.Premium.Client.SmartTalentMatching.GetMatches.Queries;
 using Domain.Entities;
 using Domain.Enums;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Test_Gigbridge_Backend.TestSupport;
 
@@ -223,6 +226,70 @@ public sealed class PremiumClientCapabilityTests
         await aiService.DidNotReceive().StartInterviewAsync(
             Arg.Any<AiInterviewStartRequestDto>(),
             Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task GetAiTalentMatches_CallerCancellationIsNotConvertedToServiceFailure()
+    {
+        var now = DateTime.UtcNow;
+        var clientUserId = Guid.NewGuid();
+        var jobPostId = Guid.NewGuid();
+        var clientProfile = new ClientProfile
+        {
+            ClientProfilesId = Guid.NewGuid(),
+            UserId = clientUserId
+        };
+        var freelancerUser = new User
+        {
+            UserId = Guid.NewGuid(),
+            FullName = "Freelancer",
+            Email = "freelancer@example.com",
+            IsActive = true
+        };
+        var context = new InMemoryApplicationDbContext();
+        context.AddSet(new JobPost
+        {
+            JobPostsId = jobPostId,
+            ClientProfilesId = clientProfile.ClientProfilesId,
+            ClientProfiles = clientProfile,
+            Status = 1,
+            Title = "Backend Engineer",
+            Description = "Build APIs"
+        });
+        context.AddSet(new FreelancerProfile
+        {
+            FreelancerProfilesId = Guid.NewGuid(),
+            UserId = freelancerUser.UserId,
+            User = freelancerUser,
+            Availability = 0
+        });
+        var runs = context.AddSet<TalentMatchRun>();
+        context.AddSet<TalentMatchResult>();
+        using var cancellation = new CancellationTokenSource();
+        var aiService = Substitute.For<IAiServiceClient>();
+        aiService.RerankTalentAsync(Arg.Any<TalentRerankRequestDto>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                cancellation.Cancel();
+                return Task.FromException<TalentRerankResponseDto>(new TaskCanceledException());
+            });
+        var configuration = Substitute.For<IConfiguration>();
+        configuration["FeatureFlags:AiSmartTalentMatchingV1"].Returns("true");
+        var handler = new GetAiTalentMatchesQueryHandler(
+            context,
+            new Premium(true),
+            new Clock(now),
+            aiService,
+            configuration,
+            Substitute.For<ILogger<GetAiTalentMatchesQueryHandler>>());
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => handler.Handle(
+            new GetAiTalentMatchesQuery(clientUserId, jobPostId), cancellation.Token));
+
+        var run = Assert.Single(runs.Entities);
+        Assert.Equal((int)TalentMatchRunStatus.Running, run.Status);
+        Assert.Null(run.FailureCode);
+        Assert.Equal(0, context.SaveChangesCount);
     }
 
     [Fact]

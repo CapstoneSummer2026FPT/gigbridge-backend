@@ -11,9 +11,12 @@ namespace Infrastructure.Persistence.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropIndex(
-                name: "ESignDocuments_cont_ContractsId_key",
-                table: "ESignDocuments");
+            migrationBuilder.Sql(
+                """
+                ALTER TABLE "ESignDocuments"
+                    DROP CONSTRAINT IF EXISTS "ESignDocuments_cont_ContractsId_key";
+                DROP INDEX IF EXISTS "ESignDocuments_cont_ContractsId_key";
+                """);
 
             migrationBuilder.AddColumn<DateTime>(
                 name: "PolicyAcceptedAt",

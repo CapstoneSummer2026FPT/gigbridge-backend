@@ -52,6 +52,7 @@ internal static class ProposalPlanMapper
             Description = Clean(item.Description),
             Amount = item.Amount,
             EstimatedDuration = Clean(item.EstimatedDuration),
+            DueDate = item.DueDate,
             Deliverables = Clean(item.Deliverables),
             AcceptanceCriteria = Clean(item.AcceptanceCriteria),
             OrderIndex = index
@@ -77,6 +78,7 @@ internal static class ProposalPlanMapper
         Description = item.Description,
         Amount = item.Amount,
         EstimatedDuration = item.EstimatedDuration,
+        DueDate = item.DueDate,
         Deliverables = item.Deliverables,
         AcceptanceCriteria = item.AcceptanceCriteria,
         OrderIndex = item.OrderIndex,

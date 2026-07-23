@@ -109,6 +109,7 @@ public sealed class SaveDraftJobPostCommandHandler
                 Description = Clean(request.item.Description),
                 Amount = request.item.Amount,
                 EstimatedDuration = Clean(request.item.EstimatedDuration),
+                DueDate = request.item.DueDate,
                 Deliverables = Clean(request.item.Deliverables),
                 AcceptanceCriteria = Clean(request.item.AcceptanceCriteria),
                 OrderIndex = request.index,

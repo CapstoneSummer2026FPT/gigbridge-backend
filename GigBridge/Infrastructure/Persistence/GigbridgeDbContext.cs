@@ -1331,6 +1331,7 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.Property(e => e.Title).HasMaxLength(200);
             entity.Property(e => e.Amount).HasPrecision(18, 2);
             entity.Property(e => e.EstimatedDuration).HasMaxLength(100);
+            entity.Property(e => e.DueDate).HasColumnType("date");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.HasOne(e => e.JobPost).WithMany(e => e.JobPostMilestonePlans)
                 .HasForeignKey(e => e.JobPostsId)
@@ -2178,6 +2179,7 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.Property(e => e.Title).HasMaxLength(200);
             entity.Property(e => e.EstimatedDuration).HasMaxLength(100);
             entity.Property(e => e.EstimatedDuration).HasMaxLength(100);
+            entity.Property(e => e.DueDate).HasColumnType("date");
             entity.HasOne(e => e.Proposals).WithMany(e => e.ProposalMilestonePlans)
                 .HasForeignKey(e => e.ProposalsId)
                 .OnDelete(DeleteBehavior.Cascade)
