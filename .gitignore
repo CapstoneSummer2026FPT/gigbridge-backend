@@ -12,7 +12,7 @@
 appsettings.Development.json
 appsettings.Local.json
 appsettings.*.json
-!appsettings.json
+appsettings.json
 
 # OS
 .DS_Store
@@ -39,7 +39,7 @@ repomix-output.xml
 *.txt
 
 # Versioned ESign delivery documentation and SQL migration
-!/docs/
-!/docs/reviews/
-!/docs/reviews/review-esign.md
-!database/migrations/20260720-add-esign-docx-artifacts.sql
+/docs/
+/docs/reviews/
+/docs/reviews/review-esign.md
+database/migrations/20260720-add-esign-docx-artifacts.sql
