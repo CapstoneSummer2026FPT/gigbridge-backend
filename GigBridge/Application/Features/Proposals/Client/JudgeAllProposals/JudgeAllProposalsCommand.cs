@@ -70,32 +70,29 @@ public class JudgeAllProposalsCommandHandler : IRequestHandler<JudgeAllProposals
 
         int maxBatch = request.BatchSize <= 0 || request.BatchSize > 20 ? 10 : request.BatchSize;
 
-        // 3. Fetch proposals for this job post (Status != Draft) - TEMPORARY: allow re-judging existing proposals
+        // 3. Fetch proposals for this job post (Status != Draft) that have not been judged yet
         var unjudgedProposals = await _context.Set<Proposal>()
             .Include(p => p.FreelancerProfiles)
             .Include(p => p.JobPosts)
                 .ThenInclude(j => j.JobPostSkills)
                     .ThenInclude(js => js.Skills)
             .Include(p => p.ProposalAiJudging)
-            .Where(p => p.JobPostsId == request.JobPostId && p.Status != 0)
+            .Where(p => p.JobPostsId == request.JobPostId && p.Status != 0 && p.ProposalAiJudging == null)
             .OrderBy(p => p.SubmittedAt)
             .Take(maxBatch)
             .ToListAsync(cancellationToken);
 
         if (!unjudgedProposals.Any())
         {
-            var remaining = await _context.Set<Proposal>()
-                .CountAsync(p => p.JobPostsId == request.JobPostId && p.Status != 0, cancellationToken);
-
             return new BatchJudgeResultDto
             {
                 ProcessedCount = 0,
-                RemainingCount = remaining,
-                IsCompleted = remaining == 0
+                RemainingCount = 0,
+                IsCompleted = true
             };
         }
 
-        var processedDtos = new List<ProposalDto>();
+        int processedCount = 0;
 
         // 4. Process proposals in the batch
         foreach (var proposal in unjudgedProposals)
@@ -108,6 +105,40 @@ public class JudgeAllProposalsCommandHandler : IRequestHandler<JudgeAllProposals
 
             if (!answers.Any() || answers.All(pa => string.IsNullOrWhiteSpace(pa.AnswerText)))
             {
+                var emptyJudging = new ProposalAiJudging
+                {
+                    ProposalAiJudgingsId = Guid.NewGuid(),
+                    ProposalId = proposal.ProposalsId,
+                    Score = 0,
+                    Summary = "No answers submitted to vetting questions.",
+                    RecommendedHire = false,
+                    TechnicalSkillsJson = "[]",
+                    SoftSkillsJson = "[]",
+                    HolisticAdjustment = 0,
+                    HolisticAdjustmentReason = "No answers submitted.",
+                    GradedQuestionsJson = "[]",
+                    EvaluatedAt = DateTime.UtcNow
+                };
+
+                if (proposal.ProposalAiJudging != null)
+                {
+                    proposal.ProposalAiJudging.Score = 0;
+                    proposal.ProposalAiJudging.Summary = "No answers submitted to vetting questions.";
+                    proposal.ProposalAiJudging.RecommendedHire = false;
+                    proposal.ProposalAiJudging.TechnicalSkillsJson = "[]";
+                    proposal.ProposalAiJudging.SoftSkillsJson = "[]";
+                    proposal.ProposalAiJudging.HolisticAdjustment = 0;
+                    proposal.ProposalAiJudging.HolisticAdjustmentReason = "No answers submitted.";
+                    proposal.ProposalAiJudging.GradedQuestionsJson = "[]";
+                    proposal.ProposalAiJudging.EvaluatedAt = DateTime.UtcNow;
+                }
+                else
+                {
+                    _context.Set<ProposalAiJudging>().Add(emptyJudging);
+                    proposal.ProposalAiJudging = emptyJudging;
+                }
+
+                processedCount++;
                 continue;
             }
 
@@ -135,7 +166,6 @@ public class JudgeAllProposalsCommandHandler : IRequestHandler<JudgeAllProposals
 
                 if (proposal.ProposalAiJudging != null)
                 {
-                    // Update existing judging record for re-judging
                     proposal.ProposalAiJudging.Score = evalResult.Score;
                     proposal.ProposalAiJudging.Summary = evalResult.Summary ?? string.Empty;
                     proposal.ProposalAiJudging.RecommendedHire = evalResult.RecommendedHire;
@@ -148,7 +178,6 @@ public class JudgeAllProposalsCommandHandler : IRequestHandler<JudgeAllProposals
                 }
                 else
                 {
-                    // Insert new judging record
                     var newJudging = new ProposalAiJudging
                     {
                         ProposalAiJudgingsId = Guid.NewGuid(),
@@ -167,6 +196,8 @@ public class JudgeAllProposalsCommandHandler : IRequestHandler<JudgeAllProposals
                     _context.Set<ProposalAiJudging>().Add(newJudging);
                     proposal.ProposalAiJudging = newJudging;
                 }
+
+                processedCount++;
             }
             catch
             {
@@ -181,7 +212,7 @@ public class JudgeAllProposalsCommandHandler : IRequestHandler<JudgeAllProposals
 
         return new BatchJudgeResultDto
         {
-            ProcessedCount = unjudgedProposals.Count,
+            ProcessedCount = processedCount,
             RemainingCount = totalRemaining,
             IsCompleted = totalRemaining == 0,
             ProcessedProposals = ProposalProjection.ToDtos(unjudgedProposals)
