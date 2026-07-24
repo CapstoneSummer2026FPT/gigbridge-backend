@@ -21,9 +21,15 @@ public sealed class StartAiInterviewCommandHandler(
     {
         var jobPost = await context.Set<JobPost>().AsNoTracking()
             .Include(x => x.JobPostSkills).ThenInclude(x => x.Skills)
+            .Include(x => x.JobPostQuestions)
             .FirstOrDefaultAsync(x => x.JobPostsId == command.JobPostId && x.Status == 1,
                 cancellationToken)
             ?? throw new NotFoundException("Job post not found.");
+
+        if (jobPost.JobPostQuestions is null || !jobPost.JobPostQuestions.Any())
+        {
+            throw new BadRequestException("This job post does not have any predefined questions.");
+        }
         AiInterviewDefinition? definition = null;
         if (command.InterviewDefinitionId.HasValue)
             definition = await context.Set<AiInterviewDefinition>()
@@ -85,6 +91,11 @@ public sealed class StartAiInterviewCommandHandler(
             activeDefinition.Status = AiInterviewDefinitionStatus.Active;
             activeDefinition.UpdatedAt = clock.UtcNow;
         }
+        var jobQuestions = jobPost.JobPostQuestions
+            .OrderBy(x => x.OrderIndex)
+            .Select(x => x.QuestionText)
+            .ToList();
+
         var result = await aiServiceClient.StartInterviewAsync(new AiInterviewStartRequestDto
         {
             JobId = jobPost.JobPostsId.ToString(),
@@ -95,7 +106,8 @@ public sealed class StartAiInterviewCommandHandler(
             Mode = activeDefinition.Mode,
             Language = activeDefinition.Language,
             QuestionCount = activeDefinition.QuestionCount,
-            DefinitionReference = activeDefinition.ExternalReference
+            DefinitionReference = activeDefinition.ExternalReference,
+            JobQuestions = jobQuestions
         }, cancellationToken);
 
         activeDefinition.Status = AiInterviewDefinitionStatus.Active;
