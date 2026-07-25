@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace Application.Features.Proposals.Common.DTOs;
 
@@ -24,4 +25,12 @@ public class ProposalDto
     public bool AiInterviewCompleted { get; set; }
     public bool AiInterviewInProgress { get; set; }
     public Guid? AiInterviewDefinitionId { get; set; }
+
+    // AI Judging Metrics
+    public int? AiScore { get; set; }
+    public string? AiSummary { get; set; }
+    public bool? AiRecommendedHire { get; set; }
+    public DateTime? AiEvaluatedAt { get; set; }
+    public List<string>? AiTechnicalSkills { get; set; }
+    public List<string>? AiSoftSkills { get; set; }
 }
