@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  web-api:
+    image: ghcr.io/${GITHUB_REPOSITORY_OWNER}/gigbridge-api:latest
+    container_name: gigbridge-api
+    restart: always
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ConnectionStrings__DefaultConnection=${DATABASE_URL}
+      - Redis__ConnectionString=${REDIS_CONNECTION_STRING}
+      - Jwt__Key=${JWT_KEY}
+      - Jwt__Issuer=${JWT_ISSUER}
+      - Jwt__Audience=${JWT_AUDIENCE}
+      - PayOS__ClientId=${PAYOS_CLIENT_ID}
+      - PayOS__ApiKey=${PAYOS_API_KEY}
+      - PayOS__ChecksumKey=${PAYOS_CHECKSUM_KEY}
+      - PayOS__ReturnUrl=${PAYOS_RETURN_URL}
+      - PayOS__CancelUrl=${PAYOS_CANCEL_URL}
+      - PayOS__WebhookUrl=${PAYOS_WEBHOOK_URL}
+      - Cloudinary__CloudName=${CLOUDINARY_CLOUD_NAME}
+      - Cloudinary__ApiKey=${CLOUDINARY_API_KEY}
+      - Cloudinary__ApiSecret=${CLOUDINARY_API_SECRET}
+      - Resend__ApiToken=${RESEND_API_TOKEN}
+      - Resend__From=${RESEND_FROM}
+      - Resend__FromName=${RESEND_FROM_NAME}
+      - AiService__BaseUrl=${AI_SERVICE_BASE_URL}
+      - AiService__ApiKey=${AI_SERVICE_API_KEY}
+    ports:
+      - "127.0.0.1:8080:8080" # Bound to localhost so only Nginx can route traffic to it
