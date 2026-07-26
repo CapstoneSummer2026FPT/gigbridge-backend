@@ -5,7 +5,9 @@ using Application.Features.Proposals.Common.UpdateProposalStatus.Commands.DTOs;
 using Application.Features.Proposals.Freelancer.Cheating.DTOs;
 using Domain.Entities;
 using Domain.Enums;
+using Microsoft.EntityFrameworkCore;
 using Test_Gigbridge_Backend.TestSupport;
+
 
 namespace Test_Gigbridge_Backend.Application.Features.Proposals.Common;
 
@@ -534,6 +536,72 @@ public class UpdateProposalStatusCommandHandlerTests
         }
     }
 
+    [Fact]
+    public async Task DiagnoseProposalSubmissionError()
+    {
+        var connectionString = "Host=localhost;Database=postgres;Username=postgres;Password=dummy_password;SSL Mode=Require;Trust Server Certificate=true";
+        var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<global::Infrastructure.Persistence.GigbridgeDbContext>()
+            .UseNpgsql(connectionString)
+            .Options;
+        using var context = new global::Infrastructure.Persistence.GigbridgeDbContext(options);
+
+        var recentProposals = await context.Set<Proposal>()
+            .Include(p => p.JobPosts)
+            .OrderByDescending(p => p.UpdatedAt)
+            .Take(10)
+            .ToListAsync();
+
+        Console.WriteLine("RECENT_PROPOSALS_START");
+        foreach (var p in recentProposals)
+        {
+            Console.WriteLine($"PROP: ID={p.ProposalsId}, Status={p.Status}, Job={p.JobPosts.Title}, FreelancerProfileId={p.FreelancerProfilesId}, UpdatedAt={p.UpdatedAt}");
+        }
+        Console.WriteLine("RECENT_PROPOSALS_END");
+
+        // Query the client and their subscription for the job post "haiz"
+        var jobId = Guid.Parse("986e95de-9254-4c56-a91c-911fa41ef466");
+        var jobPost = await context.Set<JobPost>()
+            .Include(j => j.ClientProfiles)
+                .ThenInclude(c => c.User)
+            .FirstOrDefaultAsync(j => j.JobPostsId == jobId);
+
+        if (jobPost == null)
+        {
+            Console.WriteLine("Job post 'haiz' not found.");
+            return;
+        }
+
+        var clientUserId = jobPost.ClientProfiles.UserId;
+        Console.WriteLine($"CLIENT_DIAG: JobPost ID={jobPost.JobPostsId}, Title={jobPost.Title}, Status={jobPost.Status}, Visibility={jobPost.Visibility}, EndDate={jobPost.EndDate}, ClientProfileId={jobPost.ClientProfilesId}, ClientUserId={clientUserId}, ClientEmail={jobPost.ClientProfiles.User.Email}");
+
+        var subscriptions = await context.Set<Subscription>()
+            .Include(s => s.SubscriptionPlans)
+            .Where(s => s.UserId == clientUserId)
+            .ToListAsync();
+
+        Console.WriteLine($"CLIENT_DIAG: Subscriptions Count: {subscriptions.Count}");
+        foreach (var s in subscriptions)
+        {
+            Console.WriteLine($"SUB: ID={s.SubscriptionsId}, Status={s.Status}, Start={s.StartDate}, End={s.EndDate}, PlanName={s.SubscriptionPlans.Name}, PlanPrice={s.SubscriptionPlans.Price}, PlanIsActive={s.SubscriptionPlans.IsActive}, TargetRole={s.SubscriptionPlans.TargetRole}");
+        }
+
+        // Run GetJobPostDetailQuery handler
+        Console.WriteLine("\n--- DIAGNOSING GET JOB POST DETAIL QUERY ---");
+        try
+        {
+            var queryHandler = new global::Application.Features.JobPosts.Public.GetJobPostDetail.Queries.GetJobPostDetailQueryHandler(context);
+            var result = await queryHandler.Handle(
+                new global::Application.Features.JobPosts.Public.GetJobPostDetail.Queries.GetJobPostDetailQuery(jobId),
+                CancellationToken.None);
+
+            Console.WriteLine($"GET_JOB_DIAG: Success! Title={result.Title}, HasAiInterview={result.HasAiInterview}, MilestonesCount={result.MilestonePlans.Count()}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"GET_JOB_DIAG: Fail - {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}");
+        }
+    }
+
     private sealed record NotificationCall(
         Guid UserId,
         NotificationType Type,
@@ -543,3 +611,4 @@ public class UpdateProposalStatusCommandHandlerTests
         string? ReferenceType,
         int SaveChangesCountAtCreation);
 }
+
