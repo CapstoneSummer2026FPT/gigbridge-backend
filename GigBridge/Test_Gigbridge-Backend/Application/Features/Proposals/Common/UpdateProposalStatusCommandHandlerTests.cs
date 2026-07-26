@@ -5,7 +5,9 @@ using Application.Features.Proposals.Common.UpdateProposalStatus.Commands.DTOs;
 using Application.Features.Proposals.Freelancer.Cheating.DTOs;
 using Domain.Entities;
 using Domain.Enums;
+using Microsoft.EntityFrameworkCore;
 using Test_Gigbridge_Backend.TestSupport;
+
 
 namespace Test_Gigbridge_Backend.Application.Features.Proposals.Common;
 
@@ -534,6 +536,8 @@ public class UpdateProposalStatusCommandHandlerTests
         }
     }
 
+    
+
     private sealed record NotificationCall(
         Guid UserId,
         NotificationType Type,
@@ -543,3 +547,4 @@ public class UpdateProposalStatusCommandHandlerTests
         string? ReferenceType,
         int SaveChangesCountAtCreation);
 }
+
