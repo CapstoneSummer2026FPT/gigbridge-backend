@@ -37,6 +37,7 @@ public static class DependencyInjection
     {
         var connectionString = configuration.GetConnectionString("DefaultConnection")
             ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
+        var allowLocalHttp = IsLocalEnvironment(configuration["ASPNETCORE_ENVIRONMENT"]);
 
         services.AddDbContext<GigbridgeDbContext>(options =>
             options.UseNpgsql(connectionString));
@@ -104,12 +105,20 @@ public static class DependencyInjection
             {
                 if (string.IsNullOrWhiteSpace(options.BaseUrl))
                 {
-                    options.BaseUrl = Environment.GetEnvironmentVariable("AI_SERVICE_BASE_URL");
+                    var baseUrl = Environment.GetEnvironmentVariable("AI_SERVICE_BASE_URL");
+                    if (!string.IsNullOrWhiteSpace(baseUrl))
+                    {
+                        options.BaseUrl = baseUrl;
+                    }
                 }
 
                 if (string.IsNullOrWhiteSpace(options.ApiKey))
                 {
-                    options.ApiKey = Environment.GetEnvironmentVariable("AI_SERVICE_API_KEY");
+                    var apiKey = Environment.GetEnvironmentVariable("AI_SERVICE_API_KEY");
+                    if (!string.IsNullOrWhiteSpace(apiKey))
+                    {
+                        options.ApiKey = apiKey;
+                    }
                 }
             })
             .Validate(
@@ -117,6 +126,9 @@ public static class DependencyInjection
                     !string.IsNullOrWhiteSpace(options.BaseUrl) &&
                     !string.IsNullOrWhiteSpace(options.ApiKey),
                 "AI Service configuration is missing. Set AI_SERVICE_BASE_URL and AI_SERVICE_API_KEY.")
+            .Validate(
+                options => IsAllowedServiceUri(options.BaseUrl, allowLocalHttp),
+                "AI Service base URL must use HTTPS, except for HTTP loopback URLs in local environments.")
             .ValidateOnStart();
 
         services
@@ -207,7 +219,7 @@ public static class DependencyInjection
                 ClientId = options.ClientId,
                 ApiKey = options.ApiKey,
                 ChecksumKey = options.ChecksumKey,
-                LogLevel = LogLevel.Debug,
+                LogLevel = LogLevel.Warning,
             });
         });
         services.AddKeyedSingleton("PayoutClient", (sp, key) =>
@@ -246,18 +258,18 @@ public static class DependencyInjection
 
                 if (string.IsNullOrWhiteSpace(options.BackendCallbackUri))
                     options.BackendCallbackUri = Environment.GetEnvironmentVariable("GOOGLE_MEET_BACKEND_CALLBACK_URI")
-                        ?? (string.Equals(configuration["ASPNETCORE_ENVIRONMENT"], "Development", StringComparison.OrdinalIgnoreCase)
+                        ?? (allowLocalHttp
                             ? "http://localhost:5222/api/integrations/google-meet/callback"
                             : string.Empty);
 
                 if (string.IsNullOrWhiteSpace(options.FrontendCallbackUri))
+                {
+                    var frontendBaseUrl = configuration["FrontendBaseUrl"]?.TrimEnd('/');
                     options.FrontendCallbackUri = Environment.GetEnvironmentVariable("GOOGLE_MEET_FRONTEND_CALLBACK_URI")
-                        ?? (string.Equals(configuration["ASPNETCORE_ENVIRONMENT"], "Development", StringComparison.OrdinalIgnoreCase)
-                            ? $"{configuration["FrontendBaseUrl"]?.TrimEnd('/')}/integrations/google-meet/callback"
-                            : string.Empty);
-
-                if (string.IsNullOrWhiteSpace(options.DataProtectionKeysPath))
-                    options.DataProtectionKeysPath = Environment.GetEnvironmentVariable("DATA_PROTECTION_KEYS_PATH") ?? string.Empty;
+                        ?? (string.IsNullOrWhiteSpace(frontendBaseUrl)
+                            ? string.Empty
+                            : $"{frontendBaseUrl}/integrations/google-meet/callback");
+                }
 
                 if (string.IsNullOrWhiteSpace(options.MeetApiBaseUrl))
                     options.MeetApiBaseUrl = "https://meet.googleapis.com";
@@ -265,8 +277,17 @@ public static class DependencyInjection
             .Validate(options =>
                 !string.IsNullOrWhiteSpace(options.ClientId) &&
                 !string.IsNullOrWhiteSpace(options.ClientSecret) &&
-                !string.IsNullOrWhiteSpace(options.BackendCallbackUri),
-                "Google Meet configuration is missing. Set GOOGLE_MEET_CLIENT_ID, GOOGLE_MEET_CLIENT_SECRET, and GOOGLE_MEET_BACKEND_CALLBACK_URI.")
+                !string.IsNullOrWhiteSpace(options.BackendCallbackUri) &&
+                !string.IsNullOrWhiteSpace(options.FrontendCallbackUri),
+                "Google Meet configuration is missing. Set client credentials and both backend/frontend callback URIs.")
+            .Validate(options =>
+                IsAllowedServiceUri(options.AuthorizationEndpoint, allowLocalHttp) &&
+                IsAllowedServiceUri(options.TokenEndpoint, allowLocalHttp) &&
+                IsAllowedServiceUri(options.RevocationEndpoint, allowLocalHttp) &&
+                IsAllowedServiceUri(options.MeetApiBaseUrl, allowLocalHttp) &&
+                IsAllowedServiceUri(options.BackendCallbackUri, allowLocalHttp) &&
+                IsAllowedServiceUri(options.FrontendCallbackUri, allowLocalHttp),
+                "Google Meet endpoints and callback URIs must use HTTPS, except for HTTP loopback URLs in local environments.")
             .ValidateOnStart();
 
         services.AddHttpClient("GoogleMeetOAuth")
@@ -280,6 +301,7 @@ public static class DependencyInjection
             client.Timeout = TimeSpan.FromSeconds(15);
         });
 
+        services.AddScoped<GoogleMeetIdTokenValidator>();
         services.AddScoped<IGoogleMeetOAuthService, GoogleMeetOAuthService>();
         services.AddHostedService<GoogleMeetProvisioningWorker>();
         services.AddHostedService<PremiumExpiryWorker>();
@@ -300,6 +322,23 @@ public static class DependencyInjection
         string.IsNullOrWhiteSpace(configuredValue)
             ? Environment.GetEnvironmentVariable(environmentVariable)
             : configuredValue;
+
+    private static bool IsLocalEnvironment(string? environmentName) =>
+        string.Equals(environmentName, "Development", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(environmentName, "Local", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(environmentName, "Testing", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsAllowedServiceUri(string? value, bool allowLocalHttp)
+    {
+        if (!Uri.TryCreate(value, UriKind.Absolute, out var uri)
+            || !string.IsNullOrEmpty(uri.UserInfo))
+        {
+            return false;
+        }
+
+        return uri.Scheme == Uri.UriSchemeHttps
+            || (allowLocalHttp && uri.Scheme == Uri.UriSchemeHttp && uri.IsLoopback);
+    }
 
     internal static SocketsHttpHandler CreatePayoutDirectHandler() => new()
     {

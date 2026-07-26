@@ -174,7 +174,6 @@ public sealed class AdminMilestonesController : BaseApiController
 
         var milestone = await context.Set<Milestone>()
             .Include(m => m.MilestoneAttachments)
-            .Include(m => m.PaymentProofs)
             .Include(m => m.EscrowTransactions)
             .FirstOrDefaultAsync(m => m.MilestonesId == milestoneId);
 
@@ -183,9 +182,8 @@ public sealed class AdminMilestonesController : BaseApiController
             return NotFound(ApiResponse<object>.Error(404, "Milestone not found"));
         }
 
-        // Clean up milestone attachments, payment proofs, escrow transactions
+        // Clean up milestone attachments and escrow transactions
         context.Set<MilestoneAttachment>().RemoveRange(milestone.MilestoneAttachments);
-        context.Set<PaymentProof>().RemoveRange(milestone.PaymentProofs);
         context.Set<EscrowTransaction>().RemoveRange(milestone.EscrowTransactions);
 
         // Nullify reference in wallet transactions

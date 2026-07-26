@@ -46,7 +46,8 @@ public class GoogleAuthService : IGoogleAuthService
 
             if (!tokenResponse.IsSuccessStatusCode)
             {
-                throw new BadRequestException($"Google token exchange failed: {tokenResponse.StatusCode} - {responseBody}");
+                throw new BadRequestException(
+                    $"Google token exchange failed with status {(int)tokenResponse.StatusCode}.");
             }
 
             var tokenData = JsonSerializer.Deserialize<GoogleTokenResponse>(responseBody)
@@ -67,9 +68,13 @@ public class GoogleAuthService : IGoogleAuthService
                 PictureUrl = payload.Picture
             };
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception ex) when (ex is not BadRequestException)
         {
-            throw new BadRequestException($"Google authentication failed: {ex.Message}", ex);
+            throw new BadRequestException("Google authentication failed.", ex);
         }
     }
 }

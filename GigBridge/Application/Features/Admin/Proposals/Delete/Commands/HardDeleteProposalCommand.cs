@@ -35,7 +35,6 @@ public sealed class HardDeleteProposalCommandHandler :
 
         var proposal = await _context.Set<Proposal>()
             .Include(p => p.ProposalAnswers)
-            .Include(p => p.ProposalAttachments)
             .FirstOrDefaultAsync(p => p.ProposalsId == request.ProposalId, cancellationToken);
 
         if (proposal is null)
@@ -45,7 +44,6 @@ public sealed class HardDeleteProposalCommandHandler :
 
         // Clean up related entities
         _context.Set<ProposalAnswer>().RemoveRange(proposal.ProposalAnswers);
-        _context.Set<ProposalAttachment>().RemoveRange(proposal.ProposalAttachments);
 
         // Null out nullable foreign keys in other entities pointing to this proposal
         var contracts = await _context.Set<Contract>()
@@ -79,12 +77,6 @@ public sealed class HardDeleteProposalCommandHandler :
         {
             no.ProposalsId = null;
         }
-
-        var cheatingEvents = await _context.Set<ProposalCheatingEvent>()
-            .Where(e => e.ProposalsId == request.ProposalId)
-            .ToListAsync(cancellationToken);
-        _context.Set<ProposalCheatingEvent>().RemoveRange(cheatingEvents);
-
 
         // Remove from other dependencies if any (like timers or interview sessions)
         var timer = await _context.Set<ProposalQuestionTimer>()

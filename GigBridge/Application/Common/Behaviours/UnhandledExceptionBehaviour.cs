@@ -29,11 +29,11 @@ public class UnhandledExceptionBehaviour<TRequest, TResponse> : IPipelineBehavio
                 ex is not ExternalServiceException &&
                 ex is not ForbiddenAccessException)
             {
-                _logger.LogError(ex, "GigBridge Request: Unhandled Exception for Request {Name} {@Request}", requestName, request);
+                _logger.LogError(ex, "GigBridge Request: Unhandled Exception for Request {Name}", requestName);
             }
             else
             {
-                _logger.LogWarning(ex, "GigBridge Request: Expected Application Exception for Request {Name} {@Request}", requestName, request);
+                _logger.LogWarning(ex, "GigBridge Request: Expected Application Exception for Request {Name}", requestName);
             }
             throw;
         }

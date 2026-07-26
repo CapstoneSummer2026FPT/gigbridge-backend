@@ -25,12 +25,6 @@ public partial class ConversationParticipant
 
     public int UnreadCount { get; set; }
 
-    public bool IsMuted { get; set; }
-
-    public bool IsPinned { get; set; }
-
-    public bool IsArchived { get; set; }
-
     public DateTime? DeletedAt { get; set; }
 
     public virtual Conversation Conversations { get; set; } = null!;

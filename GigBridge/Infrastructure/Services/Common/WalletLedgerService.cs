@@ -25,16 +25,7 @@ public sealed class WalletLedgerService : IWalletLedgerService
         string idempotencyKey,
         string? metadata,
         CancellationToken cancellationToken) =>
-        ApplyAsync(userId, tokenAmount, type, idempotencyKey, metadata, isCredit: false, cancellationToken);
-
-    public Task<WalletTransaction> CreditAsync(
-        Guid userId,
-        decimal tokenAmount,
-        WalletTransactionType type,
-        string idempotencyKey,
-        string? metadata,
-        CancellationToken cancellationToken) =>
-        ApplyAsync(userId, tokenAmount, type, idempotencyKey, metadata, isCredit: true, cancellationToken);
+        ApplyAsync(userId, tokenAmount, type, idempotencyKey, metadata, cancellationToken);
 
     private async Task<WalletTransaction> ApplyAsync(
         Guid userId,
@@ -42,7 +33,6 @@ public sealed class WalletLedgerService : IWalletLedgerService
         WalletTransactionType type,
         string idempotencyKey,
         string? metadata,
-        bool isCredit,
         CancellationToken cancellationToken)
     {
         if (tokenAmount <= 0)
@@ -71,27 +61,20 @@ public sealed class WalletLedgerService : IWalletLedgerService
             ?? throw new NotFoundException("Wallet does not exist.");
 
         var now = _clock.UtcNow;
-        var affected = isCredit
-            ? await _context.UserWallets
-                .Where(x => x.UserWalletsId == wallet.UserWalletsId && x.Version == wallet.Version)
-                .ExecuteUpdateAsync(setters => setters
-                    .SetProperty(x => x.AvailableTokens, x => x.AvailableTokens + tokenAmount)
-                    .SetProperty(x => x.Version, x => x.Version + 1)
-                    .SetProperty(x => x.UpdatedAt, now), cancellationToken)
-            : await _context.UserWallets
-                .Where(x => x.UserWalletsId == wallet.UserWalletsId &&
-                            x.Version == wallet.Version &&
-                            x.AvailableTokens >= tokenAmount)
-                .ExecuteUpdateAsync(setters => setters
-                    .SetProperty(x => x.AvailableTokens, x => x.AvailableTokens - tokenAmount)
-                    .SetProperty(
-                        x => x.WithdrawableTokens,
-                        x => x.WithdrawableTokens -
-                            (tokenAmount > x.AvailableTokens - x.WithdrawableTokens
-                                ? tokenAmount - (x.AvailableTokens - x.WithdrawableTokens)
-                                : 0m))
-                    .SetProperty(x => x.Version, x => x.Version + 1)
-                    .SetProperty(x => x.UpdatedAt, now), cancellationToken);
+        var affected = await _context.UserWallets
+            .Where(x => x.UserWalletsId == wallet.UserWalletsId &&
+                        x.Version == wallet.Version &&
+                        x.AvailableTokens >= tokenAmount)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(x => x.AvailableTokens, x => x.AvailableTokens - tokenAmount)
+                .SetProperty(
+                    x => x.WithdrawableTokens,
+                    x => x.WithdrawableTokens -
+                        (tokenAmount > x.AvailableTokens - x.WithdrawableTokens
+                            ? tokenAmount - (x.AvailableTokens - x.WithdrawableTokens)
+                            : 0m))
+                .SetProperty(x => x.Version, x => x.Version + 1)
+                .SetProperty(x => x.UpdatedAt, now), cancellationToken);
 
         if (affected != 1)
         {
@@ -101,7 +84,7 @@ public sealed class WalletLedgerService : IWalletLedgerService
                 .Where(x => x.UserWalletsId == wallet.UserWalletsId)
                 .Select(x => x.AvailableTokens)
                 .SingleAsync(cancellationToken);
-            if (!isCredit && balance < tokenAmount)
+            if (balance < tokenAmount)
                 throw new BadRequestException("Insufficient wallet balance.");
             throw new ConflictException("The wallet changed concurrently. Retry the operation with the same idempotency key.");
         }

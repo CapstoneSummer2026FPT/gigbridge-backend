@@ -2,5 +2,4 @@ namespace Application.Features.Proposals.Common.UpdateProposalStatus.Commands.DT
 
 public record UpdateProposalStatusResponse(
     bool Success,
-    int Status,
-    CheatingPenaltyResultDto? CheatingPenalty);
+    int Status);

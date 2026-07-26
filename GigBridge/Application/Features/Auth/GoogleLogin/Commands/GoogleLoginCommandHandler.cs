@@ -1,6 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Application.Features.Auth.Common;
 using Application.Features.Auth.GoogleLogin.DTOs;
 using Application.Features.Auth.Shared.DTOs;
 using AutoMapper;
@@ -39,7 +40,8 @@ public class GoogleLoginCommandHandler : IRequestHandler<GoogleLoginCommand, (Lo
     public async Task<(LoginResponse LoginData, string RefreshToken, DateTime RefreshTokenExpiry)> Handle(GoogleLoginCommand request, CancellationToken cancellationToken)
     {
         var googleUser = await _googleAuthService.VerifyAuthCodeAsync(request.AuthCode, cancellationToken);
-        var user = await FindUserAsync(googleUser.Email, cancellationToken);
+        var email = EmailCanonicalizer.Canonicalize(googleUser.Email);
+        var user = await FindUserAsync(email, cancellationToken);
         var isNewUser = user is null;
 
         if (user is null)
@@ -49,7 +51,7 @@ public class GoogleLoginCommandHandler : IRequestHandler<GoogleLoginCommand, (Lo
                 throw new BadRequestException("Your account does not have a role set up yet. Please select a role on the sign-up page before signing in.");
             }
 
-            user = CreateUser(googleUser, ResolveRole(request.Role));
+            user = CreateUser(googleUser, email, ResolveRole(request.Role));
             _context.Set<User>().Add(user);
             await _userEloService.InitializeNewUserAsync(user, cancellationToken);
         }
@@ -75,29 +77,26 @@ public class GoogleLoginCommandHandler : IRequestHandler<GoogleLoginCommand, (Lo
         return (new LoginResponse
         {
             User = _mapper.Map<UserDTO>(user),
-            Token = _jwtService.GenerateToken(user),
-            refreshToken = refreshToken
+            Token = _jwtService.GenerateToken(user)
         }, refreshToken, user.RefreshTokenExpiry ?? DateTime.UtcNow);
     }
 
     private Task<User?> FindUserAsync(string email, CancellationToken cancellationToken)
     {
-        var normalizedEmail = email.Trim().ToLower();
-
         return _context.Set<User>()
             .Include(u => u.ClientProfile)
             .Include(u => u.FreelancerProfile)
             .Include(u => u.UserEloScore)
-            .FirstOrDefaultAsync(u => u.Email.ToLower() == normalizedEmail, cancellationToken);
+            .FirstOrDefaultAsync(u => u.Email == email, cancellationToken);
     }
 
-    private User CreateUser(GoogleUserInfoDTO googleUser, UserRole role)
+    private User CreateUser(GoogleUserInfoDTO googleUser, string email, UserRole role)
     {
         var now = _dateTimeService.UtcNow;
         var user = new User
         {
             UserId = Guid.NewGuid(),
-            Email = googleUser.Email.Trim(),
+            Email = email,
             FullName = googleUser.Name,
             Role = (int)role,
             Provider = "Google",

@@ -77,8 +77,10 @@ public class JwtService : IJwtService
 
         var tokenValidationParameters = new TokenValidationParameters
         {
-            ValidateAudience = false,
-            ValidateIssuer = false,
+            ValidateAudience = true,
+            ValidAudience = jwtSettings["Audience"],
+            ValidateIssuer = true,
+            ValidIssuer = jwtSettings["Issuer"],
             ValidateIssuerSigningKey = true,
             IssuerSigningKey = new SymmetricSecurityKey(secretKey),
             ValidateLifetime = false // Ignore token expiration

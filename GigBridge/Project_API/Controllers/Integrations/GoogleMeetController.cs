@@ -21,6 +21,13 @@ public class GoogleMeetController : BaseApiController
     {
         _meetOAuth = meetOAuth;
         _options = options.Value;
+
+        if (!Uri.TryCreate(_options.FrontendCallbackUri, UriKind.Absolute, out var callbackUri)
+            || (callbackUri.Scheme != Uri.UriSchemeHttp && callbackUri.Scheme != Uri.UriSchemeHttps))
+        {
+            throw new InvalidOperationException(
+                "GoogleMeet:FrontendCallbackUri must be an absolute HTTP(S) URL.");
+        }
     }
 
     [HttpPost("authorization-url")]
@@ -52,7 +59,6 @@ public class GoogleMeetController : BaseApiController
         if (string.IsNullOrEmpty(state))
             return Redirect(GetFrontendCallbackUrl("missing_state", null));
 
-        var stateHash = ConvertToSha256Hex(state);
         // We can't directly access the state from here without a service method.
         // For simplicity, redirect to frontend with the raw params and let the frontend
         // pass them through the API.
@@ -108,22 +114,13 @@ public class GoogleMeetController : BaseApiController
         string? code = null,
         string? error = null)
     {
-        var baseUrl = !string.IsNullOrWhiteSpace(_options.FrontendCallbackUri)
-            ? _options.FrontendCallbackUri
-            : $"{Request.Scheme}://{Request.Host}/integrations/google-meet/callback";
+        var baseUrl = _options.FrontendCallbackUri;
 
         var separator = baseUrl.Contains('?') ? '&' : '?';
         return $"{baseUrl}{separator}result={Uri.EscapeDataString(result)}" +
                (string.IsNullOrEmpty(state) ? "" : $"&state={Uri.EscapeDataString(state)}") +
                (string.IsNullOrEmpty(code) ? "" : $"&code={Uri.EscapeDataString(code)}") +
                (string.IsNullOrEmpty(error) ? "" : $"&error={Uri.EscapeDataString(error)}");
-    }
-
-    private static string ConvertToSha256Hex(string input)
-    {
-        var bytes = System.Text.Encoding.UTF8.GetBytes(input);
-        var hash = System.Security.Cryptography.SHA256.HashData(bytes);
-        return Convert.ToHexString(hash);
     }
 }
 

@@ -15,6 +15,8 @@ namespace Application.Features.Auth.Register.DTOs
 
         public string ConfirmPassword { get; set; } = null!;
 
+        public string VerificationTicket { get; set; } = null!;
+
         public UserRole? role { get; set; }
     }
 }

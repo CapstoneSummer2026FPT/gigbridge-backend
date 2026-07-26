@@ -12,5 +12,4 @@ public class GoogleMeetOptions
     public string MeetApiBaseUrl { get; set; } = "https://meet.googleapis.com";
     public string BackendCallbackUri { get; set; } = string.Empty;
     public string FrontendCallbackUri { get; set; } = string.Empty;
-    public string DataProtectionKeysPath { get; set; } = string.Empty;
 }

@@ -60,13 +60,10 @@ public static class DependencyInjection
         services.AddScoped<IUserAccountStatusService, UserAccountStatusService>();
         services.AddScoped<IUserEloService, UserEloService>();
         services.AddScoped<IPremiumAccessService, PremiumAccessService>();
-        services.AddScoped<IProposalCheatingService, ProposalCheatingService>();
         services.AddScoped<IProposalQuestionTimerService, ProposalQuestionTimerService>();
         services.AddScoped<IProposalInterviewReviewService, ProposalInterviewReviewService>();
-        services.AddScoped<ScheduleWorkflowService>();
 
         services.AddSingleton<DeadlineWarningService>();
-        services.AddSingleton<IDeadlineWarningService>(sp => sp.GetRequiredService<DeadlineWarningService>());
         services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<DeadlineWarningService>());
 
 
