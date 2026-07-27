@@ -94,7 +94,7 @@ public class UpdateJobPostCommandHandler : IRequestHandler<UpdateJobPostCommand,
             : request.Currency.Trim();
 
         jobPost.EstimatedDuration = request.EstimatedDuration;
-        jobPost.Location = request.Location;
+        jobPost.Location = null;
         jobPost.Visibility = request.Visibility!.Value;
         jobPost.EndDate = request.EndDate;
 

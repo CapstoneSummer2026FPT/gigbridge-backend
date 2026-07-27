@@ -1,4 +1,5 @@
 using Application.Common.Exceptions;
+using Application.Features.Contracts.Common.Internal;
 using Application.Features.Contracts.Common.GetContractByJobPost.Queries;
 using Domain.Entities;
 using Domain.Enums;
@@ -41,7 +42,37 @@ public class GetContractByJobPostQueryHandlerTests
         Assert.Equal(fixture.FreelancerProfileId, result.FreelancerProfileId);
         Assert.NotNull(result.Escrow);
         Assert.Equal(400m, result.Escrow.RequiredAmount);
+        Assert.Equal(0.4m, result.Escrow.RequiredTokens);
+        Assert.Equal(0.01m, result.Escrow.FundingFeeRate);
+        Assert.Equal(4m, result.Escrow.FundingFeeVnd);
+        Assert.Equal(0.004m, result.Escrow.FundingFeeTokens);
+        Assert.Equal(0.404m, result.Escrow.TotalDebitTokens);
         Assert.Equal((int)ContractEscrowStatus.PendingFunding, result.Escrow.Status);
+    }
+
+    [Theory]
+    [InlineData(1_000_000, 1_000, 10_000, 10, 1_010)]
+    [InlineData(24, 0.024, 0.24, 0.0002, 0.0242)]
+    public void FundingQuote_UsesTheSameTokenConversionAndRoundingAsFunding(
+        decimal requiredAmount,
+        decimal requiredTokens,
+        decimal fundingFeeVnd,
+        decimal fundingFeeTokens,
+        decimal totalDebitTokens)
+    {
+        var response = ContractEscrowResponseMapper.ToResponse(new ContractEscrow
+        {
+            ContractEscrowId = Guid.NewGuid(),
+            RequiredAmount = requiredAmount,
+            Currency = "VND",
+            CreatedAt = DateTime.UtcNow
+        });
+
+        Assert.Equal(requiredTokens, response.RequiredTokens);
+        Assert.Equal(0.01m, response.FundingFeeRate);
+        Assert.Equal(fundingFeeVnd, response.FundingFeeVnd);
+        Assert.Equal(fundingFeeTokens, response.FundingFeeTokens);
+        Assert.Equal(totalDebitTokens, response.TotalDebitTokens);
     }
 
     [Fact]

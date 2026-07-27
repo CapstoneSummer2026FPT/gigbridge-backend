@@ -128,7 +128,13 @@ public sealed class FundContractEscrowCommandHandler :
         }
 
         var requiredAmount = escrow.RequiredAmount;
-        var requiredTokens = TokenWalletRules.ToTokens(requiredAmount);
+        var fundingQuote = ContractEscrowFundingQuote.Calculate(requiredAmount);
+        var requiredTokens = fundingQuote.RequiredTokens;
+        if (wallet.AvailableTokens < fundingQuote.TotalDebitTokens)
+        {
+            throw new BadRequestException("Wallet balance is insufficient to fund escrow and pay the service fee.");
+        }
+
         WalletWorkflow.DebitAvailable(wallet, requiredTokens, now, "Wallet balance is insufficient to fund escrow.");
         wallet.HeldTokens += requiredTokens;
         await ServiceFeeWorkflow.ChargeAsync(

@@ -11,26 +11,26 @@ using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
-namespace Application.Features.Proposals.Client.EvaluateProposalVetting;
+namespace Application.Features.Proposals.Client.EvaluateProposalAnswers;
 
-public class EvaluateProposalVettingCommand : IRequest<VettingEvaluationResponseDto>
+public class EvaluateProposalAnswersCommand : IRequest<VettingEvaluationResponseDto>
 {
     public Guid ProposalId { get; set; }
     public Guid UserId { get; set; } // Recruiter User ID
 }
 
-public class EvaluateProposalVettingCommandHandler : IRequestHandler<EvaluateProposalVettingCommand, VettingEvaluationResponseDto>
+public class EvaluateProposalAnswersCommandHandler : IRequestHandler<EvaluateProposalAnswersCommand, VettingEvaluationResponseDto>
 {
     private readonly IApplicationDbContext _context;
     private readonly IAiServiceClient _aiServiceClient;
 
-    public EvaluateProposalVettingCommandHandler(IApplicationDbContext context, IAiServiceClient aiServiceClient)
+    public EvaluateProposalAnswersCommandHandler(IApplicationDbContext context, IAiServiceClient aiServiceClient)
     {
         _context = context;
         _aiServiceClient = aiServiceClient;
     }
 
-    public async Task<VettingEvaluationResponseDto> Handle(EvaluateProposalVettingCommand request, CancellationToken cancellationToken)
+    public async Task<VettingEvaluationResponseDto> Handle(EvaluateProposalAnswersCommand request, CancellationToken cancellationToken)
     {
         // 1. Verify Client profile exists
         var clientProfile = await _context.Set<ClientProfile>()
@@ -62,12 +62,21 @@ public class EvaluateProposalVettingCommandHandler : IRequestHandler<EvaluatePro
             throw new ForbiddenAccessException("You do not have permission to evaluate vetting for this proposal.");
         }
 
-        // 4. Fetch the questions and candidate answers
+        // 4. Fetch only completed clarifying-question answers. This evaluation is
+        // intentionally separate from the optional AI interview workflow.
         var answers = await _context.Set<ProposalAnswer>()
             .AsNoTracking()
             .Include(pa => pa.JobPostQuestions)
-            .Where(pa => pa.ProposalsId == request.ProposalId)
+            .Where(pa =>
+                pa.ProposalsId == request.ProposalId &&
+                pa.AnswerText != null &&
+                pa.AnswerText.Trim() != string.Empty)
             .ToListAsync(cancellationToken);
+
+        if (answers.Count == 0)
+        {
+            throw new BadRequestException("No completed clarifying answers are available for evaluation.");
+        }
 
         // 5. Construct the AI request payload DTO
         var requestDto = new AnalyzeVettingRequestDto

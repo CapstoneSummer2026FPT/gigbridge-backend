@@ -98,7 +98,6 @@ public class SaveDraftJobPostCommandValidatorTests
             BudgetMax: 1000m,
             Currency: "USD",
             EstimatedDuration: "2-4 weeks",
-            Location: "Remote",
             Visibility: 1,
             EndDate: DateTime.UtcNow.AddDays(7),
             IsAigenerated: false,

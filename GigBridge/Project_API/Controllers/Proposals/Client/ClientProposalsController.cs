@@ -1,6 +1,6 @@
 using Application.Common.Models;
 using Application.Common.Models.Ai;
-using Application.Features.Proposals.Client.EvaluateProposalVetting;
+using Application.Features.Proposals.Client.EvaluateProposalAnswers;
 using Application.Features.Proposals.Client.GetProposalsByJobPost.Queries;
 using Application.Features.Proposals.Common.DTOs;
 using Domain.Enums;
@@ -35,15 +35,15 @@ public class ClientProposalsController : BaseApiController
         return Ok(ApiResponse<IEnumerable<ProposalDto>>.Ok(result, "Success"));
     }
 
-    [HttpPost("{proposalId}/ai-interview-judging")]
-    public async Task<IActionResult> EvaluateVettingAnswers(Guid proposalId)
+    [HttpPost("{proposalId}/answer-evaluation")]
+    public async Task<IActionResult> EvaluateProposalAnswers(Guid proposalId)
     {
         if (!TryGetCurrentUserId(out var userId))
         {
             return InvalidTokenResponse();
         }
 
-        var command = new EvaluateProposalVettingCommand
+        var command = new EvaluateProposalAnswersCommand
         {
             ProposalId = proposalId,
             UserId = userId

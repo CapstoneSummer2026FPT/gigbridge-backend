@@ -233,10 +233,11 @@ public class NegotiationFlowCommandHandlerTests
         var configuration = Substitute.For<IConfiguration>();
         configuration["FrontendBaseUrl"].Returns("https://gigbridge.test");
 
+        var realtimeNotifier = Substitute.For<IChatRealtimeNotifier>();
         var handler = new RespondFinalOfferCommandHandler(
             fixture.Context,
             new FixedDateTimeService(fixture.Now),
-            new NoopChatRealtimeNotifier(),
+            realtimeNotifier,
             notifications,
             emailService,
             emailRenderer,
@@ -263,6 +264,16 @@ public class NegotiationFlowCommandHandlerTests
         Assert.Equal(contract.ContractsId, result.ContractId);
         Assert.Equal((int)ContractStatus.PendingContractConfirmation, result.ContractStatus);
         Assert.Empty(fixture.Escrows.Entities);
+        var workflowCall = realtimeNotifier.ReceivedCalls().Single(call =>
+            Equals(call.GetArguments()[1], "ContractDraftUpdated"));
+        var workflowPayload = workflowCall.GetArguments()[2]
+            ?? throw new InvalidOperationException("ContractDraftUpdated payload was null.");
+        Assert.Equal(
+            fixture.ConversationId,
+            workflowPayload.GetType().GetProperty("conversationId")?.GetValue(workflowPayload));
+        Assert.Equal(
+            contract.ContractsId,
+            workflowPayload.GetType().GetProperty("contractId")?.GetValue(workflowPayload));
         await notifications.Received(1).CreateNotificationAsync(
             fixture.FreelancerUserId,
             NotificationType.ContractStarted,
