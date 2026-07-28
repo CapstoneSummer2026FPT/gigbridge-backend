@@ -20,7 +20,11 @@ public class PerformanceBehaviour<TRequest, TResponse> : IPipelineBehavior<TRequ
         if (elapsedMilliseconds > 500) {
             var requestName = typeof(TRequest).Name;
             var userId = _currentUserService.UserId ?? string.Empty;
-            _logger.LogWarning("GigBridge Long Running Request: {Name} ({ElapsedMilliseconds} milliseconds) {@UserId} {@Request}", requestName, elapsedMilliseconds, userId, request);
+            _logger.LogWarning(
+                "GigBridge Long Running Request: {Name} ({ElapsedMilliseconds} milliseconds) for User {UserId}",
+                requestName,
+                elapsedMilliseconds,
+                userId);
         }
         return response;
     }

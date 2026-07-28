@@ -186,7 +186,11 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
             await _chatRealtimeNotifier.SendUsersEventAsync(
                 participantUserIds,
                 eventName,
-                new { contractId = response.ContractId },
+                new
+                {
+                    conversationId = conversation.ConversationsId,
+                    contractId = response.ContractId
+                },
                 cancellationToken);
 
             await SendJobAcceptanceUpdates(offer, command.UserId, cancellationToken);

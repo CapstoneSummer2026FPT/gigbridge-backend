@@ -198,7 +198,10 @@ public class AcceptProposalForNegotiationCommandHandler : IRequestHandler<Accept
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Failed to send proposal negotiation email to freelancer {Email}", freelancerUser.Email);
+                    _logger.LogError(
+                        ex,
+                        "Failed to send proposal negotiation email to freelancer user {UserId}",
+                        freelancerUser.UserId);
                 }
             }
         }

@@ -89,7 +89,7 @@ public class ClientProposalsController : BaseApiController
             return InvalidTokenResponse();
         }
 
-        var command = new EvaluateProposalVettingCommand
+        var command = new EvaluateProposalAnswersCommand
         {
             ProposalId = proposalId,
             UserId = userId,

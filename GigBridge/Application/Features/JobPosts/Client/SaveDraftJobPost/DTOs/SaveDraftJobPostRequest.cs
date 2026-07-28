@@ -10,7 +10,6 @@ public sealed record SaveDraftJobPostRequest(
     decimal? BudgetMax,
     string? Currency,
     string? EstimatedDuration,
-    string? Location,
     int? Visibility,
     DateTime? EndDate,
     bool? IsAigenerated,

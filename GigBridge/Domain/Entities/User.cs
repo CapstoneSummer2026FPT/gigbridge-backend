@@ -44,9 +44,6 @@ public partial class User
 
     public DateTime? UpdatedAt { get; set; }
 
-    public string? EmailVerificationToken { get; set; }
-
-    public DateTime? TokenExpiry { get; set; }
     public string? RefreshTokenHash { get; set; }
     public DateTime? RefreshTokenExpiry { get; set; }
 
@@ -64,8 +61,6 @@ public partial class User
     public virtual ICollection<ContractProductHandoff> ReceivedContractProductHandoffs { get; set; } = new List<ContractProductHandoff>();
 
     public virtual ICollection<DisputeEvidence> DisputeEvidences { get; set; } = new List<DisputeEvidence>();
-
-    public virtual ICollection<DisputeMessage> DisputeMessages { get; set; } = new List<DisputeMessage>();
 
     public virtual ICollection<Dispute> DisputeResolvedByAdmins { get; set; } = new List<Dispute>();
 
@@ -93,21 +88,11 @@ public partial class User
 
     public virtual ICollection<BroadcastNotificationRecipient> BroadcastNotificationRecipients { get; set; } = new List<BroadcastNotificationRecipient>();
 
-    public virtual ICollection<PaymentProof> PaymentProofs { get; set; } = new List<PaymentProof>();
-
     public virtual ICollection<PlatformSetting> PlatformSettings { get; set; } = new List<PlatformSetting>();
-
-    public virtual ICollection<ProposalCheatingEvent> ProposalCheatingEvents { get; set; } = new List<ProposalCheatingEvent>();
 
     public virtual ICollection<ProposalQuestionTimer> ProposalQuestionTimers { get; set; } = new List<ProposalQuestionTimer>();
 
     public virtual ICollection<ProposalInterviewReviewSession> ProposalInterviewReviewSessions { get; set; } = new List<ProposalInterviewReviewSession>();
-
-    public virtual ICollection<FreelancerCheatingViolation> FreelancerCheatingViolations { get; set; } = new List<FreelancerCheatingViolation>();
-
-    public virtual ICollection<FreelancerCheatingViolation> ReviewedFreelancerCheatingViolations { get; set; } = new List<FreelancerCheatingViolation>();
-
-    public virtual ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
 
     public virtual ICollection<Report> ReportResolvedByAdmins { get; set; } = new List<Report>();
 

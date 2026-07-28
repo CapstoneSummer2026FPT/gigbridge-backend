@@ -13,6 +13,8 @@ using Application.Features.Contracts.Signing.Common.Sign.DTOs;
 using Application.Features.Contracts.Details.Freelancer.RequestChange.DTOs;
 using Domain.Entities;
 using Domain.Enums;
+using Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 using Test_Gigbridge_Backend.TestSupport;
 
 namespace Test_Gigbridge_Backend.Application.Features.Contracts.Common;
@@ -115,7 +117,7 @@ public class ContractWorkflowTests
         {
             UserWalletsId = fixture.WalletId,
             UserId = fixture.ClientUserId,
-            AvailableTokens = 999m,
+            AvailableTokens = 1_009.9999m,
             HeldTokens = 0m,
             CreatedAt = fixture.Now
         });
@@ -350,6 +352,74 @@ public class ContractWorkflowTests
             Assert.Equal((int)DeliveryChannel.Email, delivery.Channel);
             Assert.Equal((int)DeliveryOutboxStatus.Pending, delivery.Status);
         });
+    }
+
+    [Fact]
+    public async Task EnsurePendingEscrow_LoadsPersistedWorkItemsBeforeValidation()
+    {
+        var options = new DbContextOptionsBuilder<GigbridgeDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        await using var context = new GigbridgeDbContext(options);
+        var now = new DateTime(2026, 7, 28, 12, 0, 0, DateTimeKind.Utc);
+        var contractId = Guid.NewGuid();
+        var jobPostId = Guid.NewGuid();
+        var milestoneId = Guid.NewGuid();
+
+        context.Set<JobPost>().Add(new JobPost
+        {
+            JobPostsId = jobPostId,
+            ClientProfilesId = Guid.NewGuid(),
+            Title = "Persisted work item contract",
+            Description = "Regression test for signing from separate requests.",
+            Status = 1,
+            CreatedAt = now
+        });
+        context.Set<Contract>().Add(new Contract
+        {
+            ContractsId = contractId,
+            JobPostsId = jobPostId,
+            ClientProfilesId = Guid.NewGuid(),
+            Title = "Fixed contract",
+            TotalBudget = 100m,
+            Status = (int)ContractStatus.PendingSignature,
+            CreatedAt = now
+        });
+        context.Set<Milestone>().Add(new Milestone
+        {
+            MilestonesId = milestoneId,
+            ContractsId = contractId,
+            Title = "Implementation",
+            Amount = 100m,
+            SortOrder = 0,
+            Status = (int)MilestoneStatus.Pending,
+            CreatedAt = now
+        });
+        context.Set<ContractWorkItem>().Add(new ContractWorkItem
+        {
+            ContractWorkItemId = Guid.NewGuid(),
+            MilestonesId = milestoneId,
+            Title = "Build feature",
+            Description = "Build and verify the agreed feature.",
+            OrderIndex = 0,
+            Status = (int)ContractWorkItemStatus.Todo,
+            CreatedAt = now
+        });
+        await context.SaveChangesAsync();
+        context.ChangeTracker.Clear();
+
+        var persistedContract = await context.Set<Contract>()
+            .SingleAsync(contract => contract.ContractsId == contractId);
+
+        var escrow = await ContractEscrowReadiness.EnsurePendingEscrowAsync(
+            context,
+            persistedContract,
+            now.AddMinutes(1),
+            CancellationToken.None);
+
+        Assert.Equal(contractId, escrow.ContractsId);
+        Assert.Equal(100m, escrow.RequiredAmount);
+        Assert.Equal((int)ContractStatus.PendingEscrow, persistedContract.Status);
     }
 
     [Fact]

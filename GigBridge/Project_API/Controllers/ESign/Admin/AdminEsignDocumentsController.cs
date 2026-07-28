@@ -9,7 +9,6 @@ namespace Project_API.Controllers.Admin;
 
 [ApiController]
 [Route("api/admin/esign-documents")]
-[Route("api/admin/AdminEsignDocuments")]
 [Authorize(Roles = "Admin")]
 public sealed class AdminEsignDocumentsController : BaseApiController
 {
@@ -34,28 +33,6 @@ public sealed class AdminEsignDocumentsController : BaseApiController
             Q: q));
 
         return Ok(ApiResponse<PaginatedList<ESignDocumentListItemResponse>>.Ok(result, "Success"));
-    }
-
-    [HttpGet("by-email/{email}")]
-    public async Task<IActionResult> GetByEmail(string email)
-    {
-        if (!TryGetCurrentUserId(out var adminUserId))
-        {
-            return InvalidTokenResponse();
-        }
-
-        if (string.IsNullOrWhiteSpace(email))
-        {
-            return BadRequest(ApiResponse<object>.Error(400, "Email is required"));
-        }
-
-        var result = await Mediator.Send(new GetESignDocumentsQuery(
-            adminUserId,
-            AdminScope: true,
-            PageSize: 100,
-            Q: email));
-
-        return Ok(ApiResponse<IReadOnlyList<ESignDocumentListItemResponse>>.Ok(result.Items, "Success"));
     }
 
     [HttpDelete("{documentId:guid}")]

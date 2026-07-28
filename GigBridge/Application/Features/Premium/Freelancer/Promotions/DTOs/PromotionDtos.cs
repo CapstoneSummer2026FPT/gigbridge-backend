@@ -3,11 +3,6 @@ using Domain.Enums;
 
 namespace Application.Features.Premium.Freelancer.Promotions.DTOs;
 
-public sealed record PromotionPackageDto(
-    string Id, string Name, string? Description, int DurationDays,
-    decimal TokenPrice, decimal BoostWeight, int MaxQueuedCampaigns,
-    bool IsActive, int SortOrder);
-
 public sealed record PromotionDto(
     Guid Id, string PackageId, string PackageName, decimal TokenCost,
     decimal BoostWeight, DateTime StartsAt, DateTime EndsAt,

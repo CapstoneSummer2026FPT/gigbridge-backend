@@ -33,5 +33,11 @@ public class UpdateProposalCommandValidator : AbstractValidator<UpdateProposalCo
             .Must(value => global::Application.Features.Proposals.Common.ProposalTotalsCalculator.IsValidDuration(value))
             .When(x => !string.IsNullOrWhiteSpace(x.Request.ProposedDuration))
             .WithMessage("ProposedDuration must be a positive whole number in days, weeks, or months.");
+
+        RuleForEach(x => x.Request.WorkBreakdownItems)
+            .SetValidator(new global::Application.Features.Proposals.Common.ProposalWorkBreakdownItemValidator());
+
+        RuleForEach(x => x.Request.MilestonePlans)
+            .SetValidator(new global::Application.Features.Proposals.Common.ProposalMilestonePlanValidator());
     }
 }

@@ -530,9 +530,5 @@ public sealed class PremiumClientCapabilityTests
                 IdempotencyKey = idempotencyKey
             });
         }
-
-        public Task<WalletTransaction> CreditAsync(Guid userId, decimal tokenAmount,
-            WalletTransactionType type, string idempotencyKey, string? metadata,
-            CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 }

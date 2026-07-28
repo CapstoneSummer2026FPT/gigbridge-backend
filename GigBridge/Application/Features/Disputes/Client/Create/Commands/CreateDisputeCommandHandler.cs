@@ -47,7 +47,6 @@ public sealed class CreateDisputeCommandHandler(
             IsVipPriority = fastTrack.IsVipPriority,
             ResolutionTargetAt = fastTrack.ResolutionTargetAt,
             AiAnalysisStatus = fastTrack.AiAnalysisStatus,
-            AiSuggestedResolution = null,
             CreatedAt = now
         };
         contract.Status = (int)ContractStatus.Disputed;

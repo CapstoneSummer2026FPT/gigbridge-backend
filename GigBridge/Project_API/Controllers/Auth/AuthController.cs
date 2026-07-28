@@ -9,15 +9,9 @@ using Application.Features.Auth.RefreshToken.Commands;
 using Application.Features.Auth.RefreshToken.DTOs;
 using Application.Features.Auth.Register.Commands;
 using Application.Features.Auth.Register.DTOs;
-using Application.Features.Auth.ResendEmail.Commands;
-using Application.Features.Auth.ResendEmail.DTOs;
 using Application.Features.Auth.ResetPassword.Commands;
 using Application.Features.Auth.ResetPassword.DTOs;
 using Application.Features.Auth.Shared.DTOs;
-using Application.Features.Auth.ValidateToken.Commands;
-using Application.Features.Auth.ValidateToken.DTOs;
-using Application.Features.Auth.VerifyEmail.Commands;
-using Application.Features.Auth.VerifyEmail.DTOs;
 using Application.Features.Auth.SendOtp.Commands;
 using Application.Features.Auth.SendOtp.DTOs;
 using Application.Features.Auth.VerifyOtp.Commands;
@@ -27,8 +21,9 @@ using Application.Features.Auth.ChangePassword.DTOs;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Configuration;
+using Microsoft.AspNetCore.RateLimiting;
 using Project_API.Controllers.Common;
+using Project_API.Security;
 using System;
 using System.Threading.Tasks;
 
@@ -39,6 +34,7 @@ namespace Project_API.Controllers.Auth;
 public class AuthController : BaseApiController
 {
     [HttpPost("register")]
+    [EnableRateLimiting(AuthRateLimitPolicies.Account)]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request)
     {
         if (request == null)
@@ -53,6 +49,7 @@ public class AuthController : BaseApiController
     }
 
     [HttpPost("send-otp")]
+    [EnableRateLimiting(AuthRateLimitPolicies.OtpIssue)]
     public async Task<IActionResult> SendOtp([FromBody] SendOtpRequest request)
     {
         if (request == null || string.IsNullOrWhiteSpace(request.Email))
@@ -65,6 +62,7 @@ public class AuthController : BaseApiController
     }
 
     [HttpPost("verify-otp")]
+    [EnableRateLimiting(AuthRateLimitPolicies.OtpVerify)]
     public async Task<IActionResult> VerifyOtp([FromBody] VerifyOtpRequest request)
     {
         if (request == null || string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Otp))
@@ -72,11 +70,14 @@ public class AuthController : BaseApiController
             return BadRequest(ApiResponse<object>.Error(400, "Email and verification code are required"));
         }
 
-        await Mediator.Send(new VerifyOtpCommand(request));
-        return Ok(ApiResponse<object?>.Ok(null, "Email verified successfully"));
+        var verification = await Mediator.Send(new VerifyOtpCommand(request));
+        return Ok(ApiResponse<VerifyOtpResponse>.Ok(
+            verification,
+            "Email verified successfully"));
     }
 
     [HttpPost("login")]
+    [EnableRateLimiting(AuthRateLimitPolicies.Login)]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {
         if (request == null)
@@ -92,6 +93,7 @@ public class AuthController : BaseApiController
     }
 
     [HttpPost("google")]
+    [EnableRateLimiting(AuthRateLimitPolicies.Login)]
     public async Task<IActionResult> GoogleLogin([FromBody] GoogleLoginRequest request)
     {
         if (request == null || string.IsNullOrWhiteSpace(request.AuthCode))
@@ -109,6 +111,7 @@ public class AuthController : BaseApiController
     }
 
     [HttpPost("refresh")]
+    [EnableRateLimiting(AuthRateLimitPolicies.Refresh)]
     public async Task<IActionResult> Refresh([FromBody] TokenRequest request)
     {
          var refreshToken = Request.Cookies["refreshToken"];
@@ -120,26 +123,6 @@ public class AuthController : BaseApiController
         SetRefreshTokenCookie(newRefreshToken, newRefreshTokenExpiry);
         return Ok(ApiResponse<LoginResponse>.Ok(loginData, "Token refreshed successfully"));
     }
-
-    //[HttpGet("verify-email")]
-    //public async Task<IActionResult> EmailVerify([FromQuery] VerifyEmailRequest request)
-    //{
-    //    if (string.IsNullOrWhiteSpace(request.Token))
-    //        return BadRequest(ApiResponse<object>.BadRequest("Token is required"));
-
-    //    await Mediator.Send(new VerifyEmailCommand(request));
-    //    return Ok(ApiResponse<object>.NoContent("Email verified successfully"));
-    //}
-
-    //[HttpPost("resend-email")]
-    //public async Task<IActionResult> ResendEmailConfirmation([FromBody] EmailResendConfirmationRequest request)
-    //{
-    //    if (string.IsNullOrWhiteSpace(request.Email))
-    //        return BadRequest(ApiResponse<object>.BadRequest("Email is required"));
-
-    //    await Mediator.Send(new ResendEmailConfirmationCommand(request));
-    //    return Ok(ApiResponse<object>.NoContent("Email sent successfully"));
-    //}
 
     [HttpPost("change-password")]
     [Authorize]
@@ -154,6 +137,7 @@ public class AuthController : BaseApiController
     }
 
     [HttpPost("forgot-password")]
+    [EnableRateLimiting(AuthRateLimitPolicies.OtpIssue)]
     public async Task<IActionResult> SendPasswordEmailChanging([FromBody] ForgotPasswordRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Email))
@@ -164,6 +148,7 @@ public class AuthController : BaseApiController
     }
 
     [HttpPost("password-reset")]
+    [EnableRateLimiting(AuthRateLimitPolicies.OtpVerify)]
     public async Task<IActionResult> PasswordChangingRequest([FromBody] ResetPasswordRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.Email))
@@ -174,20 +159,6 @@ public class AuthController : BaseApiController
 
         await Mediator.Send(new ResetPasswordCommand(request));
         return Ok(ApiResponse<object>.NoContent("Password reset successfully"));
-    }
-
-    [HttpPost("validate-reset-token")]
-    public async Task<IActionResult> ValidateResetToken([FromBody] ValidateResetTokenRequest request)
-    {
-        if (string.IsNullOrWhiteSpace(request.Token))
-            return BadRequest(ApiResponse<object>.BadRequest("TOKEN_INVALID"));
-
-        var isExpired = await Mediator.Send(new ValidateResetTokenCommand(request));
-
-        if (isExpired)
-            return BadRequest(ApiResponse<object>.BadRequest("TOKEN_EXPIRED"));
-
-        return Ok(ApiResponse<object>.NoContent("valid"));
     }
 
     private void SetRefreshTokenCookie(string refreshToken, DateTime expires)

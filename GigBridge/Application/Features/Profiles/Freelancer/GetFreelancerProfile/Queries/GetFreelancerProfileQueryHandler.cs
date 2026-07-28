@@ -9,7 +9,6 @@ using Application.Features.Profiles.FreelancerProfile.GetFreelancerProfile.DTOs;
 using Application.Features.Profiles.FreelancerProfile.Common.DTOs;
 using Application.Features.Premium.Common;
 using Domain.Entities;
-using Domain.Enums;
 using Domain.Services;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -21,16 +20,13 @@ public class GetFreelancerProfileQueryHandler
     : IRequestHandler<GetFreelancerProfileQuery, FreelancerProfileDetailDto>
 {
     private readonly IApplicationDbContext _context;
-    private readonly ICurrentUserService _currentUserService;
     private readonly IPremiumAccessService _premiumAccessService;
 
     public GetFreelancerProfileQueryHandler(
         IApplicationDbContext context,
-        ICurrentUserService currentUserService,
         IPremiumAccessService premiumAccessService)
     {
         _context = context;
-        _currentUserService = currentUserService;
         _premiumAccessService = premiumAccessService;
     }
 
@@ -136,49 +132,6 @@ public class GetFreelancerProfileQueryHandler
             }).ToList()
         };
 
-        if (CanViewCheatingPenaltyLogs(request.UserId))
-        {
-            var penaltyLogs = await _context.Set<FreelancerCheatingViolation>()
-                .AsNoTracking()
-                .Include(violation => violation.Proposals)
-                    .ThenInclude(proposal => proposal.JobPosts)
-                .Where(violation => violation.FreelancerUserId == request.UserId)
-                .OrderByDescending(violation => violation.CreatedAt)
-                .Select(violation => new CheatingPenaltyLogDto
-                {
-                    ViolationId = violation.FreelancerCheatingViolationsId,
-                    ProposalId = violation.ProposalsId,
-                    JobPostId = violation.Proposals.JobPostsId,
-                    JobTitle = violation.Proposals.JobPosts.Title,
-                    ViolationNumber = violation.ViolationNumber,
-                    TotalEventCount = violation.TotalEventCount,
-                    CopyCount = violation.CopyCount,
-                    PasteCount = violation.PasteCount,
-                    TabSwitchCount = violation.TabSwitchCount,
-                    ScreenshotAttemptCount = violation.ScreenshotAttemptCount,
-                    FocusLossCount = violation.FocusLossCount,
-                    FullscreenExitCount = violation.FullscreenExitCount,
-                    Action = violation.Action,
-                    EloDelta = violation.EloDelta,
-                    SuspendedUntil = violation.SuspendedUntil,
-                    CreatedAt = violation.CreatedAt
-                })
-                .ToListAsync(cancellationToken);
-
-            detailDto.CheatingPenaltyLogs = penaltyLogs;
-            detailDto.CheatingViolationCount = penaltyLogs.Count;
-        }
-
         return detailDto;
-    }
-
-    private bool CanViewCheatingPenaltyLogs(Guid profileUserId)
-    {
-        var isOwner = Guid.TryParse(_currentUserService.UserId, out var currentUserId) &&
-                      currentUserId == profileUserId;
-        var isAdmin = string.Equals(_currentUserService.Role, nameof(UserRole.Admin), StringComparison.OrdinalIgnoreCase) ||
-                      _currentUserService.Role == ((int)UserRole.Admin).ToString();
-
-        return isOwner || isAdmin;
     }
 }

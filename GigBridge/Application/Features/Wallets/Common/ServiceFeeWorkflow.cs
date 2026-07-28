@@ -13,7 +13,7 @@ internal static class ServiceFeeWorkflow
     internal const string EndProjectFeePrefix = "SERVICE-FEE-END-";
     internal const string ClientFundingFeePrefix = "SERVICE-FEE-FUND-";
     internal const string FreelancerReleaseFeePrefix = "SERVICE-FEE-RELEASE-";
-    private const decimal ServiceFeeRate = 0.01m;
+    internal const decimal ServiceFeeRate = 0.01m;
 
     public static decimal CalculateVnd(decimal amountVnd)
     {

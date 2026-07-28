@@ -160,9 +160,7 @@ public sealed class SaveDraftJobPostCommandHandler
         jobPost.EstimatedDuration = string.IsNullOrWhiteSpace(request.EstimatedDuration)
             ? null
             : request.EstimatedDuration.Trim();
-        jobPost.Location = string.IsNullOrWhiteSpace(request.Location)
-            ? null
-            : request.Location.Trim();
+        jobPost.Location = null;
         jobPost.Visibility = request.Visibility ?? PublicVisibility;
         jobPost.EndDate = request.EndDate;
         jobPost.IsAigenerated = request.IsAigenerated;

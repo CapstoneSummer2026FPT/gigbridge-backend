@@ -15,22 +15,3 @@ public sealed record DisputeDto(
     DateTime? ResolutionTargetAt,
     string AiAnalysisStatus,
     DateTime CreatedAt);
-
-public sealed record AdminDisputeDto(
-    Guid DisputeId,
-    Guid ContractId,
-    Guid InitiatorId,
-    Guid? MilestoneId,
-    string Reason,
-    int Status,
-    int? Resolution,
-    string? ResolutionNote,
-    bool IsVipPriority,
-    DateTime? ResolutionTargetAt,
-    string AiAnalysisStatus,
-    string? AiSuggestedResolution,
-    DateTime CreatedAt,
-    DateTime? ResolvedAt,
-    Guid? ResolvedByAdminId);
-
-public sealed record ResolveDisputeRequest(int Resolution, string ResolutionNote);

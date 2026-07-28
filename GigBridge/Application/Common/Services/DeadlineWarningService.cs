@@ -1,5 +1,4 @@
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
 using Domain.Entities;
 using Domain.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -9,7 +8,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Application.Common.Services;
 
-public class DeadlineWarningService : BackgroundService, IDeadlineWarningService
+public sealed class DeadlineWarningService : BackgroundService
 {
     private static readonly TimeSpan CheckInterval = TimeSpan.FromHours(6);
 
@@ -43,7 +42,7 @@ public class DeadlineWarningService : BackgroundService, IDeadlineWarningService
         }
     }
 
-    public async Task CheckDeadlinesAsync(CancellationToken cancellationToken)
+    private async Task CheckDeadlinesAsync(CancellationToken cancellationToken)
     {
         using var scope = _scopeFactory.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();

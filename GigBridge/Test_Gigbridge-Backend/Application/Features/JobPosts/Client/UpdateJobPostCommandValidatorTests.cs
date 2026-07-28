@@ -109,7 +109,6 @@ public class UpdateJobPostCommandValidatorTests
             BudgetMax: 1000m,
             Currency: "VND",
             EstimatedDuration: "2 weeks",
-            Location: "Remote",
             Visibility: 1,
             EndDate: DateTime.UtcNow.AddDays(7),
             SkillIds: new List<Guid> { Guid.NewGuid() },

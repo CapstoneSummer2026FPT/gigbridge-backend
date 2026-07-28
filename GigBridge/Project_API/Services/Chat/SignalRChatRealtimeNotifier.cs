@@ -48,7 +48,7 @@ public class SignalRChatRealtimeNotifier : IChatRealtimeNotifier
         try
         {
             await _hubContext.Clients
-                .Group(ChatHub.GetUserGroupName(userId))
+                .User(userId.ToString())
                 .SendAsync(eventName, payload, cancellationToken);
         }
         catch (Exception ex)
@@ -74,13 +74,13 @@ public class SignalRChatRealtimeNotifier : IChatRealtimeNotifier
 
         try
         {
-            var groupNames = userIds
+            var targetUserIds = userIds
                 .Distinct()
-                .Select(ChatHub.GetUserGroupName)
+                .Select(userId => userId.ToString())
                 .ToList();
 
             await _hubContext.Clients
-                .Groups(groupNames)
+                .Users(targetUserIds)
                 .SendAsync(eventName, payload, cancellationToken);
         }
         catch (Exception ex)

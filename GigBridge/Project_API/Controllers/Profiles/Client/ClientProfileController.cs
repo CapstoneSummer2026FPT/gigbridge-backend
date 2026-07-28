@@ -2,7 +2,7 @@ using System;
 using System.Threading.Tasks;
 using Application.Common.Models;
 using Application.Features.Profiles.ClientProfile.GetClientProfile.DTOs;
-using Application.Features.Profiles.ClientProfile.CreateClientProfile.DTOs;
+using Application.Features.Profiles.ClientProfile.Common.DTOs;
 using Application.Features.Profiles.ClientProfile.GetClientProfile.Queries;
 using Application.Features.Profiles.ClientProfile.GetMyClientProfile.Queries;
 using Application.Features.Profiles.ClientProfile.UpdateClientProfile.Commands;

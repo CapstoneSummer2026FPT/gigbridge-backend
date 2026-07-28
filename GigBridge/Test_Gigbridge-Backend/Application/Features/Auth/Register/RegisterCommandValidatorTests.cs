@@ -67,6 +67,34 @@ public class RegisterCommandValidatorTests
         Assert.Contains(result.Errors, error => error.PropertyName == "RegisterRequest.role");
     }
 
+    [Fact]
+    public void Validate_ReturnsErrorWhenRoleIsAdmin()
+    {
+        // Arrange
+        var request = CreateValidRequest();
+        request.role = UserRole.Admin;
+        var command = new RegisterCommand(request);
+
+        // Act
+        var result = _validator.Validate(command);
+
+        // Assert
+        Assert.Contains(result.Errors, error => error.PropertyName == "RegisterRequest.role");
+    }
+
+    [Fact]
+    public void Validate_ReturnsErrorWhenVerificationTicketIsMissing()
+    {
+        var request = CreateValidRequest();
+        request.VerificationTicket = string.Empty;
+
+        var result = _validator.Validate(new RegisterCommand(request));
+
+        Assert.Contains(
+            result.Errors,
+            error => error.PropertyName == "RegisterRequest.VerificationTicket");
+    }
+
     private static RegisterRequest CreateValidRequest()
     {
         return new RegisterRequest
@@ -75,6 +103,7 @@ public class RegisterCommandValidatorTests
             FullName = "Client User",
             Password = "StrongPass1!",
             ConfirmPassword = "StrongPass1!",
+            VerificationTicket = new string('a', 64),
             role = UserRole.Client
         };
     }

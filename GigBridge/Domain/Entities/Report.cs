@@ -31,13 +31,6 @@ public partial class Report
 
     public DateTime? ResolvedAt { get; set; }
 
-    /// <summary>
-    /// v1.2: Admin đính kèm bản hợp đồng lao động e-sign PDF cho tranh chấp thanh toán
-    /// </summary>
-    public string? AdminAttachmentUrl { get; set; }
-
-    public string? AdminAttachmentFileName { get; set; }
-
     public DateTime CreatedAt { get; set; }
 
     public DateTime? UpdatedAt { get; set; }
