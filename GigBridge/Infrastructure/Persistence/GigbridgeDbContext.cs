@@ -153,8 +153,6 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
     public virtual DbSet<ProposalAiJudging> ProposalAiJudgings { get; set; }
 
-    public virtual DbSet<RefreshToken> RefreshTokens { get; set; }
-
     public virtual DbSet<Report> Reports { get; set; }
 
     public virtual DbSet<ReportContract> ReportContracts { get; set; }

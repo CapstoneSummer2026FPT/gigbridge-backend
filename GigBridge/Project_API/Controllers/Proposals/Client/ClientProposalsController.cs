@@ -1,6 +1,6 @@
 using Application.Common.Models;
 using Application.Common.Models.Ai;
-using Application.Features.Proposals.Client.EvaluateProposalVetting;
+using Application.Features.Proposals.Client.EvaluateProposalAnswers;
 using Application.Features.Proposals.Client.GetProposalJudgingList;
 using Application.Features.Proposals.Client.GetProposalsByJobPost.Queries;
 using Application.Features.Proposals.Client.JudgeAllProposals;

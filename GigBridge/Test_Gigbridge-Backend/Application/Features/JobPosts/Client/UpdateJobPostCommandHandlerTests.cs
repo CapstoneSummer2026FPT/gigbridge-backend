@@ -165,7 +165,6 @@ public class UpdateJobPostCommandHandlerTests
             BudgetMax: 200m,
             Currency: "VND",
             EstimatedDuration: "1 week",
-            Location: "Remote",
             Visibility: 2,
             EndDate: now.AddDays(7),
             SkillIds: new List<Guid> { skillId },

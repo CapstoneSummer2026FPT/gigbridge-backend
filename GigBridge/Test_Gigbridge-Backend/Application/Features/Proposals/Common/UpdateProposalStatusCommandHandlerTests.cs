@@ -439,35 +439,6 @@ public class UpdateProposalStatusCommandHandlerTests
         public DateTime UtcNow { get; }
     }
 
-    private sealed class StubProposalCheatingService : IProposalCheatingService
-    {
-        private readonly CheatingPenaltyResultDto? _penaltyResult;
-
-        public StubProposalCheatingService(CheatingPenaltyResultDto? penaltyResult)
-        {
-            _penaltyResult = penaltyResult;
-        }
-
-        public Task<CheatingEventLogResponse> LogEventAsync(
-            Guid proposalId,
-            Guid freelancerUserId,
-            LogProposalCheatingEventRequest request,
-            string? ipAddress,
-            string? userAgent,
-            CancellationToken cancellationToken)
-        {
-            throw new NotSupportedException();
-        }
-
-        public Task<CheatingPenaltyResultDto?> ApplySubmissionPenaltyIfNeededAsync(
-            Proposal proposal,
-            Guid freelancerUserId,
-            CancellationToken cancellationToken)
-        {
-            return Task.FromResult(_penaltyResult);
-        }
-    }
-
     private sealed class SpyNotificationService : INotificationService
     {
         private readonly InMemoryApplicationDbContext _context;
