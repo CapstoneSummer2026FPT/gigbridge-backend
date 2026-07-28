@@ -3,7 +3,7 @@ name: Build & Deploy .NET API
 on:
   push:
     branches:
-      - deploy-test
+      - optimize-code-base
 
 jobs:
   build-and-push:
