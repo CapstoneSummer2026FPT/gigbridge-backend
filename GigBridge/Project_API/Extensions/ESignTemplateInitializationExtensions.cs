@@ -25,6 +25,7 @@ public static class ESignTemplateInitializationExtensions
             using var scope = app.Services.CreateScope();
             var context = scope.ServiceProvider.GetRequiredService<GigbridgeDbContext>();
 
+
             var hasActiveFixedPriceTemplate = await context.EsignTemplates
                 .AnyAsync(template =>
                     template.TemplateCode == FixedPriceTemplateCode &&

@@ -151,6 +151,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
     public virtual DbSet<ProposalAnswer> ProposalAnswers { get; set; }
 
+    public virtual DbSet<ProposalAiJudging> ProposalAiJudgings { get; set; }
+
     public virtual DbSet<Report> Reports { get; set; }
 
     public virtual DbSet<ReportContract> ReportContracts { get; set; }
@@ -2054,6 +2056,21 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
                 .HasForeignKey(e => e.ProposalsId)
                 .OnDelete(DeleteBehavior.Cascade)
                 .HasConstraintName("ProposalMilestonePlans_ProposalsId_fkey");
+        });
+
+        modelBuilder.Entity<ProposalAiJudging>(entity =>
+        {
+            entity.HasKey(e => e.ProposalAiJudgingsId).HasName("ProposalAiJudgings_pkey");
+            entity.HasIndex(e => e.ProposalId, "IX_ProposalAiJudgings_ProposalId").IsUnique();
+            entity.Property(e => e.ProposalAiJudgingsId).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.EvaluatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.TechnicalSkillsJson).HasColumnType("text");
+            entity.Property(e => e.SoftSkillsJson).HasColumnType("text");
+            entity.Property(e => e.GradedQuestionsJson).HasColumnType("text");
+            entity.HasOne(e => e.Proposal).WithOne(e => e.ProposalAiJudging)
+                .HasForeignKey<ProposalAiJudging>(e => e.ProposalId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("ProposalAiJudgings_ProposalId_fkey");
         });
 
         modelBuilder.Entity<NegotiationMilestoneDraft>(entity =>

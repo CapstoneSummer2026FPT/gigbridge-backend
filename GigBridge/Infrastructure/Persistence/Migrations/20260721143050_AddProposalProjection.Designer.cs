@@ -3,6 +3,7 @@ using System;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,16 +12,17 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(GigbridgeDbContext))]
-    partial class GigbridgeDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260721143050_AddProposalProjection")]
+    partial class AddProposalProjection
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "8.0.29")
+                .HasAnnotation("ProductVersion", "8.0.11")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
-            NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "citext");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
             modelBuilder.Entity("Domain.Entities.AdminAuditLog", b =>
@@ -514,6 +516,9 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "UserId" }, "ClientProfiles_usr_UserId_key")
                         .IsUnique();
 
+                    b.HasIndex(new[] { "UserId" }, "IX_ClientProfiles_UserId")
+                        .IsUnique();
+
                     b.ToTable("ClientProfiles");
                 });
 
@@ -560,11 +565,6 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("ProposalsId");
 
-                    b.Property<int>("RevisionNumber")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(1);
-
                     b.Property<DateOnly?>("StartDate")
                         .HasColumnType("date");
 
@@ -604,256 +604,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "Status" }, "IX_Contracts_Status");
 
                     b.ToTable("Contracts");
-                });
-
-            modelBuilder.Entity("Domain.Entities.ContractAmendment", b =>
-                {
-                    b.Property<Guid>("ContractAmendmentId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasDefaultValueSql("gen_random_uuid()");
-
-                    b.Property<DateTime?>("AppliedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<decimal>("BudgetDelta")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<Guid>("ContractChangeRequestId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("ContractsId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasDefaultValueSql("now()");
-
-                    b.Property<Guid>("CreatedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("DocumentSnapshotJson")
-                        .HasColumnType("jsonb");
-
-                    b.Property<decimal>("OriginalTotalBudget")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<decimal>("ProposedTotalBudget")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<string>("Reason")
-                        .IsRequired()
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
-
-                    b.Property<string>("ReviewNote")
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
-
-                    b.Property<int>("RevisionNumber")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.HasKey("ContractAmendmentId");
-
-                    b.HasIndex("ContractChangeRequestId")
-                        .IsUnique();
-
-                    b.HasIndex("ContractsId", "RevisionNumber")
-                        .IsUnique();
-
-                    b.ToTable("ContractAmendments");
-                });
-
-            modelBuilder.Entity("Domain.Entities.ContractAmendmentMilestone", b =>
-                {
-                    b.Property<Guid>("ContractAmendmentMilestoneId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasDefaultValueSql("gen_random_uuid()");
-
-                    b.Property<string>("AcceptanceCriteria")
-                        .HasColumnType("text");
-
-                    b.Property<decimal>("Amount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<Guid>("ContractAmendmentId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Deliverables")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Description")
-                        .HasColumnType("text");
-
-                    b.Property<DateOnly?>("DueDate")
-                        .HasColumnType("date");
-
-                    b.Property<string>("EstimatedDuration")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<int>("OrderIndex")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid?>("SourceMilestoneId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.HasKey("ContractAmendmentMilestoneId");
-
-                    b.HasIndex("ContractAmendmentId", "OrderIndex")
-                        .IsUnique();
-
-                    b.ToTable("ContractAmendmentMilestones");
-                });
-
-            modelBuilder.Entity("Domain.Entities.ContractAmendmentSignature", b =>
-                {
-                    b.Property<Guid>("ContractAmendmentSignatureId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasDefaultValueSql("gen_random_uuid()");
-
-                    b.Property<Guid>("ContractAmendmentId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("SignatureData")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("SignedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("SignerRole")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("ContractAmendmentSignatureId");
-
-                    b.HasIndex("ContractAmendmentId", "UserId")
-                        .IsUnique();
-
-                    b.ToTable("ContractAmendmentSignatures");
-                });
-
-            modelBuilder.Entity("Domain.Entities.ContractAmendmentWorkItem", b =>
-                {
-                    b.Property<Guid>("ContractAmendmentWorkItemId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasDefaultValueSql("gen_random_uuid()");
-
-                    b.Property<Guid>("ContractAmendmentMilestoneId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Deliverables")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Description")
-                        .HasColumnType("text");
-
-                    b.Property<string>("EstimatedDuration")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<int>("OrderIndex")
-                        .HasColumnType("integer");
-
-                    b.Property<Guid?>("SourceContractWorkItemId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.HasKey("ContractAmendmentWorkItemId");
-
-                    b.HasIndex("ContractAmendmentMilestoneId", "OrderIndex")
-                        .IsUnique();
-
-                    b.ToTable("ContractAmendmentWorkItems");
-                });
-
-            modelBuilder.Entity("Domain.Entities.ContractChangeRequest", b =>
-                {
-                    b.Property<Guid>("ContractChangeRequestId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasDefaultValueSql("gen_random_uuid()");
-
-                    b.Property<Guid[]>("AffectedMilestoneIds")
-                        .IsRequired()
-                        .HasColumnType("uuid[]");
-
-                    b.Property<Guid[]>("AffectedWorkItemIds")
-                        .IsRequired()
-                        .HasColumnType("uuid[]");
-
-                    b.Property<string>("ClarificationRequestNote")
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
-
-                    b.Property<string>("ClarificationResponseNote")
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
-
-                    b.Property<DateTime?>("ClarifiedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("ContractsId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasDefaultValueSql("now()");
-
-                    b.Property<string>("Reason")
-                        .IsRequired()
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
-
-                    b.Property<Guid>("RequestedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("RequestedChanges")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("RespondedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("RespondedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ResponseNote")
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.HasKey("ContractChangeRequestId");
-
-                    b.HasIndex("ContractsId");
-
-                    b.ToTable("ContractChangeRequests");
                 });
 
             modelBuilder.Entity("Domain.Entities.ContractEscrow", b =>
@@ -922,39 +672,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "Status" }, "IX_ContractEscrows_Status");
 
                     b.ToTable("ContractEscrows");
-                });
-
-            modelBuilder.Entity("Domain.Entities.ContractPlanRevision", b =>
-                {
-                    b.Property<Guid>("ContractPlanRevisionId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasDefaultValueSql("gen_random_uuid()");
-
-                    b.Property<Guid>("ContractsId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasDefaultValueSql("now()");
-
-                    b.Property<int>("RevisionNumber")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("SnapshotJson")
-                        .IsRequired()
-                        .HasColumnType("jsonb");
-
-                    b.Property<Guid>("SubmittedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("ContractPlanRevisionId");
-
-                    b.HasIndex("ContractsId", "RevisionNumber")
-                        .IsUnique();
-
-                    b.ToTable("ContractPlanRevisions");
                 });
 
             modelBuilder.Entity("Domain.Entities.ContractProductHandoff", b =>
@@ -1034,60 +751,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "ContractsId", "Version" }, "IX_ContractProductHandoffs_ContractsId_Version");
 
                     b.ToTable("ContractProductHandoffs");
-                });
-
-            modelBuilder.Entity("Domain.Entities.ContractWorkItem", b =>
-                {
-                    b.Property<Guid>("ContractWorkItemId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasDefaultValueSql("gen_random_uuid()");
-
-                    b.Property<DateTime?>("CompletedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasDefaultValueSql("now()");
-
-                    b.Property<string>("Deliverables")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Description")
-                        .HasColumnType("text");
-
-                    b.Property<string>("EstimatedDuration")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<Guid>("MilestonesId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("OrderIndex")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("ProgressNote")
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("ContractWorkItemId");
-
-                    b.HasIndex("MilestonesId", "OrderIndex")
-                        .IsUnique();
-
-                    b.ToTable("ContractWorkItems");
                 });
 
             modelBuilder.Entity("Domain.Entities.Conversation", b =>
@@ -1188,6 +851,15 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<bool>("IsArchived")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsMuted")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsPinned")
+                        .HasColumnType("boolean");
+
                     b.Property<DateTime>("JoinedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
@@ -1274,7 +946,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<Guid>("RecipientUserId")
                         .HasColumnType("uuid");
 
-                    b.Property<Guid?>("ScheduleId")
+                    b.Property<Guid>("ScheduleId")
                         .HasColumnType("uuid");
 
                     b.Property<int>("Status")
@@ -1304,6 +976,9 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.Property<int>("AiAnalysisStatus")
                         .HasColumnType("integer");
+
+                    b.Property<string>("AiSuggestedResolution")
+                        .HasColumnType("text");
 
                     b.Property<Guid?>("AssignedAdminId")
                         .HasColumnType("uuid")
@@ -1504,6 +1179,41 @@ namespace Infrastructure.Persistence.Migrations
                     b.ToTable("DisputeEvidence", (string)null);
                 });
 
+            modelBuilder.Entity("Domain.Entities.DisputeMessage", b =>
+                {
+                    b.Property<Guid>("DisputeMessagesId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("DisputeMessagesId")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<string>("Content")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid>("DisputesId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("DisputesId");
+
+                    b.Property<Guid>("SenderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("SenderId");
+
+                    b.HasKey("DisputeMessagesId")
+                        .HasName("DisputeMessages_pkey");
+
+                    b.HasIndex("SenderId");
+
+                    b.HasIndex(new[] { "DisputesId", "CreatedAt" }, "IX_DisputeMessages_DisputesId_CreatedAt");
+
+                    b.ToTable("DisputeMessages");
+                });
+
             modelBuilder.Entity("Domain.Entities.DisputeMilestoneDecision", b =>
                 {
                     b.Property<Guid>("DisputeMilestoneDecisionId")
@@ -1625,9 +1335,6 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnName("ESignDocumentsId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
-                    b.Property<string>("ContractSnapshotJson")
-                        .HasColumnType("jsonb");
-
                     b.Property<Guid?>("ContractsId")
                         .HasColumnType("uuid")
                         .HasColumnName("ContractsId");
@@ -1659,20 +1366,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("FinalizedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<byte[]>("FinalizedDocumentContent")
-                        .HasColumnType("bytea");
-
-                    b.Property<string>("FinalizedDocumentFileName")
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)");
-
-                    b.Property<string>("FinalizedDocumentMimeType")
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)");
-
-                    b.Property<long?>("FinalizedDocumentSizeBytes")
-                        .HasColumnType("bigint");
-
                     b.Property<Guid>("JobPostsId")
                         .HasColumnType("uuid")
                         .HasColumnName("JobPostsId");
@@ -1695,7 +1388,8 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex("EsignTemplatesId");
 
-                    b.HasIndex(new[] { "ContractsId" }, "IX_ESignDocuments_ContractsId");
+                    b.HasIndex(new[] { "ContractsId" }, "ESignDocuments_cont_ContractsId_key")
+                        .IsUnique();
 
                     b.HasIndex(new[] { "DocumentCode" }, "IX_ESignDocuments_DocumentCode")
                         .IsUnique();
@@ -1736,13 +1430,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<string>("IpAddress")
                         .HasMaxLength(45)
                         .HasColumnType("character varying(45)");
-
-                    b.Property<DateTime?>("PolicyAcceptedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("PolicyVersion")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
 
                     b.Property<int?>("SignatureHeight")
                         .HasColumnType("integer");
@@ -1954,6 +1641,87 @@ namespace Infrastructure.Persistence.Migrations
                     b.ToTable("FAQCategories", (string)null);
                 });
 
+            modelBuilder.Entity("Domain.Entities.FreelancerCheatingViolation", b =>
+                {
+                    b.Property<Guid>("FreelancerCheatingViolationsId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("FreelancerCheatingViolationsId")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<int>("Action")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("AdminNote")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<int>("CopyCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<int>("EloDelta")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("FocusLossCount")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("FreelancerUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("FullscreenExitCount")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("IsReviewed")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("PasteCount")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("ProposalsId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ReviewedByAdminId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ScreenshotAttemptCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("SuspendedUntil")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("TabSwitchCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TotalEventCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ViolationNumber")
+                        .HasColumnType("integer");
+
+                    b.HasKey("FreelancerCheatingViolationsId")
+                        .HasName("FreelancerCheatingViolations_pkey");
+
+                    b.HasIndex("ReviewedByAdminId");
+
+                    b.HasIndex(new[] { "FreelancerUserId", "CreatedAt" }, "IX_FreelancerCheatingViolations_FreelancerUserId_CreatedAt")
+                        .IsDescending(false, true);
+
+                    b.HasIndex(new[] { "IsReviewed" }, "IX_FreelancerCheatingViolations_IsReviewed");
+
+                    b.HasIndex(new[] { "ProposalsId" }, "IX_FreelancerCheatingViolations_ProposalsId")
+                        .IsUnique();
+
+                    b.ToTable("FreelancerCheatingViolations");
+                });
+
             modelBuilder.Entity("Domain.Entities.FreelancerProfile", b =>
                 {
                     b.Property<Guid>("FreelancerProfilesId")
@@ -2007,6 +1775,9 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "Availability" }, "IX_FreelancerProfiles_Availability");
 
                     b.HasIndex(new[] { "MajorId" }, "IX_FreelancerProfiles_MajorId");
+
+                    b.HasIndex(new[] { "UserId" }, "IX_FreelancerProfiles_UserId")
+                        .IsUnique();
 
                     b.ToTable("FreelancerProfiles");
                 });
@@ -2646,60 +2417,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.ToTable("JobPostAttachments");
                 });
 
-            modelBuilder.Entity("Domain.Entities.JobPostMilestonePlan", b =>
-                {
-                    b.Property<Guid>("JobPostMilestonePlanId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasDefaultValueSql("gen_random_uuid()");
-
-                    b.Property<string>("AcceptanceCriteria")
-                        .HasColumnType("text");
-
-                    b.Property<decimal>("Amount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasDefaultValueSql("now()");
-
-                    b.Property<string>("Deliverables")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Description")
-                        .HasColumnType("text");
-
-                    b.Property<DateOnly?>("DueDate")
-                        .HasColumnType("date");
-
-                    b.Property<string>("EstimatedDuration")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<Guid>("JobPostsId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("OrderIndex")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("JobPostMilestonePlanId");
-
-                    b.HasIndex("JobPostsId", "OrderIndex")
-                        .IsUnique();
-
-                    b.ToTable("JobPostMilestonePlans");
-                });
-
             modelBuilder.Entity("Domain.Entities.JobPostPromotion", b =>
                 {
                     b.Property<Guid>("JobPostPromotionsId")
@@ -2844,42 +2561,6 @@ namespace Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("JobPostSkills");
-                });
-
-            modelBuilder.Entity("Domain.Entities.JobPostWorkItem", b =>
-                {
-                    b.Property<Guid>("JobPostWorkItemId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasDefaultValueSql("gen_random_uuid()");
-
-                    b.Property<string>("Deliverables")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Description")
-                        .HasColumnType("text");
-
-                    b.Property<string>("EstimatedDuration")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<Guid>("JobPostMilestonePlanId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("OrderIndex")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.HasKey("JobPostWorkItemId");
-
-                    b.HasIndex("JobPostMilestonePlanId", "OrderIndex")
-                        .IsUnique();
-
-                    b.ToTable("JobPostWorkItems");
                 });
 
             modelBuilder.Entity("Domain.Entities.Major", b =>
@@ -3239,56 +2920,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.ToTable("MilestoneAttachments");
                 });
 
-            modelBuilder.Entity("Domain.Entities.MilestoneEarlyStartRequest", b =>
-                {
-                    b.Property<Guid>("MilestoneEarlyStartRequestId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasDefaultValueSql("gen_random_uuid()");
-
-                    b.Property<Guid>("ContractsId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasDefaultValueSql("now()");
-
-                    b.Property<Guid>("MilestonesId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Reason")
-                        .IsRequired()
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
-
-                    b.Property<Guid>("RequestedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("RespondedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("RespondedByUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ResponseNote")
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.HasKey("MilestoneEarlyStartRequestId");
-
-                    b.HasIndex("ContractsId");
-
-                    b.HasIndex("MilestonesId", "Status")
-                        .IsUnique()
-                        .HasFilter("\"Status\" = 0");
-
-                    b.ToTable("MilestoneEarlyStartRequests");
-                });
-
             modelBuilder.Entity("Domain.Entities.NegotiationMilestoneDraft", b =>
                 {
                     b.Property<Guid>("NegotiationMilestoneDraftId")
@@ -3349,42 +2980,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.ToTable("NegotiationMilestoneDrafts");
                 });
 
-            modelBuilder.Entity("Domain.Entities.NegotiationMilestoneDraftWorkItem", b =>
-                {
-                    b.Property<Guid>("NegotiationMilestoneDraftWorkItemId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasDefaultValueSql("gen_random_uuid()");
-
-                    b.Property<string>("Deliverables")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Description")
-                        .HasColumnType("text");
-
-                    b.Property<string>("EstimatedDuration")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<Guid>("NegotiationMilestoneDraftId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("OrderIndex")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.HasKey("NegotiationMilestoneDraftWorkItemId");
-
-                    b.HasIndex("NegotiationMilestoneDraftId", "OrderIndex")
-                        .IsUnique();
-
-                    b.ToTable("NegotiationMilestoneDraftWorkItems");
-                });
-
             modelBuilder.Entity("Domain.Entities.NegotiationOffer", b =>
                 {
                     b.Property<Guid>("NegotiationOfferId")
@@ -3400,7 +2995,7 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("ClientProfilesId");
 
-                    b.Property<Guid?>("ContractsId")
+                    b.Property<Guid>("ContractsId")
                         .HasColumnType("uuid")
                         .HasColumnName("ContractsId");
 
@@ -3523,42 +3118,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.ToTable("NegotiationOfferMilestones");
                 });
 
-            modelBuilder.Entity("Domain.Entities.NegotiationOfferWorkItem", b =>
-                {
-                    b.Property<Guid>("NegotiationOfferWorkItemId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasDefaultValueSql("gen_random_uuid()");
-
-                    b.Property<string>("Deliverables")
-                        .HasColumnType("text");
-
-                    b.Property<string>("Description")
-                        .HasColumnType("text");
-
-                    b.Property<string>("EstimatedDuration")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<Guid>("NegotiationOfferMilestoneId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("OrderIndex")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.HasKey("NegotiationOfferWorkItemId");
-
-                    b.HasIndex("NegotiationOfferMilestoneId", "OrderIndex")
-                        .IsUnique();
-
-                    b.ToTable("NegotiationOfferWorkItems");
-                });
-
             modelBuilder.Entity("Domain.Entities.Notification", b =>
                 {
                     b.Property<Guid>("NotificationsId")
@@ -3603,7 +3162,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.Property<int>("Type")
                         .HasColumnType("integer")
-                        .HasComment("Enum NotificationType: 0=NewJob, 1=ProposalReceived, 2=ProposalStatusChanged, 3=ContractStarted, 4=MilestoneUpdated, 5=PaymentProofUploaded, 6=PaymentConfirmed, 7=ChatMessage, 8=DisputeUpdate, 9=ReviewReceived, 10=SystemAlert, 11=AIInterviewInvite, 12=SubscriptionExpiring, 13=Schedule, 14=SubscriptionActivated, 15=SubscriptionCancelled, 16=PromotionActivated, 17=PromotionExpired, 18=RankProtectionActivated, 19=RankProtectionExpired, 20=ReportUpdate");
+                        .HasComment("Enum NotificationType: 0=NewJob, 1=ProposalReceived, 2=ProposalStatusChanged, 3=ContractStarted, 4=MilestoneUpdated, 5=PaymentProofUploaded, 6=PaymentConfirmed, 7=ChatMessage, 8=DisputeUpdate, 9=ReviewReceived, 10=SystemAlert, 11=AIInterviewInvite, 12=SubscriptionExpiring, 13=Schedule, 14=SubscriptionActivated, 15=SubscriptionCancelled, 16=PromotionActivated, 17=PromotionExpired, 18=RankProtectionActivated, 19=RankProtectionExpired");
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid")
@@ -3628,6 +3187,66 @@ namespace Infrastructure.Persistence.Migrations
                         .HasFilter("\"Type\" = 13 AND \"ReferenceId\" IS NOT NULL AND \"IsRead\" IS NOT TRUE");
 
                     b.ToTable("Notifications");
+                });
+
+            modelBuilder.Entity("Domain.Entities.PaymentProof", b =>
+                {
+                    b.Property<Guid>("PaymentProofsId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("PaymentProofsId")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateTime?>("ConfirmedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime?>("DisputedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<long?>("FileSize")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("FileUrl")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("MilestonesId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("MilestonesId");
+
+                    b.Property<string>("Note")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Status")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasComment("Enum PaymentProofStatus: 0=Pending, 1=Confirmed, 2=Disputed");
+
+                    b.Property<Guid>("UploadedById")
+                        .HasColumnType("uuid")
+                        .HasColumnName("UploadedById");
+
+                    b.HasKey("PaymentProofsId")
+                        .HasName("PaymentProofs_pkey");
+
+                    b.HasIndex(new[] { "MilestonesId" }, "IX_PaymentProofs_MilestonesId");
+
+                    b.HasIndex(new[] { "Status" }, "IX_PaymentProofs_Status");
+
+                    b.HasIndex(new[] { "UploadedById" }, "IX_PaymentProofs_UploadedById");
+
+                    b.ToTable("PaymentProofs");
                 });
 
             modelBuilder.Entity("Domain.Entities.PayoutOutbox", b =>
@@ -3678,6 +3297,61 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "WalletWithdrawalId" }, "IX_PayoutOutboxes_WalletWithdrawalId");
 
                     b.ToTable("PayoutOutboxes");
+                });
+
+            modelBuilder.Entity("Domain.Entities.PayoutWebhookLog", b =>
+                {
+                    b.Property<Guid>("PayoutWebhookLogId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<string>("Error")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("EventId")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("ProcessedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("ProcessingStatus")
+                        .HasColumnType("integer")
+                        .HasComment("Enum PayoutWebhookProcessingStatus: 0=Pending, 1=Processed, 2=Rejected, 3=Failed");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("RawPayload")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTime>("ReceivedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("SignatureHash")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<Guid?>("WalletWithdrawalId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("PayoutWebhookLogId")
+                        .HasName("PayoutWebhookLogs_pkey");
+
+                    b.HasIndex(new[] { "Provider", "EventId" }, "IX_PayoutWebhookLogs_Provider_EventId");
+
+                    b.HasIndex(new[] { "Provider", "SignatureHash" }, "IX_PayoutWebhookLogs_Provider_SignatureHash");
+
+                    b.HasIndex(new[] { "WalletWithdrawalId" }, "IX_PayoutWebhookLogs_WalletWithdrawalId");
+
+                    b.ToTable("PayoutWebhookLogs");
                 });
 
             modelBuilder.Entity("Domain.Entities.PlatformSetting", b =>
@@ -3731,6 +3405,9 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnName("PortfolioItemsId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
+                    b.Property<Guid?>("CategoryCategoriesId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid>("FreelancerId")
                         .HasColumnType("uuid")
                         .HasColumnName("FreelancerId");
@@ -3740,6 +3417,8 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasKey("PortfolioItemsId")
                         .HasName("PortfolioItems_pkey");
+
+                    b.HasIndex("CategoryCategoriesId");
 
                     b.HasIndex(new[] { "FreelancerId" }, "IX_PortfolioItems_FreelancerId");
 
@@ -3917,6 +3596,103 @@ namespace Infrastructure.Persistence.Migrations
                     b.ToTable("ProposalAnswers");
                 });
 
+            modelBuilder.Entity("Domain.Entities.ProposalAttachment", b =>
+                {
+                    b.Property<Guid>("ProposalAttachmentsId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("ProposalAttachmentsId")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<long?>("FileSize")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("FileUrl")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("ProposalsId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("ProposalsId");
+
+                    b.HasKey("ProposalAttachmentsId")
+                        .HasName("ProposalAttachments_pkey");
+
+                    b.HasIndex(new[] { "ProposalsId" }, "IX_ProposalAttachments_ProposalsId");
+
+                    b.ToTable("ProposalAttachments");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ProposalCheatingEvent", b =>
+                {
+                    b.Property<Guid>("ProposalCheatingEventsId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("ProposalCheatingEventsId")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<string>("ClientEventId")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<int>("EventType")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("FreelancerUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("IpAddress")
+                        .HasMaxLength(45)
+                        .HasColumnType("character varying(45)");
+
+                    b.Property<Guid?>("JobPostQuestionsId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Metadata")
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTime>("OccurredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("ProposalsId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("UserAgent")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.HasKey("ProposalCheatingEventsId")
+                        .HasName("ProposalCheatingEvents_pkey");
+
+                    b.HasIndex("JobPostQuestionsId");
+
+                    b.HasIndex(new[] { "EventType" }, "IX_ProposalCheatingEvents_EventType");
+
+                    b.HasIndex(new[] { "FreelancerUserId", "CreatedAt" }, "IX_ProposalCheatingEvents_FreelancerUserId_CreatedAt")
+                        .IsDescending(false, true);
+
+                    b.HasIndex(new[] { "ProposalsId", "ClientEventId" }, "IX_ProposalCheatingEvents_ProposalsId_ClientEventId")
+                        .IsUnique();
+
+                    b.ToTable("ProposalCheatingEvents");
+                });
+
             modelBuilder.Entity("Domain.Entities.ProposalInterviewReviewSession", b =>
                 {
                     b.Property<Guid>("ProposalInterviewReviewSessionsId")
@@ -3989,9 +3765,6 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.Property<string>("Description")
                         .HasColumnType("text");
-
-                    b.Property<DateOnly?>("DueDate")
-                        .HasColumnType("date");
 
                     b.Property<string>("EstimatedDuration")
                         .HasMaxLength(100)
@@ -4093,9 +3866,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<int>("OrderIndex")
                         .HasColumnType("integer");
 
-                    b.Property<Guid?>("ProposalMilestonePlansId")
-                        .HasColumnType("uuid");
-
                     b.Property<Guid>("ProposalsId")
                         .HasColumnType("uuid");
 
@@ -4107,11 +3877,49 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasKey("ProposalWorkBreakdownItemsId")
                         .HasName("ProposalWorkBreakdownItems_pkey");
 
-                    b.HasIndex("ProposalMilestonePlansId");
-
                     b.HasIndex(new[] { "ProposalsId", "OrderIndex" }, "IX_ProposalWorkBreakdownItems_Proposal_Order");
 
                     b.ToTable("ProposalWorkBreakdownItems");
+                });
+
+            modelBuilder.Entity("Domain.Entities.RefreshToken", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("Id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("RevokedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("UserId");
+
+                    b.HasKey("Id")
+                        .HasName("RefreshTokens_pkey");
+
+                    b.HasIndex(new[] { "ExpiresAt" }, "IX_RefreshTokens_ExpiresAt");
+
+                    b.HasIndex(new[] { "Token" }, "IX_RefreshTokens_Token")
+                        .IsUnique();
+
+                    b.HasIndex(new[] { "UserId" }, "IX_RefreshTokens_UserId");
+
+                    b.ToTable("RefreshTokens");
                 });
 
             modelBuilder.Entity("Domain.Entities.Report", b =>
@@ -4121,6 +3929,14 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("ReportsId")
                         .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<string>("AdminAttachmentFileName")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("AdminAttachmentUrl")
+                        .HasColumnType("text")
+                        .HasComment("v1.2: Admin đính kèm bản hợp đồng lao động e-sign PDF cho tranh chấp thanh toán");
 
                     b.Property<string>("AdminNote")
                         .HasColumnType("text");
@@ -4730,175 +4546,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.ToTable("SubscriptionPlans");
                 });
 
-            modelBuilder.Entity("Domain.Entities.TalentMatchEvent", b =>
-                {
-                    b.Property<Guid>("TalentMatchEventId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasDefaultValueSql("gen_random_uuid()");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasDefaultValueSql("now()");
-
-                    b.Property<int>("EventType")
-                        .HasColumnType("integer")
-                        .HasComment("Enum TalentMatchEventType: 0=Impression, 1=ProfileOpened, 2=Saved, 3=Invited, 4=ProposalSubmitted, 5=Shortlisted, 6=InterviewStarted, 7=InterviewCompleted, 8=Hired, 9=ContractCompleted");
-
-                    b.Property<Guid>("FreelancerProfileId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("IdempotencyKey")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<Guid?>("SourceEntityId")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("TalentMatchRunId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("TalentMatchEventId");
-
-                    b.HasIndex("FreelancerProfileId");
-
-                    b.HasIndex("TalentMatchRunId", "FreelancerProfileId");
-
-                    b.HasIndex(new[] { "TalentMatchRunId", "EventType", "CreatedAt" }, "IX_TalentMatchEvents_Run_Type_CreatedAt");
-
-                    b.HasIndex(new[] { "IdempotencyKey" }, "UX_TalentMatchEvents_IdempotencyKey")
-                        .IsUnique();
-
-                    b.ToTable("TalentMatchEvents", (string)null);
-                });
-
-            modelBuilder.Entity("Domain.Entities.TalentMatchResult", b =>
-                {
-                    b.Property<Guid>("TalentMatchResultId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasDefaultValueSql("gen_random_uuid()");
-
-                    b.Property<decimal>("AlgorithmScore")
-                        .HasPrecision(5, 2)
-                        .HasColumnType("numeric(5,2)");
-
-                    b.Property<string>("Confidence")
-                        .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("character varying(16)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasDefaultValueSql("now()");
-
-                    b.Property<decimal>("EmbeddingScore")
-                        .HasPrecision(5, 2)
-                        .HasColumnType("numeric(5,2)");
-
-                    b.Property<decimal>("EvidenceScore")
-                        .HasPrecision(5, 2)
-                        .HasColumnType("numeric(5,2)");
-
-                    b.Property<decimal>("FinalScore")
-                        .HasPrecision(5, 2)
-                        .HasColumnType("numeric(5,2)");
-
-                    b.Property<Guid>("FreelancerProfileId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string[]>("MatchedSkills")
-                        .IsRequired()
-                        .HasColumnType("text[]");
-
-                    b.Property<string[]>("MissingSkills")
-                        .IsRequired()
-                        .HasColumnType("text[]");
-
-                    b.Property<int>("Rank")
-                        .HasColumnType("integer");
-
-                    b.Property<string[]>("Reasons")
-                        .IsRequired()
-                        .HasColumnType("text[]");
-
-                    b.Property<string[]>("SemanticStrengths")
-                        .IsRequired()
-                        .HasColumnType("text[]");
-
-                    b.Property<Guid>("TalentMatchRunId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("TalentMatchResultId");
-
-                    b.HasIndex("FreelancerProfileId");
-
-                    b.ToTable("TalentMatchResults", (string)null);
-                });
-
-            modelBuilder.Entity("Domain.Entities.TalentMatchRun", b =>
-                {
-                    b.Property<Guid>("TalentMatchRunId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasDefaultValueSql("gen_random_uuid()");
-
-                    b.Property<string>("AlgorithmVersion")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<Guid>("ClientUserId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("CompletedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp with time zone")
-                        .HasDefaultValueSql("now()");
-
-                    b.Property<int>("EligibleCandidateCount")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("EmbeddingModel")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("FailureCode")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<Guid>("JobPostId")
-                        .HasColumnType("uuid");
-
-                    b.Property<long>("LatencyMilliseconds")
-                        .HasColumnType("bigint");
-
-                    b.Property<int>("ReturnedCandidateCount")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("ScoringVersion")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer")
-                        .HasComment("Enum TalentMatchRunStatus: 0=Running, 1=Succeeded, 2=NoCandidates, 3=Failed");
-
-                    b.HasKey("TalentMatchRunId");
-
-                    b.HasIndex("JobPostId");
-
-                    b.HasIndex(new[] { "ClientUserId", "JobPostId", "CreatedAt" }, "IX_TalentMatchRuns_ClientUserId_JobPostId_CreatedAt");
-
-                    b.ToTable("TalentMatchRuns", (string)null);
-                });
-
             modelBuilder.Entity("Domain.Entities.User", b =>
                 {
                     b.Property<Guid>("UserId")
@@ -4918,7 +4565,10 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<string>("Email")
                         .IsRequired()
                         .HasMaxLength(255)
-                        .HasColumnType("citext");
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("EmailVerificationToken")
+                        .HasColumnType("text");
 
                     b.Property<string>("FullName")
                         .IsRequired()
@@ -4978,6 +4628,9 @@ namespace Infrastructure.Persistence.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
+                    b.Property<DateTime?>("TokenExpiry")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -5028,7 +4681,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.Property<int>("Reason")
                         .HasColumnType("integer")
-                        .HasComment("Enum UserEloPointReason: 0=InitialGrant, 1=InactivityPenalty, 2=ReturnBonus, 3=JobCompletion, 4=ReviewRating, 5=LegacyIntegrityPenalty");
+                        .HasComment("Enum UserEloPointReason: 0=InitialGrant, 1=InactivityPenalty, 2=ReturnBonus, 3=JobCompletion, 4=ReviewRating");
 
                     b.Property<Guid?>("SourceEntityId")
                         .HasColumnType("uuid");
@@ -5456,6 +5109,11 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("FreelancerId");
 
+                    b.Property<bool?>("IsCurrentJob")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<DateOnly>("StartDate")
                         .HasColumnType("date");
 
@@ -5657,69 +5315,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("Proposals");
                 });
 
-            modelBuilder.Entity("Domain.Entities.ContractAmendment", b =>
-                {
-                    b.HasOne("Domain.Entities.ContractChangeRequest", "ChangeRequest")
-                        .WithOne("Amendment")
-                        .HasForeignKey("Domain.Entities.ContractAmendment", "ContractChangeRequestId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Domain.Entities.Contract", "Contract")
-                        .WithMany("Amendments")
-                        .HasForeignKey("ContractsId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("ChangeRequest");
-
-                    b.Navigation("Contract");
-                });
-
-            modelBuilder.Entity("Domain.Entities.ContractAmendmentMilestone", b =>
-                {
-                    b.HasOne("Domain.Entities.ContractAmendment", "Amendment")
-                        .WithMany("Milestones")
-                        .HasForeignKey("ContractAmendmentId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Amendment");
-                });
-
-            modelBuilder.Entity("Domain.Entities.ContractAmendmentSignature", b =>
-                {
-                    b.HasOne("Domain.Entities.ContractAmendment", "Amendment")
-                        .WithMany("Signatures")
-                        .HasForeignKey("ContractAmendmentId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Amendment");
-                });
-
-            modelBuilder.Entity("Domain.Entities.ContractAmendmentWorkItem", b =>
-                {
-                    b.HasOne("Domain.Entities.ContractAmendmentMilestone", "Milestone")
-                        .WithMany("WorkItems")
-                        .HasForeignKey("ContractAmendmentMilestoneId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Milestone");
-                });
-
-            modelBuilder.Entity("Domain.Entities.ContractChangeRequest", b =>
-                {
-                    b.HasOne("Domain.Entities.Contract", "Contract")
-                        .WithMany("ChangeRequests")
-                        .HasForeignKey("ContractsId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Contract");
-                });
-
             modelBuilder.Entity("Domain.Entities.ContractEscrow", b =>
                 {
                     b.HasOne("Domain.Entities.Contract", "Contract")
@@ -5727,17 +5322,6 @@ namespace Infrastructure.Persistence.Migrations
                         .HasForeignKey("Domain.Entities.ContractEscrow", "ContractsId")
                         .IsRequired()
                         .HasConstraintName("ContractEscrows_cont_ContractsId_fkey");
-
-                    b.Navigation("Contract");
-                });
-
-            modelBuilder.Entity("Domain.Entities.ContractPlanRevision", b =>
-                {
-                    b.HasOne("Domain.Entities.Contract", "Contract")
-                        .WithMany("PlanRevisions")
-                        .HasForeignKey("ContractsId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
 
                     b.Navigation("Contract");
                 });
@@ -5766,17 +5350,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("ReceivedByUser");
 
                     b.Navigation("SubmittedByUser");
-                });
-
-            modelBuilder.Entity("Domain.Entities.ContractWorkItem", b =>
-                {
-                    b.HasOne("Domain.Entities.Milestone", "Milestone")
-                        .WithMany("WorkItems")
-                        .HasForeignKey("MilestonesId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Milestone");
                 });
 
             modelBuilder.Entity("Domain.Entities.Conversation", b =>
@@ -5862,7 +5435,8 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasOne("Domain.Entities.Schedule", null)
                         .WithMany()
                         .HasForeignKey("ScheduleId")
-                        .OnDelete(DeleteBehavior.Restrict);
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Domain.Entities.Dispute", b =>
@@ -5954,6 +5528,25 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("UploadedBy");
                 });
 
+            modelBuilder.Entity("Domain.Entities.DisputeMessage", b =>
+                {
+                    b.HasOne("Domain.Entities.Dispute", "Disputes")
+                        .WithMany("DisputeMessages")
+                        .HasForeignKey("DisputesId")
+                        .IsRequired()
+                        .HasConstraintName("DisputeMessages_disp_DisputesId_fkey");
+
+                    b.HasOne("Domain.Entities.User", "Sender")
+                        .WithMany("DisputeMessages")
+                        .HasForeignKey("SenderId")
+                        .IsRequired()
+                        .HasConstraintName("DisputeMessages_usr_SenderId_fkey");
+
+                    b.Navigation("Disputes");
+
+                    b.Navigation("Sender");
+                });
+
             modelBuilder.Entity("Domain.Entities.DisputeMilestoneDecision", b =>
                 {
                     b.HasOne("Domain.Entities.User", "DecidedByAdmin")
@@ -6002,8 +5595,8 @@ namespace Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Domain.Entities.EsignDocument", b =>
                 {
                     b.HasOne("Domain.Entities.Contract", "Contracts")
-                        .WithMany("EsignDocuments")
-                        .HasForeignKey("ContractsId")
+                        .WithOne("EsignDocument")
+                        .HasForeignKey("Domain.Entities.EsignDocument", "ContractsId")
                         .HasConstraintName("ESignDocuments_cont_ContractsId_fkey");
 
                     b.HasOne("Domain.Entities.EsignTemplate", "EsignTemplates")
@@ -6064,6 +5657,34 @@ namespace Infrastructure.Persistence.Migrations
                         .HasConstraintName("FAQs_faqCat_FAQCategoriesId_fkey");
 
                     b.Navigation("Faqcategories");
+                });
+
+            modelBuilder.Entity("Domain.Entities.FreelancerCheatingViolation", b =>
+                {
+                    b.HasOne("Domain.Entities.User", "FreelancerUser")
+                        .WithMany("FreelancerCheatingViolations")
+                        .HasForeignKey("FreelancerUserId")
+                        .IsRequired()
+                        .HasConstraintName("FreelancerCheatingViolations_usr_FreelancerUserId_fkey");
+
+                    b.HasOne("Domain.Entities.Proposal", "Proposals")
+                        .WithMany()
+                        .HasForeignKey("ProposalsId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("FreelancerCheatingViolations_propo_ProposalsId_fkey");
+
+                    b.HasOne("Domain.Entities.User", "ReviewedByAdmin")
+                        .WithMany("ReviewedFreelancerCheatingViolations")
+                        .HasForeignKey("ReviewedByAdminId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("FreelancerCheatingViolations_usr_ReviewedByAdminId_fkey");
+
+                    b.Navigation("FreelancerUser");
+
+                    b.Navigation("Proposals");
+
+                    b.Navigation("ReviewedByAdmin");
                 });
 
             modelBuilder.Entity("Domain.Entities.FreelancerProfile", b =>
@@ -6261,17 +5882,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("JobPosts");
                 });
 
-            modelBuilder.Entity("Domain.Entities.JobPostMilestonePlan", b =>
-                {
-                    b.HasOne("Domain.Entities.JobPost", "JobPost")
-                        .WithMany("JobPostMilestonePlans")
-                        .HasForeignKey("JobPostsId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("JobPost");
-                });
-
             modelBuilder.Entity("Domain.Entities.JobPostPromotion", b =>
                 {
                     b.HasOne("Domain.Entities.User", "ClientUser")
@@ -6327,17 +5937,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("JobPosts");
 
                     b.Navigation("Skills");
-                });
-
-            modelBuilder.Entity("Domain.Entities.JobPostWorkItem", b =>
-                {
-                    b.HasOne("Domain.Entities.JobPostMilestonePlan", "MilestonePlan")
-                        .WithMany("WorkItems")
-                        .HasForeignKey("JobPostMilestonePlanId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("MilestonePlan");
                 });
 
             modelBuilder.Entity("Domain.Entities.MajorCategory", b =>
@@ -6434,25 +6033,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("UploadedByUser");
                 });
 
-            modelBuilder.Entity("Domain.Entities.MilestoneEarlyStartRequest", b =>
-                {
-                    b.HasOne("Domain.Entities.Contract", "Contract")
-                        .WithMany()
-                        .HasForeignKey("ContractsId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Domain.Entities.Milestone", "Milestone")
-                        .WithMany()
-                        .HasForeignKey("MilestonesId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Contract");
-
-                    b.Navigation("Milestone");
-                });
-
             modelBuilder.Entity("Domain.Entities.NegotiationMilestoneDraft", b =>
                 {
                     b.HasOne("Domain.Entities.Conversation", "Conversations")
@@ -6463,17 +6043,6 @@ namespace Infrastructure.Persistence.Migrations
                         .HasConstraintName("NegotiationMilestoneDrafts_ConversationsId_fkey");
 
                     b.Navigation("Conversations");
-                });
-
-            modelBuilder.Entity("Domain.Entities.NegotiationMilestoneDraftWorkItem", b =>
-                {
-                    b.HasOne("Domain.Entities.NegotiationMilestoneDraft", "MilestoneDraft")
-                        .WithMany("WorkItems")
-                        .HasForeignKey("NegotiationMilestoneDraftId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("MilestoneDraft");
                 });
 
             modelBuilder.Entity("Domain.Entities.NegotiationOffer", b =>
@@ -6487,6 +6056,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasOne("Domain.Entities.Contract", "Contracts")
                         .WithMany("NegotiationOffers")
                         .HasForeignKey("ContractsId")
+                        .IsRequired()
                         .HasConstraintName("NegotiationOffers_cont_ContractsId_fkey");
 
                     b.HasOne("Domain.Entities.Conversation", "Conversations")
@@ -6537,17 +6107,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("NegotiationOffer");
                 });
 
-            modelBuilder.Entity("Domain.Entities.NegotiationOfferWorkItem", b =>
-                {
-                    b.HasOne("Domain.Entities.NegotiationOfferMilestone", "Milestone")
-                        .WithMany("WorkItems")
-                        .HasForeignKey("NegotiationOfferMilestoneId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Milestone");
-                });
-
             modelBuilder.Entity("Domain.Entities.Notification", b =>
                 {
                     b.HasOne("Domain.Entities.User", "User")
@@ -6559,6 +6118,25 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("Domain.Entities.PaymentProof", b =>
+                {
+                    b.HasOne("Domain.Entities.Milestone", "Milestones")
+                        .WithMany("PaymentProofs")
+                        .HasForeignKey("MilestonesId")
+                        .IsRequired()
+                        .HasConstraintName("PaymentProofs_mStone_MilestonesId_fkey");
+
+                    b.HasOne("Domain.Entities.User", "UploadedBy")
+                        .WithMany("PaymentProofs")
+                        .HasForeignKey("UploadedById")
+                        .IsRequired()
+                        .HasConstraintName("PaymentProofs_usr_UploadedById_fkey");
+
+                    b.Navigation("Milestones");
+
+                    b.Navigation("UploadedBy");
+                });
+
             modelBuilder.Entity("Domain.Entities.PayoutOutbox", b =>
                 {
                     b.HasOne("Domain.Entities.WalletWithdrawal", "WalletWithdrawal")
@@ -6567,6 +6145,16 @@ namespace Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("PayoutOutboxes_wwd_WalletWithdrawalId_fkey");
+
+                    b.Navigation("WalletWithdrawal");
+                });
+
+            modelBuilder.Entity("Domain.Entities.PayoutWebhookLog", b =>
+                {
+                    b.HasOne("Domain.Entities.WalletWithdrawal", "WalletWithdrawal")
+                        .WithMany()
+                        .HasForeignKey("WalletWithdrawalId")
+                        .HasConstraintName("PayoutWebhookLogs_wwd_WalletWithdrawalId_fkey");
 
                     b.Navigation("WalletWithdrawal");
                 });
@@ -6583,6 +6171,10 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.PortfolioItem", b =>
                 {
+                    b.HasOne("Domain.Entities.Category", null)
+                        .WithMany("PortfolioItems")
+                        .HasForeignKey("CategoryCategoriesId");
+
                     b.HasOne("Domain.Entities.FreelancerProfile", "Freelancer")
                         .WithMany("PortfolioItems")
                         .HasForeignKey("FreelancerId")
@@ -6636,6 +6228,45 @@ namespace Infrastructure.Persistence.Migrations
                         .HasForeignKey("ProposalsId")
                         .IsRequired()
                         .HasConstraintName("ProposalAnswers_propo_ProposalsId_fkey");
+
+                    b.Navigation("JobPostQuestions");
+
+                    b.Navigation("Proposals");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ProposalAttachment", b =>
+                {
+                    b.HasOne("Domain.Entities.Proposal", "Proposals")
+                        .WithMany("ProposalAttachments")
+                        .HasForeignKey("ProposalsId")
+                        .IsRequired()
+                        .HasConstraintName("ProposalAttachments_propo_ProposalsId_fkey");
+
+                    b.Navigation("Proposals");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ProposalCheatingEvent", b =>
+                {
+                    b.HasOne("Domain.Entities.User", "FreelancerUser")
+                        .WithMany("ProposalCheatingEvents")
+                        .HasForeignKey("FreelancerUserId")
+                        .IsRequired()
+                        .HasConstraintName("ProposalCheatingEvents_usr_FreelancerUserId_fkey");
+
+                    b.HasOne("Domain.Entities.JobPostQuestion", "JobPostQuestions")
+                        .WithMany()
+                        .HasForeignKey("JobPostQuestionsId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("ProposalCheatingEvents_jpq_JobPostQuestionsId_fkey");
+
+                    b.HasOne("Domain.Entities.Proposal", "Proposals")
+                        .WithMany()
+                        .HasForeignKey("ProposalsId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("ProposalCheatingEvents_propo_ProposalsId_fkey");
+
+                    b.Navigation("FreelancerUser");
 
                     b.Navigation("JobPostQuestions");
 
@@ -6704,11 +6335,6 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.ProposalWorkBreakdownItem", b =>
                 {
-                    b.HasOne("Domain.Entities.ProposalMilestonePlan", "ProposalMilestonePlan")
-                        .WithMany("WorkItems")
-                        .HasForeignKey("ProposalMilestonePlansId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("Domain.Entities.Proposal", "Proposals")
                         .WithMany("ProposalWorkBreakdownItems")
                         .HasForeignKey("ProposalsId")
@@ -6716,9 +6342,18 @@ namespace Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasConstraintName("ProposalWorkBreakdownItems_ProposalsId_fkey");
 
-                    b.Navigation("ProposalMilestonePlan");
-
                     b.Navigation("Proposals");
+                });
+
+            modelBuilder.Entity("Domain.Entities.RefreshToken", b =>
+                {
+                    b.HasOne("Domain.Entities.User", "User")
+                        .WithMany("RefreshTokens")
+                        .HasForeignKey("UserId")
+                        .IsRequired()
+                        .HasConstraintName("RefreshTokens_usr_UserId_fkey");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Domain.Entities.Report", b =>
@@ -6901,72 +6536,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("Domain.Entities.TalentMatchEvent", b =>
-                {
-                    b.HasOne("Domain.Entities.FreelancerProfile", "FreelancerProfile")
-                        .WithMany()
-                        .HasForeignKey("FreelancerProfileId")
-                        .OnDelete(DeleteBehavior.NoAction)
-                        .IsRequired();
-
-                    b.HasOne("Domain.Entities.TalentMatchRun", "TalentMatchRun")
-                        .WithMany("Events")
-                        .HasForeignKey("TalentMatchRunId")
-                        .OnDelete(DeleteBehavior.NoAction)
-                        .IsRequired();
-
-                    b.HasOne("Domain.Entities.TalentMatchResult", "TalentMatchResult")
-                        .WithMany("Events")
-                        .HasForeignKey("TalentMatchRunId", "FreelancerProfileId")
-                        .HasPrincipalKey("TalentMatchRunId", "FreelancerProfileId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("FreelancerProfile");
-
-                    b.Navigation("TalentMatchResult");
-
-                    b.Navigation("TalentMatchRun");
-                });
-
-            modelBuilder.Entity("Domain.Entities.TalentMatchResult", b =>
-                {
-                    b.HasOne("Domain.Entities.FreelancerProfile", "FreelancerProfile")
-                        .WithMany()
-                        .HasForeignKey("FreelancerProfileId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Domain.Entities.TalentMatchRun", "TalentMatchRun")
-                        .WithMany("Results")
-                        .HasForeignKey("TalentMatchRunId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("FreelancerProfile");
-
-                    b.Navigation("TalentMatchRun");
-                });
-
-            modelBuilder.Entity("Domain.Entities.TalentMatchRun", b =>
-                {
-                    b.HasOne("Domain.Entities.User", "ClientUser")
-                        .WithMany()
-                        .HasForeignKey("ClientUserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Domain.Entities.JobPost", "JobPost")
-                        .WithMany()
-                        .HasForeignKey("JobPostId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("ClientUser");
-
-                    b.Navigation("JobPost");
-                });
-
             modelBuilder.Entity("Domain.Entities.UserEloPointTransaction", b =>
                 {
                     b.HasOne("Domain.Entities.User", "User")
@@ -7102,6 +6671,8 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("CategorySkills");
 
                     b.Navigation("MajorCategories");
+
+                    b.Navigation("PortfolioItems");
                 });
 
             modelBuilder.Entity("Domain.Entities.ClientProfile", b =>
@@ -7113,10 +6684,6 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.Contract", b =>
                 {
-                    b.Navigation("Amendments");
-
-                    b.Navigation("ChangeRequests");
-
                     b.Navigation("ContractEscrow");
 
                     b.Navigation("ContractProductHandoffs");
@@ -7125,36 +6692,17 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.Navigation("Disputes");
 
-                    b.Navigation("EsignDocuments");
+                    b.Navigation("EsignDocument");
 
                     b.Navigation("Milestones");
 
                     b.Navigation("NegotiationOffers");
-
-                    b.Navigation("PlanRevisions");
 
                     b.Navigation("ReportContracts");
 
                     b.Navigation("Reviews");
 
                     b.Navigation("WalletTransactions");
-                });
-
-            modelBuilder.Entity("Domain.Entities.ContractAmendment", b =>
-                {
-                    b.Navigation("Milestones");
-
-                    b.Navigation("Signatures");
-                });
-
-            modelBuilder.Entity("Domain.Entities.ContractAmendmentMilestone", b =>
-                {
-                    b.Navigation("WorkItems");
-                });
-
-            modelBuilder.Entity("Domain.Entities.ContractChangeRequest", b =>
-                {
-                    b.Navigation("Amendment");
                 });
 
             modelBuilder.Entity("Domain.Entities.ContractEscrow", b =>
@@ -7182,6 +6730,8 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("Conversations");
 
                     b.Navigation("DisputeEvidences");
+
+                    b.Navigation("DisputeMessages");
 
                     b.Navigation("MilestoneDecisions");
                 });
@@ -7234,8 +6784,6 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.Navigation("JobPostAttachments");
 
-                    b.Navigation("JobPostMilestonePlans");
-
                     b.Navigation("JobPostPromotions");
 
                     b.Navigation("JobPostQuestions");
@@ -7247,11 +6795,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("Proposals");
 
                     b.Navigation("SavedJobs");
-                });
-
-            modelBuilder.Entity("Domain.Entities.JobPostMilestonePlan", b =>
-                {
-                    b.Navigation("WorkItems");
                 });
 
             modelBuilder.Entity("Domain.Entities.JobPostQuestion", b =>
@@ -7294,24 +6837,14 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.Navigation("MilestoneAttachments");
 
+                    b.Navigation("PaymentProofs");
+
                     b.Navigation("ReportContracts");
-
-                    b.Navigation("WorkItems");
-                });
-
-            modelBuilder.Entity("Domain.Entities.NegotiationMilestoneDraft", b =>
-                {
-                    b.Navigation("WorkItems");
                 });
 
             modelBuilder.Entity("Domain.Entities.NegotiationOffer", b =>
                 {
                     b.Navigation("NegotiationOfferMilestones");
-                });
-
-            modelBuilder.Entity("Domain.Entities.NegotiationOfferMilestone", b =>
-                {
-                    b.Navigation("WorkItems");
                 });
 
             modelBuilder.Entity("Domain.Entities.Proposal", b =>
@@ -7326,6 +6859,8 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.Navigation("ProposalAnswers");
 
+                    b.Navigation("ProposalAttachments");
+
                     b.Navigation("ProposalInterviewReviewSession");
 
                     b.Navigation("ProposalMilestonePlans");
@@ -7333,11 +6868,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("ProposalQuestionTimers");
 
                     b.Navigation("ProposalWorkBreakdownItems");
-                });
-
-            modelBuilder.Entity("Domain.Entities.ProposalMilestonePlan", b =>
-                {
-                    b.Navigation("WorkItems");
                 });
 
             modelBuilder.Entity("Domain.Entities.ReportContract", b =>
@@ -7366,18 +6896,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("Subscriptions");
                 });
 
-            modelBuilder.Entity("Domain.Entities.TalentMatchResult", b =>
-                {
-                    b.Navigation("Events");
-                });
-
-            modelBuilder.Entity("Domain.Entities.TalentMatchRun", b =>
-                {
-                    b.Navigation("Events");
-
-                    b.Navigation("Results");
-                });
-
             modelBuilder.Entity("Domain.Entities.User", b =>
                 {
                     b.Navigation("AdminAuditLogs");
@@ -7400,6 +6918,8 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.Navigation("DisputeInitiators");
 
+                    b.Navigation("DisputeMessages");
+
                     b.Navigation("DisputeResolvedByAdmins");
 
                     b.Navigation("DisputeRespondents");
@@ -7407,6 +6927,8 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("EsignSignatures");
 
                     b.Navigation("EsignTemplates");
+
+                    b.Navigation("FreelancerCheatingViolations");
 
                     b.Navigation("FreelancerProfile");
 
@@ -7420,13 +6942,19 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.Navigation("Notifications");
 
+                    b.Navigation("PaymentProofs");
+
                     b.Navigation("PlatformSettings");
+
+                    b.Navigation("ProposalCheatingEvents");
 
                     b.Navigation("ProposalInterviewReviewSessions");
 
                     b.Navigation("ProposalQuestionTimers");
 
                     b.Navigation("ReceivedContractProductHandoffs");
+
+                    b.Navigation("RefreshTokens");
 
                     b.Navigation("ReportContractReporters");
 
@@ -7441,6 +6969,8 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("ReviewReviewees");
 
                     b.Navigation("ReviewReviewers");
+
+                    b.Navigation("ReviewedFreelancerCheatingViolations");
 
                     b.Navigation("SavedFreelancers");
 

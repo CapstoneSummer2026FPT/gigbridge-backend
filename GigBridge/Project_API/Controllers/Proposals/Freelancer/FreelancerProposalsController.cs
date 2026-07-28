@@ -32,7 +32,10 @@ public class FreelancerProposalsController : BaseApiController
     }
 
     [HttpGet("my-proposals")]
-    public async Task<IActionResult> GetMyProposals([FromQuery] int pageIndex = 1, int pageSize = 10)
+    public async Task<IActionResult> GetMyProposals(
+        [FromQuery] int pageIndex = 1, 
+        [FromQuery] int pageSize = 10, 
+        [FromQuery] int? status = null)
     {
         if (!TryGetCurrentUserId(out var userId))
         {
@@ -43,12 +46,13 @@ public class FreelancerProposalsController : BaseApiController
         {
             UserId = userId,
             PageIndex = pageIndex,
-            PageSize = pageSize
+            PageSize = pageSize,
+            Status = status
         };
 
         var result = await Mediator.Send(query);
 
-        return Ok(ApiResponse<IEnumerable<ProposalDto>>.Ok(result, "Success"));
+        return Ok(ApiResponse<PaginatedList<ProposalDto>>.Ok(result, "Success"));
     }
     [HttpPut("{proposalId}")]
     public async Task<IActionResult> UpdateProposal(

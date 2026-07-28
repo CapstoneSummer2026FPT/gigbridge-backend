@@ -1,9 +1,12 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces.IService;
+using Application.Common.Models.Ai;
 using Application.Features.JobPosts.Client.UpdateJobPost.Commands;
 using Application.Features.JobPosts.Client.UpdateJobPost.DTOs;
 using Domain.Entities;
+using Domain.Enums;
 using Infrastructure.Services.ContentModerationService;
+using NSubstitute;
 using Test_Gigbridge_Backend.TestSupport;
 
 namespace Test_Gigbridge_Backend.Application.Features.JobPosts.Client;
@@ -112,6 +115,102 @@ public class UpdateJobPostCommandHandlerTests
         Assert.Equal(0, jobPost.Visibility);
         Assert.Null(jobPost.UpdatedAt);
         Assert.Equal(0, context.SaveChangesCount);
+    }
+
+    [Fact]
+    public async Task Handle_UpdatesAiInterviewDefinition_WhenActiveInterviewExists()
+    {
+        var now = new DateTime(2026, 6, 15, 10, 0, 0, DateTimeKind.Utc);
+        var context = new InMemoryApplicationDbContext();
+        var userId = Guid.NewGuid();
+        var clientProfileId = Guid.NewGuid();
+        var jobPostId = Guid.NewGuid();
+        var skillId = Guid.NewGuid();
+
+        context.AddSet(new ClientProfile { ClientProfilesId = clientProfileId, UserId = userId });
+        context.AddSet(new JobPost
+        {
+            JobPostsId = jobPostId,
+            ClientProfilesId = clientProfileId,
+            Title = "Old title",
+            Description = "Old description",
+            Status = 0,
+            Visibility = 0,
+            CreatedAt = now.AddDays(-1)
+        });
+        context.AddSet(new Skill
+        {
+            SkillsId = skillId,
+            Name = "System Skill"
+        });
+        context.AddSet(new AiInterviewDefinition
+        {
+            AiInterviewDefinitionsId = Guid.NewGuid(),
+            JobPostId = jobPostId,
+            ClientUserId = userId,
+            Language = "auto",
+            Mode = "voice",
+            QuestionCount = 5,
+            Status = AiInterviewDefinitionStatus.Active,
+            ExternalReference = "old-aidef-ref",
+            CreatedAt = now.AddDays(-1)
+        });
+        context.AddSet<JobPostSkill>();
+
+        var request = new UpdateJobPostRequest(
+            Title: "Updated title",
+            Description: "Updated description",
+            MajorCategoryId: null,
+            BudgetMin: 100m,
+            BudgetMax: 200m,
+            Currency: "VND",
+            EstimatedDuration: "1 week",
+            Visibility: 2,
+            EndDate: now.AddDays(7),
+            SkillIds: new List<Guid> { skillId },
+            CustomSkillNames: new List<string> { "Custom Skill" });
+
+        var aiServiceClient = Substitute.For<IAiServiceClient>();
+        aiServiceClient.CreateInterviewDefinitionAsync(
+            Arg.Any<AiInterviewDefinitionRequestDto>(),
+            Arg.Any<CancellationToken>())
+            .Returns(new AiInterviewDefinitionResponseDto
+            {
+                DefinitionReference = "new-aidef-ref",
+                Mode = "voice",
+                Language = "auto",
+                QuestionCount = 5
+            });
+
+        var handler = new UpdateJobPostCommandHandler(
+            context,
+            new FixedDateTimeService(now),
+            new ContentModerationService(),
+            aiServiceClient);
+
+        var result = await handler.Handle(
+            new UpdateJobPostCommand(jobPostId, userId, request),
+            CancellationToken.None);
+
+        Assert.True(result);
+
+        // Verify the AI Service was called with updated details
+        await aiServiceClient.Received(1).CreateInterviewDefinitionAsync(
+            Arg.Is<AiInterviewDefinitionRequestDto>(req =>
+                req.JobId == jobPostId.ToString() &&
+                req.JobTitle == "Updated title" &&
+                req.JobDescription == "Updated description" &&
+                req.JobSkills.Contains("System Skill") &&
+                req.JobSkills.Contains("Custom Skill") &&
+                req.Mode == "voice" &&
+                req.Language == "auto" &&
+                req.QuestionCount == 5),
+            Arg.Any<CancellationToken>());
+
+        // Verify definition in DB was updated
+        var definition = Assert.Single(context.Set<AiInterviewDefinition>());
+        Assert.Equal("new-aidef-ref", definition.ExternalReference);
+        Assert.Equal(now, definition.UpdatedAt);
     }
 
     private sealed class FixedDateTimeService : IDateTimeService

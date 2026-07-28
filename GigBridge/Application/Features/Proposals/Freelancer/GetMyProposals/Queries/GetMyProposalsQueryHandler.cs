@@ -1,5 +1,6 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
+using Application.Common.Models;
 using Application.Features.Proposals.Common;
 using Application.Features.Proposals.Common.DTOs;
 using Domain.Entities;
@@ -9,7 +10,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.Proposals.Freelancer.GetMyProposals.Queries;
 
-public class GetMyProposalsQueryHandler : IRequestHandler<GetMyProposalsQuery, IEnumerable<ProposalDto>>
+public class GetMyProposalsQueryHandler : IRequestHandler<GetMyProposalsQuery, PaginatedList<ProposalDto>>
 {
     private readonly IApplicationDbContext _context;
 
@@ -18,7 +19,7 @@ public class GetMyProposalsQueryHandler : IRequestHandler<GetMyProposalsQuery, I
         _context = context;
     }
 
-    public async Task<IEnumerable<ProposalDto>> Handle(GetMyProposalsQuery request, CancellationToken cancellationToken)
+    public async Task<PaginatedList<ProposalDto>> Handle(GetMyProposalsQuery request, CancellationToken cancellationToken)
     {
         var freelancerProfile = await _context.Set<FreelancerProfile>()
             .AsNoTracking()
@@ -29,12 +30,21 @@ public class GetMyProposalsQueryHandler : IRequestHandler<GetMyProposalsQuery, I
             throw new NotFoundException("Freelancer profile does not exist.");
         }
 
-        var proposals = await _context.Set<Proposal>()
+        var queryable = _context.Set<Proposal>()
             .AsNoTracking()
             .Include(proposal => proposal.JobPosts)
             .Include(proposal => proposal.ProposalWorkBreakdownItems)
             .Include(proposal => proposal.ProposalMilestonePlans)
-            .Where(proposal => proposal.FreelancerProfilesId == freelancerProfile.FreelancerProfilesId)
+            .Where(proposal => proposal.FreelancerProfilesId == freelancerProfile.FreelancerProfilesId);
+
+        if (request.Status.HasValue)
+        {
+            queryable = queryable.Where(proposal => proposal.Status == request.Status.Value);
+        }
+
+        var totalCount = await queryable.CountAsync(cancellationToken);
+
+        var proposals = await queryable
             .OrderByDescending(proposal => proposal.SubmittedAt)
             .Skip((NormalizePageIndex(request.PageIndex) - 1) * NormalizePageSize(request.PageSize))
             .Take(NormalizePageSize(request.PageSize))
@@ -42,7 +52,10 @@ public class GetMyProposalsQueryHandler : IRequestHandler<GetMyProposalsQuery, I
 
         var proposalDtos = ProposalProjection.ToDtos(proposals);
         var jobPostIds = proposals.Select(proposal => proposal.JobPostsId).Distinct().ToList();
-        if (jobPostIds.Count == 0) return proposalDtos;
+        if (jobPostIds.Count == 0)
+        {
+            return new PaginatedList<ProposalDto>(proposalDtos.ToList(), totalCount, request.PageIndex, request.PageSize);
+        }
 
         var definitions = await _context.Set<AiInterviewDefinition>()
             .AsNoTracking()
@@ -88,7 +101,7 @@ public class GetMyProposalsQueryHandler : IRequestHandler<GetMyProposalsQuery, I
                 attempt => attempt.Status == AiInterviewAttemptStatus.InProgress);
         }
 
-        return proposalDtos;
+        return new PaginatedList<ProposalDto>(proposalDtos.ToList(), totalCount, request.PageIndex, request.PageSize);
     }
 
     private static int NormalizePageIndex(int pageIndex)
