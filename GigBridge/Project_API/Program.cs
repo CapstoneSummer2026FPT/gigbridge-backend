@@ -41,13 +41,8 @@ var app = builder.Build();
 
 await app.EnsureLocalESignTemplatesAsync();
 
-if (app.Environment.IsDevelopment()
-    || app.Environment.IsEnvironment("Local")
-    || app.Environment.IsEnvironment("Testing"))
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+app.UseSwagger();
+app.UseSwaggerUI();
 
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseMiddleware<RequestLoggingMiddleware>();

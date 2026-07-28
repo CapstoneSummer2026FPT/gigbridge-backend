@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  web-api:
+    image: ghcr.io/capstonesummer2026fpt/gigbridge-api:latest
+    container_name: gigbridge-api
+    restart: always
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+
+      # Database
+      - ConnectionStrings__DefaultConnection=${DATABASE_URL}
+
+      # Redis (External Connection)
+      - Redis__ConnectionString=${REDIS_CONNECTION_STRING}
+
+      # JWT
+      - Jwt__Key=${JWT_KEY}
+      - Jwt__Issuer=${JWT_ISSUER}
+      - Jwt__Audience=${JWT_AUDIENCE}
+
+      # PayOS
+      - PayOS__ClientId=${PAYOS_CLIENT_ID}
+      - PayOS__ApiKey=${PAYOS_API_KEY}
+      - PayOS__ChecksumKey=${PAYOS_CHECKSUM_KEY}
+      - PayOS__ReturnUrl=${PAYOS_RETURN_URL}
+      - PayOS__CancelUrl=${PAYOS_CANCEL_URL}
+
+      # PayOS Payout
+      - PayOSPayout__ClientId=${PAYOS_PAYOUT_CLIENT_ID}
+      - PayOSPayout__ApiKey=${PAYOS_PAYOUT_API_KEY}
+      - PayOSPayout__ChecksumKey=${PAYOS_PAYOUT_CHECKSUM_KEY}
+
+      # Wallet Withdrawals
+      - WalletWithdrawals__Enabled=${WALLET_WITHDRAWALS_ENABLED}
+
+      # Frontend Base URL
+      - FrontendBaseUrl=${FRONTEND_BASE_URL}
+
+      # Google Authentication (Login)
+      - Authentication__Google__ClientId=${GOOGLE_CLIENT_ID}
+      - Authentication__Google__ClientSecret=${GOOGLE_CLIENT_SECRET}
+
+      # Cloudinary
+      - Cloudinary__CloudName=${CLOUDINARY_CLOUD_NAME}
+      - Cloudinary__ApiKey=${CLOUDINARY_API_KEY}
+      - Cloudinary__ApiSecret=${CLOUDINARY_API_SECRET}
+
+      # Google Meet
+      - GoogleMeet__ClientId=${GOOGLE_MEET_CLIENT_ID}
+      - GoogleMeet__ClientSecret=${GOOGLE_MEET_CLIENT_SECRET}
+      - GoogleMeet__BackendCallbackUri=${GOOGLE_MEET_BACKEND_CALLBACK_URI}
+      - GoogleMeet__FrontendCallbackUri=${GOOGLE_MEET_FRONTEND_CALLBACK_URI}
+
+      # Resend
+      - Resend__ApiToken=${RESEND_API_TOKEN}
+      - Resend__From=${RESEND_FROM}
+      - Resend__FromName=${RESEND_FROM_NAME}
+
+      # AI Service
+      - AiService__BaseUrl=${AI_SERVICE_BASE_URL}
+      - AiService__ApiKey=${AI_SERVICE_API_KEY}
+
+    ports:
+      - "127.0.0.1:8080:8080" # Exposed locally; Nginx routes public traffic

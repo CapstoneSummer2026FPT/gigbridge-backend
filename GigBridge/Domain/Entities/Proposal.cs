@@ -57,4 +57,6 @@ public partial class Proposal
     public virtual ICollection<ProposalMilestonePlan> ProposalMilestonePlans { get; set; } = new List<ProposalMilestonePlan>();
 
     public virtual ProposalInterviewReviewSession? ProposalInterviewReviewSession { get; set; }
+
+    public virtual ProposalAiJudging? ProposalAiJudging { get; set; }
 }

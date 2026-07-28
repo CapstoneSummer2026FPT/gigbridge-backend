@@ -7,6 +7,9 @@
 *.key
 *.pfx
 **/secrets.json
+.env
+.env.*
+!*.example
 
 # ASP.NET configuration
 appsettings.Development.json

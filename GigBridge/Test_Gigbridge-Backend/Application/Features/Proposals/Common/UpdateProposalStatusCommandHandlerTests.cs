@@ -4,7 +4,9 @@ using Application.Features.Proposals.Common.UpdateProposalStatus.Commands;
 using Application.Features.Proposals.Common.UpdateProposalStatus.Commands.DTOs;
 using Domain.Entities;
 using Domain.Enums;
+using Microsoft.EntityFrameworkCore;
 using Test_Gigbridge_Backend.TestSupport;
+
 
 namespace Test_Gigbridge_Backend.Application.Features.Proposals.Common;
 
@@ -437,4 +439,64 @@ public class UpdateProposalStatusCommandHandlerTests
         public DateTime UtcNow { get; }
     }
 
+    private sealed class SpyNotificationService : INotificationService
+    {
+        private readonly InMemoryApplicationDbContext _context;
+
+        public SpyNotificationService(InMemoryApplicationDbContext context)
+        {
+            _context = context;
+        }
+
+        public List<NotificationCall> Notifications { get; } = new();
+
+        public Task CreateNotificationAsync(
+            Guid userId,
+            NotificationType type,
+            string title,
+            string? content = null,
+            Guid? referenceId = null,
+            string? referenceType = null,
+            CancellationToken cancellationToken = default)
+        {
+            Notifications.Add(new NotificationCall(
+                userId,
+                type,
+                title,
+                content ?? string.Empty,
+                referenceId,
+                referenceType,
+                _context.SaveChangesCount));
+
+            return Task.CompletedTask;
+        }
+
+        public Task CreateBroadcastNotificationAsync(
+            NotificationTarget target,
+            NotificationType type,
+            string title,
+            string? content = null,
+            Guid? referenceId = null,
+            string? referenceType = null,
+            Guid? targetUserId = null,
+            bool sendEmail = false,
+            Guid? createdByAdminId = null,
+            DateTime? expiresAt = null,
+            CancellationToken cancellationToken = default)
+        {
+            throw new NotSupportedException();
+        }
+    }
+
+    
+
+    private sealed record NotificationCall(
+        Guid UserId,
+        NotificationType Type,
+        string Title,
+        string Content,
+        Guid? ReferenceId,
+        string? ReferenceType,
+        int SaveChangesCountAtCreation);
 }
+

@@ -138,7 +138,11 @@ public sealed class PremiumClientCapabilityTests
             JobPostsId = jobId,
             Status = 1,
             Title = "Backend Engineer",
-            Description = "Build APIs"
+            Description = "Build APIs",
+            JobPostQuestions = new List<JobPostQuestion>
+            {
+                new JobPostQuestion { JobPostQuestionsId = Guid.NewGuid(), QuestionText = "Mock question", OrderIndex = 1 }
+            }
         });
         context.AddSet(new AiInterviewDefinition
         {
@@ -199,7 +203,11 @@ public sealed class PremiumClientCapabilityTests
             JobPostsId = jobId,
             Status = 1,
             Title = "Backend Engineer",
-            Description = "Build APIs"
+            Description = "Build APIs",
+            JobPostQuestions = new List<JobPostQuestion>
+            {
+                new JobPostQuestion { JobPostQuestionsId = Guid.NewGuid(), QuestionText = "Mock question", OrderIndex = 1 }
+            }
         });
         context.AddSet(new AiInterviewDefinition
         {
@@ -356,6 +364,121 @@ public sealed class PremiumClientCapabilityTests
         Assert.Single(promotions.Entities);
         Assert.Equal(10m, first.TokenCost);
         Assert.Equal(now.AddDays(7), first.FeaturedUntil);
+    }
+
+    [Fact]
+    public async Task StartAiInterview_LoadsPredefinedJobPostQuestions()
+    {
+        var now = DateTime.UtcNow;
+        var freelancerId = Guid.NewGuid();
+        var jobId = Guid.NewGuid();
+        var definitionId = Guid.NewGuid();
+        var freelancerProfile = new FreelancerProfile
+        {
+            FreelancerProfilesId = Guid.NewGuid(),
+            UserId = freelancerId
+        };
+        var context = new InMemoryApplicationDbContext();
+        var questions = new List<JobPostQuestion>
+        {
+            new JobPostQuestion { JobPostQuestionsId = Guid.NewGuid(), QuestionText = "Second Question", OrderIndex = 2 },
+            new JobPostQuestion { JobPostQuestionsId = Guid.NewGuid(), QuestionText = "First Question", OrderIndex = 1 }
+        };
+        context.AddSet(new JobPost
+        {
+            JobPostsId = jobId,
+            Status = 1,
+            Title = "Backend Engineer",
+            Description = "Build APIs",
+            JobPostQuestions = questions
+        });
+        context.AddSet(new AiInterviewDefinition
+        {
+            AiInterviewDefinitionsId = definitionId,
+            JobPostId = jobId,
+            ClientUserId = Guid.NewGuid(),
+            Language = "en",
+            Mode = "text",
+            QuestionCount = 7,
+            Status = AiInterviewDefinitionStatus.Active,
+            ExternalReference = "aidef_registered-reference",
+            CreatedAt = now
+        });
+        context.AddSet<AiInterviewAttempt>();
+        context.AddSet<AiInterviewAnswerResult>();
+        context.AddSet(new Proposal
+        {
+            ProposalsId = Guid.NewGuid(),
+            JobPostsId = jobId,
+            FreelancerProfilesId = freelancerProfile.FreelancerProfilesId,
+            FreelancerProfiles = freelancerProfile,
+            Status = 1
+        });
+        var aiService = Substitute.For<IAiServiceClient>();
+        aiService.StartInterviewAsync(
+                Arg.Any<AiInterviewStartRequestDto>(), Arg.Any<CancellationToken>())
+            .Returns(new AiInterviewQuestionResponseDto
+            {
+                SessionId = "session-123",
+                QuestionIndex = 1,
+                QuestionText = "First Question",
+                Language = "en"
+            });
+        var handler = new StartAiInterviewCommandHandler(context, aiService, new Clock(now));
+
+        await handler.Handle(
+            new StartAiInterviewCommand(freelancerId, jobId, null, "voice", "auto"),
+            CancellationToken.None);
+
+        await aiService.Received(1).StartInterviewAsync(
+            Arg.Is<AiInterviewStartRequestDto>(request =>
+                request.JobQuestions.Count == 2 &&
+                request.JobQuestions[0] == "First Question" &&
+                request.JobQuestions[1] == "Second Question"),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task StartAiInterview_ThrowsBadRequest_WhenNoPredefinedQuestions()
+    {
+        var now = DateTime.UtcNow;
+        var freelancerId = Guid.NewGuid();
+        var jobId = Guid.NewGuid();
+        var context = new InMemoryApplicationDbContext();
+        context.AddSet(new JobPost
+        {
+            JobPostsId = jobId,
+            Status = 1,
+            Title = "Backend Engineer",
+            Description = "Build APIs"
+            // No questions populated
+        });
+        context.AddSet(new AiInterviewDefinition
+        {
+            AiInterviewDefinitionsId = Guid.NewGuid(),
+            JobPostId = jobId,
+            ClientUserId = Guid.NewGuid(),
+            Language = "en",
+            Mode = "voice",
+            QuestionCount = 5,
+            Status = AiInterviewDefinitionStatus.Active,
+            ExternalReference = "aidef_registered-reference",
+            CreatedAt = now
+        });
+        context.AddSet<Proposal>();
+        context.AddSet<AiInterviewAttempt>();
+        context.AddSet<AiInterviewAnswerResult>();
+        var aiService = Substitute.For<IAiServiceClient>();
+        var handler = new StartAiInterviewCommandHandler(context, aiService, new Clock(now));
+
+        var exception = await Assert.ThrowsAsync<BadRequestException>(() => handler.Handle(
+            new StartAiInterviewCommand(freelancerId, jobId, null, "voice", "en"),
+            CancellationToken.None));
+
+        Assert.Equal("This job post does not have any predefined questions.", exception.Message);
+        await aiService.DidNotReceive().StartInterviewAsync(
+            Arg.Any<AiInterviewStartRequestDto>(),
+            Arg.Any<CancellationToken>());
     }
 
     private sealed class Clock(DateTime now) : IDateTimeService
