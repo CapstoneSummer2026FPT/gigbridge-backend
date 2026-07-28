@@ -1944,8 +1944,11 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.Property(e => e.JobTitle).HasMaxLength(160);
             entity.Property(e => e.TokenCost).HasPrecision(18, 4);
             entity.Property(e => e.BoostWeight).HasPrecision(10, 4);
+            entity.Property(e => e.QueuePosition).HasDefaultValue(0);
             entity.HasIndex(e => new { e.FreelancerProfileId, e.Status, e.StartTime },
                 "IX_FreelancerProfilePromotions_Queue");
+            entity.HasIndex(e => new { e.Status, e.QueuePosition },
+                "IX_FreelancerProfilePromotions_Position");
             entity.HasIndex(e => e.EndTime, "IX_FreelancerProfilePromotions_End");
             entity.HasIndex(e => e.WalletTransactionId).IsUnique();
             entity.HasIndex(e => e.FreelancerProfileId,

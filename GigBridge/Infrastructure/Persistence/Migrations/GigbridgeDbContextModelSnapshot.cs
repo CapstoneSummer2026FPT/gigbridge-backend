@@ -2116,6 +2116,11 @@ namespace Infrastructure.Persistence.Migrations
                         .HasMaxLength(240)
                         .HasColumnType("character varying(240)");
 
+                    b.Property<int>("QueuePosition")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
                     b.Property<bool>("ShowJobTitle")
                         .HasColumnType("boolean");
 
@@ -2150,6 +2155,8 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "EndTime" }, "IX_FreelancerProfilePromotions_End");
 
                     b.HasIndex(new[] { "FreelancerProfileId", "Status", "StartTime" }, "IX_FreelancerProfilePromotions_Queue");
+
+                    b.HasIndex(new[] { "Status", "QueuePosition" }, "IX_FreelancerProfilePromotions_Position");
 
                     b.HasIndex(new[] { "FreelancerProfileId" }, "UX_FreelancerProfilePromotions_OneActive")
                         .IsUnique()
