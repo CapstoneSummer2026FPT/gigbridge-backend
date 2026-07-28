@@ -81,7 +81,7 @@ public class ClientProposalsController : BaseApiController
         return Ok(ApiResponse<BatchJudgeResultDto>.Ok(result, "Success"));
     }
 
-    [HttpPost("{proposalId}/ai-interview-judging")]
+    [HttpPost("{proposalId}/answer-evaluation")]
     public async Task<IActionResult> EvaluateVettingAnswers(Guid proposalId, [FromQuery] bool onlyIfCached = false)
     {
         if (!TryGetCurrentUserId(out var userId))

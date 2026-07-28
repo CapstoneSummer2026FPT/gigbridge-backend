@@ -111,7 +111,7 @@ public class EvaluateProposalAnswersCommandHandler : IRequestHandler<EvaluatePro
 
         if (!answers.Any() || answers.All(pa => string.IsNullOrWhiteSpace(pa.AnswerText)))
         {
-            throw new BadRequestException("This candidate did not submit any answers to the vetting questions, so AI judging cannot be performed.");
+            throw new BadRequestException("No completed clarifying answers are available for evaluation.");
         }
 
         // 6. Construct AI request payload
