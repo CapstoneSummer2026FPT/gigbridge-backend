@@ -125,6 +125,8 @@ public sealed class PremiumExpiryWorker : BackgroundService
         if (expired.Count == 0)
             return;
         await context.SaveChangesAsync(cancellationToken);
+        await PromotionPolicy.RecalculateQueuePositionsAsync(
+            context, now, cancellationToken);
 
         foreach (var active in expired)
         {

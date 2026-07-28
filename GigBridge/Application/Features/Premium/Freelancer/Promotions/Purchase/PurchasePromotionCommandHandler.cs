@@ -80,6 +80,8 @@ public sealed class PurchasePromotionCommandHandler(
         };
         context.Set<FreelancerProfilePromotion>().Add(promotion);
         await context.SaveChangesAsync(cancellationToken);
+        await PromotionPolicy.RecalculateQueuePositionsAsync(
+            context, now, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         await cache.RemoveAsync(PromotionPolicy.UserCacheKey(command.UserId), cancellationToken);
         await cache.RemoveAsync(PromotionPolicy.FeedCacheKey, cancellationToken);

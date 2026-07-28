@@ -68,5 +68,42 @@ public static class PromotionPolicy
     public static decimal BoostWeight(decimal cumulativeTokens, PromotionPolicyDto policy) =>
         cumulativeTokens * policy.BoostWeightPerCoin;
 
+    public static async Task RecalculateQueuePositionsAsync(
+        IApplicationDbContext context,
+        DateTime now,
+        CancellationToken cancellationToken)
+    {
+        var campaigns = await context.Set<FreelancerProfilePromotion>()
+            .Where(item => item.QueuePosition > 0 ||
+                           (item.Status == Domain.Enums.PromotionStatus.Active &&
+                            item.StartTime <= now &&
+                            item.EndTime > now))
+            .ToListAsync(cancellationToken);
+
+        var ordered = OrderQueue(campaigns, now);
+        foreach (var campaign in campaigns)
+            campaign.QueuePosition = 0;
+
+        for (var index = 0; index < ordered.Count; index++)
+            ordered[index].QueuePosition = index + 1;
+
+        await context.SaveChangesAsync(cancellationToken);
+    }
+
+    public static IReadOnlyList<FreelancerProfilePromotion> OrderQueue(
+        IEnumerable<FreelancerProfilePromotion> campaigns,
+        DateTime now) =>
+        campaigns
+            .Where(item => item.Status == Domain.Enums.PromotionStatus.Active &&
+                           item.StartTime <= now &&
+                           item.EndTime > now)
+            .OrderByDescending(item => item.BoostWeight)
+            .ThenBy(item => item.QueuePosition <= 0
+                ? int.MaxValue
+                : item.QueuePosition)
+            .ThenBy(item => item.CreatedAt)
+            .ThenBy(item => item.FreelancerProfilePromotionsId)
+            .ToList();
+
     public static string UserCacheKey(Guid userId) => $"{CachePrefix}{userId:N}";
 }

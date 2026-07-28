@@ -61,6 +61,7 @@ public sealed class TrackPromotionInteractionCommandHandler(IApplicationDbContex
                 foreach (var item in remaining) { item.StartTime = cursor; item.EndTime = cursor.AddDays(item.DurationDays); cursor = item.EndTime; }
                 await context.SaveChangesAsync(ct);
             }
+            await PromotionPolicy.RecalculateQueuePositionsAsync(context, now, ct);
         }
         await transaction.CommitAsync(ct);
         await cache.RemoveAsync(PromotionPolicy.FeedCacheKey, ct);
