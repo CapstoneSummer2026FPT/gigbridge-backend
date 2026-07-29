@@ -18,6 +18,8 @@ namespace Application.Common.Services;
 
 public sealed class DeliveryOutboxService : BackgroundService
 {
+    internal static readonly TimeSpan DueDeliveryPollInterval = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan BackfillInterval = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan ProcessingTimeout = TimeSpan.FromMinutes(10);
     private static readonly TimeSpan[] RetryDelays =
         [TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(15), TimeSpan.FromHours(1), TimeSpan.FromHours(6)];
@@ -38,32 +40,89 @@ public sealed class DeliveryOutboxService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        while (!stoppingToken.IsCancellationRequested)
-        {
-            try { await ProcessBatch(stoppingToken); }
-            catch (Exception ex) when (ex is not OperationCanceledException) { _logger.LogError(ex, "Delivery outbox batch failed."); }
-            await Task.Delay(TimeSpan.FromSeconds(15), stoppingToken);
-        }
+        await Task.WhenAll(
+            RunChannelLoopAsync(DeliveryChannel.NotificationRealtime, stoppingToken),
+            RunChannelLoopAsync(DeliveryChannel.Email, stoppingToken),
+            RunBackfillLoopAsync(stoppingToken));
     }
 
-    internal async Task ProcessBatch(CancellationToken ct)
+    private async Task RunChannelLoopAsync(
+        DeliveryChannel channel,
+        CancellationToken stoppingToken)
+    {
+        using var timer = new PeriodicTimer(DueDeliveryPollInterval);
+        do
+        {
+            try
+            {
+                await ProcessChannelBatch(channel, stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Delivery outbox {Channel} batch failed.", channel);
+            }
+        }
+        while (await timer.WaitForNextTickAsync(stoppingToken));
+    }
+
+    private async Task RunBackfillLoopAsync(CancellationToken stoppingToken)
+    {
+        using var timer = new PeriodicTimer(BackfillInterval);
+        do
+        {
+            try
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var context = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
+                await EnsureAcceptedSchedulesHaveStartDeliveries(
+                    context, DateTime.UtcNow, _frontendBaseUrl, _emailRenderer,
+                    stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "Meeting-start delivery backfill failed.");
+            }
+        }
+        while (await timer.WaitForNextTickAsync(stoppingToken));
+    }
+
+    internal async Task ProcessChannelBatch(
+        DeliveryChannel channel,
+        CancellationToken ct)
     {
         using var scope = _scopeFactory.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
         var now = DateTime.UtcNow;
-        await EnsureAcceptedSchedulesHaveStartDeliveries(context, now, _frontendBaseUrl, _emailRenderer, ct);
         await context.Set<DeliveryOutbox>()
-            .Where(x => x.Status == (int)DeliveryOutboxStatus.Processing && x.NextAttemptAt <= now)
+            .Where(x => x.Channel == (int)channel &&
+                x.Status == (int)DeliveryOutboxStatus.Processing &&
+                x.NextAttemptAt <= now)
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(x => x.Status, (int)DeliveryOutboxStatus.Pending)
                 .SetProperty(x => x.AttemptCount, x => x.AttemptCount + 1)
                 .SetProperty(x => x.NextAttemptAt, now), ct);
-        var candidates = await context.Set<DeliveryOutbox>().AsNoTracking().Where(x => x.Status == (int)DeliveryOutboxStatus.Pending && x.NextAttemptAt <= now)
-            .OrderBy(x => x.NextAttemptAt).Select(x => x.DeliveryOutboxId).Take(25).ToListAsync(ct);
+        var candidates = await DueDeliveriesForChannel(
+                context.Set<DeliveryOutbox>().AsNoTracking(), channel, now)
+            .Select(x => x.DeliveryOutboxId)
+            .Take(25)
+            .ToListAsync(ct);
         foreach (var jobId in candidates)
         {
             var processingDeadline = DateTime.UtcNow.Add(ProcessingTimeout);
-            var claimed = await context.Set<DeliveryOutbox>().Where(x => x.DeliveryOutboxId == jobId && x.Status == (int)DeliveryOutboxStatus.Pending)
+            var claimed = await context.Set<DeliveryOutbox>()
+                .Where(x => x.DeliveryOutboxId == jobId &&
+                    x.Channel == (int)channel &&
+                    x.Status == (int)DeliveryOutboxStatus.Pending)
                 .ExecuteUpdateAsync(setters => setters
                     .SetProperty(x => x.Status, (int)DeliveryOutboxStatus.Processing)
                     .SetProperty(x => x.NextAttemptAt, processingDeadline), ct);
@@ -158,6 +217,16 @@ public sealed class DeliveryOutboxService : BackgroundService
             await context.SaveChangesAsync(ct);
         }
     }
+
+    internal static IQueryable<DeliveryOutbox> DueDeliveriesForChannel(
+        IQueryable<DeliveryOutbox> deliveries,
+        DeliveryChannel channel,
+        DateTime now) =>
+        deliveries
+            .Where(x => x.Channel == (int)channel &&
+                x.Status == (int)DeliveryOutboxStatus.Pending &&
+                x.NextAttemptAt <= now)
+            .OrderBy(x => x.NextAttemptAt);
 
     private static async Task SendFinalContractEmailAsync(
         IApplicationDbContext context,

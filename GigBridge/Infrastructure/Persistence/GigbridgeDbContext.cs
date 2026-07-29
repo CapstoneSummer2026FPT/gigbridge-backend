@@ -1777,6 +1777,7 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.Property(e => e.AgreementStatus).HasDefaultValue(ScheduleAgreementStatus.Accepted);
             entity.Property(e => e.EditCount).HasDefaultValue(0);
             entity.Property(e => e.RescheduleRequestCount).HasDefaultValue(0);
+            entity.Property(e => e.RescheduleRejectionCount).HasDefaultValue(0);
             entity.Property(e => e.ProposedTimeZoneId).HasMaxLength(64);
             entity.Property(e => e.Version).HasDefaultValue(1).IsConcurrencyToken();
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
