@@ -38,6 +38,8 @@ public sealed class PurchasePromotionCommandHandler(
             ?? throw new NotFoundException("Freelancer profile does not exist.");
 
         await using var transaction = await context.BeginTransactionAsync(cancellationToken);
+        await transaction.AcquireTransactionLockAsync(
+            PromotionPolicy.QueueTransactionLockKey, cancellationToken);
         var queue = await context.Set<FreelancerProfilePromotion>()
             .Where(item => item.FreelancerProfileId == profileId &&
                 (item.Status == PromotionStatus.Active || item.Status == PromotionStatus.Pending))

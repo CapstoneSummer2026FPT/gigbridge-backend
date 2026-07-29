@@ -2156,7 +2156,9 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "FreelancerProfileId", "Status", "StartTime" }, "IX_FreelancerProfilePromotions_Queue");
 
-                    b.HasIndex(new[] { "Status", "QueuePosition" }, "IX_FreelancerProfilePromotions_Position");
+                    b.HasIndex(new[] { "Status", "QueuePosition" }, "IX_FreelancerProfilePromotions_Position")
+                        .IsUnique()
+                        .HasFilter("\"QueuePosition\" > 0");
 
                     b.HasIndex(new[] { "FreelancerProfileId" }, "UX_FreelancerProfilePromotions_OneActive")
                         .IsUnique()
@@ -4532,6 +4534,18 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(255)");
 
                     b.Property<int>("MeetingStatus")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<DateTime?>("ProposedScheduledAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ProposedTimeZoneId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("RescheduleRequestCount")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
                         .HasDefaultValue(0);

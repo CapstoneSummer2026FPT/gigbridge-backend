@@ -41,6 +41,8 @@ public sealed class EndPromotionCommandHandler(
         FreelancerProfilePromotion? next;
         await using (var transaction = await context.BeginTransactionAsync(cancellationToken))
         {
+            await transaction.AcquireTransactionLockAsync(
+                PromotionPolicy.QueueTransactionLockKey, cancellationToken);
             var affected = await context.Set<FreelancerProfilePromotion>()
                 .Where(item =>
                     item.FreelancerProfilePromotionsId == promotion.FreelancerProfilePromotionsId &&

@@ -9,6 +9,9 @@ namespace Application.Features.Premium.Freelancer.Promotions.Common;
 
 public static class PromotionPolicy
 {
+    // All promotion queue mutations use this transaction-scoped database lock.
+    // The stable value is arbitrary, but must remain identical across application instances.
+    public const long QueueTransactionLockKey = 0x4769674272696467;
     public const string SettingKey = "premium.freelancer.promotion-policy";
     public const string CachePrefix = "premium:promotion:";
     public const string FeedCacheKey = "premium:promotions:feed";
@@ -83,6 +86,7 @@ public static class PromotionPolicy
         var ordered = OrderQueue(campaigns, now);
         foreach (var campaign in campaigns)
             campaign.QueuePosition = 0;
+        await context.SaveChangesAsync(cancellationToken);
 
         for (var index = 0; index < ordered.Count; index++)
             ordered[index].QueuePosition = index + 1;

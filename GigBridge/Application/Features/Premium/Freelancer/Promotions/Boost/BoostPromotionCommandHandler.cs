@@ -35,6 +35,8 @@ public sealed class BoostPromotionCommandHandler(IApplicationDbContext context, 
             return PromotionDto.FromEntity(promotion);
         }
         await using var transaction = await context.BeginTransactionAsync(ct);
+        await transaction.AcquireTransactionLockAsync(
+            PromotionPolicy.QueueTransactionLockKey, ct);
         await ledger.DebitAsync(command.UserId, amount, WalletTransactionType.PromotionPurchase,
             command.Request.IdempotencyKey, metadata, ct);
         var targetIncrement = decimal.ToInt32(amount * policy.TargetClicksPerCoin);

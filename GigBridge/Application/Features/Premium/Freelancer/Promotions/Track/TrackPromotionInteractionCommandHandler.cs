@@ -39,6 +39,8 @@ public sealed class TrackPromotionInteractionCommandHandler(IApplicationDbContex
     private async Task CompleteAtTargetAsync(Guid id, DateTime now, CancellationToken ct)
     {
         await using var transaction = await context.BeginTransactionAsync(ct);
+        await transaction.AcquireTransactionLockAsync(
+            PromotionPolicy.QueueTransactionLockKey, ct);
         var completed = await context.Set<FreelancerProfilePromotion>()
             .Where(x => x.FreelancerProfilePromotionsId == id && x.Status == PromotionStatus.Active && x.ClickCount >= x.TargetClickCount)
             .ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, PromotionStatus.Expired)
