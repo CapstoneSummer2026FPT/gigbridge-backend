@@ -6,7 +6,7 @@ namespace Test_Gigbridge_Backend.Project_API.Controllers.Proposals.Client;
 public class ClientProposalAnswerEvaluationContractTests
 {
     [Fact]
-    public void Controller_ExposesAnswerEvaluationRoute_WithoutLegacyInterviewRoute()
+    public void Controller_ExposesAiInterviewJudgingRoute_WithoutAnswerEvaluationRoute()
     {
         var routes = typeof(ClientProposalsController)
             .GetMethods()
@@ -15,7 +15,7 @@ public class ClientProposalAnswerEvaluationContractTests
             .Select(attribute => attribute.Template)
             .ToArray();
 
-        Assert.Contains("{proposalId}/answer-evaluation", routes);
-        Assert.DoesNotContain("{proposalId}/ai-interview-judging", routes);
+        Assert.Contains("{proposalId}/ai-interview-judging", routes);
+        Assert.DoesNotContain("{proposalId}/answer-evaluation", routes);
     }
 }
