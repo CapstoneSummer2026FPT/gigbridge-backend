@@ -90,6 +90,9 @@ public sealed class PremiumExpiryWorker : BackgroundService
         var notifications = scope.ServiceProvider.GetRequiredService<INotificationService>();
         var now = DateTime.UtcNow;
 
+        await using var transaction = await context.BeginTransactionAsync(cancellationToken);
+        await transaction.AcquireTransactionLockAsync(
+            PromotionPolicy.QueueTransactionLockKey, cancellationToken);
         var expired = await context.Set<FreelancerProfilePromotion>()
             .Include(item => item.FreelancerProfile)
             .Where(item => item.Status == PromotionStatus.Active && item.EndTime <= now)
@@ -125,6 +128,9 @@ public sealed class PremiumExpiryWorker : BackgroundService
         if (expired.Count == 0)
             return;
         await context.SaveChangesAsync(cancellationToken);
+        await PromotionPolicy.RecalculateQueuePositionsAsync(
+            context, now, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         foreach (var active in expired)
         {

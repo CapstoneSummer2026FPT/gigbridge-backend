@@ -101,6 +101,17 @@ public class ClientJobPostsController : BaseApiController
         return Ok(ApiResponse<JobPostPromotionDto>.Ok(result, "Job post promoted successfully"));
     }
 
+    [HttpPost("{jobPostId:guid}/promotion/end")]
+    public async Task<IActionResult> EndJobPostPromotion(
+        Guid jobPostId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetCurrentUserId(out var userId)) return InvalidTokenResponse();
+        var result = await Mediator.Send(
+            new EndJobPostPromotionCommand(userId, jobPostId), cancellationToken);
+        return Ok(ApiResponse<JobPostPromotionDto>.Ok(result, "Job promotion ended"));
+    }
+
     [HttpGet("{jobPostId:guid}/talent-matches")]
     public async Task<IActionResult> GetTalentMatches(
         Guid jobPostId,

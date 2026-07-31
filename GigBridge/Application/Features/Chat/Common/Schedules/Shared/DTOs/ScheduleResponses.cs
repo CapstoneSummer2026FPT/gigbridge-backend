@@ -16,6 +16,8 @@ public record ScheduleResponse(
     Guid? CancelledByUserId, string? CancellationReason, DateTime CreatedAt, DateTime? UpdatedAt,
     DateTime? CancelledAt, DateTime CutoffUtc, DateTime GraceExpiresAtUtc, bool CanEdit, bool CanCancel,
     int AgreementStatus, DateTime? CounterProposalCreatedAtUtc, DateTime? CounterProposalEditExpiresAtUtc,
+    DateTime? ProposedScheduledAtUtc, string? ProposedTimeZoneId,
+    int RescheduleRequestCount, int RemainingRescheduleRequests,
     bool CanAccept, bool CanReject, bool CanProposeTime, bool CanEditCounterProposal,
     ScheduleMeetingResponse? Meeting = null);
 
@@ -27,7 +29,9 @@ public record ScheduleEventResponse(
     int AgreementStatus = 0, DateTime? CounterProposalCreatedAtUtc = null,
     DateTime? CounterProposalEditExpiresAtUtc = null, bool CanAccept = false, bool CanReject = false,
     bool CanProposeTime = false, bool CanEditCounterProposal = false,
-    ScheduleMeetingResponse? Meeting = null);
+    ScheduleMeetingResponse? Meeting = null, DateTime? ProposedScheduledAtUtc = null,
+    string? ProposedTimeZoneId = null, int RescheduleRequestCount = 0,
+    int RemainingRescheduleRequests = 3);
 
 public record ScheduleMutationResult(ScheduleResponse Schedule, MessageResponse Message);
 

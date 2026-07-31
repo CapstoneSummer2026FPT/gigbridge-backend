@@ -18,6 +18,7 @@ public class GoogleMeetProvisioningWorker : BackgroundService
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan LeaseDuration = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan LeaseMonitorInterval = TimeSpan.FromSeconds(15);
+    private static readonly TimeSpan PendingJobTimeout = TimeSpan.FromMinutes(2);
 
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<GoogleMeetProvisioningWorker> _logger;
@@ -428,15 +429,20 @@ public class GoogleMeetProvisioningWorker : BackgroundService
         var context = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
 
         var now = DateTime.UtcNow;
-        var candidateIds = await context.Set<GoogleMeetProvisioningJob>().AsNoTracking()
+        var processingCandidateIds = await context.Set<GoogleMeetProvisioningJob>().AsNoTracking()
             .Where(j => j.Status == GoogleMeetProvisioningJobStatus.Processing &&
                 j.LeaseExpiresAt != null && j.LeaseExpiresAt < now)
             .Select(j => j.GoogleMeetProvisioningJobId)
             .ToListAsync(ct);
-        if (candidateIds.Count == 0) return;
+        var pendingCandidateIds = await context.Set<GoogleMeetProvisioningJob>().AsNoTracking()
+            .Where(j => j.Status == GoogleMeetProvisioningJobStatus.Pending &&
+                j.CreatedAt < now - PendingJobTimeout)
+            .Select(j => j.GoogleMeetProvisioningJobId)
+            .ToListAsync(ct);
+        if (processingCandidateIds.Count == 0 && pendingCandidateIds.Count == 0) return;
 
-        var staleCount = await context.Set<GoogleMeetProvisioningJob>()
-            .Where(j => candidateIds.Contains(j.GoogleMeetProvisioningJobId) &&
+        var expiredProcessingCount = await context.Set<GoogleMeetProvisioningJob>()
+            .Where(j => processingCandidateIds.Contains(j.GoogleMeetProvisioningJobId) &&
                 j.Status == GoogleMeetProvisioningJobStatus.Processing &&
                 j.LeaseExpiresAt != null && j.LeaseExpiresAt < now)
             .ExecuteUpdateAsync(
@@ -446,12 +452,25 @@ public class GoogleMeetProvisioningWorker : BackgroundService
                     .SetProperty(j => j.CompletedAt, now),
                 ct);
 
-        if (staleCount > 0)
+        var expiredPendingCount = await context.Set<GoogleMeetProvisioningJob>()
+            .Where(j => pendingCandidateIds.Contains(j.GoogleMeetProvisioningJobId) &&
+                j.Status == GoogleMeetProvisioningJobStatus.Pending &&
+                j.CreatedAt < now - PendingJobTimeout)
+            .ExecuteUpdateAsync(
+                setters => setters
+                    .SetProperty(j => j.Status, GoogleMeetProvisioningJobStatus.Ambiguous)
+                    .SetProperty(j => j.FailureCode, "queue_timeout")
+                    .SetProperty(j => j.CompletedAt, now),
+                ct);
+
+        var expiredCount = expiredProcessingCount + expiredPendingCount;
+        if (expiredCount > 0)
         {
+            var candidateIds = processingCandidateIds.Concat(pendingCandidateIds).ToArray();
             var expiredJobs = await context.Set<GoogleMeetProvisioningJob>().AsNoTracking()
                 .Where(j => candidateIds.Contains(j.GoogleMeetProvisioningJobId) &&
                     j.Status == GoogleMeetProvisioningJobStatus.Ambiguous &&
-                    j.FailureCode == "lease_expired")
+                    (j.FailureCode == "lease_expired" || j.FailureCode == "queue_timeout"))
                 .Select(j => new { j.ScheduleId, j.Attempt })
                 .ToListAsync(ct);
             var scheduleIds = expiredJobs.Select(x => x.ScheduleId).Distinct().ToArray();
@@ -475,7 +494,11 @@ public class GoogleMeetProvisioningWorker : BackgroundService
             foreach (var schedule in schedules.Where(s => s.MeetingStatus == MeetingProvisioningStatus.Failed))
                 await SendMeetingUpdateAsync(schedule.ScheduleId, (DbContext)context, chat, ct);
 
-            _logger.LogWarning("Expired {Count} stale provisioning leases", staleCount);
+            _logger.LogWarning(
+                "Expired {Count} stale Google Meet provisioning jobs ({ProcessingCount} processing, {PendingCount} pending)",
+                expiredCount,
+                expiredProcessingCount,
+                expiredPendingCount);
         }
     }
 

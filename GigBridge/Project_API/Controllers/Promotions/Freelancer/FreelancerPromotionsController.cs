@@ -4,6 +4,7 @@ using Application.Features.Premium.Freelancer.Promotions.GetCurrent;
 using Application.Features.Premium.Freelancer.Promotions.GetHistory;
 using Application.Features.Premium.Freelancer.Promotions.Purchase;
 using Application.Features.Premium.Freelancer.Promotions.Boost;
+using Application.Features.Premium.Freelancer.Promotions.End;
 using Application.Features.Premium.Freelancer.Promotions.GetDraft;
 using Application.Features.Premium.Freelancer.Promotions.GetManager;
 using Application.Features.Premium.Freelancer.Promotions.UploadPhoto;
@@ -64,6 +65,15 @@ public sealed class FreelancerPromotionsController : BaseApiController
     {
         if (!TryGetCurrentUserId(out var id)) return InvalidTokenResponse();
         return Ok(ApiResponse<PromotionDto>.Ok(await Mediator.Send(new BoostPromotionCommand(id, promotionId, request), ct), "Promotion boosted"));
+    }
+
+    [HttpPost("{promotionId:guid}/end")]
+    public async Task<IActionResult> End(Guid promotionId, CancellationToken ct)
+    {
+        if (!TryGetCurrentUserId(out var id)) return InvalidTokenResponse();
+        return Ok(ApiResponse<PromotionDto>.Ok(
+            await Mediator.Send(new EndPromotionCommand(id, promotionId), ct),
+            "Promotion ended"));
     }
 
     [HttpPost("photo")]

@@ -72,6 +72,27 @@ public class ScheduleWorkflowTests
     }
 
     [Fact]
+    public async Task Create_WithEmailDisabled_QueuesOnlyRealtimeNotifications()
+    {
+        var now = new DateTime(2026, 6, 21, 6, 0, 0, DateTimeKind.Utc);
+        await using var db = CreateContext();
+        var fixture = Seed(db, now);
+        var handler = new ScheduleWorkflowService(db, new FixedClock(now),
+            new NoopChatRealtimeNotifier(), new NoopGoogleMeetOAuthService(), EmailRenderer);
+
+        await handler.Handle(new CreateScheduleCommand(fixture.ClientId,
+            new CreateScheduleRequest(fixture.ConversationId, "Review", null,
+                new DateTimeOffset(now.AddDays(3)), SendEmailNotification: false)), default);
+
+        var deliveries = await db.DeliveryOutboxes.ToListAsync();
+        Assert.DoesNotContain(deliveries,
+            delivery => delivery.Channel == (int)DeliveryChannel.Email);
+        Assert.Equal(2, deliveries.Count(delivery =>
+            delivery.Channel == (int)DeliveryChannel.NotificationRealtime));
+        Assert.Equal(2, await db.Notifications.CountAsync());
+    }
+
+    [Fact]
     public async Task CreatorGrace_AllowsSameDayCancellation_WithoutConsumingEditQuota()
     {
         var now = new DateTime(2026, 6, 21, 6, 0, 0, DateTimeKind.Utc); // 13:00 ICT
@@ -102,7 +123,7 @@ public class ScheduleWorkflowTests
 
         var accepted = await handler.Handle(new AcceptScheduleCommand(fixture.FreelancerId,
             created.Schedule.ScheduleId, new ScheduleVersionRequest(created.Schedule.Version)), default);
-        await Assert.ThrowsAsync<BadRequestException>(() => handler.Handle(new UpdateScheduleCommand(fixture.FreelancerId,
+        await Assert.ThrowsAsync<BadRequestException>(() => handler.Handle(new UpdateScheduleCommand(fixture.ClientId,
             created.Schedule.ScheduleId, new UpdateScheduleRequest(" Review   call ", "Line one\nLine two", starts, accepted.Schedule.Version)), default));
         Assert.Equal(0, (await db.Schedules.SingleAsync()).EditCount);
     }
@@ -144,7 +165,7 @@ public class ScheduleWorkflowTests
     }
 
     [Fact]
-    public async Task SharedQuota_RejectsThirdEdit()
+    public async Task ClientEditQuota_RejectsThirdEdit()
     {
         var now = new DateTime(2026, 6, 21, 6, 0, 0, DateTimeKind.Utc);
         await using var db = CreateContext();
@@ -156,7 +177,7 @@ public class ScheduleWorkflowTests
             created.Schedule.ScheduleId, new ScheduleVersionRequest(created.Schedule.Version)), default);
         var one = await handler.Handle(new UpdateScheduleCommand(fixture.ClientId, created.Schedule.ScheduleId,
             new UpdateScheduleRequest("Review one", null, new DateTimeOffset(now.AddDays(3)), accepted.Schedule.Version)), default);
-        var two = await handler.Handle(new UpdateScheduleCommand(fixture.FreelancerId, created.Schedule.ScheduleId,
+        var two = await handler.Handle(new UpdateScheduleCommand(fixture.ClientId, created.Schedule.ScheduleId,
             new UpdateScheduleRequest("Review two", null, new DateTimeOffset(now.AddDays(3)), one.Schedule.Version)), default);
         await Assert.ThrowsAsync<BadRequestException>(() => handler.Handle(new UpdateScheduleCommand(fixture.ClientId,
             created.Schedule.ScheduleId, new UpdateScheduleRequest("Review three", null, new DateTimeOffset(now.AddDays(3)), two.Schedule.Version)), default));
@@ -401,6 +422,268 @@ public class ScheduleWorkflowTests
         var next = await handler.Handle(new CreateScheduleCommand(fixture.ClientId,
             new CreateScheduleRequest(fixture.ConversationId, "Next", null, new DateTimeOffset(now.AddDays(5)))), default);
         Assert.Equal((int)ScheduleAgreementStatus.AwaitingFreelancer, next.Schedule.AgreementStatus);
+    }
+
+    [Fact]
+    public async Task AcceptedSchedule_FreelancerCanRequestThreeDateChanges_ClientCanRejectOrAccept()
+    {
+        var now = new DateTime(2026, 6, 21, 6, 0, 0, DateTimeKind.Utc);
+        await using var db = CreateContext();
+        var fixture = Seed(db, now);
+        var handler = new ScheduleWorkflowService(db, new FixedClock(now),
+            new NoopChatRealtimeNotifier(), new NoopGoogleMeetOAuthService(), EmailRenderer);
+
+        var created = await handler.Handle(new CreateScheduleCommand(fixture.ClientId,
+            new CreateScheduleRequest(fixture.ConversationId, "Review", null,
+                new DateTimeOffset(now.AddDays(3)))), default);
+        var accepted = await handler.Handle(new AcceptScheduleCommand(fixture.FreelancerId,
+            created.Schedule.ScheduleId, new ScheduleVersionRequest(created.Schedule.Version)), default);
+        var originalTime = accepted.Schedule.ScheduledAtUtc;
+        await Assert.ThrowsAsync<ForbiddenAccessException>(() => handler.Handle(
+            new UpdateScheduleCommand(fixture.FreelancerId, created.Schedule.ScheduleId,
+                new UpdateScheduleRequest("Direct edit", null, new DateTimeOffset(now.AddDays(4)),
+                    accepted.Schedule.Version)), default));
+
+        var rescheduleEventTime = now.AddMinutes(1);
+        handler = new ScheduleWorkflowService(db, new FixedClock(rescheduleEventTime),
+            new NoopChatRealtimeNotifier(), new NoopGoogleMeetOAuthService(), EmailRenderer);
+        var version = accepted.Schedule.Version;
+        for (var requestNumber = 1; requestNumber <= 2; requestNumber++)
+        {
+            var requestedTime = now.AddDays(3 + requestNumber);
+            var requested = await handler.Handle(new CreateCounterProposalCommand(fixture.FreelancerId,
+                created.Schedule.ScheduleId,
+                new CounterProposalRequest(new DateTimeOffset(requestedTime), version)), default);
+
+            Assert.Equal((int)ScheduleAgreementStatus.AwaitingClientReschedule,
+                requested.Schedule.AgreementStatus);
+            Assert.Equal(originalTime, requested.Schedule.ScheduledAtUtc);
+            Assert.Equal(requestedTime, requested.Schedule.ProposedScheduledAtUtc);
+            Assert.Equal(requestNumber, requested.Schedule.RescheduleRequestCount);
+            Assert.Equal(3 - requestNumber, requested.Schedule.RemainingRescheduleRequests);
+            if (requestNumber == 1)
+            {
+                var movedCard = await db.Messages.SingleAsync(
+                    message => message.ScheduleId == created.Schedule.ScheduleId);
+                Assert.Equal(rescheduleEventTime, movedCard.SentAt);
+                Assert.Equal(fixture.FreelancerId, movedCard.SenderUserId);
+            }
+
+            var rejected = await handler.Handle(new RejectScheduleCommand(fixture.ClientId,
+                created.Schedule.ScheduleId, new ScheduleVersionRequest(requested.Schedule.Version)), default);
+            Assert.Equal((int)ScheduleAgreementStatus.RescheduleRejected, rejected.Schedule.AgreementStatus);
+            Assert.Equal(ScheduleStatus.Scheduled, (ScheduleStatus)rejected.Schedule.Status);
+            Assert.Equal(originalTime, rejected.Schedule.ScheduledAtUtc);
+            Assert.Null(rejected.Schedule.ProposedScheduledAtUtc);
+            version = rejected.Schedule.Version;
+        }
+
+        var finalRequestedTime = now.AddDays(7);
+        var finalRequest = await handler.Handle(new CreateCounterProposalCommand(fixture.FreelancerId,
+            created.Schedule.ScheduleId,
+            new CounterProposalRequest(new DateTimeOffset(finalRequestedTime), version)), default);
+        var finalAccepted = await handler.Handle(new AcceptScheduleCommand(fixture.ClientId,
+            created.Schedule.ScheduleId, new ScheduleVersionRequest(finalRequest.Schedule.Version)), default);
+
+        Assert.Equal((int)ScheduleAgreementStatus.Accepted, finalAccepted.Schedule.AgreementStatus);
+        Assert.Equal(finalRequestedTime, finalAccepted.Schedule.ScheduledAtUtc);
+        Assert.Null(finalAccepted.Schedule.ProposedScheduledAtUtc);
+        Assert.Equal(3, finalAccepted.Schedule.RescheduleRequestCount);
+        Assert.Equal(0, finalAccepted.Schedule.RemainingRescheduleRequests);
+
+        var freelancerView = await handler.Handle(new GetScheduleQuery(
+            fixture.FreelancerId, created.Schedule.ScheduleId), default);
+        Assert.False(freelancerView.CanProposeTime);
+        await Assert.ThrowsAsync<BadRequestException>(() => handler.Handle(
+            new CreateCounterProposalCommand(fixture.FreelancerId, created.Schedule.ScheduleId,
+                new CounterProposalRequest(new DateTimeOffset(now.AddDays(8)),
+                    finalAccepted.Schedule.Version)), default));
+    }
+
+    [Fact]
+    public async Task FutureCounterProposal_RemainsActionableAfterOriginalTimePasses()
+    {
+        var now = new DateTime(2026, 6, 21, 6, 0, 0, DateTimeKind.Utc);
+        await using var db = CreateContext();
+        var fixture = Seed(db, now);
+        var handler = new ScheduleWorkflowService(db, new FixedClock(now),
+            new NoopChatRealtimeNotifier(), new NoopGoogleMeetOAuthService(), EmailRenderer);
+
+        var created = await handler.Handle(new CreateScheduleCommand(fixture.ClientId,
+            new CreateScheduleRequest(fixture.ConversationId, "Review", null,
+                new DateTimeOffset(now.AddHours(1)))), default);
+        var accepted = await handler.Handle(new AcceptScheduleCommand(fixture.FreelancerId,
+            created.Schedule.ScheduleId, new ScheduleVersionRequest(created.Schedule.Version)), default);
+        var requested = await handler.Handle(new CreateCounterProposalCommand(fixture.FreelancerId,
+            created.Schedule.ScheduleId,
+            new CounterProposalRequest(new DateTimeOffset(now.AddHours(4)),
+                accepted.Schedule.Version)), default);
+
+        var responseTime = now.AddHours(2);
+        handler = new ScheduleWorkflowService(db, new FixedClock(responseTime),
+            new NoopChatRealtimeNotifier(), new NoopGoogleMeetOAuthService(), EmailRenderer);
+
+        var clientView = await handler.Handle(new GetScheduleQuery(
+            fixture.ClientId, created.Schedule.ScheduleId), default);
+        var freelancerView = await handler.Handle(new GetScheduleQuery(
+            fixture.FreelancerId, created.Schedule.ScheduleId), default);
+        Assert.True(clientView.CanAccept);
+        Assert.True(clientView.CanReject);
+        Assert.True(freelancerView.CanEditCounterProposal);
+
+        var scheduleMessage = await db.Messages.SingleAsync(
+            message => message.ScheduleId == created.Schedule.ScheduleId);
+        Assert.True(MessageHelpers.ParseScheduleMetadata(
+            scheduleMessage, fixture.ClientId, responseTime)!.CanAccept);
+        Assert.True(MessageHelpers.ParseScheduleMetadata(
+            scheduleMessage, fixture.ClientId, responseTime)!.CanReject);
+        Assert.True(MessageHelpers.ParseScheduleMetadata(
+            scheduleMessage, fixture.FreelancerId, responseTime)!.CanEditCounterProposal);
+
+        var edited = await handler.Handle(new UpdateCounterProposalCommand(
+            fixture.FreelancerId, created.Schedule.ScheduleId,
+            new CounterProposalRequest(new DateTimeOffset(now.AddHours(5)),
+                requested.Schedule.Version)), default);
+        var finalAccepted = await handler.Handle(new AcceptScheduleCommand(
+            fixture.ClientId, created.Schedule.ScheduleId,
+            new ScheduleVersionRequest(edited.Schedule.Version)), default);
+
+        Assert.Equal(now.AddHours(5), finalAccepted.Schedule.ScheduledAtUtc);
+        Assert.Equal((int)ScheduleAgreementStatus.Accepted,
+            finalAccepted.Schedule.AgreementStatus);
+    }
+
+    [Fact]
+    public async Task AcceptedSchedule_FreelancerCanCancelWhileDateChangeIsAwaitingClient()
+    {
+        var now = new DateTime(2026, 6, 21, 6, 0, 0, DateTimeKind.Utc);
+        await using var db = CreateContext();
+        var fixture = Seed(db, now);
+        var handler = new ScheduleWorkflowService(db, new FixedClock(now),
+            new NoopChatRealtimeNotifier(), new NoopGoogleMeetOAuthService(), EmailRenderer);
+
+        var created = await handler.Handle(new CreateScheduleCommand(fixture.ClientId,
+            new CreateScheduleRequest(fixture.ConversationId, "Review", null,
+                new DateTimeOffset(now.AddDays(3)))), default);
+        var accepted = await handler.Handle(new AcceptScheduleCommand(fixture.FreelancerId,
+            created.Schedule.ScheduleId, new ScheduleVersionRequest(created.Schedule.Version)), default);
+        var requested = await handler.Handle(new CreateCounterProposalCommand(fixture.FreelancerId,
+            created.Schedule.ScheduleId,
+            new CounterProposalRequest(new DateTimeOffset(now.AddDays(4)),
+                accepted.Schedule.Version)), default);
+
+        var freelancerView = await handler.Handle(new GetScheduleQuery(
+            fixture.FreelancerId, created.Schedule.ScheduleId), default);
+        Assert.True(freelancerView.CanCancel);
+
+        const string reason = "I am no longer available";
+        var cancelled = await handler.Handle(new CancelScheduleCommand(fixture.FreelancerId,
+            created.Schedule.ScheduleId,
+            new CancelScheduleRequest(reason, requested.Schedule.Version)), default);
+
+        Assert.Equal((int)ScheduleStatus.Cancelled, cancelled.Schedule.Status);
+        Assert.Equal(fixture.FreelancerId, cancelled.Schedule.CancelledByUserId);
+        Assert.Equal(reason, cancelled.Schedule.CancellationReason);
+        Assert.Null(cancelled.Schedule.ProposedScheduledAtUtc);
+        Assert.Equal((int)ScheduleEventType.Cancelled,
+            cancelled.Message.Schedule!.EventType);
+    }
+
+    [Fact]
+    public async Task ThirdRejectedFreelancerDateChange_AutomaticallyCancelsMeeting()
+    {
+        var now = new DateTime(2026, 6, 21, 6, 0, 0, DateTimeKind.Utc);
+        await using var db = CreateContext();
+        var fixture = Seed(db, now);
+        var handler = new ScheduleWorkflowService(db, new FixedClock(now),
+            new NoopChatRealtimeNotifier(), new NoopGoogleMeetOAuthService(), EmailRenderer);
+
+        var created = await handler.Handle(new CreateScheduleCommand(fixture.ClientId,
+            new CreateScheduleRequest(fixture.ConversationId, "Review", null,
+                new DateTimeOffset(now.AddDays(3)))), default);
+        var accepted = await handler.Handle(new AcceptScheduleCommand(fixture.FreelancerId,
+            created.Schedule.ScheduleId, new ScheduleVersionRequest(created.Schedule.Version)), default);
+
+        var version = accepted.Schedule.Version;
+        ScheduleMutationResult? rejected = null;
+        for (var requestNumber = 1; requestNumber <= 3; requestNumber++)
+        {
+            var requested = await handler.Handle(new CreateCounterProposalCommand(fixture.FreelancerId,
+                created.Schedule.ScheduleId,
+                new CounterProposalRequest(new DateTimeOffset(now.AddDays(3 + requestNumber)),
+                    version)), default);
+            rejected = await handler.Handle(new RejectScheduleCommand(fixture.ClientId,
+                created.Schedule.ScheduleId,
+                new ScheduleVersionRequest(requested.Schedule.Version)), default);
+            version = rejected.Schedule.Version;
+
+            if (requestNumber < 3)
+                Assert.Equal((int)ScheduleStatus.Scheduled, rejected.Schedule.Status);
+        }
+
+        Assert.NotNull(rejected);
+        Assert.Equal((int)ScheduleStatus.Cancelled, rejected.Schedule.Status);
+        Assert.Equal((int)ScheduleAgreementStatus.RescheduleRejected,
+            rejected.Schedule.AgreementStatus);
+        Assert.Equal(3, rejected.Schedule.RescheduleRequestCount);
+        Assert.Equal(0, rejected.Schedule.RemainingRescheduleRequests);
+        Assert.Null(rejected.Schedule.CancelledByUserId);
+        Assert.Null(rejected.Schedule.ProposedScheduledAtUtc);
+        Assert.Equal(
+            "Automatically cancelled after the client rejected three freelancer reschedule requests.",
+            rejected.Schedule.CancellationReason);
+        Assert.Equal((int)ScheduleEventType.Cancelled,
+            rejected.Message.Schedule!.EventType);
+
+        var ongoing = await handler.Handle(new GetOngoingScheduleQuery(
+            fixture.FreelancerId, fixture.ConversationId), default);
+        Assert.False(ongoing.HasOngoingSchedule);
+        Assert.Null(ongoing.ScheduleId);
+    }
+
+    [Fact]
+    public async Task ThirdDateChangeWithOnlyTwoRejections_DoesNotCancelMeeting()
+    {
+        var now = new DateTime(2026, 6, 21, 6, 0, 0, DateTimeKind.Utc);
+        await using var db = CreateContext();
+        var fixture = Seed(db, now);
+        var handler = new ScheduleWorkflowService(db, new FixedClock(now),
+            new NoopChatRealtimeNotifier(), new NoopGoogleMeetOAuthService(), EmailRenderer);
+
+        var created = await handler.Handle(new CreateScheduleCommand(fixture.ClientId,
+            new CreateScheduleRequest(fixture.ConversationId, "Review", null,
+                new DateTimeOffset(now.AddDays(3)))), default);
+        var accepted = await handler.Handle(new AcceptScheduleCommand(fixture.FreelancerId,
+            created.Schedule.ScheduleId, new ScheduleVersionRequest(created.Schedule.Version)), default);
+
+        var firstRequest = await handler.Handle(new CreateCounterProposalCommand(fixture.FreelancerId,
+            created.Schedule.ScheduleId,
+            new CounterProposalRequest(new DateTimeOffset(now.AddDays(4)),
+                accepted.Schedule.Version)), default);
+        var firstAccepted = await handler.Handle(new AcceptScheduleCommand(fixture.ClientId,
+            created.Schedule.ScheduleId,
+            new ScheduleVersionRequest(firstRequest.Schedule.Version)), default);
+
+        var version = firstAccepted.Schedule.Version;
+        ScheduleMutationResult? lastRejection = null;
+        for (var requestNumber = 2; requestNumber <= 3; requestNumber++)
+        {
+            var requested = await handler.Handle(new CreateCounterProposalCommand(fixture.FreelancerId,
+                created.Schedule.ScheduleId,
+                new CounterProposalRequest(new DateTimeOffset(now.AddDays(3 + requestNumber)),
+                    version)), default);
+            lastRejection = await handler.Handle(new RejectScheduleCommand(fixture.ClientId,
+                created.Schedule.ScheduleId,
+                new ScheduleVersionRequest(requested.Schedule.Version)), default);
+            version = lastRejection.Schedule.Version;
+        }
+
+        Assert.NotNull(lastRejection);
+        Assert.Equal((int)ScheduleStatus.Scheduled, lastRejection.Schedule.Status);
+        Assert.Equal((int)ScheduleAgreementStatus.RescheduleRejected,
+            lastRejection.Schedule.AgreementStatus);
+        Assert.Equal(3, lastRejection.Schedule.RescheduleRequestCount);
+        Assert.Null(lastRejection.Schedule.CancellationReason);
     }
 
     [Fact]
