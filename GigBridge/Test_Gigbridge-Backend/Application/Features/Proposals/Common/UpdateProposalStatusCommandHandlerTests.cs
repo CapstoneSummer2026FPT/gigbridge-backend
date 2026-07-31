@@ -259,6 +259,29 @@ public class UpdateProposalStatusCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_SubmitDraftWithGeneratedWorkItem_PassesSubmissionGuard()
+    {
+        var (handler, proposal, userId) = CreateDraftSubmissionHandler();
+        var milestone = proposal.ProposalMilestonePlans.Single();
+        var workItem = proposal.ProposalWorkBreakdownItems.Single();
+        workItem.Title = milestone.Title;
+        workItem.Description = milestone.Deliverables;
+        workItem.Deliverables = milestone.Deliverables;
+        workItem.EstimatedDuration = milestone.EstimatedDuration;
+
+        var result = await handler.Handle(
+            new UpdateProposalStatusCommand(
+                proposal.ProposalsId,
+                userId,
+                new UpdateProposalStatusRequest { Status = 1 }),
+            CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Equal(1, proposal.Status);
+        Assert.Equal(milestone.ProposalMilestonePlansId, workItem.ProposalMilestonePlansId);
+    }
+
+    [Fact]
     public async Task Handle_WithdrawShortlistedProposal_ThrowsBadRequest()
     {
         var (handler, proposal, userId) = CreateDraftSubmissionHandler();
