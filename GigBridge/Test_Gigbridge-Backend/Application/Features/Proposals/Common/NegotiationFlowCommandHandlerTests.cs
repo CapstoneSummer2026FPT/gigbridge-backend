@@ -6,6 +6,7 @@ using Application.Features.Chat.Common.FinalOffers.Create.DTOs;
 using Application.Features.Chat.Common.FinalOffers.Respond.Commands;
 using Application.Features.Chat.Common.FinalOffers.Respond.DTOs;
 using Application.Features.Chat.Common.FinalOffers.Shared.Email;
+using Application.Features.Chat.Common.Messages.Send.DTOs;
 using Application.Features.Chat.Common.Negotiations.MilestonePlans.Commands;
 using Application.Features.Chat.Common.Negotiations.StartFromProposal.Commands;
 using Application.Features.Chat.Common.Negotiations.MilestonePlans.DTOs;
@@ -48,10 +49,11 @@ public class NegotiationFlowCommandHandlerTests
     {
         var fixture = new NegotiationFixture();
         fixture.AddConversationWithParticipants();
+        var realtimeNotifier = Substitute.For<IChatRealtimeNotifier>();
         var handler = new CreateFinalOfferCommandHandler(
             fixture.Context,
             new FixedDateTimeService(fixture.Now),
-            new NoopChatRealtimeNotifier());
+            realtimeNotifier);
 
         var offerId = await handler.Handle(
             new CreateFinalOfferCommand(
@@ -75,6 +77,33 @@ public class NegotiationFlowCommandHandlerTests
         Assert.Equal((int)MessageType.FinalOffer, message.MessageType);
         Assert.Equal(fixture.ClientUserId, message.SenderUserId);
         Assert.Contains(offerId.ToString(), message.Metadata);
+
+        await realtimeNotifier.Received(1).SendUsersEventAsync(
+            Arg.Is<IReadOnlyCollection<Guid>>(userIds =>
+                userIds.Count == 2 &&
+                userIds.Contains(fixture.ClientUserId) &&
+                userIds.Contains(fixture.FreelancerUserId)),
+            "ReceiveMessage",
+            Arg.Is<object>(payload => IsExpectedFinalOfferMessage(
+                payload,
+                message.MessagesId,
+                fixture.ConversationId)),
+            Arg.Any<CancellationToken>());
+
+        await realtimeNotifier.Received(1).SendUsersEventAsync(
+            Arg.Is<IReadOnlyCollection<Guid>>(userIds =>
+                userIds.Count == 2 &&
+                userIds.Contains(fixture.ClientUserId) &&
+                userIds.Contains(fixture.FreelancerUserId)),
+            "FinalOfferCreated",
+            Arg.Is<object>(payload =>
+                Equals(
+                    GetPropertyValue(payload, "conversationId"),
+                    fixture.ConversationId) &&
+                Equals(
+                    GetPropertyValue(payload, "offerId"),
+                    offerId)),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -349,6 +378,22 @@ public class NegotiationFlowCommandHandlerTests
         Assert.All(fixture.Milestones.Entities, milestone => Assert.False(string.IsNullOrWhiteSpace(milestone.AcceptanceCriteria)));
         Assert.Equal(2, fixture.Milestones.Entities.Sum(milestone => milestone.WorkItems.Count));
         Assert.Empty(fixture.Escrows.Entities);
+    }
+
+    private static object? GetPropertyValue(object instance, string propertyName)
+    {
+        return instance.GetType().GetProperty(propertyName)?.GetValue(instance);
+    }
+
+    private static bool IsExpectedFinalOfferMessage(
+        object payload,
+        Guid messageId,
+        Guid conversationId)
+    {
+        return payload is MessageResponse response &&
+               response.MessageId == messageId &&
+               response.ConversationId == conversationId &&
+               response.MessageType == (int)MessageType.FinalOffer;
     }
 
     private sealed class NegotiationFixture

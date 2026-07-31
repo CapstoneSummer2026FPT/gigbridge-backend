@@ -46,6 +46,102 @@ public class ContractWorkflowTests
         Assert.Contains("cannot exceed contract total budget", exception.Message);
         Assert.Empty(fixture.Milestones.Entities);
     }
+
+    [Fact]
+    public async Task UpdateContractDetails_ReusesPersistedMilestoneAndWorkItemIds()
+    {
+        var options = new DbContextOptionsBuilder<GigbridgeDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        await using var context = new GigbridgeDbContext(options);
+        var createdAt = new DateTime(2026, 7, 30, 12, 0, 0, DateTimeKind.Utc);
+        var now = createdAt.AddDays(1);
+        var clientUserId = Guid.NewGuid();
+        var clientProfileId = Guid.NewGuid();
+        var contractId = Guid.NewGuid();
+        var milestoneId = Guid.NewGuid();
+        var workItemId = Guid.NewGuid();
+
+        context.Set<ClientProfile>().Add(new ClientProfile
+        {
+            ClientProfilesId = clientProfileId,
+            UserId = clientUserId
+        });
+        context.Set<Contract>().Add(new Contract
+        {
+            ContractsId = contractId,
+            ClientProfilesId = clientProfileId,
+            Title = "Editable contract",
+            TotalBudget = 100m,
+            Status = (int)ContractStatus.PendingContractDetails,
+            RevisionNumber = 0,
+            CreatedAt = createdAt
+        });
+        context.Set<Milestone>().Add(new Milestone
+        {
+            MilestonesId = milestoneId,
+            ContractsId = contractId,
+            Title = "Original milestone",
+            Amount = 100m,
+            SortOrder = 0,
+            Status = (int)MilestoneStatus.Pending,
+            CreatedAt = createdAt
+        });
+        context.Set<ContractWorkItem>().Add(new ContractWorkItem
+        {
+            ContractWorkItemId = workItemId,
+            MilestonesId = milestoneId,
+            Title = "Original work item",
+            Description = "Original description",
+            OrderIndex = 0,
+            Status = (int)ContractWorkItemStatus.Todo,
+            CreatedAt = createdAt
+        });
+        await context.SaveChangesAsync();
+        context.ChangeTracker.Clear();
+
+        var handler = new UpdateContractDetailsCommandHandler(
+            context,
+            new FixedDateTimeService(now),
+            new NoopChatRealtimeNotifier());
+        var request = new UpdateContractDetailsRequest(
+        [
+            new ContractMilestoneRequest(
+                milestoneId,
+                "Updated milestone",
+                100m,
+                DateOnly.FromDateTime(now.AddDays(7)),
+                0,
+                WorkItems:
+                [
+                    new ContractWorkItemRequest(
+                        workItemId,
+                        "Updated work item",
+                        "Updated description",
+                        "Updated deliverable",
+                        "1 week",
+                        0)
+                ])
+        ]);
+
+        await handler.Handle(
+            new UpdateContractDetailsCommand(contractId, clientUserId, request),
+            CancellationToken.None);
+        context.ChangeTracker.Clear();
+
+        var persistedMilestone = await context.Set<Milestone>()
+            .Include(milestone => milestone.WorkItems)
+            .SingleAsync(milestone => milestone.ContractsId == contractId);
+        var persistedWorkItem = Assert.Single(persistedMilestone.WorkItems);
+        Assert.Equal(milestoneId, persistedMilestone.MilestonesId);
+        Assert.Equal("Updated milestone", persistedMilestone.Title);
+        Assert.Equal(createdAt, persistedMilestone.CreatedAt);
+        Assert.Equal(workItemId, persistedWorkItem.ContractWorkItemId);
+        Assert.Equal("Updated work item", persistedWorkItem.Title);
+        Assert.Equal("Updated description", persistedWorkItem.Description);
+        Assert.Equal(createdAt, persistedWorkItem.CreatedAt);
+        Assert.Equal(1, (await context.Set<Contract>().SingleAsync()).RevisionNumber);
+    }
     
     [Fact]
     public async Task SubmitAndFreelancerConfirm_CreatesEsignDocumentAndPendingEscrow()

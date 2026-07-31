@@ -8,6 +8,8 @@ public class ReviewDto
 
     public Guid JobPostId { get; set; }
 
+    public string ProjectTitle { get; set; } = string.Empty;
+
     public Guid ReviewerId { get; set; }
 
     public string? ReviewerName { get; set; }

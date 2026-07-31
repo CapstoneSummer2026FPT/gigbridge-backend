@@ -15,15 +15,18 @@ public class CreateReviewCommandHandler : IRequestHandler<CreateReviewCommand, R
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
     private readonly IUserEloService _userEloService;
+    private readonly INotificationService _notificationService;
 
     public CreateReviewCommandHandler(
         IApplicationDbContext context,
         IDateTimeService dateTimeService,
-        IUserEloService userEloService)
+        IUserEloService userEloService,
+        INotificationService notificationService)
     {
         _context = context;
         _dateTimeService = dateTimeService;
         _userEloService = userEloService;
+        _notificationService = notificationService;
     }
 
     public async Task<ReviewDto> Handle(CreateReviewCommand command, CancellationToken cancellationToken)
@@ -60,20 +63,21 @@ public class CreateReviewCommandHandler : IRequestHandler<CreateReviewCommand, R
         }
 
         var now = _dateTimeService.UtcNow;
+        var rating = CalculateOverallRating(command.Request);
         var review = new Review
         {
             ReviewsId = Guid.NewGuid(),
             ContractsId = contract.ContractsId,
             ReviewerId = command.UserId,
             RevieweeId = revieweeId,
-            Rating = command.Request.Rating,
+            Rating = rating,
             Comment = string.IsNullOrWhiteSpace(command.Request.Comment)
                 ? null
                 : command.Request.Comment.Trim(),
             CommunicationRating = command.Request.CommunicationRating,
             QualityRating = command.Request.QualityRating,
             TimelinessRating = command.Request.TimelinessRating,
-            IsVisible = !command.Request.IsAnonymous,
+            IsVisible = true,
             CreatedAt = now
         };
 
@@ -86,12 +90,31 @@ public class CreateReviewCommandHandler : IRequestHandler<CreateReviewCommand, R
 
         await _context.SaveChangesAsync(cancellationToken);
 
+        await _notificationService.CreateNotificationAsync(
+            revieweeId,
+            NotificationType.ReviewReceived,
+            "You received a new project review",
+            $"{review.Reviewer.FullName} reviewed your work on {contract.Title}.",
+            contract.ContractsId,
+            nameof(Contract),
+            cancellationToken);
+
         review.Contracts = contract;
         review.Reviewer = command.UserId == contract.ClientProfiles.UserId
             ? contract.ClientProfiles.User
             : contract.FreelancerProfiles!.User;
 
         return ReviewProjection.ToDto(review);
+    }
+
+    private static int CalculateOverallRating(CreateReviewRequest request)
+    {
+        var average = (
+            request.CommunicationRating!.Value +
+            request.QualityRating!.Value +
+            request.TimelinessRating!.Value) / 3m;
+
+        return (int)Math.Round(average, MidpointRounding.AwayFromZero);
     }
 
     private static Guid ResolveRevieweeId(Contract contract, Guid reviewerId)
