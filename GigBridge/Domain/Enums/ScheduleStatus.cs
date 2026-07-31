@@ -15,7 +15,9 @@ public enum ScheduleAgreementStatus
     AwaitingFreelancer = 1,
     FreelancerRejectedAwaitingCounterproposal = 2,
     AwaitingClient = 3,
-    ClientRejected = 4
+    ClientRejected = 4,
+    AwaitingClientReschedule = 5,
+    RescheduleRejected = 6
 }
 
 public enum ScheduleEventType

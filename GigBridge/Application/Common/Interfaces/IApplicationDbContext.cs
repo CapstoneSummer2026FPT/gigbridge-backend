@@ -11,5 +11,6 @@ public interface IApplicationDbContext
 
 public interface IApplicationDbContextTransaction : IAsyncDisposable
 {
+    Task AcquireTransactionLockAsync(long lockKey, CancellationToken cancellationToken);
     Task CommitAsync(CancellationToken cancellationToken);
 }

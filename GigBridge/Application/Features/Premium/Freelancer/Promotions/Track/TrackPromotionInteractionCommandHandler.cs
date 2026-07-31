@@ -39,6 +39,8 @@ public sealed class TrackPromotionInteractionCommandHandler(IApplicationDbContex
     private async Task CompleteAtTargetAsync(Guid id, DateTime now, CancellationToken ct)
     {
         await using var transaction = await context.BeginTransactionAsync(ct);
+        await transaction.AcquireTransactionLockAsync(
+            PromotionPolicy.QueueTransactionLockKey, ct);
         var completed = await context.Set<FreelancerProfilePromotion>()
             .Where(x => x.FreelancerProfilePromotionsId == id && x.Status == PromotionStatus.Active && x.ClickCount >= x.TargetClickCount)
             .ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, PromotionStatus.Expired)
@@ -61,6 +63,7 @@ public sealed class TrackPromotionInteractionCommandHandler(IApplicationDbContex
                 foreach (var item in remaining) { item.StartTime = cursor; item.EndTime = cursor.AddDays(item.DurationDays); cursor = item.EndTime; }
                 await context.SaveChangesAsync(ct);
             }
+            await PromotionPolicy.RecalculateQueuePositionsAsync(context, now, ct);
         }
         await transaction.CommitAsync(ct);
         await cache.RemoveAsync(PromotionPolicy.FeedCacheKey, ct);

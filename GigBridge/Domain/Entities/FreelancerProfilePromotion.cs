@@ -12,6 +12,7 @@ public sealed class FreelancerProfilePromotion
     public int DurationDays { get; set; }
     public decimal TokenCost { get; set; }
     public decimal BoostWeight { get; set; }
+    public int QueuePosition { get; set; }
     public int TargetClickCount { get; set; }
     public string PhotoUrl { get; set; } = null!;
     public string DisplayName { get; set; } = null!;

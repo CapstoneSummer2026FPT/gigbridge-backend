@@ -11,14 +11,14 @@ public sealed record PromotionDto(
     string? JobTitle, bool ShowJobTitle, int ImpressionCount, int ClickCount,
     int TargetClickCount, int QueuePosition)
 {
-    public static PromotionDto FromEntity(FreelancerProfilePromotion promotion, int queuePosition = 0) =>
+    public static PromotionDto FromEntity(FreelancerProfilePromotion promotion) =>
         new(promotion.FreelancerProfilePromotionsId, promotion.PackageId,
             promotion.PackageName, promotion.TokenCost, promotion.BoostWeight,
             promotion.StartTime, promotion.EndTime, promotion.Status,
             promotion.WalletTransactionId, promotion.CreatedAt, promotion.PhotoUrl,
             promotion.DisplayName, promotion.Quote, promotion.ShowQuote,
             promotion.JobTitle, promotion.ShowJobTitle, promotion.ImpressionCount,
-            promotion.ClickCount, promotion.TargetClickCount, queuePosition);
+            promotion.ClickCount, promotion.TargetClickCount, promotion.QueuePosition);
 }
 
 public sealed record PromotionPolicyDto(
@@ -35,7 +35,10 @@ public sealed record PromotionDraftDto(
 public sealed record PromotionManagerDto(
     PromotionDto? Active, IReadOnlyList<PromotionDto> Queued,
     IReadOnlyList<PromotionDto> History, PromotionPolicyDto Policy,
-    decimal AvailableTokens);
+    decimal AvailableTokens, IReadOnlyList<PromotionQueueEntryDto> Queue);
+
+public sealed record PromotionQueueEntryDto(
+    int QueuePosition, decimal BoostWeight, bool IsCurrent);
 
 public sealed record PublicPromotionCardDto(
     Guid Id, Guid FreelancerUserId, string PhotoUrl, string DisplayName,

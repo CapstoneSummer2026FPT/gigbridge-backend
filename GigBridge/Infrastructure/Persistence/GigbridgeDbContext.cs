@@ -1776,6 +1776,9 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.Property(e => e.Status).HasDefaultValue(ScheduleStatus.Scheduled);
             entity.Property(e => e.AgreementStatus).HasDefaultValue(ScheduleAgreementStatus.Accepted);
             entity.Property(e => e.EditCount).HasDefaultValue(0);
+            entity.Property(e => e.RescheduleRequestCount).HasDefaultValue(0);
+            entity.Property(e => e.RescheduleRejectionCount).HasDefaultValue(0);
+            entity.Property(e => e.ProposedTimeZoneId).HasMaxLength(64);
             entity.Property(e => e.Version).HasDefaultValue(1).IsConcurrencyToken();
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
 
@@ -1946,8 +1949,13 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.Property(e => e.JobTitle).HasMaxLength(160);
             entity.Property(e => e.TokenCost).HasPrecision(18, 4);
             entity.Property(e => e.BoostWeight).HasPrecision(10, 4);
+            entity.Property(e => e.QueuePosition).HasDefaultValue(0);
             entity.HasIndex(e => new { e.FreelancerProfileId, e.Status, e.StartTime },
                 "IX_FreelancerProfilePromotions_Queue");
+            entity.HasIndex(e => new { e.Status, e.QueuePosition },
+                "IX_FreelancerProfilePromotions_Position")
+                .IsUnique()
+                .HasFilter("\"QueuePosition\" > 0");
             entity.HasIndex(e => e.EndTime, "IX_FreelancerProfilePromotions_End");
             entity.HasIndex(e => e.WalletTransactionId).IsUnique();
             entity.HasIndex(e => e.FreelancerProfileId,
