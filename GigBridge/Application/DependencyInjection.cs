@@ -5,6 +5,7 @@ using Application.Common.Mappings;
 using Application.Common.Options;
 using Application.Common.Services;
 using Application.Features.Chat.Common.Schedules;
+using Application.Features.Reviews.Common.Moderation;
 using FluentValidation;
 using MediatR;
 using Microsoft.Extensions.Configuration;
@@ -59,6 +60,7 @@ public static class DependencyInjection
         services.AddScoped<ScheduleWorkflowService>();
         services.AddScoped<IUserAccountStatusService, UserAccountStatusService>();
         services.AddScoped<IUserEloService, UserEloService>();
+        services.AddScoped<IReviewModerationService, ReviewModerationService>();
         services.AddScoped<IPremiumAccessService, PremiumAccessService>();
         services.AddScoped<IProposalQuestionTimerService, ProposalQuestionTimerService>();
         services.AddScoped<IProposalInterviewReviewService, ProposalInterviewReviewService>();

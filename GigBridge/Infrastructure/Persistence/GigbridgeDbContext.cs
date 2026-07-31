@@ -2299,6 +2299,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
             entity.HasIndex(e => e.ReviewerId, "IX_Reviews_ReviewerId");
 
+            entity.HasIndex(e => e.ModerationStatus, "IX_Reviews_ModerationStatus");
+
             entity.HasIndex(e => new { e.ContractsId, e.ReviewerId }, "Reviews_cont_ContractsId_usr_ReviewerId_key").IsUnique();
 
             entity.Property(e => e.ReviewsId)
@@ -2307,6 +2309,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.Property(e => e.ContractsId).HasColumnName("ContractsId");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.IsVisible).HasDefaultValue(true);
+            entity.Property(e => e.ModerationStatus).HasDefaultValue(0);
+            entity.Property(e => e.ModerationNote).HasMaxLength(1000);
             entity.Property(e => e.RevieweeId).HasColumnName("RevieweeId");
             entity.Property(e => e.ReviewerId).HasColumnName("ReviewerId");
 
@@ -2324,6 +2328,11 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
                 .HasForeignKey(d => d.ReviewerId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("Reviews_usr_ReviewerId_fkey");
+
+            entity.HasOne<User>().WithMany()
+                .HasForeignKey(d => d.ModeratedByAdminId)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("Reviews_usr_ModeratedByAdminId_fkey");
         });
 
         modelBuilder.Entity<SavedFreelancer>(entity =>
@@ -2469,7 +2478,7 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.Property(e => e.IdempotencyKey).HasMaxLength(200);
             entity.Property(e => e.Metadata).HasColumnType("jsonb");
             entity.Property(e => e.PointsAfter).HasDefaultValue(0);
-            entity.Property(e => e.Reason).HasComment("Enum UserEloPointReason: 0=InitialGrant, 1=InactivityPenalty, 2=ReturnBonus, 3=JobCompletion, 4=ReviewRating, 5=LegacyIntegrityPenalty");
+            entity.Property(e => e.Reason).HasComment("Enum UserEloPointReason: 0=InitialGrant, 1=InactivityPenalty, 2=ReturnBonus, 3=JobCompletion, 4=ReviewRating, 5=LegacyIntegrityPenalty, 6=ReviewModeration");
             entity.Property(e => e.SourceEntityType).HasMaxLength(50);
             entity.Property(e => e.UserId).HasColumnName("UserId");
 

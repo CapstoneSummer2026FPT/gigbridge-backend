@@ -12,6 +12,7 @@ using Application.Features.Contracts.Milestones.Freelancer.RequestUnlock.Command
 using Application.Features.Contracts.Milestones.Freelancer.Submit.Commands;
 using Domain.Entities;
 using Domain.Enums;
+using NSubstitute;
 using Test_Gigbridge_Backend.TestSupport;
 
 namespace Test_Gigbridge_Backend.Application.Features.Contracts.Common;
@@ -230,10 +231,12 @@ public class MilestoneWorkflowTests
     {
         var fixture = new MilestoneWorkflowFixture();
         var realtime = new CapturingChatRealtimeNotifier();
+        var notifications = Substitute.For<INotificationService>();
         var endProjectHandler = new EndProjectCommandHandler(
             fixture.Context,
             new FixedDateTimeService(fixture.Now.AddMinutes(6)),
-            realtime);
+            realtime,
+            notifications);
         var claimHandler = new ClaimFinalPayoutCommandHandler(
             fixture.Context,
             new FixedDateTimeService(fixture.Now.AddMinutes(7)),
@@ -274,6 +277,14 @@ public class MilestoneWorkflowTests
         Assert.Contains(realtime.UsersEvents, evt => evt.EventName == "ContractCompleted");
         Assert.DoesNotContain(realtime.ConversationEvents, evt => evt.EventName == "FinalPayoutClaimed");
         Assert.DoesNotContain(realtime.UsersEvents, evt => evt.EventName == "FinalPayoutClaimed");
+        await notifications.Received(1).CreateNotificationAsync(
+            fixture.FreelancerUserId,
+            NotificationType.ReviewRequested,
+            Arg.Any<string>(),
+            Arg.Any<string>(),
+            fixture.ContractId,
+            nameof(Contract),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -284,7 +295,8 @@ public class MilestoneWorkflowTests
         var handler = new EndProjectCommandHandler(
             fixture.Context,
             new FixedDateTimeService(fixture.Now.AddMinutes(5)),
-            realtime);
+            realtime,
+            new NoopNotificationService());
         var claimHandler = new ClaimFinalPayoutCommandHandler(
             fixture.Context,
             new FixedDateTimeService(fixture.Now.AddMinutes(6)),
@@ -331,7 +343,8 @@ public class MilestoneWorkflowTests
         var handler = new EndProjectCommandHandler(
             fixture.Context,
             new FixedDateTimeService(fixture.Now.AddMinutes(5)),
-            new CapturingChatRealtimeNotifier());
+            new CapturingChatRealtimeNotifier(),
+            new NoopNotificationService());
 
         fixture.ApproveMilestone(fixture.FirstMilestone);
         fixture.ApproveMilestone(fixture.SecondMilestone);
@@ -359,7 +372,8 @@ public class MilestoneWorkflowTests
         var endHandler = new EndProjectCommandHandler(
             fixture.Context,
             new FixedDateTimeService(fixture.Now.AddMinutes(5)),
-            realtime);
+            realtime,
+            new NoopNotificationService());
         var claimHandler = new ClaimFinalPayoutCommandHandler(
             fixture.Context,
             new FixedDateTimeService(fixture.Now.AddMinutes(6)),
@@ -390,7 +404,8 @@ public class MilestoneWorkflowTests
         var handler = new EndProjectCommandHandler(
             fixture.Context,
             new FixedDateTimeService(fixture.Now.AddMinutes(5)),
-            new CapturingChatRealtimeNotifier());
+            new CapturingChatRealtimeNotifier(),
+            new NoopNotificationService());
         fixture.ApproveMilestone(fixture.FirstMilestone);
         fixture.ApproveMilestone(fixture.SecondMilestone);
         fixture.ApproveMilestone(fixture.ThirdMilestone);

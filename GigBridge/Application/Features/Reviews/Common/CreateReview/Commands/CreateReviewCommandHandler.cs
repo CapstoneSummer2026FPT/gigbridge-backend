@@ -90,6 +90,11 @@ public class CreateReviewCommandHandler : IRequestHandler<CreateReviewCommand, R
 
         await _context.SaveChangesAsync(cancellationToken);
 
+        review.Contracts = contract;
+        review.Reviewer = command.UserId == contract.ClientProfiles.UserId
+            ? contract.ClientProfiles.User
+            : contract.FreelancerProfiles!.User;
+
         await _notificationService.CreateNotificationAsync(
             revieweeId,
             NotificationType.ReviewReceived,
@@ -98,11 +103,6 @@ public class CreateReviewCommandHandler : IRequestHandler<CreateReviewCommand, R
             contract.ContractsId,
             nameof(Contract),
             cancellationToken);
-
-        review.Contracts = contract;
-        review.Reviewer = command.UserId == contract.ClientProfiles.UserId
-            ? contract.ClientProfiles.User
-            : contract.FreelancerProfiles!.User;
 
         return ReviewProjection.ToDto(review);
     }

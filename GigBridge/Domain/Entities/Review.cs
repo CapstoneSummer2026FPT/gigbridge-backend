@@ -25,6 +25,14 @@ public partial class Review
 
     public bool? IsVisible { get; set; }
 
+    public int ModerationStatus { get; set; }
+
+    public Guid? ModeratedByAdminId { get; set; }
+
+    public DateTime? ModeratedAt { get; set; }
+
+    public string? ModerationNote { get; set; }
+
     public DateTime CreatedAt { get; set; }
 
     public DateTime? UpdatedAt { get; set; }

@@ -4358,6 +4358,21 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(true);
 
+                    b.Property<DateTime?>("ModeratedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ModeratedByAdminId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ModerationNote")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<int>("ModerationStatus")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
                     b.Property<int?>("QualityRating")
                         .HasColumnType("integer");
 
@@ -4388,6 +4403,10 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "RevieweeId", "IsVisible" }, "IX_Reviews_RevieweeId_IsVisible");
 
                     b.HasIndex(new[] { "ReviewerId" }, "IX_Reviews_ReviewerId");
+
+                    b.HasIndex(new[] { "ModeratedByAdminId" }, "IX_Reviews_ModeratedByAdminId");
+
+                    b.HasIndex(new[] { "ModerationStatus" }, "IX_Reviews_ModerationStatus");
 
                     b.HasIndex(new[] { "ContractsId", "ReviewerId" }, "Reviews_cont_ContractsId_usr_ReviewerId_key")
                         .IsUnique();
@@ -5054,7 +5073,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.Property<int>("Reason")
                         .HasColumnType("integer")
-                        .HasComment("Enum UserEloPointReason: 0=InitialGrant, 1=InactivityPenalty, 2=ReturnBonus, 3=JobCompletion, 4=ReviewRating, 5=LegacyIntegrityPenalty");
+                        .HasComment("Enum UserEloPointReason: 0=InitialGrant, 1=InactivityPenalty, 2=ReturnBonus, 3=JobCompletion, 4=ReviewRating, 5=LegacyIntegrityPenalty, 6=ReviewModeration");
 
                     b.Property<Guid?>("SourceEntityId")
                         .HasColumnType("uuid");
@@ -6819,6 +6838,12 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.Review", b =>
                 {
+                    b.HasOne("Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("ModeratedByAdminId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("Reviews_usr_ModeratedByAdminId_fkey");
+
                     b.HasOne("Domain.Entities.Contract", "Contracts")
                         .WithMany("Reviews")
                         .HasForeignKey("ContractsId")

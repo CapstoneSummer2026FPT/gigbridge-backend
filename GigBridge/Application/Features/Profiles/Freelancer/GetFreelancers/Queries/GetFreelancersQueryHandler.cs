@@ -33,7 +33,9 @@ public sealed class GetFreelancersQueryHandler
         var pageSize = Math.Clamp(request.PageSize, 1, 50);
         var now = _clock.UtcNow;
 
-        var reviews = _context.Set<Review>().AsNoTracking();
+        var reviews = _context.Set<Review>()
+            .AsNoTracking()
+            .Where(review => review.ModerationStatus == (int)ReviewModerationStatus.Active);
         var promotions = _context.Set<FreelancerProfilePromotion>().AsNoTracking();
         var subscriptions = _context.Set<Subscription>().AsNoTracking();
 

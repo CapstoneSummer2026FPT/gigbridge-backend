@@ -9,4 +9,11 @@ public interface IUserEloService
     Task ApplyLoginActivityAsync(User user, CancellationToken cancellationToken);
 
     Task ApplyReviewScoreAsync(Guid reviewId, Guid revieweeId, int rating, CancellationToken cancellationToken);
+
+    Task<int> ApplyReviewModerationAsync(
+        Guid reviewId,
+        Guid revieweeId,
+        Guid operationId,
+        bool hide,
+        CancellationToken cancellationToken);
 }

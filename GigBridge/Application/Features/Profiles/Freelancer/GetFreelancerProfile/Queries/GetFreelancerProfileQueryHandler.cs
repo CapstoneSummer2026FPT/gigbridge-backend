@@ -9,6 +9,7 @@ using Application.Features.Profiles.FreelancerProfile.GetFreelancerProfile.DTOs;
 using Application.Features.Profiles.FreelancerProfile.Common.DTOs;
 using Application.Features.Premium.Common;
 using Domain.Entities;
+using Domain.Enums;
 using Domain.Services;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -56,7 +57,9 @@ public class GetFreelancerProfileQueryHandler
         // Get average review rating
         var avgRating = await _context.Set<Review>()
             .AsNoTracking()
-            .Where(r => r.RevieweeId == request.UserId)
+            .Where(r =>
+                r.RevieweeId == request.UserId &&
+                r.ModerationStatus == (int)ReviewModerationStatus.Active)
             .AverageAsync(r => (double?)r.Rating, cancellationToken) ?? 0.0;
 
         var premium = await _premiumAccessService.GetPremiumBenefitsAsync(request.UserId, cancellationToken);

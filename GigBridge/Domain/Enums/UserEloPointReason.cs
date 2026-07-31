@@ -10,5 +10,6 @@ public enum UserEloPointReason
 
     // Persisted ledger value from the retired integrity-monitoring workflow.
     // Never reuse or renumber this value.
-    LegacyIntegrityPenalty = 5
+    LegacyIntegrityPenalty = 5,
+    ReviewModeration = 6
 }

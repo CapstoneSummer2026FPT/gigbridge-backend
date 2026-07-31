@@ -1,6 +1,7 @@
 using Application.Common.Interfaces;
 using Application.Features.Reviews.Common.DTOs;
 using Domain.Entities;
+using Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -21,7 +22,9 @@ public class GetReviewStatsQueryHandler : IRequestHandler<GetReviewStatsQuery, R
     {
         var ratings = await _context.Set<Review>()
             .AsNoTracking()
-            .Where(review => review.RevieweeId == request.UserId)
+            .Where(review =>
+                review.RevieweeId == request.UserId &&
+                review.ModerationStatus == (int)ReviewModerationStatus.Active)
             .Select(review => review.Rating)
             .ToListAsync(cancellationToken);
 

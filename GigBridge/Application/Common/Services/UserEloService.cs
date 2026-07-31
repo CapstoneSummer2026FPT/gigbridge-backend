@@ -155,6 +155,72 @@ public class UserEloService : IUserEloService
             cancellationToken);
     }
 
+    public async Task<int> ApplyReviewModerationAsync(
+        Guid reviewId,
+        Guid revieweeId,
+        Guid operationId,
+        bool hide,
+        CancellationToken cancellationToken)
+    {
+        var reviewee = await _context.Set<User>()
+            .FirstOrDefaultAsync(user => user.UserId == revieweeId, cancellationToken)
+            ?? throw new NotFoundException("Reviewee does not exist.");
+
+        if (!IsEligibleRole(reviewee.Role))
+        {
+            return 0;
+        }
+
+        var transactions = _context.Set<UserEloPointTransaction>();
+        int requestedDelta;
+        if (hide)
+        {
+            var originalDelta = await transactions
+                .Where(transaction =>
+                    transaction.UserId == revieweeId &&
+                    transaction.SourceEntityType == ReviewSource &&
+                    transaction.SourceEntityId == reviewId &&
+                    (transaction.Reason == (int)UserEloPointReason.JobCompletion ||
+                     transaction.Reason == (int)UserEloPointReason.ReviewRating))
+                .SumAsync(transaction => transaction.PointsDelta, cancellationToken);
+            requestedDelta = -originalDelta;
+        }
+        else
+        {
+            var moderationDelta = await transactions
+                .Where(transaction =>
+                    transaction.UserId == revieweeId &&
+                    transaction.SourceEntityType == ReviewSource &&
+                    transaction.SourceEntityId == reviewId &&
+                    transaction.Reason == (int)UserEloPointReason.ReviewModeration)
+                .SumAsync(transaction => transaction.PointsDelta, cancellationToken);
+            requestedDelta = -moderationDelta;
+        }
+
+        var now = _dateTimeService.UtcNow;
+        var score = await EnsureScoreAsync(revieweeId, now, cancellationToken);
+        var pointsBefore = score.CurrentPoints;
+        var action = hide ? "hide" : "restore";
+        await ApplyDeltaAsync(
+            score,
+            requestedDelta,
+            UserEloPointReason.ReviewModeration,
+            ReviewSource,
+            reviewId,
+            $"review-moderation:{reviewId}:{action}:{operationId}",
+            new
+            {
+                reviewId,
+                action,
+                requestedDelta,
+                operationId
+            },
+            now,
+            cancellationToken);
+
+        return score.CurrentPoints - pointsBefore;
+    }
+
     private async Task<UserEloScore> EnsureScoreAsync(Guid userId, DateTime now, CancellationToken cancellationToken)
     {
         var scores = _context.Set<UserEloScore>();
