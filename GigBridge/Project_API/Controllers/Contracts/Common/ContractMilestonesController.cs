@@ -13,6 +13,7 @@ using Application.Features.Contracts.Milestones.Common.EarlyStartRequests.Querie
 using Application.Features.Contracts.Milestones.Freelancer.RequestUnlock.Commands;
 using Application.Features.Contracts.Milestones.Freelancer.RequestUnlock.DTOs;
 using Application.Features.Contracts.Milestones.Freelancer.Submit.Commands;
+using Application.Features.Contracts.Milestones.Freelancer.Withdraw.Commands;
 using Application.Features.Contracts.WorkItems.Freelancer.Update.Commands;
 using Application.Features.Contracts.WorkItems.Freelancer.Update.DTOs;
 using Microsoft.AspNetCore.Authorization;
@@ -199,6 +200,20 @@ public sealed class ContractMilestonesController : BaseApiController
         var result = await Mediator.Send(new RequestMilestoneRevisionCommand(contractId, milestoneId, userId, request));
 
         return Ok(ApiResponse<ContractMilestoneResponse>.Ok(result, "Milestone revision requested"));
+    }
+
+    [HttpPost("{milestoneId:guid}/withdraw")]
+    [Authorize(Roles = "Freelancer")]
+    public async Task<IActionResult> Withdraw(Guid contractId, Guid milestoneId)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return InvalidTokenResponse();
+        }
+
+        var result = await Mediator.Send(new WithdrawMilestoneCommand(contractId, milestoneId, userId));
+
+        return Ok(ApiResponse<WithdrawMilestoneResponse>.Ok(result, "Milestone early withdrawal released"));
     }
 
 }
