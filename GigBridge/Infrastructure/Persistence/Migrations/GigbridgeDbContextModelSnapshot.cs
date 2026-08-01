@@ -1563,7 +1563,10 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex("DisputesId", "MilestonesId")
                         .IsUnique();
 
-                    b.ToTable("DisputeMilestoneDecisions");
+                    b.ToTable("DisputeMilestoneDecisions", t =>
+                        {
+                            t.HasCheckConstraint("CK_DisputeMilestoneDecisions_AllocationAmounts_NonNegative", "\"AdditionalReleaseAmount\" >= 0 AND \"RefundAmount\" >= 0 AND \"PenaltyAmount\" >= 0");
+                        });
                 });
 
             modelBuilder.Entity("Domain.Entities.DisputePenalty", b =>
@@ -1612,8 +1615,9 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("ViolatingUserId")
                         .HasColumnType("uuid");
 
-                    b.Property<Guid?>("WalletTransactionId")
-                        .HasColumnType("uuid");
+                    b.Property<Guid?>("ClientDebitWalletTransactionId")
+                        .HasColumnType("uuid")
+                        .HasComment("References the client-side wallet transaction that debits held escrow tokens; no destination wallet transaction exists.");
 
                     b.HasKey("DisputePenaltyId");
 
@@ -1627,12 +1631,15 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ViolatingUserId");
 
-                    b.HasIndex("WalletTransactionId");
+                    b.HasIndex("ClientDebitWalletTransactionId");
 
                     b.HasIndex("DisputeId", "MilestoneId")
                         .IsUnique();
 
-                    b.ToTable("DisputePenalties");
+                    b.ToTable("DisputePenalties", t =>
+                        {
+                            t.HasCheckConstraint("CK_DisputePenalties_Amount_Positive", "\"Amount\" > 0");
+                        });
                 });
 
             modelBuilder.Entity("Domain.Entities.EscrowTransaction", b =>
@@ -5321,7 +5328,10 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex("UserId", "DisputeId")
                         .IsUnique();
 
-                    b.ToTable("UserViolations");
+                    b.ToTable("UserViolations", t =>
+                        {
+                            t.HasCheckConstraint("CK_UserViolations_ViolationNumber_Positive", "\"ViolationNumber\" > 0");
+                        });
                 });
 
             modelBuilder.Entity("Domain.Entities.UserWallet", b =>
@@ -6213,13 +6223,13 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasOne("Domain.Entities.Dispute", "Dispute")
                         .WithMany("Penalties")
                         .HasForeignKey("DisputeId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.HasOne("Domain.Entities.EscrowTransaction", "EscrowTransaction")
                         .WithMany()
                         .HasForeignKey("EscrowTransactionId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("Domain.Entities.Milestone", "Milestone")
                         .WithMany()
@@ -6232,10 +6242,12 @@ namespace Infrastructure.Persistence.Migrations
                         .HasForeignKey("ViolatingUserId")
                         .OnDelete(DeleteBehavior.SetNull);
 
-                    b.HasOne("Domain.Entities.WalletTransaction", "WalletTransaction")
+                    b.HasOne("Domain.Entities.WalletTransaction", "ClientDebitWalletTransaction")
                         .WithMany()
-                        .HasForeignKey("WalletTransactionId")
-                        .OnDelete(DeleteBehavior.SetNull);
+                        .HasForeignKey("ClientDebitWalletTransactionId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("ClientDebitWalletTransaction");
 
                     b.Navigation("Contract");
 
@@ -6249,7 +6261,6 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.Navigation("ViolatingUser");
 
-                    b.Navigation("WalletTransaction");
                 });
 
             modelBuilder.Entity("Domain.Entities.EscrowTransaction", b =>
@@ -7283,7 +7294,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasOne("Domain.Entities.Dispute", "Dispute")
                         .WithMany("UserViolations")
                         .HasForeignKey("DisputeId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.HasOne("Domain.Entities.Milestone", "Milestone")

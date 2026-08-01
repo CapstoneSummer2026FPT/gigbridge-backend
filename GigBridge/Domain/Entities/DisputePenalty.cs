@@ -11,7 +11,11 @@ public sealed class DisputePenalty
     public string Reason { get; set; } = null!;
     public string? ResolutionNote { get; set; }
     public Guid CreatedByAdminId { get; set; }
-    public Guid? WalletTransactionId { get; set; }
+    /// <summary>
+    /// The client-side DisputePenalty wallet transaction that debits held escrow tokens.
+    /// A penalty has no destination wallet transaction.
+    /// </summary>
+    public Guid? ClientDebitWalletTransactionId { get; set; }
     public Guid? EscrowTransactionId { get; set; }
     public int Status { get; set; }
     public DateTime CreatedAt { get; set; }
@@ -21,6 +25,6 @@ public sealed class DisputePenalty
     public Milestone Milestone { get; set; } = null!;
     public User? ViolatingUser { get; set; }
     public User CreatedByAdmin { get; set; } = null!;
-    public WalletTransaction? WalletTransaction { get; set; }
+    public WalletTransaction? ClientDebitWalletTransaction { get; set; }
     public EscrowTransaction? EscrowTransaction { get; set; }
 }

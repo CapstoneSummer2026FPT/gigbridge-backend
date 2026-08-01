@@ -128,10 +128,13 @@ internal static class ContractEscrowWalletWorkflow
         return tokens;
     }
 
-    public static (WalletTransaction ClientDebit, WalletTransaction SystemCredit) Penalty(
+    /// <summary>
+    /// Retains a penalty for the platform by debiting only the client's held escrow balance.
+    /// No user wallet is credited and the returned transaction is the client debit ledger entry.
+    /// </summary>
+    public static WalletTransaction Penalty(
         IApplicationDbContext context,
         UserWallet clientWallet,
-        UserWallet systemWallet,
         Guid contractId,
         Guid escrowId,
         Guid milestoneId,
@@ -150,26 +153,20 @@ internal static class ContractEscrowWalletWorkflow
 
         clientWallet.HeldTokens -= tokens;
         clientWallet.UpdatedAt = now;
-        systemWallet.AvailableTokens += tokens;
-        systemWallet.UpdatedAt = now;
 
         var metadata = System.Text.Json.JsonSerializer.Serialize(new
         {
             disputeId,
             sourceUserId = clientWallet.UserId,
-            destinationUserId = systemWallet.UserId,
-            transfer = "DisputePenalty"
+            retainedByPlatform = true,
+            operation = "DisputePenaltyClientHeldDebit"
         });
         var debit = CreateTransaction(clientWallet, contractId, escrowId, milestoneId, tokens,
             amountVnd, WalletTransactionType.DisputePenalty, transactionCode,
             "AdminDisputeResolution", note, now);
-        var credit = CreateTransaction(systemWallet, contractId, escrowId, milestoneId, tokens,
-            amountVnd, WalletTransactionType.DisputePenalty, transactionCode,
-            "AdminDisputeResolution", note, now);
         debit.Metadata = metadata;
-        credit.Metadata = metadata;
-        context.Set<WalletTransaction>().AddRange(debit, credit);
-        return (debit, credit);
+        context.Set<WalletTransaction>().Add(debit);
+        return debit;
     }
 
     private static WalletTransaction CreateTransaction(

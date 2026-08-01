@@ -153,7 +153,7 @@ public sealed record AdminDisputePenaltyResponse(
     Guid? ViolatingUserId,
     decimal Amount,
     string Reason,
-    Guid? WalletTransactionId,
+    Guid? ClientDebitWalletTransactionId,
     Guid? EscrowTransactionId,
     int Status,
     DateTime CreatedAt);

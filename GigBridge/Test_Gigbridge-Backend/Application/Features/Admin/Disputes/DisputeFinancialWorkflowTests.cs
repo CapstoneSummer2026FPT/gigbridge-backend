@@ -3,6 +3,11 @@ using Application.Features.Contracts.Common.Internal;
 using Application.Features.Wallets.Common;
 using Domain.Entities;
 using Domain.Enums;
+using Infrastructure.Persistence;
+using Infrastructure.Persistence.Migrations;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations.Operations;
 using Test_Gigbridge_Backend.TestSupport;
 
 namespace Test_Gigbridge_Backend.Application.Features.Admin.Disputes;
@@ -10,33 +15,40 @@ namespace Test_Gigbridge_Backend.Application.Features.Admin.Disputes;
 public sealed class DisputeFinancialWorkflowTests
 {
     [Fact]
-    public void Penalty_MovesHeldTokensToSystemWalletAndCreatesTwoIdempotentLedgerEntries()
+    public void Penalty_DebitsOnlyClientHeldTokensAndCreatesOneLedgerEntryWithIdempotentReference()
     {
         var context = new InMemoryApplicationDbContext();
         var transactions = context.AddSet<WalletTransaction>();
         var client = new UserWallet { UserWalletsId = Guid.NewGuid(), UserId = Guid.NewGuid(), HeldTokens = 80m };
-        var system = new UserWallet { UserWalletsId = Guid.NewGuid(), UserId = DisputePenaltyAccount.UserId };
         var contractId = Guid.NewGuid();
         var escrowId = Guid.NewGuid();
         var milestoneId = Guid.NewGuid();
         var disputeId = Guid.NewGuid();
-        var code = $"DISPUTE-PENALTY-{disputeId:N}-{milestoneId:N}";
+        var code = $"DISPUTE-PENALTY-DEBIT-{disputeId:N}-{milestoneId:N}";
 
-        var result = ContractEscrowWalletWorkflow.Penalty(
-            context, client, system, contractId, escrowId, milestoneId, disputeId,
+        var clientDebit = ContractEscrowWalletWorkflow.Penalty(
+            context, client, contractId, escrowId, milestoneId, disputeId,
             25_000m, code, "Confirmed financial misconduct", DateTime.UtcNow);
 
         Assert.Equal(55m, client.HeldTokens);
-        Assert.Equal(25m, system.AvailableTokens);
-        Assert.Equal(2, transactions.Entities.Count);
-        Assert.All(transactions.Entities, item =>
+        var transaction = Assert.Single(transactions.Entities);
+        Assert.Same(clientDebit, transaction);
+        Assert.Equal(client.UserId, transaction.UserId);
+        Assert.Equal(client.UserWalletsId, transaction.UserWalletsId);
+        Assert.Equal((int)WalletTransactionType.DisputePenalty, transaction.Type);
+        Assert.Equal(code, transaction.IdempotencyKey);
+        using var metadata = System.Text.Json.JsonDocument.Parse(transaction.Metadata!);
+        Assert.Equal(disputeId.ToString(), metadata.RootElement.GetProperty("disputeId").GetString());
+        Assert.True(metadata.RootElement.GetProperty("retainedByPlatform").GetBoolean());
+        Assert.False(metadata.RootElement.TryGetProperty("destinationUserId", out _));
+
+        var penalty = new DisputePenalty
         {
-            Assert.Equal((int)WalletTransactionType.DisputePenalty, item.Type);
-            Assert.Equal(code, item.IdempotencyKey);
-            Assert.Equal(disputeId.ToString(),
-                System.Text.Json.JsonDocument.Parse(item.Metadata!).RootElement.GetProperty("disputeId").GetString());
-        });
-        Assert.Equal(system.UserId, result.SystemCredit.UserId);
+            ClientDebitWalletTransactionId = clientDebit.WalletTransactionsId,
+            ClientDebitWalletTransaction = clientDebit
+        };
+        Assert.Equal(clientDebit.WalletTransactionsId, penalty.ClientDebitWalletTransactionId);
+        Assert.Same(clientDebit, penalty.ClientDebitWalletTransaction);
     }
 
     [Fact]
@@ -45,15 +57,46 @@ public sealed class DisputeFinancialWorkflowTests
         var context = new InMemoryApplicationDbContext();
         var transactions = context.AddSet<WalletTransaction>();
         var client = new UserWallet { UserWalletsId = Guid.NewGuid(), UserId = Guid.NewGuid(), HeldTokens = 5m };
-        var system = new UserWallet { UserWalletsId = Guid.NewGuid(), UserId = DisputePenaltyAccount.UserId };
 
         Assert.Throws<BadRequestException>(() => ContractEscrowWalletWorkflow.Penalty(
-            context, client, system, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
+            context, client, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
             10_000m, "penalty", "reason", DateTime.UtcNow));
 
         Assert.Equal(5m, client.HeldTokens);
-        Assert.Equal(0m, system.AvailableTokens);
         Assert.Empty(transactions.Entities);
+    }
+
+    [Fact]
+    public void DisputeHistoryAndFinancialLedgerRelationshipsUseRestrictDeleteBehavior()
+    {
+        using var db = new GigbridgeDbContext(new DbContextOptionsBuilder<GigbridgeDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
+
+        var penalty = db.Model.FindEntityType(typeof(DisputePenalty))!;
+        var violation = db.Model.FindEntityType(typeof(UserViolation))!;
+
+        Assert.Equal(DeleteBehavior.Restrict, penalty.GetForeignKeys()
+            .Single(item => item.PrincipalEntityType.ClrType == typeof(Dispute)).DeleteBehavior);
+        Assert.Equal(DeleteBehavior.Restrict, violation.GetForeignKeys()
+            .Single(item => item.PrincipalEntityType.ClrType == typeof(Dispute)).DeleteBehavior);
+        Assert.Equal(DeleteBehavior.Restrict, penalty.GetForeignKeys()
+            .Single(item => item.PrincipalEntityType.ClrType == typeof(WalletTransaction)).DeleteBehavior);
+        Assert.Equal(DeleteBehavior.Restrict, penalty.GetForeignKeys()
+            .Single(item => item.PrincipalEntityType.ClrType == typeof(EscrowTransaction)).DeleteBehavior);
+        Assert.True(penalty.GetIndexes().Single(item =>
+            item.Properties.Select(property => property.Name)
+                .SequenceEqual(new[] { nameof(DisputePenalty.DisputeId), nameof(DisputePenalty.MilestoneId) })).IsUnique);
+    }
+
+    [Fact]
+    public void MigrationContainsSchemaOperationsOnlyAndNoUserOrWalletSeedData()
+    {
+        var migration = new ImproveAdminDisputeResolution();
+
+        Assert.DoesNotContain(migration.UpOperations, operation =>
+            operation is InsertDataOperation or UpdateDataOperation or DeleteDataOperation or SqlOperation);
+        Assert.DoesNotContain(migration.DownOperations, operation =>
+            operation is InsertDataOperation or UpdateDataOperation or DeleteDataOperation or SqlOperation);
     }
 
     [Fact]

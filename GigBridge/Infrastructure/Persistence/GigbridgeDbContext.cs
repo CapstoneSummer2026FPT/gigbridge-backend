@@ -817,6 +817,9 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
         modelBuilder.Entity<DisputeMilestoneDecision>(entity =>
         {
+            entity.ToTable(table => table.HasCheckConstraint(
+                "CK_DisputeMilestoneDecisions_AllocationAmounts_NonNegative",
+                "\"AdditionalReleaseAmount\" >= 0 AND \"RefundAmount\" >= 0 AND \"PenaltyAmount\" >= 0"));
             entity.HasKey(e => e.DisputeMilestoneDecisionId);
             entity.HasIndex(e => new { e.DisputesId, e.MilestonesId }).IsUnique();
             entity.HasIndex(e => e.DecidedByAdminId);
@@ -843,12 +846,16 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
         modelBuilder.Entity<DisputePenalty>(entity =>
         {
+            entity.ToTable(table => table.HasCheckConstraint(
+                "CK_DisputePenalties_Amount_Positive", "\"Amount\" > 0"));
             entity.HasKey(e => e.DisputePenaltyId);
             entity.HasIndex(e => new { e.DisputeId, e.MilestoneId }).IsUnique();
             entity.HasIndex(e => e.ContractId);
             entity.HasIndex(e => e.ViolatingUserId);
             entity.HasIndex(e => e.CreatedByAdminId);
             entity.Property(e => e.Amount).HasPrecision(18, 2);
+            entity.Property(e => e.ClientDebitWalletTransactionId)
+                .HasComment("References the client-side wallet transaction that debits held escrow tokens; no destination wallet transaction exists.");
             entity.Property(e => e.Reason).HasMaxLength(1000);
             entity.Property(e => e.ResolutionNote).HasMaxLength(2000);
             entity.Property(e => e.Status)
@@ -856,7 +863,7 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
 
             entity.HasOne(e => e.Dispute).WithMany(e => e.Penalties)
-                .HasForeignKey(e => e.DisputeId).OnDelete(DeleteBehavior.Cascade);
+                .HasForeignKey(e => e.DisputeId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(e => e.Contract).WithMany()
                 .HasForeignKey(e => e.ContractId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(e => e.Milestone).WithMany()
@@ -865,14 +872,16 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
                 .HasForeignKey(e => e.ViolatingUserId).OnDelete(DeleteBehavior.SetNull);
             entity.HasOne(e => e.CreatedByAdmin).WithMany()
                 .HasForeignKey(e => e.CreatedByAdminId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne(e => e.WalletTransaction).WithMany()
-                .HasForeignKey(e => e.WalletTransactionId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(e => e.ClientDebitWalletTransaction).WithMany()
+                .HasForeignKey(e => e.ClientDebitWalletTransactionId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(e => e.EscrowTransaction).WithMany()
-                .HasForeignKey(e => e.EscrowTransactionId).OnDelete(DeleteBehavior.SetNull);
+                .HasForeignKey(e => e.EscrowTransactionId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<UserViolation>(entity =>
         {
+            entity.ToTable(table => table.HasCheckConstraint(
+                "CK_UserViolations_ViolationNumber_Positive", "\"ViolationNumber\" > 0"));
             entity.HasKey(e => e.UserViolationId);
             entity.HasIndex(e => new { e.UserId, e.DisputeId }).IsUnique();
             entity.HasIndex(e => e.ContractId);
@@ -886,7 +895,7 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.HasOne(e => e.User).WithMany(e => e.UserViolations)
                 .HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(e => e.Dispute).WithMany(e => e.UserViolations)
-                .HasForeignKey(e => e.DisputeId).OnDelete(DeleteBehavior.Cascade);
+                .HasForeignKey(e => e.DisputeId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(e => e.Contract).WithMany()
                 .HasForeignKey(e => e.ContractId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(e => e.Milestone).WithMany()

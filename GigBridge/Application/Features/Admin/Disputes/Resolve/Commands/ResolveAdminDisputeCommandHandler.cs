@@ -140,12 +140,6 @@ public sealed class ResolveAdminDisputeCommandHandler :
             ?? throw new BadRequestException("Client escrow wallet does not exist.");
         var freelancerWallet = await WalletWorkflow.GetOrCreateWalletAsync(
             _context, freelancer.UserId, _clock.UtcNow, cancellationToken);
-        var systemWallet = totalPenalty > 0m
-            ? await _context.Set<UserWallet>().FirstOrDefaultAsync(
-                item => item.UserId == DisputePenaltyAccount.UserId, cancellationToken)
-                ?? throw new ConflictException("The system dispute penalty wallet is not provisioned.")
-            : null;
-
         var now = _clock.UtcNow;
         var clientViolation = await ApplyViolationAsync(client, command.ClientViolation, dispute,
             contract, command.AdminId, now, cancellationToken);
@@ -174,7 +168,7 @@ public sealed class ResolveAdminDisputeCommandHandler :
             if (allocation.ClientRefund > 0m)
                 AddRefundLedger(contract, escrow, milestone, clientWallet, dispute, allocation.ClientRefund, now);
             if (allocation.PenaltyAmount > 0m)
-                AddPenaltyLedger(contract, escrow, milestone, clientWallet, systemWallet!, dispute,
+                AddPenaltyLedger(contract, escrow, milestone, clientWallet, dispute,
                     allocation, violatingUserId, command.AdminId, command.ResolutionNote, now);
 
             milestone.ReleasedAmount += allocation.FreelancerAward;
@@ -240,7 +234,7 @@ public sealed class ResolveAdminDisputeCommandHandler :
             AddSystemMessage(conversation, $"Milestone decisions recorded for {allocations.Count} milestone(s).", now, systemMessages);
             if (totalRefund > 0) AddSystemMessage(conversation, $"{totalRefund:N2} VND refunded to the client.", now, systemMessages);
             if (totalRelease > 0) AddSystemMessage(conversation, $"{totalRelease:N2} VND released to the freelancer.", now, systemMessages);
-            if (totalPenalty > 0) AddSystemMessage(conversation, $"{totalPenalty:N2} VND transferred to the platform penalty account.", now, systemMessages);
+            if (totalPenalty > 0) AddSystemMessage(conversation, $"{totalPenalty:N2} VND retained by the platform as a dispute penalty.", now, systemMessages);
             AddSystemMessage(conversation, command.ContractAction == AdminContractAction.Resume
                 ? "Contract has been resumed." : "Contract has been terminated.", now, systemMessages);
             AddSystemMessage(conversation,
@@ -407,20 +401,21 @@ public sealed class ResolveAdminDisputeCommandHandler :
     }
 
     private void AddPenaltyLedger(Contract contract, ContractEscrow escrow, Milestone milestone,
-        UserWallet clientWallet, UserWallet systemWallet, Dispute dispute,
+        UserWallet clientWallet, Dispute dispute,
         AdminMilestoneAllocationInput allocation, Guid? violatingUserId, Guid adminId,
         string resolutionNote, DateTime now)
     {
-        var code = $"DISPUTE-PENALTY-{dispute.DisputesId:N}-{milestone.MilestonesId:N}";
-        var transfer = ContractEscrowWalletWorkflow.Penalty(_context, clientWallet, systemWallet,
+        var debitCode = $"DISPUTE-PENALTY-DEBIT-{dispute.DisputesId:N}-{milestone.MilestonesId:N}";
+        var escrowCode = $"DISPUTE-PENALTY-{dispute.DisputesId:N}-{milestone.MilestonesId:N}";
+        var clientDebit = ContractEscrowWalletWorkflow.Penalty(_context, clientWallet,
             contract.ContractsId, escrow.ContractEscrowId, milestone.MilestonesId, dispute.DisputesId,
-            allocation.PenaltyAmount, code, allocation.Reason!.Trim(), now);
+            allocation.PenaltyAmount, debitCode, allocation.Reason!.Trim(), now);
         var escrowTransaction = new EscrowTransaction
         {
             EscrowTransactionId = Guid.NewGuid(), ContractEscrowId = escrow.ContractEscrowId,
             MilestonesId = milestone.MilestonesId, Amount = allocation.PenaltyAmount,
             Type = (int)EscrowTransactionType.DisputePenalty, Status = (int)EscrowTransactionStatus.Succeeded,
-            PaymentGateway = "AdminDisputeResolution", GatewayTransactionCode = code,
+            PaymentGateway = "AdminDisputeResolution", GatewayTransactionCode = escrowCode,
             Note = allocation.Reason!.Trim(), CreatedAt = now, CompletedAt = now
         };
         _context.Set<EscrowTransaction>().Add(escrowTransaction);
@@ -430,7 +425,8 @@ public sealed class ResolveAdminDisputeCommandHandler :
             ContractId = contract.ContractsId, MilestoneId = milestone.MilestonesId,
             ViolatingUserId = violatingUserId, Amount = allocation.PenaltyAmount,
             Reason = allocation.Reason!.Trim(), ResolutionNote = resolutionNote.Trim(),
-            CreatedByAdminId = adminId, WalletTransactionId = transfer.SystemCredit.WalletTransactionsId,
+            CreatedByAdminId = adminId,
+            ClientDebitWalletTransactionId = clientDebit.WalletTransactionsId,
             EscrowTransactionId = escrowTransaction.EscrowTransactionId,
             Status = (int)EscrowTransactionStatus.Succeeded, CreatedAt = now
         });

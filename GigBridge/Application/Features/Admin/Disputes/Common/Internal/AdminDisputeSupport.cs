@@ -151,7 +151,7 @@ internal static class AdminDisputeSupport
             .OrderBy(item => item.CreatedAt)
             .Select(item => new AdminDisputePenaltyResponse(
                 item.DisputePenaltyId, item.MilestoneId, item.ViolatingUserId,
-                item.Amount, item.Reason, item.WalletTransactionId,
+                item.Amount, item.Reason, item.ClientDebitWalletTransactionId,
                 item.EscrowTransactionId, item.Status, item.CreatedAt))
             .ToListAsync(cancellationToken);
 

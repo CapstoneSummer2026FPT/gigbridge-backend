@@ -15,9 +15,6 @@ public partial class ImproveAdminDisputeResolution : Migration
             comment: "Enum AccountStatus: 0=Active, 1=Suspended, 2=Banned");
         migrationBuilder.AddColumn<DateTime>("BannedAt", "Users", "timestamp with time zone", nullable: true);
         migrationBuilder.AddColumn<string>("BanReason", "Users", "character varying(1000)", maxLength: 1000, nullable: true);
-        migrationBuilder.Sql("UPDATE \"Users\" SET \"AccountStatus\" = 1 WHERE \"SuspendedUntil\" IS NOT NULL AND \"SuspendedUntil\" > now();");
-        migrationBuilder.Sql("UPDATE \"Users\" SET \"AccountStatus\" = 2 WHERE \"IsActive\" = false;");
-
         migrationBuilder.AddColumn<decimal>("PenaltyAmount", "DisputeMilestoneDecisions", "numeric(18,2)",
             precision: 18, scale: 2, nullable: false, defaultValue: 0m);
         migrationBuilder.AddColumn<string>("Reason", "DisputeMilestoneDecisions", "character varying(2000)",
@@ -45,9 +42,10 @@ public partial class ImproveAdminDisputeResolution : Migration
             constraints: table =>
             {
                 table.PrimaryKey("PK_UserViolations", x => x.UserViolationId);
+                table.CheckConstraint("CK_UserViolations_ViolationNumber_Positive", "\"ViolationNumber\" > 0");
                 table.ForeignKey("FK_UserViolations_Users_UserId", x => x.UserId, "Users", "UserId", onDelete: ReferentialAction.Restrict);
                 table.ForeignKey("FK_UserViolations_Users_CreatedByAdminId", x => x.CreatedByAdminId, "Users", "UserId", onDelete: ReferentialAction.Restrict);
-                table.ForeignKey("FK_UserViolations_Disputes_DisputeId", x => x.DisputeId, "Disputes", "DisputesId", onDelete: ReferentialAction.Cascade);
+                table.ForeignKey("FK_UserViolations_Disputes_DisputeId", x => x.DisputeId, "Disputes", "DisputesId", onDelete: ReferentialAction.Restrict);
                 table.ForeignKey("FK_UserViolations_Contracts_ContractId", x => x.ContractId, "Contracts", "ContractsId", onDelete: ReferentialAction.Restrict);
                 table.ForeignKey("FK_UserViolations_Milestones_MilestoneId", x => x.MilestoneId, "Milestones", "MilestonesId", onDelete: ReferentialAction.SetNull);
             });
@@ -65,7 +63,8 @@ public partial class ImproveAdminDisputeResolution : Migration
                 Reason = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: false),
                 ResolutionNote = table.Column<string>(type: "character varying(2000)", maxLength: 2000, nullable: true),
                 CreatedByAdminId = table.Column<Guid>(type: "uuid", nullable: false),
-                WalletTransactionId = table.Column<Guid>(type: "uuid", nullable: true),
+                ClientDebitWalletTransactionId = table.Column<Guid>(type: "uuid", nullable: true,
+                    comment: "References the client-side wallet transaction that debits held escrow tokens; no destination wallet transaction exists."),
                 EscrowTransactionId = table.Column<Guid>(type: "uuid", nullable: true),
                 Status = table.Column<int>(type: "integer", nullable: false,
                     comment: "Enum EscrowTransactionStatus: 0=Pending, 1=Succeeded, 2=Failed, 3=Cancelled"),
@@ -74,13 +73,14 @@ public partial class ImproveAdminDisputeResolution : Migration
             constraints: table =>
             {
                 table.PrimaryKey("PK_DisputePenalties", x => x.DisputePenaltyId);
-                table.ForeignKey("FK_DisputePenalties_Disputes_DisputeId", x => x.DisputeId, "Disputes", "DisputesId", onDelete: ReferentialAction.Cascade);
+                table.CheckConstraint("CK_DisputePenalties_Amount_Positive", "\"Amount\" > 0");
+                table.ForeignKey("FK_DisputePenalties_Disputes_DisputeId", x => x.DisputeId, "Disputes", "DisputesId", onDelete: ReferentialAction.Restrict);
                 table.ForeignKey("FK_DisputePenalties_Contracts_ContractId", x => x.ContractId, "Contracts", "ContractsId", onDelete: ReferentialAction.Restrict);
                 table.ForeignKey("FK_DisputePenalties_Milestones_MilestoneId", x => x.MilestoneId, "Milestones", "MilestonesId", onDelete: ReferentialAction.Restrict);
                 table.ForeignKey("FK_DisputePenalties_Users_ViolatingUserId", x => x.ViolatingUserId, "Users", "UserId", onDelete: ReferentialAction.SetNull);
                 table.ForeignKey("FK_DisputePenalties_Users_CreatedByAdminId", x => x.CreatedByAdminId, "Users", "UserId", onDelete: ReferentialAction.Restrict);
-                table.ForeignKey("FK_DisputePenalties_WalletTransactions_WalletTransactionId", x => x.WalletTransactionId, "WalletTransactions", "WalletTransactionsId", onDelete: ReferentialAction.SetNull);
-                table.ForeignKey("FK_DisputePenalties_EscrowTransactions_EscrowTransactionId", x => x.EscrowTransactionId, "EscrowTransactions", "EscrowTransactionId", onDelete: ReferentialAction.SetNull);
+                table.ForeignKey("FK_DisputePenalties_WalletTransactions_ClientDebitWalletTransactionId", x => x.ClientDebitWalletTransactionId, "WalletTransactions", "WalletTransactionsId", onDelete: ReferentialAction.Restrict);
+                table.ForeignKey("FK_DisputePenalties_EscrowTransactions_EscrowTransactionId", x => x.EscrowTransactionId, "EscrowTransactions", "EscrowTransactionId", onDelete: ReferentialAction.Restrict);
             });
 
         migrationBuilder.CreateIndex("IX_UserViolations_UserId_DisputeId", "UserViolations", new[] { "UserId", "DisputeId" }, unique: true);
@@ -93,25 +93,23 @@ public partial class ImproveAdminDisputeResolution : Migration
         migrationBuilder.CreateIndex("IX_DisputePenalties_MilestoneId", "DisputePenalties", "MilestoneId");
         migrationBuilder.CreateIndex("IX_DisputePenalties_ViolatingUserId", "DisputePenalties", "ViolatingUserId");
         migrationBuilder.CreateIndex("IX_DisputePenalties_CreatedByAdminId", "DisputePenalties", "CreatedByAdminId");
-        migrationBuilder.CreateIndex("IX_DisputePenalties_WalletTransactionId", "DisputePenalties", "WalletTransactionId");
+        migrationBuilder.CreateIndex("IX_DisputePenalties_ClientDebitWalletTransactionId", "DisputePenalties", "ClientDebitWalletTransactionId");
         migrationBuilder.CreateIndex("IX_DisputePenalties_EscrowTransactionId", "DisputePenalties", "EscrowTransactionId");
 
-        migrationBuilder.InsertData(
-            table: "Users",
-            columns: new[] { "UserId", "FullName", "Email", "Role", "IsEmailVerified", "IsActive", "IsSetup", "AccountStatus", "ViolationCount", "IsFlagged", "Provider", "ProviderId", "CreatedAt" },
-            values: new object[] { Guid.Parse("00000000-0000-0000-0000-00000000d15c"), "GigBridge Dispute Penalty Account", "system.dispute.penalties@gigbridge.local", 2, true, false, true, 0, 0, false, "System", "dispute-penalty-wallet", new DateTime(2026, 8, 1, 0, 0, 0, DateTimeKind.Utc) });
-        migrationBuilder.InsertData(
-            table: "UserWallets",
-            columns: new[] { "UserWalletsId", "UserId", "AvailableTokens", "WithdrawableTokens", "HeldTokens", "PendingWithdrawalTokens", "Version", "CreatedAt" },
-            values: new object[] { Guid.Parse("00000000-0000-0000-0000-00000000d15d"), Guid.Parse("00000000-0000-0000-0000-00000000d15c"), 0m, 0m, 0m, 0m, 1, new DateTime(2026, 8, 1, 0, 0, 0, DateTimeKind.Utc) });
+        migrationBuilder.AddCheckConstraint(
+            name: "CK_DisputeMilestoneDecisions_AllocationAmounts_NonNegative",
+            table: "DisputeMilestoneDecisions",
+            sql: "\"AdditionalReleaseAmount\" >= 0 AND \"RefundAmount\" >= 0 AND \"PenaltyAmount\" >= 0");
+
     }
 
     protected override void Down(MigrationBuilder migrationBuilder)
     {
-        migrationBuilder.DeleteData("UserWallets", "UserWalletsId", Guid.Parse("00000000-0000-0000-0000-00000000d15d"));
-        migrationBuilder.DeleteData("Users", "UserId", Guid.Parse("00000000-0000-0000-0000-00000000d15c"));
         migrationBuilder.DropTable("DisputePenalties");
         migrationBuilder.DropTable("UserViolations");
+        migrationBuilder.DropCheckConstraint(
+            name: "CK_DisputeMilestoneDecisions_AllocationAmounts_NonNegative",
+            table: "DisputeMilestoneDecisions");
         migrationBuilder.DropColumn("PenaltyAmount", "DisputeMilestoneDecisions");
         migrationBuilder.DropColumn("Reason", "DisputeMilestoneDecisions");
         migrationBuilder.DropColumn("ViolationCount", "Users");
