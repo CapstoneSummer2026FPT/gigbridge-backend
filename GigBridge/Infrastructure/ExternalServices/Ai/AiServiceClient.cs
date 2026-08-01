@@ -80,6 +80,92 @@ public class AiServiceClient : IAiServiceClient
         return apiResponse.Data;
     }
 
+    public async Task<JobPostDetailsGenerationResponseDto> GenerateJobDescriptionDetailsAsync(
+        JobPostGenerationRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        var response = await _httpClient.PostAsJsonAsync("api/ai/job-posts/generate/details", request, cancellationToken);
+        
+        if (!response.IsSuccessStatusCode)
+        {
+            try
+            {
+                var errorResponse = await response.Content.ReadFromJsonAsync<ApiResponse<object>>(
+                    cancellationToken: cancellationToken);
+                if (errorResponse != null && !string.IsNullOrWhiteSpace(errorResponse.Message))
+                {
+                    if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
+                    {
+                        throw new BadRequestException(errorResponse.Message);
+                    }
+                    throw new HttpRequestException(errorResponse.Message);
+                }
+            }
+            catch (BadRequestException)
+            {
+                throw;
+            }
+            catch
+            {
+            }
+            response.EnsureSuccessStatusCode();
+        }
+
+        var apiResponse = await response.Content.ReadFromJsonAsync<ApiResponse<JobPostDetailsGenerationResponseDto>>(
+            cancellationToken: cancellationToken);
+
+        if (apiResponse == null || !apiResponse.Success || apiResponse.Data == null)
+        {
+            var errorMessage = apiResponse?.Message ?? "Failed to generate job description details from AI service.";
+            throw new HttpRequestException(errorMessage);
+        }
+
+        return apiResponse.Data;
+    }
+
+    public async Task<JobPostHiringPlanGenerationResponseDto> GenerateJobHiringPlanAsync(
+        JobPostHiringPlanGenerationRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        var response = await _httpClient.PostAsJsonAsync("api/ai/job-posts/generate/hiring-plan", request, cancellationToken);
+        
+        if (!response.IsSuccessStatusCode)
+        {
+            try
+            {
+                var errorResponse = await response.Content.ReadFromJsonAsync<ApiResponse<object>>(
+                    cancellationToken: cancellationToken);
+                if (errorResponse != null && !string.IsNullOrWhiteSpace(errorResponse.Message))
+                {
+                    if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
+                    {
+                        throw new BadRequestException(errorResponse.Message);
+                    }
+                    throw new HttpRequestException(errorResponse.Message);
+                }
+            }
+            catch (BadRequestException)
+            {
+                throw;
+            }
+            catch
+            {
+            }
+            response.EnsureSuccessStatusCode();
+        }
+
+        var apiResponse = await response.Content.ReadFromJsonAsync<ApiResponse<JobPostHiringPlanGenerationResponseDto>>(
+            cancellationToken: cancellationToken);
+
+        if (apiResponse == null || !apiResponse.Success || apiResponse.Data == null)
+        {
+            var errorMessage = apiResponse?.Message ?? "Failed to generate hiring plan from AI service.";
+            throw new HttpRequestException(errorMessage);
+        }
+
+        return apiResponse.Data;
+    }
+
     public async Task<AiInterviewDefinitionResponseDto> CreateInterviewDefinitionAsync(
         AiInterviewDefinitionRequestDto request,
         CancellationToken cancellationToken = default)

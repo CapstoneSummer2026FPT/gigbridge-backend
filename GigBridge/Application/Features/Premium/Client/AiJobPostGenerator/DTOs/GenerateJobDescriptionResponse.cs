@@ -38,3 +38,23 @@ public class GeneratedJobPostMilestoneDto
     public string Deliverables { get; set; } = null!;
     public string AcceptanceCriteria { get; set; } = null!;
 }
+
+public class GenerateJobDescriptionDetailsResponse
+{
+    public string Title { get; set; } = null!;
+    public Guid? MajorId { get; set; }
+    public string? MajorName { get; set; }
+    public Guid? CategoryId { get; set; }
+    public string? CategoryName { get; set; }
+    public Guid? MajorCategoryId { get; set; }
+    public List<GeneratedSkillDto> Skills { get; set; } = new();
+    public List<string> CustomSkills { get; set; } = new();
+    public string Description { get; set; } = null!;
+    public string AiDisclaimer { get; set; } = string.Empty;
+}
+
+public class GenerateJobHiringPlanResponse
+{
+    public List<string> QuestionRecruitment { get; set; } = new();
+    public List<GeneratedJobPostMilestoneDto> Milestones { get; set; } = new();
+}

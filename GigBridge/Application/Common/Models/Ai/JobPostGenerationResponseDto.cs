@@ -41,6 +41,39 @@ public class JobPostGenerationResponseDto
     public List<GeneratedMilestoneResponseDto> Milestones { get; set; } = new();
 }
 
+public class JobPostDetailsGenerationResponseDto
+{
+    [JsonPropertyName("title")]
+    public string Title { get; set; } = null!;
+
+    [JsonPropertyName("major_id")]
+    public string MajorId { get; set; } = null!;
+
+    [JsonPropertyName("category_id")]
+    public string CategoryId { get; set; } = null!;
+
+    [JsonPropertyName("system_skill_ids")]
+    public List<string> SystemSkillIds { get; set; } = new();
+
+    [JsonPropertyName("custom_skills")]
+    public List<string> CustomSkills { get; set; } = new();
+
+    [JsonPropertyName("description")]
+    public string Description { get; set; } = null!;
+
+    [JsonPropertyName("is_ai_generated")]
+    public bool IsAiGenerated { get; set; }
+}
+
+public class JobPostHiringPlanGenerationResponseDto
+{
+    [JsonPropertyName("question_recruitment")]
+    public List<string> QuestionRecruitment { get; set; } = new();
+
+    [JsonPropertyName("milestones")]
+    public List<GeneratedMilestoneResponseDto> Milestones { get; set; } = new();
+}
+
 public class GeneratedMilestoneResponseDto
 {
     [JsonPropertyName("title")]
