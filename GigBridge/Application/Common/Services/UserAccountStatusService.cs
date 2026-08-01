@@ -2,6 +2,7 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Domain.Entities;
+using Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 
 namespace Application.Common.Services;
@@ -20,6 +21,8 @@ public class UserAccountStatusService : IUserAccountStatusService
     public void SetActive(User user, bool isActive)
     {
         user.IsActive = isActive;
+        if (isActive && user.AccountStatus != (int)AccountStatus.Banned)
+            user.AccountStatus = (int)AccountStatus.Active;
         user.UpdatedAt = _dateTimeService.UtcNow;
     }
 
@@ -36,6 +39,8 @@ public class UserAccountStatusService : IUserAccountStatusService
         user.SuspensionReason = string.IsNullOrWhiteSpace(reason)
             ? "Account temporarily suspended."
             : reason.Trim();
+        user.AccountStatus = (int)AccountStatus.Suspended;
+        user.IsActive = true;
         user.UpdatedAt = now;
     }
 
@@ -44,6 +49,8 @@ public class UserAccountStatusService : IUserAccountStatusService
         user.SuspendedAt = null;
         user.SuspendedUntil = null;
         user.SuspensionReason = null;
+        if (user.AccountStatus != (int)AccountStatus.Banned)
+            user.AccountStatus = (int)AccountStatus.Active;
         user.UpdatedAt = _dateTimeService.UtcNow;
     }
 

@@ -1,6 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Application.Common.Services;
 using Application.Features.Auth.Common;
 using Application.Features.Auth.GoogleLogin.DTOs;
 using Application.Features.Auth.Shared.DTOs;
@@ -56,15 +57,7 @@ public class GoogleLoginCommandHandler : IRequestHandler<GoogleLoginCommand, (Lo
             await _userEloService.InitializeNewUserAsync(user, cancellationToken);
         }
 
-        if (!user.IsActive)
-        {
-            throw new UnauthorizedAccessException("Your account has been suspended by the administrator");
-        }
-
-        if (user.SuspendedUntil.HasValue && user.SuspendedUntil.Value > _dateTimeService.UtcNow)
-        {
-            throw new UnauthorizedAccessException($"Your account is suspended until {user.SuspendedUntil.Value:O}");
-        }
+        UserAccountEnforcement.EnsureCanAuthenticate(user, _dateTimeService.UtcNow);
 
         if (!isNewUser)
         {

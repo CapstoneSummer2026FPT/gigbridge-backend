@@ -69,6 +69,10 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
     public virtual DbSet<DisputeMilestoneDecision> DisputeMilestoneDecisions { get; set; }
 
+    public virtual DbSet<DisputePenalty> DisputePenalties { get; set; }
+
+    public virtual DbSet<UserViolation> UserViolations { get; set; }
+
     public virtual DbSet<EsignDocument> EsignDocuments { get; set; }
 
     public virtual DbSet<EsignSignature> EsignSignatures { get; set; }
@@ -579,7 +583,7 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.Property(e => e.MilestonesId).HasColumnName("MilestonesId");
             entity.Property(e => e.PaymentGateway).HasMaxLength(100);
             entity.Property(e => e.Status).HasComment("Enum EscrowTransactionStatus: 0=Pending, 1=Succeeded, 2=Failed, 3=Cancelled");
-            entity.Property(e => e.Type).HasComment("Enum EscrowTransactionType: 0=Deposit, 1=ReleaseToFreelancer, 2=RefundToClient, 3=PlatformFee, 4=Adjustment");
+            entity.Property(e => e.Type).HasComment("Enum EscrowTransactionType: 0=Deposit, 1=ReleaseToFreelancer, 2=RefundToClient, 3=PlatformFee, 4=Adjustment, 5=DisputePenalty");
 
             entity.HasOne(d => d.ContractEscrow).WithMany(p => p.EscrowTransactions)
                 .HasForeignKey(d => d.ContractEscrowId)
@@ -822,6 +826,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.Property(e => e.ReleasedAmountSnapshot).HasPrecision(18, 2);
             entity.Property(e => e.AdditionalReleaseAmount).HasPrecision(18, 2);
             entity.Property(e => e.RefundAmount).HasPrecision(18, 2);
+            entity.Property(e => e.PenaltyAmount).HasPrecision(18, 2).HasDefaultValue(0m);
+            entity.Property(e => e.Reason).HasMaxLength(2000);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
 
             entity.HasOne(e => e.Dispute).WithMany(d => d.MilestoneDecisions)
@@ -833,6 +839,60 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.HasOne(e => e.DecidedByAdmin).WithMany()
                 .HasForeignKey(e => e.DecidedByAdminId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<DisputePenalty>(entity =>
+        {
+            entity.HasKey(e => e.DisputePenaltyId);
+            entity.HasIndex(e => new { e.DisputeId, e.MilestoneId }).IsUnique();
+            entity.HasIndex(e => e.ContractId);
+            entity.HasIndex(e => e.ViolatingUserId);
+            entity.HasIndex(e => e.CreatedByAdminId);
+            entity.Property(e => e.Amount).HasPrecision(18, 2);
+            entity.Property(e => e.Reason).HasMaxLength(1000);
+            entity.Property(e => e.ResolutionNote).HasMaxLength(2000);
+            entity.Property(e => e.Status)
+                .HasComment("Enum EscrowTransactionStatus: 0=Pending, 1=Succeeded, 2=Failed, 3=Cancelled");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+
+            entity.HasOne(e => e.Dispute).WithMany(e => e.Penalties)
+                .HasForeignKey(e => e.DisputeId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.Contract).WithMany()
+                .HasForeignKey(e => e.ContractId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.Milestone).WithMany()
+                .HasForeignKey(e => e.MilestoneId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.ViolatingUser).WithMany()
+                .HasForeignKey(e => e.ViolatingUserId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(e => e.CreatedByAdmin).WithMany()
+                .HasForeignKey(e => e.CreatedByAdminId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.WalletTransaction).WithMany()
+                .HasForeignKey(e => e.WalletTransactionId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(e => e.EscrowTransaction).WithMany()
+                .HasForeignKey(e => e.EscrowTransactionId).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<UserViolation>(entity =>
+        {
+            entity.HasKey(e => e.UserViolationId);
+            entity.HasIndex(e => new { e.UserId, e.DisputeId }).IsUnique();
+            entity.HasIndex(e => e.ContractId);
+            entity.HasIndex(e => e.MilestoneId);
+            entity.HasIndex(e => e.CreatedByAdminId);
+            entity.Property(e => e.Reason).HasMaxLength(1000);
+            entity.Property(e => e.Description).HasMaxLength(4000);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.IsActive).HasDefaultValue(true);
+
+            entity.HasOne(e => e.User).WithMany(e => e.UserViolations)
+                .HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.Dispute).WithMany(e => e.UserViolations)
+                .HasForeignKey(e => e.DisputeId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(e => e.Contract).WithMany()
+                .HasForeignKey(e => e.ContractId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.Milestone).WithMany()
+                .HasForeignKey(e => e.MilestoneId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne(e => e.CreatedByAdmin).WithMany()
+                .HasForeignKey(e => e.CreatedByAdminId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<EsignDocument>(entity =>
@@ -2543,6 +2603,11 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.Property(e => e.IsEmailVerified).HasDefaultValue(false);
             entity.Property(e => e.PhoneNumber).HasMaxLength(20);
             entity.Property(e => e.SuspensionReason).HasMaxLength(500);
+            entity.Property(e => e.ViolationCount).HasDefaultValue(0);
+            entity.Property(e => e.IsFlagged).HasDefaultValue(false);
+            entity.Property(e => e.AccountStatus).HasDefaultValue((int)AccountStatus.Active)
+                .HasComment("Enum AccountStatus: 0=Active, 1=Suspended, 2=Banned");
+            entity.Property(e => e.BanReason).HasMaxLength(1000);
             entity.Property(e => e.PreferredLanguage)
                 .HasMaxLength(5)
                 .HasDefaultValueSql("'vi'::character varying");
@@ -2690,7 +2755,7 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
                 .HasComment("Enum WalletTransactionStatus: 0=Pending, 1=Succeeded, 2=Failed, 3=Cancelled");
             entity.Property(e => e.TokenAmount).HasPrecision(18, 4);
             entity.Property(e => e.Type)
-                .HasComment("Enum WalletTransactionType: 0=AdminCredit, 1=TopUp, 2=EscrowHold, 3=EscrowRelease, 4=EscrowRefund, 5=Adjustment, 6=WithdrawalLock, 7=WithdrawalSuccess, 8=WithdrawalRefund, 9=WithdrawalFee, 10=SubscriptionPurchase, 11=PromotionPurchase");
+                .HasComment("Enum WalletTransactionType: 0=AdminCredit, 1=TopUp, 2=EscrowHold, 3=EscrowRelease, 4=EscrowRefund, 5=Adjustment, 6=WithdrawalLock, 7=WithdrawalSuccess, 8=WithdrawalRefund, 9=WithdrawalFee, 10=SubscriptionPurchase, 11=PromotionPurchase, 12=DisputePenalty");
             entity.Property(e => e.UserId).HasColumnName("UserId");
             entity.Property(e => e.UserWalletsId).HasColumnName("UserWalletsId");
             entity.Property(e => e.VndAmount).HasPrecision(18, 2);

@@ -128,6 +128,50 @@ internal static class ContractEscrowWalletWorkflow
         return tokens;
     }
 
+    public static (WalletTransaction ClientDebit, WalletTransaction SystemCredit) Penalty(
+        IApplicationDbContext context,
+        UserWallet clientWallet,
+        UserWallet systemWallet,
+        Guid contractId,
+        Guid escrowId,
+        Guid milestoneId,
+        Guid disputeId,
+        decimal amountVnd,
+        string transactionCode,
+        string note,
+        DateTime now)
+    {
+        if (amountVnd <= 0m)
+            throw new BadRequestException("Penalty amount must be greater than zero.");
+
+        var tokens = TokenWalletRules.ToTokens(amountVnd);
+        if (clientWallet.HeldTokens < tokens)
+            throw new BadRequestException("Client held wallet balance is insufficient for this penalty.");
+
+        clientWallet.HeldTokens -= tokens;
+        clientWallet.UpdatedAt = now;
+        systemWallet.AvailableTokens += tokens;
+        systemWallet.UpdatedAt = now;
+
+        var metadata = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            disputeId,
+            sourceUserId = clientWallet.UserId,
+            destinationUserId = systemWallet.UserId,
+            transfer = "DisputePenalty"
+        });
+        var debit = CreateTransaction(clientWallet, contractId, escrowId, milestoneId, tokens,
+            amountVnd, WalletTransactionType.DisputePenalty, transactionCode,
+            "AdminDisputeResolution", note, now);
+        var credit = CreateTransaction(systemWallet, contractId, escrowId, milestoneId, tokens,
+            amountVnd, WalletTransactionType.DisputePenalty, transactionCode,
+            "AdminDisputeResolution", note, now);
+        debit.Metadata = metadata;
+        credit.Metadata = metadata;
+        context.Set<WalletTransaction>().AddRange(debit, credit);
+        return (debit, credit);
+    }
+
     private static WalletTransaction CreateTransaction(
         UserWallet wallet,
         Guid contractId,

@@ -10,11 +10,19 @@ public enum AdminContractAction
     Terminate = 1
 }
 
-public sealed record AdminMilestoneDecisionInput(
+public sealed record AdminMilestoneAllocationInput(
     Guid MilestoneId,
     DisputeMilestoneOutcome Outcome,
-    decimal AdditionalReleaseToFreelancer,
-    decimal RefundToClient);
+    decimal FreelancerAward,
+    decimal ClientRefund,
+    decimal PenaltyAmount,
+    string? Reason);
+
+public sealed record AdminViolationInput(
+    bool IsViolation,
+    UserViolationType? ViolationType,
+    string? Reason,
+    string? Description);
 
 public sealed record ResolveAdminDisputeCommand(
     Guid DisputeId,
@@ -22,5 +30,7 @@ public sealed record ResolveAdminDisputeCommand(
     DisputeResolution Resolution,
     string ResolutionNote,
     string? InternalNotes,
-    IReadOnlyList<AdminMilestoneDecisionInput> MilestoneDecisions,
-    AdminContractAction ContractAction) : IRequest<AdminDisputeDetailResponse>;
+    IReadOnlyList<AdminMilestoneAllocationInput> MilestoneAllocations,
+    AdminContractAction ContractAction,
+    AdminViolationInput ClientViolation,
+    AdminViolationInput FreelancerViolation) : IRequest<AdminDisputeDetailResponse>;

@@ -34,6 +34,16 @@ public partial class User
 
     public string? SuspensionReason { get; set; }
 
+    public int ViolationCount { get; set; }
+
+    public bool IsFlagged { get; set; }
+
+    public int AccountStatus { get; set; }
+
+    public DateTime? BannedAt { get; set; }
+
+    public string? BanReason { get; set; }
+
     public string? PreferredLanguage { get; set; }
 
     public string? Provider { get; set; }
@@ -121,6 +131,8 @@ public partial class User
     public virtual UserWallet? UserWallet { get; set; }
 
     public virtual ICollection<WalletTransaction> WalletTransactions { get; set; } = new List<WalletTransaction>();
+
+    public virtual ICollection<UserViolation> UserViolations { get; set; } = new List<UserViolation>();
 
     public virtual ICollection<GoogleMeetConnection> GoogleMeetConnections { get; set; } = new List<GoogleMeetConnection>();
     public virtual ICollection<GoogleMeetOAuthState> GoogleMeetOAuthStates { get; set; } = new List<GoogleMeetOAuthState>();
