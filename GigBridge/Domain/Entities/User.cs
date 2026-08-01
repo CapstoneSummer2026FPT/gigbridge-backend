@@ -106,6 +106,8 @@ public partial class User
 
     public virtual ICollection<Report> ReportResolvedByAdmins { get; set; } = new List<Report>();
 
+    public virtual ICollection<Report> ReportAssignedAdmins { get; set; } = new List<Report>();
+
     public virtual ICollection<Report> ReportReporters { get; set; } = new List<Report>();
 
     public virtual ICollection<ReportContract> ReportContractReporters { get; set; } = new List<ReportContract>();
@@ -113,6 +115,14 @@ public partial class User
     public virtual ICollection<ReportContract> ReportContractRespondents { get; set; } = new List<ReportContract>();
 
     public virtual ICollection<ReportContract> ReportContractResolvedBy { get; set; } = new List<ReportContract>();
+
+    public virtual ICollection<ReportContract> AssignedReportContracts { get; set; } = new List<ReportContract>();
+
+    public virtual ICollection<ReportContractAdminNote> ReportContractAdminNotes { get; set; } = new List<ReportContractAdminNote>();
+
+    public virtual ICollection<ReportContractInformationRequest> RequestedReportContractInformation { get; set; } = new List<ReportContractInformationRequest>();
+
+    public virtual ICollection<ReportContractInformationRequest> TargetedReportContractInformation { get; set; } = new List<ReportContractInformationRequest>();
 
     public virtual ICollection<Review> ReviewReviewees { get; set; } = new List<Review>();
 
@@ -133,6 +143,12 @@ public partial class User
     public virtual ICollection<WalletTransaction> WalletTransactions { get; set; } = new List<WalletTransaction>();
 
     public virtual ICollection<UserViolation> UserViolations { get; set; } = new List<UserViolation>();
+
+    public virtual ICollection<ReportEvidence> UploadedReportEvidences { get; set; } = new List<ReportEvidence>();
+
+    public virtual ICollection<Proposal> InvalidatedProposals { get; set; } = new List<Proposal>();
+
+    public virtual ICollection<ProposalAdminNote> ProposalAdminNotes { get; set; } = new List<ProposalAdminNote>();
 
     public virtual ICollection<GoogleMeetConnection> GoogleMeetConnections { get; set; } = new List<GoogleMeetConnection>();
     public virtual ICollection<GoogleMeetOAuthState> GoogleMeetOAuthStates { get; set; } = new List<GoogleMeetOAuthState>();

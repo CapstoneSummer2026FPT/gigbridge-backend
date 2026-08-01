@@ -6,6 +6,7 @@ using Application.Features.Admin.Disputes.Common.DTOs;
 using Application.Features.Admin.Disputes.Common.Internal;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.Wallets.Common;
+using Application.Common.Services;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
@@ -22,17 +23,20 @@ public sealed class ResolveAdminDisputeCommandHandler :
     private readonly IDateTimeService _clock;
     private readonly IChatRealtimeNotifier _realtime;
     private readonly ILogger<ResolveAdminDisputeCommandHandler> _logger;
+    private readonly IUserAccountStatusService _accountStatus;
 
     public ResolveAdminDisputeCommandHandler(
         IApplicationDbContext context,
         IDateTimeService clock,
         IChatRealtimeNotifier realtime,
-        ILogger<ResolveAdminDisputeCommandHandler> logger)
+        ILogger<ResolveAdminDisputeCommandHandler> logger,
+        IUserAccountStatusService accountStatus)
     {
         _context = context;
         _clock = clock;
         _realtime = realtime;
         _logger = logger;
+        _accountStatus = accountStatus;
     }
 
     public async Task<AdminDisputeDetailResponse> Handle(
@@ -125,7 +129,7 @@ public sealed class ResolveAdminDisputeCommandHandler :
         if (command.ClientViolation.IsViolation) violatingUserIds.Add(contract.ClientProfiles.UserId);
         if (command.FreelancerViolation.IsViolation) violatingUserIds.Add(contract.FreelancerProfiles.UserId);
         foreach (var userId in violatingUserIds.Distinct().OrderBy(id => id))
-            await transaction.AcquireTransactionLockAsync(ContractEscrowLock.ForUser(userId), cancellationToken);
+            await transaction.AcquireTransactionLockAsync(AccountEnforcementLock.ForUser(userId), cancellationToken);
 
         var client = await _context.Set<User>().FirstAsync(item => item.UserId == contract.ClientProfiles.UserId, cancellationToken);
         var freelancer = await _context.Set<User>().FirstAsync(item => item.UserId == contract.FreelancerProfiles.UserId, cancellationToken);
@@ -141,10 +145,20 @@ public sealed class ResolveAdminDisputeCommandHandler :
         var freelancerWallet = await WalletWorkflow.GetOrCreateWalletAsync(
             _context, freelancer.UserId, _clock.UtcNow, cancellationToken);
         var now = _clock.UtcNow;
-        var clientViolation = await ApplyViolationAsync(client, command.ClientViolation, dispute,
-            contract, command.AdminId, now, cancellationToken);
-        var freelancerViolation = await ApplyViolationAsync(freelancer, command.FreelancerViolation,
-            dispute, contract, command.AdminId, now, cancellationToken);
+        var clientViolation = command.ClientViolation.IsViolation
+            ? await _accountStatus.ApplyViolationAsync(client,
+                new(UserViolationSourceType.Dispute, DisputeId: dispute.DisputesId,
+                    ContractId: contract.ContractsId, MilestoneId: dispute.MilestonesId),
+                command.ClientViolation.ViolationType!.Value, command.ClientViolation.Reason!,
+                command.ClientViolation.Description, command.AdminId, null, null, cancellationToken)
+            : null;
+        var freelancerViolation = command.FreelancerViolation.IsViolation
+            ? await _accountStatus.ApplyViolationAsync(freelancer,
+                new(UserViolationSourceType.Dispute, DisputeId: dispute.DisputesId,
+                    ContractId: contract.ContractsId, MilestoneId: dispute.MilestonesId),
+                command.FreelancerViolation.ViolationType!.Value, command.FreelancerViolation.Reason!,
+                command.FreelancerViolation.Description, command.AdminId, null, null, cancellationToken)
+            : null;
         var violatingUserId = command.ClientViolation.IsViolation ^ command.FreelancerViolation.IsViolation
             ? command.ClientViolation.IsViolation ? client.UserId : freelancer.UserId
             : (Guid?)null;
@@ -310,60 +324,6 @@ public sealed class ResolveAdminDisputeCommandHandler :
         };
         if (differsFromSuggestion && string.IsNullOrWhiteSpace(input.Reason))
             throw new BadRequestException($"A reason is required when overriding the suggested allocation for '{milestone.Title}'.");
-    }
-
-    private async Task<object?> ApplyViolationAsync(User user, AdminViolationInput input, Dispute dispute,
-        Contract contract, Guid adminId, DateTime now, CancellationToken cancellationToken)
-    {
-        if (!input.IsViolation) return null;
-        var existing = await _context.Set<UserViolation>()
-            .AnyAsync(item => item.UserId == user.UserId && item.DisputeId == dispute.DisputesId, cancellationToken);
-        if (existing) return new { duplicate = true, user.ViolationCount, user.AccountStatus };
-
-        var wasBanned = user.AccountStatus == (int)AccountStatus.Banned || !user.IsActive;
-        var wasSuspended = user.AccountStatus == (int)AccountStatus.Suspended &&
-            user.SuspendedUntil.HasValue && user.SuspendedUntil.Value > now;
-        user.ViolationCount++;
-        user.IsFlagged = true;
-        user.UpdatedAt = now;
-        var action = UserViolationAction.Warning;
-        DateTime? suspendedUntil = null;
-        if (wasBanned || user.ViolationCount >= 3)
-        {
-            action = UserViolationAction.PermanentBan;
-            user.AccountStatus = (int)AccountStatus.Banned;
-            user.IsActive = false;
-            user.BannedAt ??= now;
-            user.BanReason = input.Reason!.Trim();
-            user.RefreshTokenHash = null;
-            user.RefreshTokenExpiry = null;
-        }
-        else if (user.ViolationCount == 2)
-        {
-            action = UserViolationAction.SevenDaySuspension;
-            user.AccountStatus = (int)AccountStatus.Suspended;
-            user.IsActive = true;
-            user.SuspendedAt = now;
-            user.SuspendedUntil = now.AddDays(7);
-            user.SuspensionReason = input.Reason!.Trim();
-            suspendedUntil = user.SuspendedUntil;
-        }
-        else
-        {
-            user.AccountStatus = wasSuspended ? (int)AccountStatus.Suspended : (int)AccountStatus.Active;
-            user.IsActive = true;
-        }
-
-        _context.Set<UserViolation>().Add(new UserViolation
-        {
-            UserViolationId = Guid.NewGuid(), UserId = user.UserId, DisputeId = dispute.DisputesId,
-            ContractId = contract.ContractsId, MilestoneId = dispute.MilestonesId,
-            ViolationNumber = user.ViolationCount, ViolationType = (int)input.ViolationType!.Value,
-            Reason = input.Reason!.Trim(), Description = input.Description?.Trim(),
-            ActionTaken = (int)action, SuspendedUntil = suspendedUntil,
-            CreatedByAdminId = adminId, CreatedAt = now, IsActive = true
-        });
-        return new { duplicate = false, user.ViolationCount, user.AccountStatus, action, suspendedUntil };
     }
 
     private void AddReleaseLedger(Contract contract, ContractEscrow escrow, Milestone milestone,

@@ -21,6 +21,8 @@ public static class UserAccountEnforcement
 
     public static void EnsureCanAuthenticate(User user, DateTime now)
     {
+        if (string.Equals(user.Provider, "System", StringComparison.OrdinalIgnoreCase))
+            throw new UnauthorizedAccessException("System accounts cannot authenticate interactively.");
         NormalizeExpiredSuspension(user, now);
         if (user.AccountStatus == (int)AccountStatus.Banned || !user.IsActive)
             throw new UnauthorizedAccessException("Your account has been permanently banned.");

@@ -79,6 +79,8 @@ public class GetProposalDetailQueryHandler
                 .Select(ProposalPlanMapper.ToDto)
                 .ToList(),
             Status = proposal.Status,
+            ModerationStatus = proposal.ModerationStatus,
+            InvalidationReason = proposal.InvalidationReason,
             SubmittedAt = proposal.SubmittedAt,
             UpdatedAt = proposal.UpdatedAt,
             IsAigenerated = proposal.IsAigenerated

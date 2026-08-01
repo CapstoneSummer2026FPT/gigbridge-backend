@@ -61,4 +61,15 @@ public sealed class UserAccountEnforcementTests
         Assert.Throws<UnauthorizedAccessException>(() =>
             UserAccountEnforcement.EnsureCanAuthenticate(user, Now));
     }
+
+    [Fact]
+    public void SystemProviderAccount_IsAlwaysRejectedFromInteractiveAuthentication()
+    {
+        var user = new User { Provider = "System", AccountStatus = (int)AccountStatus.Active, IsActive = true };
+
+        var error = Assert.Throws<UnauthorizedAccessException>(() =>
+            UserAccountEnforcement.EnsureCanAuthenticate(user, Now));
+
+        Assert.Contains("System accounts", error.Message);
+    }
 }

@@ -14,6 +14,8 @@ public class ProposalDto
     public decimal ProposedBudget { get; set; }
     public string ProposedDuration { get; set; } = string.Empty;
     public int Status { get; set; }
+    public int ModerationStatus { get; set; }
+    public string? InvalidationReason { get; set; }
     public DateTime SubmittedAt { get; set; }
     public DateTime? ReviewedAt { get; set; }
     public string AnalysisSummaryPreview { get; set; } = string.Empty;

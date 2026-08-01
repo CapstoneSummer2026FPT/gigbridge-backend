@@ -41,6 +41,8 @@ internal static class ProposalProjection
             ProposedBudget = proposal.ProposedBudget ?? 0m,
             ProposedDuration = proposal.ProposedDuration ?? string.Empty,
             Status = proposal.Status,
+            ModerationStatus = proposal.ModerationStatus,
+            InvalidationReason = proposal.InvalidationReason,
             SubmittedAt = proposal.SubmittedAt ?? DateTime.MinValue,
             ReviewedAt = proposal.UpdatedAt,
             AnalysisSummaryPreview = CreatePreview(proposal.AnalysisSummary),

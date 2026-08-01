@@ -145,6 +145,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
     public virtual DbSet<Proposal> Proposals { get; set; }
 
+    public virtual DbSet<ProposalAdminNote> ProposalAdminNotes { get; set; }
+
     public virtual DbSet<ProposalWorkBreakdownItem> ProposalWorkBreakdownItems { get; set; }
 
     public virtual DbSet<ProposalMilestonePlan> ProposalMilestonePlans { get; set; }
@@ -159,9 +161,15 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
     public virtual DbSet<Report> Reports { get; set; }
 
+    public virtual DbSet<ReportEvidence> ReportEvidences { get; set; }
+
     public virtual DbSet<ReportContract> ReportContracts { get; set; }
 
     public virtual DbSet<ReportContractAttachment> ReportContractAttachments { get; set; }
+
+    public virtual DbSet<ReportContractAdminNote> ReportContractAdminNotes { get; set; }
+
+    public virtual DbSet<ReportContractInformationRequest> ReportContractInformationRequests { get; set; }
 
     public virtual DbSet<Review> Reviews { get; set; }
 
@@ -203,6 +211,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
             entity.HasIndex(e => e.CreatedAt, "IX_AdminAuditLogs_CreatedAt");
 
+            entity.HasIndex(e => e.CorrelationId, "IX_AdminAuditLogs_CorrelationId");
+
             entity.HasIndex(e => new { e.EntityId, e.EntityType }, "IX_AdminAuditLogs_EntityId_EntityType");
 
             entity.Property(e => e.AdminAuditLogsId)
@@ -210,8 +220,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
                 .HasColumnName("AdminAuditLogsId");
             entity.Property(e => e.Action).HasMaxLength(100);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.CorrelationId).HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.EntityType).HasMaxLength(50);
-            entity.Property(e => e.IpAddress).HasMaxLength(45);
             entity.Property(e => e.NewValues).HasColumnType("jsonb");
             entity.Property(e => e.OldValues).HasColumnType("jsonb");
             entity.Property(e => e.AdminId).HasColumnName("AdminId");
@@ -707,6 +717,10 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
             entity.HasIndex(e => e.AssignedAdminId, "IX_Disputes_AssignedAdminId");
 
+            entity.HasIndex(e => e.RelatedReportId, "UX_Disputes_RelatedReportId")
+                .IsUnique()
+                .HasFilter("\"RelatedReportId\" IS NOT NULL");
+
             entity.HasIndex(e => e.Status, "IX_Disputes_Status");
 
             entity.HasIndex(e => new { e.Status, e.IsVipPriority, e.ResolutionTargetAt },
@@ -749,8 +763,9 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
                 .HasForeignKey(d => d.RespondentId)
                 .HasConstraintName("Disputes_usr_RespondentId_fkey");
 
-            entity.HasOne(d => d.RelatedReport).WithMany()
+            entity.HasOne(d => d.RelatedReport).WithMany(r => r.RelatedDisputes)
                 .HasForeignKey(d => d.RelatedReportId)
+                .OnDelete(DeleteBehavior.Restrict)
                 .HasConstraintName("Disputes_rc_RelatedReportId_fkey");
 
             entity.HasOne(d => d.ResolvedByAdmin).WithMany(p => p.DisputeResolvedByAdmins)
@@ -880,10 +895,18 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
         modelBuilder.Entity<UserViolation>(entity =>
         {
-            entity.ToTable(table => table.HasCheckConstraint(
-                "CK_UserViolations_ViolationNumber_Positive", "\"ViolationNumber\" > 0"));
+            entity.ToTable(table =>
+            {
+                table.HasCheckConstraint("CK_UserViolations_ViolationNumber_Positive", "\"ViolationNumber\" > 0");
+                table.HasCheckConstraint("CK_UserViolations_ExactlyOneSource",
+                    "(\"SourceType\" = 0 AND \"DisputeId\" IS NOT NULL AND \"ContractId\" IS NOT NULL AND \"ReportId\" IS NULL AND \"ManualActionId\" IS NULL) " +
+                    "OR (\"SourceType\" = 1 AND \"DisputeId\" IS NULL AND \"ReportId\" IS NOT NULL AND \"ManualActionId\" IS NULL AND \"ContractId\" IS NULL AND \"MilestoneId\" IS NULL) " +
+                    "OR (\"SourceType\" = 2 AND \"DisputeId\" IS NULL AND \"ReportId\" IS NULL AND \"ManualActionId\" IS NOT NULL AND \"ContractId\" IS NULL AND \"MilestoneId\" IS NULL)");
+            });
             entity.HasKey(e => e.UserViolationId);
-            entity.HasIndex(e => new { e.UserId, e.DisputeId }).IsUnique();
+            entity.HasIndex(e => new { e.UserId, e.DisputeId }).IsUnique().HasFilter("\"DisputeId\" IS NOT NULL");
+            entity.HasIndex(e => new { e.UserId, e.ReportId }).IsUnique().HasFilter("\"ReportId\" IS NOT NULL");
+            entity.HasIndex(e => new { e.UserId, e.ManualActionId }).IsUnique().HasFilter("\"ManualActionId\" IS NOT NULL");
             entity.HasIndex(e => e.ContractId);
             entity.HasIndex(e => e.MilestoneId);
             entity.HasIndex(e => e.CreatedByAdminId);
@@ -891,11 +914,14 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.Property(e => e.Description).HasMaxLength(4000);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.IsActive).HasDefaultValue(true);
+            entity.Property(e => e.SourceType).HasDefaultValue((int)UserViolationSourceType.Dispute);
 
             entity.HasOne(e => e.User).WithMany(e => e.UserViolations)
                 .HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(e => e.Dispute).WithMany(e => e.UserViolations)
                 .HasForeignKey(e => e.DisputeId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.Report).WithMany(e => e.UserViolations)
+                .HasForeignKey(e => e.ReportId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(e => e.Contract).WithMany()
                 .HasForeignKey(e => e.ContractId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(e => e.Milestone).WithMany()
@@ -2060,6 +2086,7 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
         modelBuilder.Entity<Proposal>(entity =>
         {
+            entity.ToTable(table => table.HasCheckConstraint("CK_Proposals_ModerationStatus_Valid", "\"ModerationStatus\" BETWEEN 0 AND 1"));
             entity.HasKey(e => e.ProposalsId).HasName("Proposals_pkey");
 
             entity.HasIndex(e => e.FreelancerProfilesId, "IX_Proposals_FreelancerProfilesId");
@@ -2071,6 +2098,10 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.HasIndex(e => new { e.JobPostsId, e.Status }, "IX_Proposals_JobPostsId_Status");
 
             entity.HasIndex(e => e.Status, "IX_Proposals_Status");
+
+            entity.HasIndex(e => e.ModerationStatus, "IX_Proposals_ModerationStatus");
+
+            entity.HasIndex(e => e.InvalidatedByAdminId, "IX_Proposals_InvalidatedByAdminId");
 
             entity.HasIndex(e => new { e.JobPostsId, e.FreelancerProfilesId }, "Proposals_jp_JobPostsId_flPro_FreelancerProfilesId_key").IsUnique();
 
@@ -2089,7 +2120,10 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.Property(e => e.Deliverables).HasColumnType("text");
             entity.Property(e => e.Assumptions).HasColumnType("text");
             entity.Property(e => e.OutOfScope).HasColumnType("text");
-            entity.Property(e => e.Status).HasComment("Enum ProposalStatus: 0=Pending, 1=Shortlisted, 2=Accepted, 3=Rejected, 4=Withdrawn");
+            entity.Property(e => e.Status).HasComment("Enum ProposalStatus: 0=Draft, 1=Pending, 2=Shortlisted, 3=Accepted, 4=Rejected, 5=Withdrawn");
+            entity.Property(e => e.ModerationStatus).HasDefaultValue((int)ProposalModerationStatus.Active)
+                .HasComment("Enum ProposalModerationStatus: 0=Active, 1=Invalidated");
+            entity.Property(e => e.InvalidationReason).HasMaxLength(2000);
 
             entity.HasOne(d => d.FreelancerProfiles).WithMany(p => p.Proposals)
                 .HasForeignKey(d => d.FreelancerProfilesId)
@@ -2100,6 +2134,25 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
                 .HasForeignKey(d => d.JobPostsId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("Proposals_jp_JobPostsId_fkey");
+
+            entity.HasOne(d => d.InvalidatedByAdmin).WithMany(p => p.InvalidatedProposals)
+                .HasForeignKey(d => d.InvalidatedByAdminId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("Proposals_usr_InvalidatedByAdminId_fkey");
+        });
+
+        modelBuilder.Entity<ProposalAdminNote>(entity =>
+        {
+            entity.HasKey(e => e.ProposalAdminNoteId);
+            entity.HasIndex(e => new { e.ProposalId, e.CreatedAt });
+            entity.Property(e => e.ProposalAdminNoteId).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.Content).HasMaxLength(5000);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.IsActive).HasDefaultValue(true);
+            entity.HasOne(e => e.Proposal).WithMany(e => e.AdminNotes)
+                .HasForeignKey(e => e.ProposalId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.AdminUser).WithMany(e => e.ProposalAdminNotes)
+                .HasForeignKey(e => e.AdminUserId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<ProposalWorkBreakdownItem>(entity =>
@@ -2333,6 +2386,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
             entity.HasIndex(e => e.ResolvedByAdminId, "IX_Reports_ResolvedByAdminId");
 
+            entity.HasIndex(e => e.AssignedAdminId, "IX_Reports_AssignedAdminId");
+
             entity.HasIndex(e => e.Status, "IX_Reports_Status");
 
             entity.Property(e => e.ReportsId)
@@ -2340,6 +2395,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
                 .HasColumnName("ReportsId");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.ReportedEntityType).HasMaxLength(50);
+            entity.Property(e => e.Description).HasMaxLength(4000);
+            entity.Property(e => e.ResolutionAction).HasComment("Enum AccountReportResolutionAction: 0=None, 1=Warning, 2=Suspension, 3=PermanentBan");
             entity.Property(e => e.Status)
                 .HasDefaultValue(0)
                 .HasComment("Enum ReportStatus: 0=Pending, 1=Reviewing, 2=Resolved, 3=Dismissed");
@@ -2350,10 +2407,33 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
                 .HasForeignKey(d => d.ResolvedByAdminId)
                 .HasConstraintName("Reports_ResolvedByAdminId_fkey");
 
+            entity.HasOne(d => d.AssignedAdmin).WithMany(p => p.ReportAssignedAdmins)
+                .HasForeignKey(d => d.AssignedAdminId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("Reports_AssignedAdminId_fkey");
+
             entity.HasOne(d => d.Reporter).WithMany(p => p.ReportReporters)
                 .HasForeignKey(d => d.ReporterId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("Reports_usr_ReporterId_fkey");
+        });
+
+        modelBuilder.Entity<ReportEvidence>(entity =>
+        {
+            entity.ToTable("ReportEvidences", table =>
+                table.HasCheckConstraint("CK_ReportEvidences_FileSize_Positive", "\"FileSize\" > 0"));
+            entity.HasKey(e => e.ReportEvidenceId);
+            entity.HasIndex(e => e.ReportId);
+            entity.HasIndex(e => e.UploadedByUserId);
+            entity.Property(e => e.StorageKey).HasMaxLength(500);
+            entity.Property(e => e.OriginalFileName).HasMaxLength(500);
+            entity.Property(e => e.ContentType).HasMaxLength(200);
+            entity.Property(e => e.Description).HasMaxLength(1000);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.HasOne(e => e.Report).WithMany(e => e.ReportEvidences)
+                .HasForeignKey(e => e.ReportId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.UploadedByUser).WithMany(e => e.UploadedReportEvidences)
+                .HasForeignKey(e => e.UploadedByUserId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<Review>(entity =>
@@ -2813,6 +2893,7 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
         modelBuilder.Entity<ReportContract>(entity =>
         {
+            entity.ToTable(table => table.HasCheckConstraint("CK_ReportContracts_AdminReviewStatus_Valid", "\"AdminReviewStatus\" BETWEEN 0 AND 6"));
             entity.HasKey(e => e.ReportContractId).HasName("ReportContracts_pkey");
 
             entity.HasIndex(e => e.ContractId, "IX_ReportContracts_ContractId");
@@ -2822,6 +2903,10 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.HasIndex(e => e.RespondentId, "IX_ReportContracts_RespondentId");
 
             entity.HasIndex(e => e.Status, "IX_ReportContracts_Status");
+
+            entity.HasIndex(e => e.AssignedAdminId, "IX_ReportContracts_AssignedAdminId");
+
+            entity.HasIndex(e => e.AdminReviewStatus, "IX_ReportContracts_AdminReviewStatus");
 
             entity.Property(e => e.ReportContractId)
                 .HasDefaultValueSql("gen_random_uuid()")
@@ -2843,6 +2928,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.Property(e => e.RejectReason).HasMaxLength(5000);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.IsEscalatedToDispute).HasDefaultValue(false);
+            entity.Property(e => e.AdminReviewStatus).HasDefaultValue((int)ContractReportAdminStatus.Open);
+            entity.Property(e => e.AdminResolutionNote).HasMaxLength(5000);
 
             entity.HasOne(d => d.Contract).WithMany(p => p.ReportContracts)
                 .HasForeignKey(d => d.ContractId)
@@ -2865,6 +2952,11 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.HasOne(d => d.ResolvedByUser).WithMany(p => p.ReportContractResolvedBy)
                 .HasForeignKey(d => d.ResolvedBy)
                 .HasConstraintName("ReportContracts_usr_ResolvedBy_fkey");
+
+            entity.HasOne(d => d.AssignedAdmin).WithMany(p => p.AssignedReportContracts)
+                .HasForeignKey(d => d.AssignedAdminId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("ReportContracts_usr_AssignedAdminId_fkey");
         });
 
         modelBuilder.Entity<ReportContractAttachment>(entity =>
@@ -2885,8 +2977,38 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
             entity.HasOne(d => d.ReportContract).WithMany(p => p.ReportContractAttachments)
                 .HasForeignKey(d => d.ReportContractId)
-                .OnDelete(DeleteBehavior.Cascade)
+                .OnDelete(DeleteBehavior.Restrict)
                 .HasConstraintName("ReportContractAttachments_rc_ReportContractId_fkey");
+        });
+
+        modelBuilder.Entity<ReportContractAdminNote>(entity =>
+        {
+            entity.HasKey(e => e.ReportContractAdminNoteId);
+            entity.HasIndex(e => new { e.ReportContractId, e.CreatedAt });
+            entity.Property(e => e.Content).HasMaxLength(5000);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.IsActive).HasDefaultValue(true);
+            entity.HasOne(e => e.ReportContract).WithMany(e => e.AdminNotes)
+                .HasForeignKey(e => e.ReportContractId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.AdminUser).WithMany(e => e.ReportContractAdminNotes)
+                .HasForeignKey(e => e.AdminUserId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<ReportContractInformationRequest>(entity =>
+        {
+            entity.ToTable(table => table.HasCheckConstraint("CK_ReportContractInformationRequests_Status_Valid", "\"Status\" BETWEEN 0 AND 3"));
+            entity.HasKey(e => e.InformationRequestId);
+            entity.HasIndex(e => new { e.ReportContractId, e.RequestId, e.TargetUserId }).IsUnique();
+            entity.HasIndex(e => e.TargetUserId);
+            entity.Property(e => e.Message).HasMaxLength(4000);
+            entity.Property(e => e.RequestedEvidenceOrClarification).HasMaxLength(2000);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.HasOne(e => e.ReportContract).WithMany(e => e.InformationRequests)
+                .HasForeignKey(e => e.ReportContractId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.RequestedByAdmin).WithMany(e => e.RequestedReportContractInformation)
+                .HasForeignKey(e => e.RequestedByAdminId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.TargetUser).WithMany(e => e.TargetedReportContractInformation)
+                .HasForeignKey(e => e.TargetUserId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<TalentMatchRun>(entity =>

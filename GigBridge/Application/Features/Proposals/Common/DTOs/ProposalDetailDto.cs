@@ -37,6 +37,10 @@ public class ProposalDetailDto
     /// </summary>
     public int Status { get; set; }
 
+    public int ModerationStatus { get; set; }
+
+    public string? InvalidationReason { get; set; }
+
     public DateTime? SubmittedAt { get; set; }
 
     public DateTime? UpdatedAt { get; set; }

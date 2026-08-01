@@ -10,6 +10,7 @@ using Project_API.Services.Chat;
 using Project_API.Services.Notification;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddScoped<Application.Common.Interfaces.IService.IRequestMetadataAccessor, Project_API.Services.RequestMetadataAccessor>();
 
 if (builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Testing"))
 {

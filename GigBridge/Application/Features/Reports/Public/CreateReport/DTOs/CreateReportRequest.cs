@@ -6,4 +6,5 @@ public record CreateReportRequest(
     Guid ReportedEntityId,
     string ReportedEntityType,
     ReportType Type,
-    string Reason);
+    string Reason,
+    string? Description = null);

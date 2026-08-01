@@ -59,6 +59,7 @@ public static class DependencyInjection
         }, typeof(MappingProfile));
         services.AddScoped<ScheduleWorkflowService>();
         services.AddScoped<IUserAccountStatusService, UserAccountStatusService>();
+        services.AddScoped<IAdminAuditService, AdminAuditService>();
         services.AddScoped<IUserEloService, UserEloService>();
         services.AddScoped<IReviewModerationService, ReviewModerationService>();
         services.AddScoped<IPremiumAccessService, PremiumAccessService>();

@@ -48,6 +48,7 @@ public static class ReportProjection
                 Status = (ReportStatus)report.Status,
                 IsPremiumReporter = premiumReporterSet.Contains(report.ReporterId),
                 Reason = report.Reason,
+                Description = report.Description,
                 AdminNote = report.AdminNote,
                 ResolvedByAdmin = report.ResolvedByAdmin is null
                     ? null
