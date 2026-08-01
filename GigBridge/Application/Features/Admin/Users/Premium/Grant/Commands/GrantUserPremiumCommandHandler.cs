@@ -1,6 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Application.Features.Subscriptions.Common;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
@@ -31,12 +32,17 @@ public sealed class GrantUserPremiumCommandHandler : IRequestHandler<GrantUserPr
             throw new BadRequestException("Only freelancer accounts can receive Freelancer Premium.");
 
         var now = _clock.UtcNow;
-        var alreadyPremium = await _context.Set<Subscription>().AnyAsync(x => x.UserId == command.UserId && x.Status == SubscriptionStatus.Active && x.StartDate <= now && x.EndDate > now && x.SubscriptionPlans.Price > 0, ct);
+        var alreadyPremium = await _context.Set<Subscription>()
+            .Where(x => x.UserId == command.UserId)
+            .EffectiveAt(UserRole.Freelancer, now)
+            .AnyAsync(ct);
         if (alreadyPremium) return false;
 
-        var plan = await _context.Set<SubscriptionPlan>().Where(x => x.IsActive == true && x.TargetRole == (int)UserRole.Freelancer && x.Price > 0).OrderByDescending(x => x.DurationInDays).ThenBy(x => x.Price).FirstOrDefaultAsync(ct)
+        var plan = await _context.Set<SubscriptionPlan>().Where(x => x.IsActive == true &&
+                (x.TargetRole == null || x.TargetRole == (int)UserRole.Freelancer) && x.Price > 0)
+            .OrderByDescending(x => x.DurationInDays).ThenBy(x => x.Price).FirstOrDefaultAsync(ct)
             ?? throw new NotFoundException("No active Freelancer Premium plan is configured.");
-        var subscription = new Subscription { SubscriptionsId = Guid.NewGuid(), UserId = command.UserId, SubscriptionPlansId = plan.SubscriptionPlansId, Status = SubscriptionStatus.Active, StartDate = now, EndDate = now.AddDays(365), AutoRenew = false, PaymentReference = $"ADMIN-GRANT-{Guid.NewGuid():N}", CreatedAt = now };
+        var subscription = new Subscription { SubscriptionsId = Guid.NewGuid(), UserId = command.UserId, SubscriptionPlansId = plan.SubscriptionPlansId, SubscriptionPlans = plan, Status = SubscriptionStatus.Active, StartDate = now, EndDate = now.AddDays(plan.DurationInDays), AutoRenew = false, PaymentReference = $"ADMIN-GRANT-{Guid.NewGuid():N}", CreatedAt = now };
         _context.Set<Subscription>().Add(subscription);
         await _context.SaveChangesAsync(ct);
         await _cache.RemoveAsync($"premium:access:{command.UserId:N}", ct);

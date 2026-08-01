@@ -3,6 +3,7 @@ using System;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(GigbridgeDbContext))]
-    partial class GigbridgeDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260801053807_RepairPremiumEntitlements")]
+    partial class RepairPremiumEntitlements
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -2112,14 +2115,14 @@ namespace Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
-                    b.Property<string>("Quote")
-                        .HasMaxLength(240)
-                        .HasColumnType("character varying(240)");
-
                     b.Property<int>("QueuePosition")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
                         .HasDefaultValue(0);
+
+                    b.Property<string>("Quote")
+                        .HasMaxLength(240)
+                        .HasColumnType("character varying(240)");
 
                     b.Property<bool>("ShowJobTitle")
                         .HasColumnType("boolean");
@@ -2154,11 +2157,11 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "EndTime" }, "IX_FreelancerProfilePromotions_End");
 
-                    b.HasIndex(new[] { "FreelancerProfileId", "Status", "StartTime" }, "IX_FreelancerProfilePromotions_Queue");
-
                     b.HasIndex(new[] { "Status", "QueuePosition" }, "IX_FreelancerProfilePromotions_Position")
                         .IsUnique()
                         .HasFilter("\"QueuePosition\" > 0");
+
+                    b.HasIndex(new[] { "FreelancerProfileId", "Status", "StartTime" }, "IX_FreelancerProfilePromotions_Queue");
 
                     b.HasIndex(new[] { "FreelancerProfileId" }, "UX_FreelancerProfilePromotions_OneActive")
                         .IsUnique()
@@ -4396,17 +4399,17 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasKey("ReviewsId")
                         .HasName("Reviews_pkey");
 
+                    b.HasIndex("ModeratedByAdminId");
+
                     b.HasIndex(new[] { "ContractsId" }, "IX_Reviews_ContractsId");
+
+                    b.HasIndex(new[] { "ModerationStatus" }, "IX_Reviews_ModerationStatus");
 
                     b.HasIndex(new[] { "RevieweeId" }, "IX_Reviews_RevieweeId");
 
                     b.HasIndex(new[] { "RevieweeId", "IsVisible" }, "IX_Reviews_RevieweeId_IsVisible");
 
                     b.HasIndex(new[] { "ReviewerId" }, "IX_Reviews_ReviewerId");
-
-                    b.HasIndex(new[] { "ModeratedByAdminId" }, "IX_Reviews_ModeratedByAdminId");
-
-                    b.HasIndex(new[] { "ModerationStatus" }, "IX_Reviews_ModerationStatus");
 
                     b.HasIndex(new[] { "ContractsId", "ReviewerId" }, "Reviews_cont_ContractsId_usr_ReviewerId_key")
                         .IsUnique();
@@ -4564,12 +4567,12 @@ namespace Infrastructure.Persistence.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
-                    b.Property<int>("RescheduleRequestCount")
+                    b.Property<int>("RescheduleRejectionCount")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
                         .HasDefaultValue(0);
 
-                    b.Property<int>("RescheduleRejectionCount")
+                    b.Property<int>("RescheduleRequestCount")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
                         .HasDefaultValue(0);
@@ -6837,17 +6840,17 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.Review", b =>
                 {
-                    b.HasOne("Domain.Entities.User", null)
-                        .WithMany()
-                        .HasForeignKey("ModeratedByAdminId")
-                        .OnDelete(DeleteBehavior.SetNull)
-                        .HasConstraintName("Reviews_usr_ModeratedByAdminId_fkey");
-
                     b.HasOne("Domain.Entities.Contract", "Contracts")
                         .WithMany("Reviews")
                         .HasForeignKey("ContractsId")
                         .IsRequired()
                         .HasConstraintName("Reviews_cont_ContractsId_fkey");
+
+                    b.HasOne("Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("ModeratedByAdminId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("Reviews_usr_ModeratedByAdminId_fkey");
 
                     b.HasOne("Domain.Entities.User", "Reviewee")
                         .WithMany("ReviewReviewees")

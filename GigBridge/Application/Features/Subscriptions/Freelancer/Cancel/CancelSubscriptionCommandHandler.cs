@@ -1,6 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Application.Features.Subscriptions.Common;
 using Application.Features.Subscriptions.Freelancer.DTOs;
 using Domain.Entities;
 using Domain.Enums;
@@ -20,10 +21,8 @@ public sealed class CancelSubscriptionCommandHandler(
         var now = clock.UtcNow;
         var subscription = await context.Set<Subscription>()
             .Include(item => item.SubscriptionPlans)
-            .Where(item => item.UserId == command.UserId &&
-                           item.Status == SubscriptionStatus.Active &&
-                           item.SubscriptionPlans.Price > 0 &&
-                           item.StartDate <= now && item.EndDate > now)
+            .Where(item => item.UserId == command.UserId)
+            .EffectiveAt(UserRole.Freelancer, now)
             .OrderByDescending(item => item.EndDate)
             .FirstOrDefaultAsync(cancellationToken)
             ?? throw new NotFoundException("Active subscription does not exist.");

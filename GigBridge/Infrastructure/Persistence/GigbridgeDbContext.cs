@@ -2451,7 +2451,6 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
                 .HasColumnName("SubscriptionPlansId");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.Currency)
-                .HasMaxLength(5)
                 .HasDefaultValueSql("'VND'::character varying");
             entity.Property(e => e.Features).HasColumnType("jsonb");
             entity.Property(e => e.IsActive).HasDefaultValue(true);

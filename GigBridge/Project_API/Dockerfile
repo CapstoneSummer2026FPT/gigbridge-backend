@@ -17,6 +17,8 @@ COPY ["Domain/Domain.csproj", "Domain/"]
 COPY ["Infrastructure/Infrastructure.csproj", "Infrastructure/"]
 COPY ["Application/Application.csproj", "Application/"]
 RUN dotnet restore "./Project_API/Project_API.csproj"
+RUN dotnet tool install --global dotnet-ef --version 8.0.29
+ENV PATH="${PATH}:/root/.dotnet/tools"
 COPY . .
 WORKDIR "/src/Project_API"
 RUN dotnet build "./Project_API.csproj" -c $BUILD_CONFIGURATION -o /app/build
@@ -25,6 +27,12 @@ RUN dotnet build "./Project_API.csproj" -c $BUILD_CONFIGURATION -o /app/build
 FROM build AS publish
 ARG BUILD_CONFIGURATION=Release
 RUN dotnet publish "./Project_API.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
+RUN dotnet ef migrations bundle \
+    --project "/src/Infrastructure/Infrastructure.csproj" \
+    --startup-project "./Project_API.csproj" \
+    --configuration $BUILD_CONFIGURATION \
+    --output /app/publish/efbundle \
+    --force
 
 # This stage is used in production or when running from VS in regular mode (Default when not using the Debug configuration)
 FROM base AS final

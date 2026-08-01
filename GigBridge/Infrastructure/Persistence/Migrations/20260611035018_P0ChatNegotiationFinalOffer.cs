@@ -31,7 +31,7 @@ namespace Infrastructure.Persistence.Migrations
                 name: "IX_Messages_SenderId",
                 table: "Messages");
 
-            migrationBuilder.DropUniqueConstraint(
+            migrationBuilder.DropIndex(
                 name: "Conversations_usr_User1Id_usr_User2Id_cont_ContractsId_key",
                 table: "Conversations");
 
@@ -857,10 +857,11 @@ namespace Infrastructure.Persistence.Migrations
                 table: "Messages",
                 column: "SenderId");
 
-            migrationBuilder.AddUniqueConstraint(
+            migrationBuilder.CreateIndex(
                 name: "Conversations_usr_User1Id_usr_User2Id_cont_ContractsId_key",
                 table: "Conversations",
-                columns: new[] { "User1Id", "User2Id", "ContractsId" });
+                columns: new[] { "User1Id", "User2Id", "ContractsId" },
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_Conversations_User1Id",

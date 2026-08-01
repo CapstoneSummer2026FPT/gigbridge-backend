@@ -1,5 +1,6 @@
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Application.Features.Subscriptions.Common;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
@@ -25,7 +26,11 @@ public sealed class RevokeUserPremiumCommandHandler : IRequestHandler<RevokeUser
     public async Task<bool> Handle(RevokeUserPremiumCommand command, CancellationToken ct)
     {
         var now = _clock.UtcNow;
-        var active = await _context.Set<Subscription>().Include(x => x.SubscriptionPlans).Where(x => x.UserId == command.UserId && x.Status == SubscriptionStatus.Active && x.EndDate > now && x.SubscriptionPlans.Price > 0).ToListAsync(ct);
+        var active = await _context.Set<Subscription>().Include(x => x.SubscriptionPlans)
+            .Where(x => x.UserId == command.UserId &&
+                        x.Status == SubscriptionStatus.Active && x.EndDate > now)
+            .CompatibleWithRole(UserRole.Freelancer)
+            .ToListAsync(ct);
         if (active.Count == 0) return false;
 
         foreach (var subscription in active)
