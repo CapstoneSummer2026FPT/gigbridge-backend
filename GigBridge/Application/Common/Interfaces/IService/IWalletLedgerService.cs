@@ -12,12 +12,4 @@ public interface IWalletLedgerService
         string idempotencyKey,
         string? metadata,
         CancellationToken cancellationToken);
-
-    Task<WalletTransaction> CreditAsync(
-        Guid userId,
-        decimal tokenAmount,
-        WalletTransactionType type,
-        string idempotencyKey,
-        string? metadata,
-        CancellationToken cancellationToken);
 }

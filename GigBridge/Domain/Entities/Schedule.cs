@@ -37,6 +37,10 @@ public class Schedule
     public ScheduleStatus Status { get; set; }
     public ScheduleAgreementStatus AgreementStatus { get; set; }
     public DateTime? CounterProposalCreatedAtUtc { get; set; }
+    public DateTime? ProposedScheduledAtUtc { get; set; }
+    public string? ProposedTimeZoneId { get; set; }
+    public int RescheduleRequestCount { get; set; }
+    public int RescheduleRejectionCount { get; set; }
     public int EditCount { get; set; }
     public int Version { get; set; } = 1;
     public Guid? CancelledByUserId { get; set; }

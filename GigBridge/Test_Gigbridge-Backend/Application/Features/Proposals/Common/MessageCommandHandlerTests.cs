@@ -141,6 +141,37 @@ public class MessageCommandHandlerTests
     }
 
     [Fact]
+    public async Task SendMessage_FromFreelancerBroadcastsToClientAndFreelancerUsers()
+    {
+        var fixture = new MessageFixture();
+        var notifier = new CapturingChatRealtimeNotifier();
+        var handler = new SendMessageCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            notifier);
+
+        var response = await handler.Handle(
+            new SendMessageCommand(
+                fixture.FreelancerUserId,
+                new SendMessageRequest(
+                    fixture.ConversationId,
+                    "freelancer-realtime-1",
+                    "Message from freelancer",
+                    null,
+                    [])),
+            CancellationToken.None);
+
+        var receiveEvent = Assert.Single(
+            notifier.UsersEvents,
+            realtimeEvent => realtimeEvent.EventName == "ReceiveMessage");
+        Assert.Contains(fixture.ClientUserId, receiveEvent.UserIds);
+        Assert.Contains(fixture.FreelancerUserId, receiveEvent.UserIds);
+        Assert.Equal(fixture.FreelancerUserId, response.SenderUserId);
+        Assert.Equal(1, fixture.ClientParticipant.UnreadCount);
+        Assert.Equal(0, fixture.FreelancerParticipant.UnreadCount);
+    }
+
+    [Fact]
     public async Task SendMessage_TextOnlyMessageAllowsMissingAttachments()
     {
         var fixture = new MessageFixture();

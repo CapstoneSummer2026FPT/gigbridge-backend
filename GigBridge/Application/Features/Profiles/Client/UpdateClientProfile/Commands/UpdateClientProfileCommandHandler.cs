@@ -1,7 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
-using Application.Features.Profiles.ClientProfile.CreateClientProfile.DTOs;
+using Application.Features.Profiles.ClientProfile.Common.DTOs;
 using AutoMapper;
 using Domain.Entities;
 using MediatR;

@@ -41,8 +41,6 @@ public sealed class HardDeleteJobPostCommandHandler :
             .Include(jp => jp.JobInvitations)
             .Include(jp => jp.Proposals)
                 .ThenInclude(p => p.ProposalAnswers)
-            .Include(jp => jp.Proposals)
-                .ThenInclude(p => p.ProposalAttachments)
             .FirstOrDefaultAsync(jp => jp.JobPostsId == request.JobPostId, cancellationToken);
 
         if (jobPost is null)
@@ -77,17 +75,15 @@ public sealed class HardDeleteJobPostCommandHandler :
 
         foreach (var contract in contracts)
         {
-            // Milestone attachments and payment proofs
+            // Milestone attachments
             var milestones = await _context.Set<Milestone>()
                 .Include(m => m.MilestoneAttachments)
-                .Include(m => m.PaymentProofs)
                 .Where(m => m.ContractsId == contract.ContractsId)
                 .ToListAsync(cancellationToken);
 
             foreach (var m in milestones)
             {
                 _context.Set<MilestoneAttachment>().RemoveRange(m.MilestoneAttachments);
-                _context.Set<PaymentProof>().RemoveRange(m.PaymentProofs);
             }
 
             // Escrow transactions and contract escrows
@@ -111,17 +107,15 @@ public sealed class HardDeleteJobPostCommandHandler :
             }
             _context.Set<ContractEscrow>().RemoveRange(contractEscrows);
 
-            // Disputes, dispute evidences, dispute messages
+            // Disputes and dispute evidences
             var disputes = await _context.Set<Dispute>()
                 .Include(d => d.DisputeEvidences)
-                .Include(d => d.DisputeMessages)
                 .Where(d => d.ContractsId == contract.ContractsId)
                 .ToListAsync(cancellationToken);
 
             foreach (var d in disputes)
             {
                 _context.Set<DisputeEvidence>().RemoveRange(d.DisputeEvidences);
-                _context.Set<DisputeMessage>().RemoveRange(d.DisputeMessages);
             }
             _context.Set<Dispute>().RemoveRange(disputes);
 
@@ -192,16 +186,9 @@ public sealed class HardDeleteJobPostCommandHandler :
         _context.Set<SavedJob>().RemoveRange(jobPost.SavedJobs);
         _context.Set<JobInvitation>().RemoveRange(jobPost.JobInvitations);
 
-        var proposalIds = jobPost.Proposals.Select(p => p.ProposalsId).ToList();
-        var cheatingEvents = await _context.Set<ProposalCheatingEvent>()
-            .Where(e => proposalIds.Contains(e.ProposalsId))
-            .ToListAsync(cancellationToken);
-        _context.Set<ProposalCheatingEvent>().RemoveRange(cheatingEvents);
-
         foreach (var proposal in jobPost.Proposals)
         {
             _context.Set<ProposalAnswer>().RemoveRange(proposal.ProposalAnswers);
-            _context.Set<ProposalAttachment>().RemoveRange(proposal.ProposalAttachments);
         }
         _context.Set<Proposal>().RemoveRange(jobPost.Proposals);
 

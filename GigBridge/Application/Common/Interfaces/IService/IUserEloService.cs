@@ -10,5 +10,10 @@ public interface IUserEloService
 
     Task ApplyReviewScoreAsync(Guid reviewId, Guid revieweeId, int rating, CancellationToken cancellationToken);
 
-    Task ApplyCheatingPenaltyAsync(Guid violationId, Guid userId, int pointsDelta, CancellationToken cancellationToken);
+    Task<int> ApplyReviewModerationAsync(
+        Guid reviewId,
+        Guid revieweeId,
+        Guid operationId,
+        bool hide,
+        CancellationToken cancellationToken);
 }

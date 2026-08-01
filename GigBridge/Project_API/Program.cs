@@ -4,6 +4,7 @@ using Infrastructure;
 using Project_API.Extensions;
 using Project_API.Hubs;
 using Project_API.Middleware;
+using Project_API.Security;
 using Project_API.Services;
 using Project_API.Services.Chat;
 using Project_API.Services.Notification;
@@ -26,7 +27,8 @@ builder.Services.AddInfrastructureServices(builder.Configuration);
 // API-layer concerns
 builder.Services.AddJwtAuthentication(builder.Configuration);
 builder.Services.AddSwaggerWithBearerAuth();
-builder.Services.AddCorsPolicy();
+builder.Services.AddCorsPolicy(builder.Configuration, builder.Environment);
+builder.Services.AddAuthRateLimiting();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddScoped<IChatRealtimeNotifier, SignalRChatRealtimeNotifier>();
@@ -39,15 +41,14 @@ var app = builder.Build();
 
 await app.EnsureLocalESignTemplatesAsync();
 
-// Enable Swagger in all environments for testing
 app.UseSwagger();
 app.UseSwaggerUI();
-
 
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseMiddleware<RequestLoggingMiddleware>();
 
-app.UseCors("AllowAll"); // CORS must be BEFORE UseHttpsRedirection and MapControllers
+app.UseCors(Project_API.Extensions.ServiceCollectionExtensions.FrontendCorsPolicy);
+app.UseRateLimiter();
 if (!app.Environment.IsEnvironment("Testing"))
 {
     app.UseHttpsRedirection();

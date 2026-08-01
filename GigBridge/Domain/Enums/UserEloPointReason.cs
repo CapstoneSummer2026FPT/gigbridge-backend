@@ -7,5 +7,9 @@ public enum UserEloPointReason
     ReturnBonus = 2,
     JobCompletion = 3,
     ReviewRating = 4,
-    CheatingPenalty = 5
+
+    // Persisted ledger value from the retired integrity-monitoring workflow.
+    // Never reuse or renumber this value.
+    LegacyIntegrityPenalty = 5,
+    ReviewModeration = 6
 }

@@ -23,5 +23,11 @@ public class SubmitProposalValidator : AbstractValidator<SubmitProposalCommand>
             .Must(value => global::Application.Features.Proposals.Common.ProposalTotalsCalculator.IsValidDuration(value))
             .WithMessage("ProposedDuration must be a positive whole number in days, weeks, or months.")
             .When(x => !string.IsNullOrWhiteSpace(x.Request.ProposedDuration));
+
+        RuleForEach(x => x.Request.WorkBreakdownItems)
+            .SetValidator(new global::Application.Features.Proposals.Common.ProposalWorkBreakdownItemValidator());
+
+        RuleForEach(x => x.Request.MilestonePlans)
+            .SetValidator(new global::Application.Features.Proposals.Common.ProposalMilestonePlanValidator());
     }
 }

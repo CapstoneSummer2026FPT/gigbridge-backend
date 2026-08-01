@@ -35,6 +35,21 @@ public class GoogleMeetControllerTests
             result.Url);
     }
 
+    [Fact]
+    public void Constructor_RejectsMissingFrontendCallbackUri()
+    {
+        // Arrange
+        var options = Options.Create(new GoogleMeetOptions());
+
+        // Act
+        var action = () => new GoogleMeetController(
+            Substitute.For<IGoogleMeetOAuthService>(),
+            options);
+
+        // Assert
+        Assert.Throws<InvalidOperationException>(action);
+    }
+
     private static GoogleMeetController CreateController(string frontendCallbackUri)
     {
         var options = Options.Create(new GoogleMeetOptions

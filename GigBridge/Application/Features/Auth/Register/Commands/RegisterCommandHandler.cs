@@ -1,6 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Application.Features.Auth.Common;
 using Application.Features.Auth.Shared.DTOs;
 using AutoMapper;
 using Domain.Entities;
@@ -38,29 +39,38 @@ public class RegisterCommandHandler : IRequestHandler<RegisterCommand, UserDTO>
     public async Task<UserDTO> Handle(RegisterCommand request, CancellationToken cancellationToken)
     {
         var registerRequest = request.RegisterRequest;
-        var email = registerRequest.Email.Trim();
+        if (registerRequest.role is not (UserRole.Client or UserRole.Freelancer))
+        {
+            throw new BadRequestException("Only Client or Freelancer registration is allowed.");
+        }
+
+        var email = EmailCanonicalizer.Canonicalize(registerRequest.Email);
 
         var emailExists = await _context.Set<User>()
-            .AnyAsync(user => user.Email.ToLower() == email.ToLower(), cancellationToken);
+            .AnyAsync(user => user.Email == email, cancellationToken);
 
         if (emailExists)
         {
             throw new BadRequestException("Email already exists");
         }
 
-        var verificationKey = $"verified_email:{email.ToLowerInvariant()}";
-        var cachedOtp = await _cacheService.GetAsync<string>(verificationKey, cancellationToken);
-        if (string.IsNullOrEmpty(cachedOtp))
+        var verificationKey = OtpSecurity.VerifiedKey(
+            OtpPurpose.Signup,
+            email,
+            registerRequest.VerificationTicket);
+        var isVerified = await _cacheService.GetAndRemoveAsync<bool>(
+            verificationKey,
+            cancellationToken);
+        if (!isVerified)
         {
             throw new BadRequestException("Email has not been verified or verification has expired.");
         }
 
-        var user = CreateUser(registerRequest.role!.Value, email, registerRequest.FullName, registerRequest.Password);
+        var user = CreateUser(registerRequest.role.Value, email, registerRequest.FullName, registerRequest.Password);
 
         _context.Set<User>().Add(user);
         await _userEloService.InitializeNewUserAsync(user, cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
-        await _cacheService.RemoveAsync(verificationKey, cancellationToken);
 
         return _mapper.Map<UserDTO>(user);
     }
@@ -77,9 +87,7 @@ public class RegisterCommandHandler : IRequestHandler<RegisterCommand, UserDTO>
             Role = (int)role,
             IsEmailVerified = true,
             IsActive = true,
-            CreatedAt = now,
-            EmailVerificationToken = null,
-            TokenExpiry = null
+            CreatedAt = now
         };
 
         user.AttachProfileForRole(now);

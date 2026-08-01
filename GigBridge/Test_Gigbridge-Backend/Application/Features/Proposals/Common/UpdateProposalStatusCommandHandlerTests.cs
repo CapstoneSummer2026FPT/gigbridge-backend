@@ -2,7 +2,6 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces.IService;
 using Application.Features.Proposals.Common.UpdateProposalStatus.Commands;
 using Application.Features.Proposals.Common.UpdateProposalStatus.Commands.DTOs;
-using Application.Features.Proposals.Freelancer.Cheating.DTOs;
 using Domain.Entities;
 using Domain.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -147,7 +146,7 @@ public class UpdateProposalStatusCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_SubmitDraftWithNewCheatingViolation_NotifiesFreelancerAfterSaving()
+    public async Task Handle_SubmitDraft_DoesNotApplyRetiredIntegrityPenalty()
     {
         var now = new DateTime(2026, 6, 10, 10, 0, 0, DateTimeKind.Utc);
         var context = new InMemoryApplicationDbContext();
@@ -155,7 +154,6 @@ public class UpdateProposalStatusCommandHandlerTests
         var freelancerProfileId = Guid.NewGuid();
         var jobPostId = Guid.NewGuid();
         var proposalId = Guid.NewGuid();
-        var violationId = Guid.NewGuid();
 
         var jobPost = new JobPost
         {
@@ -207,22 +205,9 @@ public class UpdateProposalStatusCommandHandlerTests
         context.AddSet(jobPost);
         context.AddSet(proposal);
         context.AddSet<ClientProfile>();
-
-        var cheatingPenalty = new CheatingPenaltyResultDto(
-            true,
-            true,
-            violationId,
-            3,
-            -50,
-            (int)CheatingViolationAction.TemporarySuspension,
-            now.AddDays(7),
-            "Anti-cheat suspension applied: violation 3. Your account is suspended for 7 days. 50 Elo points deducted.");
-        var notificationService = new SpyNotificationService(context);
-        var handler = new UpdateProposalStatusCommandHandler(
-            context,
-            new FixedDateTimeService(now),
-            new StubProposalCheatingService(cheatingPenalty),
-            notificationService: notificationService);
+        context.AddSet<UserEloPointTransaction>();
+        context.AddSet<Notification>();
+        var handler = new UpdateProposalStatusCommandHandler(context, new FixedDateTimeService(now));
 
         var result = await handler.Handle(
             new UpdateProposalStatusCommand(
@@ -233,12 +218,8 @@ public class UpdateProposalStatusCommandHandlerTests
 
         Assert.True(result.Success);
         Assert.Equal(1, proposal.Status);
-        Assert.Single(notificationService.Notifications);
-        Assert.Equal(1, notificationService.Notifications[0].SaveChangesCountAtCreation);
-        Assert.Equal("Anti-cheat suspension applied", notificationService.Notifications[0].Title);
-        Assert.Contains("violation 3", notificationService.Notifications[0].Content);
-        Assert.Contains("suspended for 7 days", notificationService.Notifications[0].Content);
-        Assert.Equal(violationId, notificationService.Notifications[0].ReferenceId);
+        Assert.Empty(context.Set<UserEloPointTransaction>());
+        Assert.Empty(context.Set<Notification>());
     }
 
     [Fact]
@@ -275,6 +256,29 @@ public class UpdateProposalStatusCommandHandlerTests
         Assert.Equal(1, proposal.Status);
         Assert.Equal(500m, proposal.ProposedBudget);
         Assert.Equal(400m, proposal.ProposalMilestonePlans.Single().Amount);
+    }
+
+    [Fact]
+    public async Task Handle_SubmitDraftWithGeneratedWorkItem_PassesSubmissionGuard()
+    {
+        var (handler, proposal, userId) = CreateDraftSubmissionHandler();
+        var milestone = proposal.ProposalMilestonePlans.Single();
+        var workItem = proposal.ProposalWorkBreakdownItems.Single();
+        workItem.Title = milestone.Title;
+        workItem.Description = milestone.Deliverables;
+        workItem.Deliverables = milestone.Deliverables;
+        workItem.EstimatedDuration = milestone.EstimatedDuration;
+
+        var result = await handler.Handle(
+            new UpdateProposalStatusCommand(
+                proposal.ProposalsId,
+                userId,
+                new UpdateProposalStatusRequest { Status = 1 }),
+            CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Equal(1, proposal.Status);
+        Assert.Equal(milestone.ProposalMilestonePlansId, workItem.ProposalMilestonePlansId);
     }
 
     [Fact]
@@ -458,35 +462,6 @@ public class UpdateProposalStatusCommandHandlerTests
         public DateTime UtcNow { get; }
     }
 
-    private sealed class StubProposalCheatingService : IProposalCheatingService
-    {
-        private readonly CheatingPenaltyResultDto? _penaltyResult;
-
-        public StubProposalCheatingService(CheatingPenaltyResultDto? penaltyResult)
-        {
-            _penaltyResult = penaltyResult;
-        }
-
-        public Task<CheatingEventLogResponse> LogEventAsync(
-            Guid proposalId,
-            Guid freelancerUserId,
-            LogProposalCheatingEventRequest request,
-            string? ipAddress,
-            string? userAgent,
-            CancellationToken cancellationToken)
-        {
-            throw new NotSupportedException();
-        }
-
-        public Task<CheatingPenaltyResultDto?> ApplySubmissionPenaltyIfNeededAsync(
-            Proposal proposal,
-            Guid freelancerUserId,
-            CancellationToken cancellationToken)
-        {
-            return Task.FromResult(_penaltyResult);
-        }
-    }
-
     private sealed class SpyNotificationService : INotificationService
     {
         private readonly InMemoryApplicationDbContext _context;
@@ -536,71 +511,7 @@ public class UpdateProposalStatusCommandHandlerTests
         }
     }
 
-    [Fact]
-    public async Task DiagnoseProposalSubmissionError()
-    {
-        var connectionString = "Host=localhost;Database=postgres;Username=postgres;Password=dummy_password;SSL Mode=Require;Trust Server Certificate=true";
-        var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<global::Infrastructure.Persistence.GigbridgeDbContext>()
-            .UseNpgsql(connectionString)
-            .Options;
-        using var context = new global::Infrastructure.Persistence.GigbridgeDbContext(options);
-
-        var recentProposals = await context.Set<Proposal>()
-            .Include(p => p.JobPosts)
-            .OrderByDescending(p => p.UpdatedAt)
-            .Take(10)
-            .ToListAsync();
-
-        Console.WriteLine("RECENT_PROPOSALS_START");
-        foreach (var p in recentProposals)
-        {
-            Console.WriteLine($"PROP: ID={p.ProposalsId}, Status={p.Status}, Job={p.JobPosts.Title}, FreelancerProfileId={p.FreelancerProfilesId}, UpdatedAt={p.UpdatedAt}");
-        }
-        Console.WriteLine("RECENT_PROPOSALS_END");
-
-        // Query the client and their subscription for the job post "haiz"
-        var jobId = Guid.Parse("986e95de-9254-4c56-a91c-911fa41ef466");
-        var jobPost = await context.Set<JobPost>()
-            .Include(j => j.ClientProfiles)
-                .ThenInclude(c => c.User)
-            .FirstOrDefaultAsync(j => j.JobPostsId == jobId);
-
-        if (jobPost == null)
-        {
-            Console.WriteLine("Job post 'haiz' not found.");
-            return;
-        }
-
-        var clientUserId = jobPost.ClientProfiles.UserId;
-        Console.WriteLine($"CLIENT_DIAG: JobPost ID={jobPost.JobPostsId}, Title={jobPost.Title}, Status={jobPost.Status}, Visibility={jobPost.Visibility}, EndDate={jobPost.EndDate}, ClientProfileId={jobPost.ClientProfilesId}, ClientUserId={clientUserId}, ClientEmail={jobPost.ClientProfiles.User.Email}");
-
-        var subscriptions = await context.Set<Subscription>()
-            .Include(s => s.SubscriptionPlans)
-            .Where(s => s.UserId == clientUserId)
-            .ToListAsync();
-
-        Console.WriteLine($"CLIENT_DIAG: Subscriptions Count: {subscriptions.Count}");
-        foreach (var s in subscriptions)
-        {
-            Console.WriteLine($"SUB: ID={s.SubscriptionsId}, Status={s.Status}, Start={s.StartDate}, End={s.EndDate}, PlanName={s.SubscriptionPlans.Name}, PlanPrice={s.SubscriptionPlans.Price}, PlanIsActive={s.SubscriptionPlans.IsActive}, TargetRole={s.SubscriptionPlans.TargetRole}");
-        }
-
-        // Run GetJobPostDetailQuery handler
-        Console.WriteLine("\n--- DIAGNOSING GET JOB POST DETAIL QUERY ---");
-        try
-        {
-            var queryHandler = new global::Application.Features.JobPosts.Public.GetJobPostDetail.Queries.GetJobPostDetailQueryHandler(context);
-            var result = await queryHandler.Handle(
-                new global::Application.Features.JobPosts.Public.GetJobPostDetail.Queries.GetJobPostDetailQuery(jobId),
-                CancellationToken.None);
-
-            Console.WriteLine($"GET_JOB_DIAG: Success! Title={result.Title}, HasAiInterview={result.HasAiInterview}, MilestonesCount={result.MilestonePlans.Count()}");
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"GET_JOB_DIAG: Fail - {ex.GetType().Name}: {ex.Message}\n{ex.StackTrace}");
-        }
-    }
+    
 
     private sealed record NotificationCall(
         Guid UserId,

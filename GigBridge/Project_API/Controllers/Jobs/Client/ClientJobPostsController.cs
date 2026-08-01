@@ -1,6 +1,7 @@
 using Application.Common.Models;
 using Application.Features.JobPosts.Client.CreateDraftJobPost.Commands;
 using Application.Features.JobPosts.Client.CreateDraftJobPost.DTOs;
+using Application.Features.JobPosts.Client.Attachments.Commands;
 using Application.Features.JobPosts.Client.CreateJobPost.Commands;
 using Application.Features.JobPosts.Client.CreateJobPost.DTOs;
 using Application.Features.JobPosts.Client.DeleteEmptyDraftJobPost.Commands;
@@ -100,6 +101,17 @@ public class ClientJobPostsController : BaseApiController
         return Ok(ApiResponse<JobPostPromotionDto>.Ok(result, "Job post promoted successfully"));
     }
 
+    [HttpPost("{jobPostId:guid}/promotion/end")]
+    public async Task<IActionResult> EndJobPostPromotion(
+        Guid jobPostId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetCurrentUserId(out var userId)) return InvalidTokenResponse();
+        var result = await Mediator.Send(
+            new EndJobPostPromotionCommand(userId, jobPostId), cancellationToken);
+        return Ok(ApiResponse<JobPostPromotionDto>.Ok(result, "Job promotion ended"));
+    }
+
     [HttpGet("{jobPostId:guid}/talent-matches")]
     public async Task<IActionResult> GetTalentMatches(
         Guid jobPostId,
@@ -136,6 +148,44 @@ public class ClientJobPostsController : BaseApiController
         var result = await Mediator.Send(new UploadJobPromotionImageCommand(
             userId, stream, file.FileName, file.ContentType), cancellationToken);
         return Ok(ApiResponse<string>.Ok(result, "Promotion image uploaded"));
+    }
+
+    [HttpPost("{jobPostId:guid}/attachments")]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(6 * 1024 * 1024)]
+    public async Task<IActionResult> UploadJobPostAttachment(
+        Guid jobPostId,
+        IFormFile file,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetCurrentUserId(out var userId)) return InvalidTokenResponse();
+        if (file is null || file.Length == 0)
+            return BadRequest(ApiResponse<object>.BadRequest("A job post image is required."));
+
+        await using var stream = file.OpenReadStream();
+        var result = await Mediator.Send(new UploadJobPostAttachmentCommand(
+            jobPostId,
+            userId,
+            stream,
+            file.FileName,
+            file.ContentType,
+            file.Length), cancellationToken);
+        return Ok(ApiResponse<Application.Features.JobPosts.Common.DTOs.AttachmentDto>.Ok(
+            result,
+            "Job post image uploaded"));
+    }
+
+    [HttpDelete("{jobPostId:guid}/attachments/{attachmentId:guid}")]
+    public async Task<IActionResult> DeleteJobPostAttachment(
+        Guid jobPostId,
+        Guid attachmentId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetCurrentUserId(out var userId)) return InvalidTokenResponse();
+        var result = await Mediator.Send(
+            new DeleteJobPostAttachmentCommand(jobPostId, attachmentId, userId),
+            cancellationToken);
+        return Ok(ApiResponse<bool>.Ok(result, "Job post image deleted"));
     }
 
     [HttpPost("{jobPostId:guid}/talent-matches/ai")]

@@ -17,15 +17,18 @@ public sealed class EndProjectCommandHandler : IRequestHandler<EndProjectCommand
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
     private readonly IChatRealtimeNotifier _chatRealtimeNotifier;
+    private readonly INotificationService _notificationService;
 
     public EndProjectCommandHandler(
         IApplicationDbContext context,
         IDateTimeService dateTimeService,
-        IChatRealtimeNotifier chatRealtimeNotifier)
+        IChatRealtimeNotifier chatRealtimeNotifier,
+        INotificationService notificationService)
     {
         _context = context;
         _dateTimeService = dateTimeService;
         _chatRealtimeNotifier = chatRealtimeNotifier;
+        _notificationService = notificationService;
     }
 
     public async Task<EndProjectResponse> Handle(EndProjectCommand command, CancellationToken cancellationToken)
@@ -126,6 +129,15 @@ public sealed class EndProjectCommandHandler : IRequestHandler<EndProjectCommand
             new[] { clientProfile.UserId, freelancerProfile.UserId },
             "ContractCompleted",
             payload,
+            cancellationToken);
+
+        await _notificationService.CreateNotificationAsync(
+            freelancerProfile.UserId,
+            NotificationType.ReviewRequested,
+            "Project completed - share your review",
+            $"Review your experience working with the client on {contract.Title}.",
+            contract.ContractsId,
+            nameof(Contract),
             cancellationToken);
 
         return new EndProjectResponse(

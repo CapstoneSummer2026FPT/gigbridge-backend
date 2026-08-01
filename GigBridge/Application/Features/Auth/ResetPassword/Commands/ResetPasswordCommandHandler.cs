@@ -1,6 +1,6 @@
-using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Application.Features.Auth.Common;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -26,34 +26,34 @@ public class ResetPasswordCommandHandler : IRequestHandler<ResetPasswordCommand>
     public async Task Handle(ResetPasswordCommand request, CancellationToken cancellationToken)
     {
         var resetRequest = request.Request;
-        var email = resetRequest.Email.Trim().ToLowerInvariant();
+        var email = EmailCanonicalizer.Canonicalize(resetRequest.Email);
+        var verificationKey = OtpSecurity.VerifiedKey(
+            OtpPurpose.PasswordReset,
+            email,
+            resetRequest.Otp);
+        var isVerified = await _cacheService.GetAndRemoveAsync<bool>(
+            verificationKey,
+            cancellationToken);
+
+        if (!isVerified)
+        {
+            throw new Application.Common.Exceptions.BadRequestException(
+                "Invalid or expired OTP verification code.");
+        }
+
         var user = await _context.Set<User>()
-            .FirstOrDefaultAsync(u => u.Email.ToLower() == email, cancellationToken);
+            .FirstOrDefaultAsync(u => u.Email == email, cancellationToken);
 
         if (user is null)
         {
-            throw new NotFoundException("Email does not exist");
+            throw new Application.Common.Exceptions.BadRequestException(
+                "Invalid or expired OTP verification code.");
         }
-
-        await EnsureOtpIsValidAsync(email, resetRequest.Otp, cancellationToken);
 
         user.Password = _passwordHasher.HashPassword(resetRequest.NewPassword);
-        user.EmailVerificationToken = null;
-        user.TokenExpiry = null;
+        user.RefreshTokenHash = null;
+        user.RefreshTokenExpiry = null;
 
         await _context.SaveChangesAsync(cancellationToken);
-        
-        // Remove verification status from cache so it cannot be reused
-        await _cacheService.RemoveAsync($"verified_email:{email}", cancellationToken);
-    }
-
-    private async Task EnsureOtpIsValidAsync(string email, string otp, CancellationToken cancellationToken)
-    {
-        var cachedOtp = await _cacheService.GetAsync<string>($"verified_email:{email}", cancellationToken);
-
-        if (string.IsNullOrEmpty(cachedOtp) || cachedOtp != otp)
-        {
-            throw new BadRequestException("Invalid or expired OTP verification code.");
-        }
     }
 }

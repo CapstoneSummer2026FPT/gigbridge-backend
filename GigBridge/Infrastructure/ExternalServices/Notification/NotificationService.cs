@@ -74,7 +74,7 @@ public class NotificationService : INotificationService
 
         if (targetUserIds.Count == 0)
         {
-            _logger.LogWarning("Broadcast notification '{Title}' had no target users (target={Target}).", title, target);
+            _logger.LogWarning("Broadcast notification had no target users (target={Target}).", target);
             return;
         }
 

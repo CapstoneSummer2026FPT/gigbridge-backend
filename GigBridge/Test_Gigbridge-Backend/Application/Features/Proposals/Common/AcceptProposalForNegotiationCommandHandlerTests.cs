@@ -99,6 +99,42 @@ public class AcceptProposalForNegotiationCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_FirstTimeAccept_CopiesGeneratedWorkItemIntoNegotiationDraft()
+    {
+        var fixture = new TestFixture();
+        var milestone = fixture.Proposal.ProposalMilestonePlans
+            .OrderBy(item => item.OrderIndex)
+            .First();
+        milestone.Deliverables = "Approved foundation package";
+        milestone.EstimatedDuration = "3 weeks";
+        fixture.Proposal.ProposalWorkBreakdownItems.Add(new ProposalWorkBreakdownItem
+        {
+            ProposalWorkBreakdownItemsId = Guid.NewGuid(),
+            ProposalsId = fixture.ProposalId,
+            ProposalMilestonePlansId = milestone.ProposalMilestonePlansId,
+            Title = milestone.Title,
+            Description = milestone.Deliverables,
+            Deliverables = milestone.Deliverables,
+            EstimatedDuration = milestone.EstimatedDuration,
+            OrderIndex = 0
+        });
+
+        var handler = CreateHandler(fixture);
+        await handler.Handle(
+            new AcceptProposalForNegotiationCommand(fixture.ProposalId, fixture.ClientUserId),
+            CancellationToken.None);
+
+        var draft = fixture.NegotiationDrafts.Entities.Single(item =>
+            item.SourceProposalMilestonePlanId == milestone.ProposalMilestonePlansId);
+        var workItem = Assert.Single(draft.WorkItems);
+        Assert.Equal(milestone.Title, workItem.Title);
+        Assert.Equal(milestone.Deliverables, workItem.Description);
+        Assert.Equal(milestone.Deliverables, workItem.Deliverables);
+        Assert.Equal(milestone.EstimatedDuration, workItem.EstimatedDuration);
+        Assert.Equal(0, workItem.OrderIndex);
+    }
+
+    [Fact]
     public async Task Handle_ReopenReusedConversation_ReturnsExistingIdWithoutDuplicateSpam()
     {
         // Arrange

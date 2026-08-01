@@ -8,7 +8,6 @@ public record UpdateJobPostRequest(
     decimal? BudgetMax,
     string? Currency,
     string? EstimatedDuration,
-    string? Location,
     int? Visibility,
     DateTime? EndDate,
     List<Guid>? SkillIds,

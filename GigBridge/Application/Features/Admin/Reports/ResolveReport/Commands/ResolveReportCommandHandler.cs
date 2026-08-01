@@ -1,6 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Application.Features.Reviews.Common.Moderation;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
@@ -14,11 +15,16 @@ public class ResolveReportCommandHandler : IRequestHandler<ResolveReportCommand>
 
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
+    private readonly IReviewModerationService _reviewModerationService;
 
-    public ResolveReportCommandHandler(IApplicationDbContext context, IDateTimeService dateTimeService)
+    public ResolveReportCommandHandler(
+        IApplicationDbContext context,
+        IDateTimeService dateTimeService,
+        IReviewModerationService reviewModerationService)
     {
         _context = context;
         _dateTimeService = dateTimeService;
+        _reviewModerationService = reviewModerationService;
     }
 
     public async Task Handle(ResolveReportCommand command, CancellationToken cancellationToken)
@@ -46,7 +52,11 @@ public class ResolveReportCommandHandler : IRequestHandler<ResolveReportCommand>
 
         if (command.Request.TakeAction)
         {
-            await ApplyModerationActionAsync(report, cancellationToken);
+            await ApplyModerationActionAsync(
+                report,
+                command.AdminId,
+                command.Request.AdminNote ?? report.Reason,
+                cancellationToken);
         }
 
         var now = _dateTimeService.UtcNow;
@@ -61,7 +71,11 @@ public class ResolveReportCommandHandler : IRequestHandler<ResolveReportCommand>
         await _context.SaveChangesAsync(cancellationToken);
     }
 
-    private async Task ApplyModerationActionAsync(Report report, CancellationToken cancellationToken)
+    private async Task ApplyModerationActionAsync(
+        Report report,
+        Guid adminId,
+        string moderationNote,
+        CancellationToken cancellationToken)
     {
         switch (report.ReportedEntityType)
         {
@@ -88,14 +102,12 @@ public class ResolveReportCommandHandler : IRequestHandler<ResolveReportCommand>
                 break;
 
             case ReportedEntityTypes.Review:
-                var review = await _context.Set<Review>()
-                    .FirstOrDefaultAsync(item => item.ReviewsId == report.ReportedEntityId, cancellationToken);
-                if (review is null)
-                {
-                    throw new NotFoundException("Reported review does not exist.");
-                }
-                review.IsVisible = false;
-                review.UpdatedAt = _dateTimeService.UtcNow;
+                await _reviewModerationService.SetStatusAsync(
+                    report.ReportedEntityId,
+                    ReviewModerationStatus.Hidden,
+                    adminId,
+                    moderationNote,
+                    cancellationToken);
                 break;
 
             default:

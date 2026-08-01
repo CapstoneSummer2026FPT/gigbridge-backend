@@ -100,10 +100,13 @@ public class CreateReportCommandHandler : IRequestHandler<CreateReportCommand, G
 
             case ReportedEntityTypes.Review:
                 var reviewExists = await _context.Set<Review>()
-                    .AnyAsync(review => review.ReviewsId == entityId, cancellationToken);
+                    .AnyAsync(review =>
+                        review.ReviewsId == entityId &&
+                        review.RevieweeId == reporterId,
+                        cancellationToken);
                 if (!reviewExists)
                 {
-                    throw new NotFoundException("Reported review does not exist.");
+                    throw new NotFoundException("The received review does not exist.");
                 }
                 break;
         }

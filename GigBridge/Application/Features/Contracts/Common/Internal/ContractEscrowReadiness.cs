@@ -32,6 +32,7 @@ internal static class ContractEscrowReadiness
         CancellationToken cancellationToken)
     {
         var milestones = await context.Set<Milestone>()
+            .Include(milestone => milestone.WorkItems)
             .Where(milestone => milestone.ContractsId == contract.ContractsId)
             .ToListAsync(cancellationToken);
 

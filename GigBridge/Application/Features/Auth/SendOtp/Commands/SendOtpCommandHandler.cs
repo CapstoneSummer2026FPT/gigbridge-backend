@@ -1,4 +1,6 @@
+using Application.Common.Exceptions;
 using Application.Common.Interfaces.IService;
+using Application.Features.Auth.Common;
 using MediatR;
 using System.Security.Cryptography;
 
@@ -17,12 +19,45 @@ public class SendOtpCommandHandler : IRequestHandler<SendOtpCommand, Unit>
 
     public async Task<Unit> Handle(SendOtpCommand request, CancellationToken cancellationToken)
     {
-        var email = request.SendOtpRequest.Email.Trim().ToLowerInvariant();
-        var cacheKey = $"otp:{email}";
-        var otp = RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
+        var email = EmailCanonicalizer.Canonicalize(request.SendOtpRequest.Email);
+        if (!OtpPurposeNames.TryParse(request.SendOtpRequest.Purpose, out var purpose)
+            || purpose != OtpPurpose.Signup)
+        {
+            throw new BadRequestException("Invalid verification purpose.");
+        }
 
-        await _cacheService.RemoveAsync(cacheKey, cancellationToken);
-        await _cacheService.SetAsync(cacheKey, otp, TimeSpan.FromMinutes(5), cancellationToken);
+        if (await _cacheService.GetAsync<bool>(
+                OtpSecurity.LockoutKey(purpose, email),
+                cancellationToken))
+        {
+            throw new BadRequestException("Too many failed verification attempts. Please try again later.");
+        }
+
+        if (await _cacheService.GetAsync<bool>(
+                OtpSecurity.CooldownKey(purpose, email),
+                cancellationToken))
+        {
+            throw new BadRequestException("Please wait before requesting another verification code.");
+        }
+
+        var challengeKey = OtpSecurity.ChallengeKey(purpose, email);
+        var otp = RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
+        var challenge = new OtpChallengeState(
+            otp,
+            0,
+            DateTime.UtcNow.Add(OtpSecurity.ChallengeLifetime));
+
+        await _cacheService.RemoveAsync(challengeKey, cancellationToken);
+        await _cacheService.SetAsync(
+            challengeKey,
+            challenge,
+            OtpSecurity.ChallengeLifetime,
+            cancellationToken);
+        await _cacheService.SetAsync(
+            OtpSecurity.CooldownKey(purpose, email),
+            true,
+            OtpSecurity.ResendCooldown,
+            cancellationToken);
         await _authEmailSender.SendOtpEmailAsync(email, otp, cancellationToken);
 
         return Unit.Value;

@@ -2,6 +2,7 @@ using Application.Common.Interfaces;
 using Application.Features.Reviews.Common;
 using Application.Features.Reviews.Common.DTOs;
 using Domain.Entities;
+using Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -25,7 +26,9 @@ public class GetReviewsByUserQueryHandler
             .AsNoTracking()
             .Include(review => review.Contracts)
             .Include(review => review.Reviewer)
-            .Where(review => review.RevieweeId == request.UserId)
+            .Where(review =>
+                review.RevieweeId == request.UserId &&
+                review.ModerationStatus == (int)ReviewModerationStatus.Active)
             .OrderByDescending(review => review.CreatedAt)
             .ToListAsync(cancellationToken);
 

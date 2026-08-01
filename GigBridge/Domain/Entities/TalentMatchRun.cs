@@ -12,7 +12,6 @@ public sealed class TalentMatchRun
     public int ReturnedCandidateCount { get; set; }
     public long LatencyMilliseconds { get; set; }
     public int Status { get; set; }
-    public bool CacheHit { get; set; }
     public string? FailureCode { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? CompletedAt { get; set; }

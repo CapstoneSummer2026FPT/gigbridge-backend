@@ -13,8 +13,6 @@ public class UserEloService : IUserEloService
 {
     private const string UserSource = "User";
     private const string ReviewSource = "Review";
-    private const string CheatingViolationSource = "FreelancerCheatingViolation";
-
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
 
@@ -157,47 +155,70 @@ public class UserEloService : IUserEloService
             cancellationToken);
     }
 
-    public async Task ApplyCheatingPenaltyAsync(
-        Guid violationId,
-        Guid userId,
-        int pointsDelta,
+    public async Task<int> ApplyReviewModerationAsync(
+        Guid reviewId,
+        Guid revieweeId,
+        Guid operationId,
+        bool hide,
         CancellationToken cancellationToken)
     {
-        if (pointsDelta >= 0)
+        var reviewee = await _context.Set<User>()
+            .FirstOrDefaultAsync(user => user.UserId == revieweeId, cancellationToken)
+            ?? throw new NotFoundException("Reviewee does not exist.");
+
+        if (!IsEligibleRole(reviewee.Role))
         {
-            return;
+            return 0;
         }
 
-        var user = await _context.Set<User>()
-            .FirstOrDefaultAsync(existingUser => existingUser.UserId == userId, cancellationToken);
-
-        if (user is null)
+        var transactions = _context.Set<UserEloPointTransaction>();
+        int requestedDelta;
+        if (hide)
         {
-            throw new NotFoundException("Freelancer does not exist.");
+            var originalDelta = await transactions
+                .Where(transaction =>
+                    transaction.UserId == revieweeId &&
+                    transaction.SourceEntityType == ReviewSource &&
+                    transaction.SourceEntityId == reviewId &&
+                    (transaction.Reason == (int)UserEloPointReason.JobCompletion ||
+                     transaction.Reason == (int)UserEloPointReason.ReviewRating))
+                .SumAsync(transaction => transaction.PointsDelta, cancellationToken);
+            requestedDelta = -originalDelta;
         }
-
-        if (user.Role != (int)UserRole.Freelancer)
+        else
         {
-            return;
+            var moderationDelta = await transactions
+                .Where(transaction =>
+                    transaction.UserId == revieweeId &&
+                    transaction.SourceEntityType == ReviewSource &&
+                    transaction.SourceEntityId == reviewId &&
+                    transaction.Reason == (int)UserEloPointReason.ReviewModeration)
+                .SumAsync(transaction => transaction.PointsDelta, cancellationToken);
+            requestedDelta = -moderationDelta;
         }
 
         var now = _dateTimeService.UtcNow;
-        var score = await EnsureScoreAsync(userId, now, cancellationToken);
-
+        var score = await EnsureScoreAsync(revieweeId, now, cancellationToken);
+        var pointsBefore = score.CurrentPoints;
+        var action = hide ? "hide" : "restore";
         await ApplyDeltaAsync(
             score,
-            pointsDelta,
-            UserEloPointReason.CheatingPenalty,
-            CheatingViolationSource,
-            violationId,
-            $"cheating:{violationId}:{userId}:penalty",
+            requestedDelta,
+            UserEloPointReason.ReviewModeration,
+            ReviewSource,
+            reviewId,
+            $"review-moderation:{reviewId}:{action}:{operationId}",
             new
             {
-                violationId,
-                requestedDelta = pointsDelta
+                reviewId,
+                action,
+                requestedDelta,
+                operationId
             },
             now,
             cancellationToken);
+
+        return score.CurrentPoints - pointsBefore;
     }
 
     private async Task<UserEloScore> EnsureScoreAsync(Guid userId, DateTime now, CancellationToken cancellationToken)

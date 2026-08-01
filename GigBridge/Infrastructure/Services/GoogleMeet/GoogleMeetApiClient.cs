@@ -55,9 +55,8 @@ public class GoogleMeetApiClient : IGoogleMeetApiClient
                 var failureCode = isServerError ? "meet_server_error" : "meet_api_error";
 
                 _logger.LogWarning(
-                    "Meet API returned {Status} for space creation: {Body}",
-                    response.StatusCode,
-                    isServerError ? null : SanitizeForLog(responseBody));
+                    "Meet API returned {Status} for space creation",
+                    response.StatusCode);
 
                 return new CreateMeetSpaceResult(
                     false,
@@ -70,7 +69,7 @@ public class GoogleMeetApiClient : IGoogleMeetApiClient
             var space = JsonSerializer.Deserialize<GoogleMeetSpaceResponse>(responseBody, JsonOptions);
             if (space is null || string.IsNullOrEmpty(space.Name) || string.IsNullOrEmpty(space.MeetingUri))
             {
-                _logger.LogWarning("Meet API returned invalid response: {Body}", SanitizeForLog(responseBody));
+                _logger.LogWarning("Meet API returned an invalid response for space creation");
                 return new CreateMeetSpaceResult(false, true, null, null, "invalid_response");
             }
 
@@ -79,7 +78,7 @@ public class GoogleMeetApiClient : IGoogleMeetApiClient
                 uri.Scheme != "https" ||
                 uri.Host != "meet.google.com")
             {
-                _logger.LogWarning("Meet API returned invalid meeting URI: {Uri}", space.MeetingUri);
+                _logger.LogWarning("Meet API returned an invalid meeting URI");
                 return new CreateMeetSpaceResult(false, true, null, null, "invalid_meeting_uri");
             }
 
@@ -95,13 +94,6 @@ public class GoogleMeetApiClient : IGoogleMeetApiClient
             _logger.LogWarning(ex, "Meet API request failed due to network error");
             return new CreateMeetSpaceResult(false, true, null, null, "network_error");
         }
-    }
-
-    private static string SanitizeForLog(string value)
-    {
-        if (value.Length > 500)
-            return value[..500] + "...(truncated)";
-        return value;
     }
 
     private record GoogleMeetSpaceResponse(string? Name, string? MeetingUri, string? MeetingCode);

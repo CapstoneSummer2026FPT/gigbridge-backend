@@ -29,7 +29,7 @@ public sealed class PoliciesControllerTests : IDisposable
         var policiesDirectory = Path.Combine(_contentRoot, "Policies");
         Directory.CreateDirectory(policiesDirectory);
         var policyPath = Path.Combine(policiesDirectory, "GigBridge_Policy_VN.md");
-        const string markdown = "# Bộ chính sách GigBridge\n\nPhiên bản 1.0-DATN";
+        const string markdown = " Bộ chính sách GigBridge";
         File.WriteAllText(policyPath, markdown, Encoding.UTF8);
 
         var result = Assert.IsType<PhysicalFileResult>(CreateController().GetGigBridgeVietnamPolicy());

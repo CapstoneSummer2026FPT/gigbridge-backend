@@ -1,3 +1,4 @@
+using Application.Features.Proposals.Common.DTOs;
 using Application.Features.Proposals.Freelancer.SubmitProposal.Commands;
 using Application.Features.Proposals.Freelancer.SubmitProposal.DTOs;
 
@@ -70,6 +71,51 @@ public class SubmitProposalValidatorTests
         var result = _validator.Validate(command);
 
         Assert.Contains(result.Errors, error => error.PropertyName == "Request.ProposedBudget");
+    }
+
+    [Fact]
+    public void Validate_ReturnsErrorsBeforeDatabaseWhenPlanFieldsExceedColumnLimits()
+    {
+        var request = CreateValidRequest() with
+        {
+            WorkBreakdownItems =
+            [
+                new ProposalWorkBreakdownItemDto
+                {
+                    Title = new string('W', 201),
+                    EstimatedDuration = new string('D', 101)
+                }
+            ],
+            MilestonePlans =
+            [
+                new ProposalMilestonePlanDto
+                {
+                    Title = new string('M', 201),
+                    EstimatedDuration = new string('D', 101),
+                    WorkItems =
+                    [
+                        new ProposalWorkBreakdownItemDto
+                        {
+                            Title = new string('N', 201)
+                        }
+                    ]
+                }
+            ]
+        };
+        var command = new SubmitProposalCommand(request, Guid.NewGuid());
+
+        var result = _validator.Validate(command);
+
+        Assert.Contains(result.Errors, error =>
+            error.PropertyName == "Request.WorkBreakdownItems[0].Title");
+        Assert.Contains(result.Errors, error =>
+            error.PropertyName == "Request.WorkBreakdownItems[0].EstimatedDuration");
+        Assert.Contains(result.Errors, error =>
+            error.PropertyName == "Request.MilestonePlans[0].Title");
+        Assert.Contains(result.Errors, error =>
+            error.PropertyName == "Request.MilestonePlans[0].EstimatedDuration");
+        Assert.Contains(result.Errors, error =>
+            error.PropertyName == "Request.MilestonePlans[0].WorkItems[0].Title");
     }
 
     private static SubmitProposalRequest CreateValidRequest()

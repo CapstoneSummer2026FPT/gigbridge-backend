@@ -3,7 +3,7 @@ using MediatR;
 
 namespace Application.Features.Auth.VerifyOtp.Commands
 {
-    public class VerifyOtpCommand : IRequest<Unit>
+    public class VerifyOtpCommand : IRequest<VerifyOtpResponse>
     {
         public VerifyOtpRequest VerifyOtpRequest { get; }
 

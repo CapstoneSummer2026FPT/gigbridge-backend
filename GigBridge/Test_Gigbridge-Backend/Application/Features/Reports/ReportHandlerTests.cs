@@ -1,6 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces.IService;
 using Application.Features.Admin.Reports.ResolveReport.Commands;
+using Application.Features.Reviews.Common.Moderation;
 using Application.Features.Admin.Reports.ResolveReport.DTOs;
 using Application.Features.Admin.Reports.GetReports.Queries;
 using Application.Features.Admin.Reports.GetReportSummary.Queries;
@@ -13,6 +14,7 @@ using Domain.Entities;
 using Domain.Enums;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using NSubstitute;
 
 namespace Test_Gigbridge_Backend.Application.Features.Reports;
 
@@ -129,6 +131,29 @@ public class ReportHandlerTests
     }
 
     [Fact]
+    public async Task CreateReport_AllowsOnlyReviewRecipientToReportReview()
+    {
+        await using var context = CreateContext();
+        var recipient = AddUser(context, UserRole.Client);
+        var unrelatedUser = AddUser(context, UserRole.Client);
+        var review = AddReview(context, recipient.UserId);
+        await context.SaveChangesAsync();
+        var handler = new CreateReportCommandHandler(context, new FixedDateTimeService());
+
+        await handler.Handle(
+            new CreateReportCommand(
+                new CreateReportRequest(review.ReviewsId, ReportedEntityTypes.Review, ReportType.Other, "This feedback violates policy."),
+                recipient.UserId),
+            CancellationToken.None);
+
+        await Assert.ThrowsAsync<NotFoundException>(() => handler.Handle(
+            new CreateReportCommand(
+                new CreateReportRequest(review.ReviewsId, ReportedEntityTypes.Review, ReportType.Other, "I do not own this feedback."),
+                unrelatedUser.UserId),
+            CancellationToken.None));
+    }
+
+    [Fact]
     public async Task CreateReport_CreatesReportForPublicOpenJobPost()
     {
         await using var context = CreateContext();
@@ -217,7 +242,7 @@ public class ReportHandlerTests
         var report = AddReport(context, reporter.UserId, reportedUser.UserId, ReportedEntityTypes.User);
         await context.SaveChangesAsync();
 
-        var handler = new ResolveReportCommandHandler(context, new FixedDateTimeService());
+        var handler = new ResolveReportCommandHandler(context, new FixedDateTimeService(), Substitute.For<IReviewModerationService>());
         await handler.Handle(
             new ResolveReportCommand(report.ReportsId, admin.UserId, new ResolveReportRequest("Handled.", false)),
             CancellationToken.None);
@@ -329,7 +354,7 @@ public class ReportHandlerTests
         var report = AddReport(context, reporter.UserId, reportedUser.UserId, ReportedEntityTypes.User);
         await context.SaveChangesAsync();
 
-        var handler = new ResolveReportCommandHandler(context, new FixedDateTimeService());
+        var handler = new ResolveReportCommandHandler(context, new FixedDateTimeService(), Substitute.For<IReviewModerationService>());
         await handler.Handle(
             new ResolveReportCommand(report.ReportsId, admin.UserId, new ResolveReportRequest("Deactivate.", true)),
             CancellationToken.None);
@@ -348,7 +373,7 @@ public class ReportHandlerTests
         var report = AddReport(context, reporter.UserId, jobPost.JobPostsId, ReportedEntityTypes.JobPost);
         await context.SaveChangesAsync();
 
-        var handler = new ResolveReportCommandHandler(context, new FixedDateTimeService());
+        var handler = new ResolveReportCommandHandler(context, new FixedDateTimeService(), Substitute.For<IReviewModerationService>());
         await handler.Handle(
             new ResolveReportCommand(report.ReportsId, admin.UserId, new ResolveReportRequest("Cancel.", true)),
             CancellationToken.None);
@@ -367,13 +392,18 @@ public class ReportHandlerTests
         var report = AddReport(context, reporter.UserId, review.ReviewsId, ReportedEntityTypes.Review);
         await context.SaveChangesAsync();
 
-        var handler = new ResolveReportCommandHandler(context, new FixedDateTimeService());
+        var moderationService = Substitute.For<IReviewModerationService>();
+        var handler = new ResolveReportCommandHandler(context, new FixedDateTimeService(), moderationService);
         await handler.Handle(
             new ResolveReportCommand(report.ReportsId, admin.UserId, new ResolveReportRequest("Hide.", true)),
             CancellationToken.None);
 
-        var updatedReview = await context.Reviews.SingleAsync(item => item.ReviewsId == review.ReviewsId);
-        Assert.False(updatedReview.IsVisible);
+        await moderationService.Received(1).SetStatusAsync(
+            review.ReviewsId,
+            ReviewModerationStatus.Hidden,
+            admin.UserId,
+            "Hide.",
+            Arg.Any<CancellationToken>());
     }
 
     private static GigbridgeDbContext CreateContext()
@@ -449,14 +479,14 @@ public class ReportHandlerTests
         return jobPost;
     }
 
-    private static Review AddReview(GigbridgeDbContext context)
+    private static Review AddReview(GigbridgeDbContext context, Guid? revieweeId = null)
     {
         var review = new Review
         {
             ReviewsId = Guid.NewGuid(),
             ContractsId = Guid.NewGuid(),
             ReviewerId = Guid.NewGuid(),
-            RevieweeId = Guid.NewGuid(),
+            RevieweeId = revieweeId ?? Guid.NewGuid(),
             Rating = 1,
             Comment = "Abusive review.",
             IsVisible = true,

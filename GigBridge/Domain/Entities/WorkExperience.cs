@@ -19,7 +19,5 @@ public partial class WorkExperience
 
     public string? Description { get; set; }
 
-    public bool? IsCurrentJob { get; set; }
-
     public virtual FreelancerProfile Freelancer { get; set; } = null!;
 }

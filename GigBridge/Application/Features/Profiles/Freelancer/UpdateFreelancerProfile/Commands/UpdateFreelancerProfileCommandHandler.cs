@@ -1,7 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
-using Application.Features.Profiles.FreelancerProfile.CreateFreelancerProfile.DTOs;
+using Application.Features.Profiles.FreelancerProfile.Common.DTOs;
 using Application.Features.Profiles.FreelancerProfile.Common;
 using AutoMapper;
 using Domain.Entities;

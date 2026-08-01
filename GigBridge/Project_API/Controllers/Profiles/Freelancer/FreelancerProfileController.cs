@@ -2,8 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Application.Common.Models;
-using Application.Features.Profiles.FreelancerProfile.CreateFreelancerProfile.DTOs;
-using Application.Features.Profiles.FreelancerProfile.GetAllFreelancers.Queries;
+using Application.Features.Profiles.FreelancerProfile.Common.DTOs;
+using Application.Features.Profiles.FreelancerProfile.GetFreelancers.DTOs;
+using Application.Features.Profiles.FreelancerProfile.GetFreelancers.Queries;
 using Application.Features.Profiles.FreelancerProfile.GetFreelancerProfile.DTOs;
 using Application.Features.Profiles.FreelancerProfile.GetFreelancerProfile.Queries;
 using Application.Features.Profiles.FreelancerProfile.GetMyFreelancerProfile.Queries;
@@ -52,14 +53,25 @@ public class FreelancerProfileController : BaseApiController
         return Ok(ApiResponse<FreelancerProfileDetailDto>.Ok(result, "Success"));
     }
 
-    [HttpGet("freelancer")]
-    public async Task<IActionResult> GetAllFreelancers(
-        [FromQuery] List<string>? skills, 
-        [FromQuery] string? availabilityStatus, 
-        [FromQuery] double? minRating)
+    [HttpGet("freelancers")]
+    public async Task<IActionResult> GetFreelancers(
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 20,
+        [FromQuery] string? search = null,
+        [FromQuery] List<string>? skills = null,
+        [FromQuery] string? availabilityStatus = null,
+        [FromQuery] double? minRating = null,
+        [FromQuery] string? sort = null)
     {
-        var query = new GetAllFreelancersQuery(skills, availabilityStatus, minRating);
+        var query = new GetFreelancersQuery(
+            page,
+            pageSize,
+            search,
+            skills,
+            availabilityStatus,
+            minRating,
+            sort);
         var result = await Mediator.Send(query);
-        return Ok(ApiResponse<IEnumerable<FreelancerProfileDetailDto>>.Ok(result, "Success"));
+        return Ok(ApiResponse<PaginatedList<FreelancerSummaryDto>>.Ok(result, "Success"));
     }
 }
