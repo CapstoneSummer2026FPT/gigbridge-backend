@@ -182,7 +182,17 @@ public class GenerateJobDescriptionCommandHandler
             BudgetMin = aiResponse.BudgetMin,
             BudgetMax = aiResponse.BudgetMax,
             Currency = aiResponse.Currency,
-            AiDisclaimer = "AI-generated content. Review and edit all fields before publishing."
+            AiDisclaimer = "AI-generated content. Review and edit all fields before publishing.",
+            Milestones = aiResponse.Milestones?.Select(m => new GeneratedJobPostMilestoneDto
+            {
+                Title = m.Title,
+                Amount = m.Amount,
+                EstimatedDuration = m.EstimatedDuration,
+                DueDate = m.DueDate,
+                Description = m.Description,
+                Deliverables = m.Deliverables,
+                AcceptanceCriteria = m.AcceptanceCriteria
+            }).ToList() ?? new()
         };
     }
 }

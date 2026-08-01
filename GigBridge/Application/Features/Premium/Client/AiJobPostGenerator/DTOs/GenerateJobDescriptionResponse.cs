@@ -25,4 +25,16 @@ public class GenerateJobDescriptionResponse
     public decimal? BudgetMax { get; set; }
     public string? Currency { get; set; }
     public string AiDisclaimer { get; set; } = string.Empty;
+    public List<GeneratedJobPostMilestoneDto> Milestones { get; set; } = new();
+}
+
+public class GeneratedJobPostMilestoneDto
+{
+    public string Title { get; set; } = null!;
+    public decimal Amount { get; set; }
+    public string EstimatedDuration { get; set; } = null!;
+    public string DueDate { get; set; } = null!;
+    public string Description { get; set; } = null!;
+    public string Deliverables { get; set; } = null!;
+    public string AcceptanceCriteria { get; set; } = null!;
 }
