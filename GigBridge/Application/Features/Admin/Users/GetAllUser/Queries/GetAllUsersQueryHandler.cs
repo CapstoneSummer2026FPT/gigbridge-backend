@@ -30,17 +30,19 @@ public class GetAllUsersQueryHandler : IRequestHandler<GetAllUsersQuery, GetAllU
         {
             query = request.Premium.Value
                 ? query.Where(user => _context.Set<Subscription>().Any(subscription =>
-                    user.Role == (int)UserRole.Freelancer && subscription.UserId == user.UserId &&
+                    (user.Role == (int)UserRole.Client || user.Role == (int)UserRole.Freelancer) &&
+                    subscription.UserId == user.UserId &&
                     subscription.Status == SubscriptionStatus.Active && subscription.StartDate <= now &&
                     subscription.EndDate > now && subscription.SubscriptionPlans.Price > 0 &&
                     subscription.SubscriptionPlans.IsActive == true &&
-                    (subscription.SubscriptionPlans.TargetRole == null || subscription.SubscriptionPlans.TargetRole == (int)UserRole.Freelancer)))
+                    (subscription.SubscriptionPlans.TargetRole == null || subscription.SubscriptionPlans.TargetRole == user.Role)))
                 : query.Where(user => !_context.Set<Subscription>().Any(subscription =>
-                    user.Role == (int)UserRole.Freelancer && subscription.UserId == user.UserId &&
+                    (user.Role == (int)UserRole.Client || user.Role == (int)UserRole.Freelancer) &&
+                    subscription.UserId == user.UserId &&
                     subscription.Status == SubscriptionStatus.Active && subscription.StartDate <= now &&
                     subscription.EndDate > now && subscription.SubscriptionPlans.Price > 0 &&
                     subscription.SubscriptionPlans.IsActive == true &&
-                    (subscription.SubscriptionPlans.TargetRole == null || subscription.SubscriptionPlans.TargetRole == (int)UserRole.Freelancer)));
+                    (subscription.SubscriptionPlans.TargetRole == null || subscription.SubscriptionPlans.TargetRole == user.Role)));
         }
         var total = await query.CountAsync(cancellationToken);
 
@@ -72,20 +74,33 @@ public class GetAllUsersQueryHandler : IRequestHandler<GetAllUsersQuery, GetAllU
 
     private async Task AddPremiumStatusesAsync(IReadOnlyList<AdminUserDto> users, DateTime now, CancellationToken ct)
     {
-        var freelancerIds = users.Where(user => user.Role == (int)UserRole.Freelancer)
-            .Select(user => user.UserId).ToArray();
+        var premiumEligibleUsers = users
+            .Where(user => user.Role == (int)UserRole.Client || user.Role == (int)UserRole.Freelancer)
+            .Select(user => new { user.UserId, user.Role })
+            .ToArray();
+        var eligibleUserIds = premiumEligibleUsers.Select(user => user.UserId).ToArray();
+        var eligibleRoles = premiumEligibleUsers.ToDictionary(user => user.UserId, user => user.Role);
         var expiries = await _context.Set<Subscription>().AsNoTracking()
-            .Where(subscription => freelancerIds.Contains(subscription.UserId) &&
+            .Where(subscription => eligibleUserIds.Contains(subscription.UserId) &&
                 subscription.Status == SubscriptionStatus.Active && subscription.StartDate <= now &&
                 subscription.EndDate > now && subscription.SubscriptionPlans.Price > 0 &&
-                subscription.SubscriptionPlans.IsActive == true &&
-                (subscription.SubscriptionPlans.TargetRole == null || subscription.SubscriptionPlans.TargetRole == (int)UserRole.Freelancer))
+                subscription.SubscriptionPlans.IsActive == true)
+            .Select(subscription => new
+            {
+                subscription.UserId,
+                subscription.EndDate,
+                subscription.SubscriptionPlans.TargetRole
+            })
+            .ToListAsync(ct);
+        var premiumUntilByUser = expiries
+            .Where(subscription =>
+                eligibleRoles.TryGetValue(subscription.UserId, out var role) &&
+                (subscription.TargetRole == null || subscription.TargetRole == role))
             .GroupBy(subscription => subscription.UserId)
-            .Select(group => new { UserId = group.Key, Until = group.Max(item => item.EndDate) })
-            .ToDictionaryAsync(item => item.UserId, item => item.Until, ct);
+            .ToDictionary(group => group.Key, group => group.Max(item => item.EndDate));
         foreach (var user in users)
         {
-            user.IsPremium = expiries.TryGetValue(user.UserId, out var premiumUntil);
+            user.IsPremium = premiumUntilByUser.TryGetValue(user.UserId, out var premiumUntil);
             user.PremiumUntil = user.IsPremium ? premiumUntil : null;
         }
     }

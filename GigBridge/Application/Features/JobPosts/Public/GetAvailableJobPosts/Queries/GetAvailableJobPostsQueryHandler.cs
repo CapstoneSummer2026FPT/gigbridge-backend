@@ -59,7 +59,7 @@ public class GetAvailableJobPostsQueryHandler : IRequestHandler<GetAvailableJobP
         return JobPostProjection.ToSummaryDtos(jobPosts, _clock.UtcNow, aiInterviewJobIds);
     }
 
-    private static IQueryable<JobPost> ApplyFilters(IQueryable<JobPost> query, GetAvailableJobPostsQuery request)
+    internal static IQueryable<JobPost> ApplyFilters(IQueryable<JobPost> query, GetAvailableJobPostsQuery request)
     {
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
@@ -69,7 +69,9 @@ public class GetAvailableJobPostsQueryHandler : IRequestHandler<GetAvailableJobP
                 jobPost.Description.ToLower().Contains(keyword) ||
                 jobPost.JobPostSkills.Any(jobPostSkill =>
                     jobPostSkill.Skills != null &&
-                    jobPostSkill.Skills.Name.ToLower().Contains(keyword)));
+                    jobPostSkill.Skills.Name.ToLower().Contains(keyword)) ||
+                jobPost.CustomSkillNames.Any(skillName =>
+                    skillName.ToLower().Contains(keyword)));
         }
 
         if (request.SkillIds is { Count: > 0 })
@@ -91,7 +93,7 @@ public class GetAvailableJobPostsQueryHandler : IRequestHandler<GetAvailableJobP
         return query;
     }
 
-    private static IQueryable<JobPost> ApplySorting(
+    internal static IQueryable<JobPost> ApplySorting(
         IQueryable<JobPost> query,
         GetAvailableJobPostsQuery request,
         DateTime now)
@@ -123,12 +125,12 @@ public class GetAvailableJobPostsQueryHandler : IRequestHandler<GetAvailableJobP
         };
     }
 
-    private static int NormalizePageIndex(int pageIndex)
+    internal static int NormalizePageIndex(int pageIndex)
     {
         return pageIndex < 1 ? 1 : pageIndex;
     }
 
-    private static int NormalizePageSize(int pageSize)
+    internal static int NormalizePageSize(int pageSize)
     {
         return pageSize is < 1 or > 100 ? 10 : pageSize;
     }

@@ -11,6 +11,8 @@ public static class AuthRateLimitPolicies
     public const string OtpIssue = "auth-otp-issue";
     public const string OtpVerify = "auth-otp-verify";
     public const string Refresh = "auth-refresh";
+    public const string DiscoveryAnalytics = "discovery-analytics";
+    public const string PromotionTelemetry = "promotion-telemetry";
 
     public static IServiceCollection AddAuthRateLimiting(this IServiceCollection services)
     {
@@ -32,6 +34,8 @@ public static class AuthRateLimitPolicies
             AddFixedWindow(options, OtpIssue, permitLimit: 3, TimeSpan.FromMinutes(5));
             AddFixedWindow(options, OtpVerify, permitLimit: 10, TimeSpan.FromMinutes(5));
             AddFixedWindow(options, Refresh, permitLimit: 30, TimeSpan.FromMinutes(1));
+            AddFixedWindow(options, DiscoveryAnalytics, permitLimit: 120, TimeSpan.FromMinutes(1));
+            AddFixedWindow(options, PromotionTelemetry, permitLimit: 120, TimeSpan.FromMinutes(1));
         });
 
         return services;

@@ -59,7 +59,7 @@ internal static class ServiceFeeWorkflow
 
         WalletWorkflow.DebitAvailable(wallet, serviceFeeTokens, now, "Insufficient GigCoin balance to pay the service fee.");
 
-        context.Set<WalletTransaction>().Add(new WalletTransaction
+        var walletTransaction = new WalletTransaction
         {
             WalletTransactionsId = Guid.NewGuid(),
             UserWalletsId = wallet.UserWalletsId,
@@ -76,6 +76,26 @@ internal static class ServiceFeeWorkflow
             Note = note,
             CreatedAt = now,
             CompletedAt = now
+        };
+        context.Set<WalletTransaction>().Add(walletTransaction);
+        context.Set<PlatformRevenueEvent>().Add(new PlatformRevenueEvent
+        {
+            PlatformRevenueEventId = Guid.NewGuid(),
+            Source = idempotencyKey.StartsWith(ClientFundingFeePrefix, StringComparison.Ordinal)
+                ? PlatformRevenueSource.ContractFundingFee
+                : PlatformRevenueSource.ContractReleaseFee,
+            WalletTransactionId = walletTransaction.WalletTransactionsId,
+            PayerUserId = userId,
+            ContractId = contractId,
+            SourceEntityType = nameof(WalletTransaction),
+            SourceEntityId = walletTransaction.WalletTransactionsId,
+            SourceReference = idempotencyKey,
+            GigCoinAmount = serviceFeeTokens,
+            VndEquivalent = serviceFeeVnd,
+            VndPerGigCoin = TokenWalletRules.VndPerToken,
+            OccurredAt = now,
+            RecordedAt = now,
+            Metadata = "{\"rate\":0.01,\"capture\":\"atomic\"}"
         });
 
         return serviceFeeTokens;
