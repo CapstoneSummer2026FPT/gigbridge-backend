@@ -29,6 +29,16 @@ public class AccountStatusMiddleware
             return;
         }
 
+        // SignalR negotiation only selects a transport. The authenticated
+        // transport request immediately following it performs the account
+        // status check, so querying the database here would duplicate that
+        // remote lookup on every hub connection.
+        if (IsSignalRNegotiateRequest(context.Request))
+        {
+            await _next(context);
+            return;
+        }
+
         var userIdValue = context.User.FindFirstValue(ClaimTypes.NameIdentifier) ??
                           context.User.FindFirstValue("sub");
 
@@ -65,6 +75,13 @@ public class AccountStatusMiddleware
         }
 
         await _next(context);
+    }
+
+    private static bool IsSignalRNegotiateRequest(HttpRequest request)
+    {
+        return HttpMethods.IsPost(request.Method) &&
+               request.Path.StartsWithSegments("/hubs") &&
+               request.Path.Value?.EndsWith("/negotiate", StringComparison.OrdinalIgnoreCase) == true;
     }
 
     private static Task WriteUnauthorizedAsync(HttpContext context, string message)

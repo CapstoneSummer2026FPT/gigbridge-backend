@@ -92,7 +92,7 @@ internal static class ContractEscrowWalletWorkflow
         if (feeTokens > 0m)
         {
             var feeCode = $"{ServiceFeeWorkflow.FreelancerReleaseFeePrefix}{transactionCode}";
-            context.Set<WalletTransaction>().Add(CreateTransaction(
+            var feeTransaction = CreateTransaction(
                 freelancerWallet,
                 contractId,
                 escrow.ContractEscrowId,
@@ -107,7 +107,25 @@ internal static class ContractEscrowWalletWorkflow
                 WalletBalanceSource.Earned,
                 null,
                 feeTokens,
-                null));
+                null);
+            context.Set<WalletTransaction>().Add(feeTransaction);
+            context.Set<PlatformRevenueEvent>().Add(new PlatformRevenueEvent
+            {
+                PlatformRevenueEventId = Guid.NewGuid(),
+                Source = PlatformRevenueSource.ContractReleaseFee,
+                WalletTransactionId = feeTransaction.WalletTransactionsId,
+                PayerUserId = freelancerWallet.UserId,
+                ContractId = contractId,
+                SourceEntityType = nameof(WalletTransaction),
+                SourceEntityId = feeTransaction.WalletTransactionsId,
+                SourceReference = feeCode,
+                GigCoinAmount = feeTokens,
+                VndEquivalent = feeVnd,
+                VndPerGigCoin = TokenWalletRules.VndPerToken,
+                OccurredAt = now,
+                RecordedAt = now,
+                Metadata = "{\"rate\":0.01,\"capture\":\"atomic\"}"
+            });
         }
 
         return new EscrowTransferResult(amountVnd, grossTokens, feeVnd, feeTokens, netTokens);

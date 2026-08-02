@@ -1,3 +1,4 @@
+using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Domain.Entities;
@@ -24,8 +25,25 @@ public sealed class RevokeUserPremiumCommandHandler : IRequestHandler<RevokeUser
 
     public async Task<bool> Handle(RevokeUserPremiumCommand command, CancellationToken ct)
     {
+        var user = await _context.Set<User>().AsNoTracking()
+            .FirstOrDefaultAsync(x => x.UserId == command.UserId, ct)
+            ?? throw new NotFoundException("User", command.UserId);
+        if (user.Role != (int)UserRole.Client && user.Role != (int)UserRole.Freelancer)
+            throw new BadRequestException("Only client and freelancer accounts can have Premium revoked.");
+
+        var targetRole = (UserRole)user.Role;
+        var premiumName = targetRole == UserRole.Client ? "Client Premium" : "Freelancer Premium";
         var now = _clock.UtcNow;
-        var active = await _context.Set<Subscription>().Include(x => x.SubscriptionPlans).Where(x => x.UserId == command.UserId && x.Status == SubscriptionStatus.Active && x.EndDate > now && x.SubscriptionPlans.Price > 0).ToListAsync(ct);
+        var active = await _context.Set<Subscription>().Include(x => x.SubscriptionPlans)
+            .Where(x =>
+                x.UserId == command.UserId &&
+                x.Status == SubscriptionStatus.Active &&
+                x.StartDate <= now &&
+                x.EndDate > now &&
+                x.SubscriptionPlans.IsActive == true &&
+                x.SubscriptionPlans.Price > 0 &&
+                (x.SubscriptionPlans.TargetRole == null || x.SubscriptionPlans.TargetRole == user.Role))
+            .ToListAsync(ct);
         if (active.Count == 0) return false;
 
         foreach (var subscription in active)
@@ -36,8 +54,13 @@ public sealed class RevokeUserPremiumCommandHandler : IRequestHandler<RevokeUser
             subscription.AutoRenew = false;
         }
         await _context.SaveChangesAsync(ct);
-        await _cache.RemoveAsync($"premium:access:{command.UserId:N}", ct);
-        await _notifications.CreateNotificationAsync(command.UserId, NotificationType.SubscriptionCancelled, "Freelancer Premium revoked by an administrator", null, null, nameof(Subscription), ct);
+        await _cache.RemoveAsync(GetPremiumCacheKey(targetRole, command.UserId), ct);
+        await _notifications.CreateNotificationAsync(command.UserId, NotificationType.SubscriptionCancelled, $"{premiumName} revoked by an administrator", null, null, nameof(Subscription), ct);
         return true;
     }
+
+    private static string GetPremiumCacheKey(UserRole role, Guid userId) =>
+        role == UserRole.Client
+            ? $"premium:access:client:{userId:N}"
+            : $"premium:access:{userId:N}";
 }

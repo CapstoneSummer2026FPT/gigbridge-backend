@@ -4,7 +4,11 @@ using Application.Common.Interfaces.IService;
 using Application.Common.Mappings;
 using Application.Common.Options;
 using Application.Common.Services;
+using Application.Features.Admin.Analytics.Common.DTOs;
+using Application.Features.Admin.Analytics.Common.Interfaces;
+using Application.Features.Admin.Analytics.Common.Services;
 using Application.Features.Chat.Common.Schedules;
+using Application.Features.MarketplaceAnalytics.Common.Services;
 using Application.Features.Reviews.Common.Moderation;
 using FluentValidation;
 using MediatR;
@@ -65,6 +69,8 @@ public static class DependencyInjection
         services.AddScoped<IPremiumAccessService, PremiumAccessService>();
         services.AddScoped<IProposalQuestionTimerService, ProposalQuestionTimerService>();
         services.AddScoped<IProposalInterviewReviewService, ProposalInterviewReviewService>();
+        services.AddScoped<IAdminAnalyticsService, AdminAnalyticsService>();
+        services.AddScoped<IMarketplaceAnalyticsRecorder, MarketplaceAnalyticsRecorder>();
 
         services.AddSingleton<DeadlineWarningService>();
         services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<DeadlineWarningService>());

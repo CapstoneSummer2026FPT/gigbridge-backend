@@ -97,6 +97,14 @@ public class GenerateJobDescriptionCommandHandlerTests
             return Task.FromResult(ResponseToReturn);
         }
 
+        public Task<JobPostDetailsGenerationResponseDto> GenerateJobDescriptionDetailsAsync(
+            JobPostGenerationRequestDto request,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
+        public Task<JobPostHiringPlanGenerationResponseDto> GenerateJobHiringPlanAsync(
+            JobPostHiringPlanGenerationRequestDto request,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
+
         public Task<AiInterviewDefinitionResponseDto> CreateInterviewDefinitionAsync(
             AiInterviewDefinitionRequestDto request,
             CancellationToken cancellationToken = default) => throw new NotSupportedException();

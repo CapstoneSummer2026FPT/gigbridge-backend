@@ -3,6 +3,7 @@ using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Domain.Entities;
 using Domain.Enums;
+using Domain.Services.Payments;
 using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.Wallets.Common.Withdrawals;
@@ -119,6 +120,29 @@ internal static class WithdrawalWorkflow
                     : "Withdrawal failed and earned balance was refunded.",
                 CreatedAt = now,
                 CompletedAt = now
+            });
+        }
+
+        if (target == WithdrawalStatus.Success && current.FeeVnd > 0m &&
+            !await context.Set<PlatformRevenueEvent>().AnyAsync(
+                item => item.WalletWithdrawalId == withdrawalId,
+                cancellationToken))
+        {
+            context.Set<PlatformRevenueEvent>().Add(new PlatformRevenueEvent
+            {
+                PlatformRevenueEventId = Guid.NewGuid(),
+                Source = PlatformRevenueSource.WithdrawalFee,
+                WalletWithdrawalId = withdrawalId,
+                PayerUserId = current.UserId,
+                SourceEntityType = nameof(WalletWithdrawal),
+                SourceEntityId = withdrawalId,
+                SourceReference = current.ProviderTransactionCode ?? current.ProviderOrderCode,
+                GigCoinAmount = TokenWalletRules.ToTokens(current.FeeVnd),
+                VndEquivalent = current.FeeVnd,
+                VndPerGigCoin = TokenWalletRules.VndPerToken,
+                OccurredAt = now,
+                RecordedAt = now,
+                Metadata = "{\"capture\":\"successful-withdrawal\"}"
             });
         }
 
