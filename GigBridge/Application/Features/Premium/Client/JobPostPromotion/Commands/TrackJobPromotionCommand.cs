@@ -5,5 +5,8 @@ namespace Application.Features.Premium.Client.JobPostPromotion.Commands;
 
 public enum JobPromotionInteractionType { Impression, Click }
 
-public sealed record TrackJobPromotionCommand(Guid PromotionId, JobPromotionInteractionType Type)
+public sealed record TrackJobPromotionCommand(
+    Guid PromotionId,
+    JobPromotionInteractionType Type,
+    string VisitorKey)
     : IRequest<JobPromotionInteractionDto>;

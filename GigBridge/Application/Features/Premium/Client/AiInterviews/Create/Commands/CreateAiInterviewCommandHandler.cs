@@ -55,6 +55,21 @@ public sealed class CreateAiInterviewCommandHandler(
             CreatedAt = clock.UtcNow
         };
         context.Set<AiInterviewDefinition>().Add(definition);
+        context.Set<PremiumUsageEvent>().Add(new PremiumUsageEvent
+        {
+            PremiumUsageEventId = Guid.NewGuid(),
+            Type = PremiumUsageEventType.AiInterview,
+            UserId = command.UserId,
+            JobPostId = command.JobPostId,
+            IdempotencyKey = $"ai-interview-definition:{definition.AiInterviewDefinitionsId:N}",
+            OccurredAt = definition.CreatedAt,
+            Metadata = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                definition.Language,
+                definition.Mode,
+                definition.QuestionCount
+            })
+        });
         await context.SaveChangesAsync(cancellationToken);
         return new AiInterviewDefinitionDto(
             definition.AiInterviewDefinitionsId,

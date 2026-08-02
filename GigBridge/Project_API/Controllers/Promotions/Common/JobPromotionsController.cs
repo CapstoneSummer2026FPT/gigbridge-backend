@@ -4,12 +4,15 @@ using Application.Features.Premium.Client.JobPostPromotion.DTOs;
 using Application.Features.Premium.Client.JobPostPromotion.Queries;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Project_API.Controllers.Common;
+using Project_API.Security;
 
 namespace Project_API.Controllers;
 
 [ApiController]
 [AllowAnonymous]
+[EnableRateLimiting(AuthRateLimitPolicies.PromotionTelemetry)]
 [Route("api/job-promotions")]
 public sealed class JobPromotionsController : BaseApiController
 {
@@ -29,7 +32,11 @@ public sealed class JobPromotionsController : BaseApiController
     private async Task<IActionResult> Track(
         Guid promotionId,
         JobPromotionInteractionType type,
-        CancellationToken cancellationToken) =>
-        Ok(ApiResponse<JobPromotionInteractionDto>.Ok(
-            await Mediator.Send(new TrackJobPromotionCommand(promotionId, type), cancellationToken), "Recorded"));
+        CancellationToken cancellationToken)
+    {
+        var visitorKey = Request.Headers["X-Promotion-Visitor"].ToString();
+        return Ok(ApiResponse<JobPromotionInteractionDto>.Ok(
+            await Mediator.Send(
+                new TrackJobPromotionCommand(promotionId, type, visitorKey), cancellationToken), "Recorded"));
+    }
 }

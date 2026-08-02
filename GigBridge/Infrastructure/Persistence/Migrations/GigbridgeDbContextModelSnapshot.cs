@@ -7516,6 +7516,8 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.Navigation("WalletWithdrawals");
                 });
+
+            AnalyticsModelConfiguration.Configure(modelBuilder);
 #pragma warning restore 612, 618
         }
     }
