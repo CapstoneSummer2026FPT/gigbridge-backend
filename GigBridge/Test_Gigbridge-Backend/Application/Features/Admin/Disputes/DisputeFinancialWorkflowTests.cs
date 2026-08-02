@@ -26,8 +26,16 @@ public sealed class DisputeFinancialWorkflowTests
         var disputeId = Guid.NewGuid();
         var code = $"DISPUTE-PENALTY-DEBIT-{disputeId:N}-{milestoneId:N}";
 
+        var escrow = new ContractEscrow
+        {
+            ContractEscrowId = escrowId,
+            ContractsId = contractId,
+            DepositedTokens = 80m,
+            EarnedTokens = 0m
+        };
+
         var clientDebit = ContractEscrowWalletWorkflow.Penalty(
-            context, client, contractId, escrowId, milestoneId, disputeId,
+            context, client, escrow, contractId, milestoneId, disputeId,
             25_000m, code, "Confirmed financial misconduct", DateTime.UtcNow);
 
         Assert.Equal(55m, client.HeldTokens);
@@ -59,7 +67,7 @@ public sealed class DisputeFinancialWorkflowTests
         var client = new UserWallet { UserWalletsId = Guid.NewGuid(), UserId = Guid.NewGuid(), HeldTokens = 5m };
 
         Assert.Throws<BadRequestException>(() => ContractEscrowWalletWorkflow.Penalty(
-            context, client, Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
+            context, client, new ContractEscrow(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
             10_000m, "penalty", "reason", DateTime.UtcNow));
 
         Assert.Equal(5m, client.HeldTokens);

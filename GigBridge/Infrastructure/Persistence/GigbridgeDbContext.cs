@@ -522,6 +522,14 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.Property(e => e.RequiredPercentage)
                 .HasPrecision(5, 4)
                 .HasDefaultValue(1.0m);
+            entity.Property(e => e.DepositedTokens)
+                .HasPrecision(18, 4)
+                .HasDefaultValue(0m)
+                .HasComment("Portion of held escrow funded from the deposited (non-withdrawable) pool; restored to AvailableTokens on refund.");
+            entity.Property(e => e.EarnedTokens)
+                .HasPrecision(18, 4)
+                .HasDefaultValue(0m)
+                .HasComment("Portion of held escrow funded from the earned (withdrawable) pool; restored to WithdrawableTokens on refund.");
             entity.Property(e => e.Status)
                 .HasComment("Enum ContractEscrowStatus: 0=PendingFunding, 1=PartiallyFunded, 2=Funded, 3=PartiallyReleased, 4=Released, 5=Refunded, 6=Cancelled, 7=Disputed");
 
@@ -2744,7 +2752,6 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             {
                 t.HasCheckConstraint("CK_UserWallets_AvailableTokens_NonNegative", "\"AvailableTokens\" >= 0");
                 t.HasCheckConstraint("CK_UserWallets_WithdrawableTokens_NonNegative", "\"WithdrawableTokens\" >= 0");
-                t.HasCheckConstraint("CK_UserWallets_WithdrawableTokens_MaxAvailable", "\"WithdrawableTokens\" <= \"AvailableTokens\"");
                 t.HasCheckConstraint("CK_UserWallets_HeldTokens_NonNegative", "\"HeldTokens\" >= 0");
                 t.HasCheckConstraint("CK_UserWallets_PendingWithdrawalTokens_NonNegative", "\"PendingWithdrawalTokens\" >= 0");
             });
@@ -2843,6 +2850,15 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.Property(e => e.ContractEscrowId).HasColumnName("ContractEscrowId");
             entity.Property(e => e.ContractsId).HasColumnName("ContractsId");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.DepositedAmount)
+                .HasPrecision(18, 4)
+                .HasComment("Token amount sourced from the deposited pool (AvailableTokens) or held-deposited escrow; null when single-source Earned.");
+            entity.Property(e => e.EarnedAmount)
+                .HasPrecision(18, 4)
+                .HasComment("Token amount sourced from the earned pool (WithdrawableTokens) or held-earned escrow; null when single-source Deposited.");
+            entity.Property(e => e.BalanceSource)
+                .HasDefaultValue(0)
+                .HasComment("Enum WalletBalanceSource: 0=Deposited, 1=Earned, 2=HeldDeposited, 3=HeldEarned, 4=PendingWithdrawal, 5=Combined");
             entity.Property(e => e.GatewayOrderCode).HasMaxLength(100);
             entity.Property(e => e.GatewayProvider).HasMaxLength(100);
             entity.Property(e => e.GatewayTransactionCode).HasMaxLength(200);

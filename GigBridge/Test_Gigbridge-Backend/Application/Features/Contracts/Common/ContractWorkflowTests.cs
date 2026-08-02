@@ -248,6 +248,97 @@ public class ContractWorkflowTests
     }
 
     [Fact]
+    public async Task FundEscrow_DepositedFirstSpendingMixesBothPoolsIntoEscrowComposition()
+    {
+        var fixture = new ContractWorkflowFixture();
+        fixture.MoveToFullySignedPendingEscrow();
+        fixture.Contract.TotalBudget = 1_000_000m;
+        fixture.Escrows.Entities[0].RequiredAmount = 1_000_000m;
+        fixture.Wallets.Add(new UserWallet
+        {
+            UserWalletsId = fixture.WalletId,
+            UserId = fixture.ClientUserId,
+            AvailableTokens = 600m,
+            WithdrawableTokens = 410m,
+            HeldTokens = 0m,
+            CreatedAt = fixture.Now
+        });
+
+        var handler = new FundContractEscrowCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopNotificationService(),
+            new NoopChatRealtimeNotifier());
+
+        var result = await handler.Handle(
+            new FundContractEscrowCommand(fixture.ContractId, fixture.ClientUserId),
+            CancellationToken.None);
+
+        Assert.Equal((int)ContractStatus.Active, result.ContractStatus);
+
+        // 1,000-token hold: 600 deposited + 400 earned (deposited spent first).
+        var escrow = fixture.Escrows.Entities[0];
+        Assert.Equal(600m, escrow.DepositedTokens);
+        Assert.Equal(400m, escrow.EarnedTokens);
+
+        // The 10-token service fee is charged after the hold from the remaining 10 earned.
+        var wallet = fixture.Wallets.Entities[0];
+        Assert.Equal(0m, wallet.AvailableTokens);
+        Assert.Equal(0m, wallet.WithdrawableTokens);
+        Assert.Equal(1_000m, wallet.HeldTokens);
+
+        var hold = Assert.Single(fixture.WalletTransactions.Entities.Where(transaction =>
+            transaction.Type == (int)WalletTransactionType.EscrowHold));
+        Assert.Equal((int)WalletBalanceSource.Combined, hold.BalanceSource);
+        Assert.Equal(600m, hold.DepositedAmount);
+        Assert.Equal(400m, hold.EarnedAmount);
+        Assert.Equal(1_000m, hold.TokenAmount);
+
+        var fee = Assert.Single(fixture.WalletTransactions.Entities.Where(transaction =>
+            transaction.Type == (int)WalletTransactionType.Adjustment));
+        Assert.Equal(10m, fee.TokenAmount);
+        Assert.Equal((int)WalletBalanceSource.Earned, fee.BalanceSource);
+        Assert.Null(fee.DepositedAmount);
+        Assert.Equal(10m, fee.EarnedAmount);
+    }
+
+    [Fact]
+    public async Task FundEscrow_RejectsWhenCombinedDepositedAndEarnedIsInsufficient()
+    {
+        var fixture = new ContractWorkflowFixture();
+        fixture.MoveToFullySignedPendingEscrow();
+        fixture.Contract.TotalBudget = 1_000_000m;
+        fixture.Escrows.Entities[0].RequiredAmount = 1_000_000m;
+        fixture.Wallets.Add(new UserWallet
+        {
+            UserWalletsId = fixture.WalletId,
+            UserId = fixture.ClientUserId,
+            AvailableTokens = 600m,
+            WithdrawableTokens = 400m,
+            HeldTokens = 0m,
+            CreatedAt = fixture.Now
+        });
+
+        var handler = new FundContractEscrowCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopNotificationService(),
+            new NoopChatRealtimeNotifier());
+
+        // 600 deposited + 400 earned = 1,000, but the 10-token fee pushes it over.
+        await Assert.ThrowsAsync<BadRequestException>(() =>
+            handler.Handle(
+                new FundContractEscrowCommand(fixture.ContractId, fixture.ClientUserId),
+                CancellationToken.None));
+
+        var wallet = fixture.Wallets.Entities[0];
+        Assert.Equal(600m, wallet.AvailableTokens);
+        Assert.Equal(400m, wallet.WithdrawableTokens);
+        Assert.Equal(0m, wallet.HeldTokens);
+        Assert.Empty(fixture.WalletTransactions.Entities);
+    }
+
+    [Fact]
     public async Task FundEscrow_FullySignedPendingSignatureSelfHealsAndFunds()
     {
         var fixture = new ContractWorkflowFixture();

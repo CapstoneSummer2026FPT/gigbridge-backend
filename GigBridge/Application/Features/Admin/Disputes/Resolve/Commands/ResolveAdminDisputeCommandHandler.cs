@@ -330,8 +330,8 @@ public sealed class ResolveAdminDisputeCommandHandler :
         UserWallet clientWallet, UserWallet freelancerWallet, Dispute dispute, decimal amount, DateTime now)
     {
         var code = $"DISPUTE-RELEASE-{dispute.DisputesId:N}-{milestone.MilestonesId:N}";
-        ContractEscrowWalletWorkflow.Release(_context, clientWallet, freelancerWallet, contract.ContractsId,
-            escrow.ContractEscrowId, milestone.MilestonesId, amount, code, "AdminDisputeResolution",
+        ContractEscrowWalletWorkflow.Release(_context, clientWallet, freelancerWallet, escrow,
+            contract.ContractsId, milestone.MilestonesId, amount, code, "AdminDisputeResolution",
             "Released through dispute resolution.", now);
         _context.Set<EscrowTransaction>().Add(new EscrowTransaction
         {
@@ -347,8 +347,8 @@ public sealed class ResolveAdminDisputeCommandHandler :
         UserWallet clientWallet, Dispute dispute, decimal amount, DateTime now)
     {
         var code = $"DISPUTE-REFUND-{dispute.DisputesId:N}-{milestone.MilestonesId:N}";
-        ContractEscrowWalletWorkflow.Refund(_context, clientWallet, contract.ContractsId,
-            escrow.ContractEscrowId, milestone.MilestonesId, amount, code, "AdminDisputeResolution",
+        ContractEscrowWalletWorkflow.Refund(_context, clientWallet, escrow, contract.ContractsId,
+            milestone.MilestonesId, amount, code, "AdminDisputeResolution",
             "Refunded through dispute resolution.", now);
         _context.Set<EscrowTransaction>().Add(new EscrowTransaction
         {
@@ -367,8 +367,8 @@ public sealed class ResolveAdminDisputeCommandHandler :
     {
         var debitCode = $"DISPUTE-PENALTY-DEBIT-{dispute.DisputesId:N}-{milestone.MilestonesId:N}";
         var escrowCode = $"DISPUTE-PENALTY-{dispute.DisputesId:N}-{milestone.MilestonesId:N}";
-        var clientDebit = ContractEscrowWalletWorkflow.Penalty(_context, clientWallet,
-            contract.ContractsId, escrow.ContractEscrowId, milestone.MilestonesId, dispute.DisputesId,
+        var clientDebit = ContractEscrowWalletWorkflow.Penalty(_context, clientWallet, escrow,
+            contract.ContractsId, milestone.MilestonesId, dispute.DisputesId,
             allocation.PenaltyAmount, debitCode, allocation.Reason!.Trim(), now);
         var escrowTransaction = new EscrowTransaction
         {

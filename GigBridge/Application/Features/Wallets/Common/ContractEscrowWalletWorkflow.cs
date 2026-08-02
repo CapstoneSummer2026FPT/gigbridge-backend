@@ -12,8 +12,8 @@ internal static class ContractEscrowWalletWorkflow
         IApplicationDbContext context,
         UserWallet clientWallet,
         UserWallet freelancerWallet,
+        ContractEscrow escrow,
         Guid contractId,
-        Guid escrowId,
         Guid? milestoneId,
         decimal amountVnd,
         string transactionCode,
@@ -37,15 +37,27 @@ internal static class ContractEscrowWalletWorkflow
             throw new BadRequestException("Client held wallet balance is insufficient for this release.");
         }
 
+        var clientBefore = Snapshot(clientWallet);
+        var freelancerBefore = Snapshot(freelancerWallet);
+
+        // The released funds leave the client's held escrow; the escrow's source
+        // composition shrinks proportionally. The freelancer is credited the net
+        // amount as EARNED GigCoin regardless of how the client funded the escrow.
+        var heldSplit = SplitByEscrowComposition(escrow, grossTokens);
         clientWallet.HeldTokens -= grossTokens;
         clientWallet.UpdatedAt = now;
         WalletWorkflow.CreditWithdrawable(freelancerWallet, netTokens, now);
+        ConsumeEscrowSource(escrow, heldSplit);
 
+        var clientSource = ToHeldSource(heldSplit);
+        var (clientSplitDeposited, clientSplitEarned) = WalletBalanceAudit.ToSplitAmounts(
+            heldSplit.Deposited,
+            heldSplit.Earned);
         context.Set<WalletTransaction>().AddRange(
             CreateTransaction(
                 clientWallet,
                 contractId,
-                escrowId,
+                escrow.ContractEscrowId,
                 milestoneId,
                 grossTokens,
                 amountVnd,
@@ -53,11 +65,16 @@ internal static class ContractEscrowWalletWorkflow
                 transactionCode,
                 provider,
                 note,
-                now),
+                now,
+                clientSource,
+                clientSplitDeposited,
+                clientSplitEarned,
+                WalletBalanceAudit.EnrichMetadata(
+                    null, heldSplit.Deposited, heldSplit.Earned, clientBefore, clientWallet)),
             CreateTransaction(
                 freelancerWallet,
                 contractId,
-                escrowId,
+                escrow.ContractEscrowId,
                 milestoneId,
                 netTokens,
                 amountVnd - feeVnd,
@@ -65,7 +82,12 @@ internal static class ContractEscrowWalletWorkflow
                 transactionCode,
                 provider,
                 note,
-                now));
+                now,
+                WalletBalanceSource.Earned,
+                null,
+                netTokens,
+                WalletBalanceAudit.EnrichMetadata(
+                    null, 0m, netTokens, freelancerBefore, freelancerWallet)));
 
         if (feeTokens > 0m)
         {
@@ -73,7 +95,7 @@ internal static class ContractEscrowWalletWorkflow
             context.Set<WalletTransaction>().Add(CreateTransaction(
                 freelancerWallet,
                 contractId,
-                escrowId,
+                escrow.ContractEscrowId,
                 milestoneId,
                 feeTokens,
                 feeVnd,
@@ -81,7 +103,11 @@ internal static class ContractEscrowWalletWorkflow
                 feeCode,
                 "InternalTokenWallet",
                 "1% freelancer service fee withheld from escrow release.",
-                now));
+                now,
+                WalletBalanceSource.Earned,
+                null,
+                feeTokens,
+                null));
         }
 
         return new EscrowTransferResult(amountVnd, grossTokens, feeVnd, feeTokens, netTokens);
@@ -90,8 +116,8 @@ internal static class ContractEscrowWalletWorkflow
     public static decimal Refund(
         IApplicationDbContext context,
         UserWallet clientWallet,
+        ContractEscrow escrow,
         Guid contractId,
-        Guid escrowId,
         Guid? milestoneId,
         decimal amountVnd,
         string transactionCode,
@@ -110,13 +136,24 @@ internal static class ContractEscrowWalletWorkflow
             throw new BadRequestException("Client held wallet balance is insufficient for this refund.");
         }
 
+        var before = Snapshot(clientWallet);
+        var split = SplitByEscrowComposition(escrow, tokens);
+
+        // Refunds restore each source to the client's matching pool: deposited
+        // portions back to the deposited balance, earned portions back to earned.
         clientWallet.HeldTokens -= tokens;
-        clientWallet.AvailableTokens += tokens;
+        clientWallet.AvailableTokens += split.Deposited;
+        clientWallet.WithdrawableTokens += split.Earned;
         clientWallet.UpdatedAt = now;
+        ConsumeEscrowSource(escrow, split);
+
+        var (depositedAmount, earnedAmount) = WalletBalanceAudit.ToSplitAmounts(
+            split.Deposited,
+            split.Earned);
         context.Set<WalletTransaction>().Add(CreateTransaction(
             clientWallet,
             contractId,
-            escrowId,
+            escrow.ContractEscrowId,
             milestoneId,
             tokens,
             amountVnd,
@@ -124,7 +161,11 @@ internal static class ContractEscrowWalletWorkflow
             transactionCode,
             provider,
             note,
-            now));
+            now,
+            ToHeldSource(split),
+            depositedAmount,
+            earnedAmount,
+            WalletBalanceAudit.EnrichMetadata(null, split.Deposited, split.Earned, before, clientWallet)));
         return tokens;
     }
 
@@ -135,8 +176,8 @@ internal static class ContractEscrowWalletWorkflow
     public static WalletTransaction Penalty(
         IApplicationDbContext context,
         UserWallet clientWallet,
+        ContractEscrow escrow,
         Guid contractId,
-        Guid escrowId,
         Guid milestoneId,
         Guid disputeId,
         decimal amountVnd,
@@ -151,23 +192,88 @@ internal static class ContractEscrowWalletWorkflow
         if (clientWallet.HeldTokens < tokens)
             throw new BadRequestException("Client held wallet balance is insufficient for this penalty.");
 
+        var before = Snapshot(clientWallet);
+        var split = SplitByEscrowComposition(escrow, tokens);
         clientWallet.HeldTokens -= tokens;
         clientWallet.UpdatedAt = now;
+        ConsumeEscrowSource(escrow, split);
 
-        var metadata = System.Text.Json.JsonSerializer.Serialize(new
+        var existingMetadata = System.Text.Json.JsonSerializer.Serialize(new
         {
             disputeId,
             sourceUserId = clientWallet.UserId,
             retainedByPlatform = true,
             operation = "DisputePenaltyClientHeldDebit"
         });
-        var debit = CreateTransaction(clientWallet, contractId, escrowId, milestoneId, tokens,
+        var (depositedAmount, earnedAmount) = WalletBalanceAudit.ToSplitAmounts(
+            split.Deposited,
+            split.Earned);
+        var debit = CreateTransaction(clientWallet, contractId, escrow.ContractEscrowId, milestoneId, tokens,
             amountVnd, WalletTransactionType.DisputePenalty, transactionCode,
-            "AdminDisputeResolution", note, now);
-        debit.Metadata = metadata;
+            "AdminDisputeResolution", note, now,
+            ToHeldSource(split), depositedAmount, earnedAmount, null);
+        debit.Metadata = WalletBalanceAudit.EnrichMetadata(
+            existingMetadata, split.Deposited, split.Earned, before, clientWallet);
         context.Set<WalletTransaction>().Add(debit);
         return debit;
     }
+
+    /// <summary>
+    /// Splits a token amount leaving the escrow by the escrow's held composition.
+    /// A legacy escrow created before source tracking (composition 0/0) falls back
+    /// to treating the whole amount as deposited, matching prior refund behaviour.
+    /// </summary>
+    private static (decimal Deposited, decimal Earned) SplitByEscrowComposition(
+        ContractEscrow escrow,
+        decimal tokenAmount)
+    {
+        var total = escrow.DepositedTokens + escrow.EarnedTokens;
+        if (total <= 0m)
+        {
+            return (tokenAmount, 0m);
+        }
+
+        if (tokenAmount > total)
+        {
+            throw new BadRequestException("Escrow source composition is insufficient for this transfer.");
+        }
+
+        var deposited = decimal.Round(
+            tokenAmount * escrow.DepositedTokens / total,
+            4,
+            MidpointRounding.AwayFromZero);
+        deposited = Math.Min(deposited, escrow.DepositedTokens);
+        var earned = tokenAmount - deposited;
+        if (earned > escrow.EarnedTokens)
+        {
+            earned = escrow.EarnedTokens;
+            deposited = tokenAmount - earned;
+        }
+        return (deposited, earned);
+    }
+
+    private static void ConsumeEscrowSource(
+        ContractEscrow escrow,
+        (decimal Deposited, decimal Earned) split)
+    {
+        escrow.DepositedTokens -= split.Deposited;
+        escrow.EarnedTokens -= split.Earned;
+    }
+
+    private static WalletBalanceSource ToHeldSource((decimal Deposited, decimal Earned) split) =>
+        split.Deposited > 0m && split.Earned > 0m
+            ? WalletBalanceSource.Combined
+            : split.Earned > 0m
+                ? WalletBalanceSource.HeldEarned
+                : WalletBalanceSource.HeldDeposited;
+
+    private static UserWallet Snapshot(UserWallet wallet) => new()
+    {
+        AvailableTokens = wallet.AvailableTokens,
+        WithdrawableTokens = wallet.WithdrawableTokens,
+        HeldTokens = wallet.HeldTokens,
+        PendingWithdrawalTokens = wallet.PendingWithdrawalTokens
+    };
 
     private static WalletTransaction CreateTransaction(
         UserWallet wallet,
@@ -180,7 +286,11 @@ internal static class ContractEscrowWalletWorkflow
         string transactionCode,
         string provider,
         string note,
-        DateTime now) => new()
+        DateTime now,
+        WalletBalanceSource balanceSource = WalletBalanceSource.Deposited,
+        decimal? depositedAmount = null,
+        decimal? earnedAmount = null,
+        string? metadata = null) => new()
     {
         WalletTransactionsId = Guid.NewGuid(),
         UserWalletsId = wallet.UserWalletsId,
@@ -190,11 +300,15 @@ internal static class ContractEscrowWalletWorkflow
         MilestonesId = milestoneId,
         TokenAmount = tokens,
         VndAmount = amountVnd,
+        BalanceSource = (int)balanceSource,
+        DepositedAmount = depositedAmount,
+        EarnedAmount = earnedAmount,
         Type = (int)type,
         Status = (int)WalletTransactionStatus.Succeeded,
         IdempotencyKey = transactionCode,
         GatewayProvider = provider,
         GatewayTransactionCode = transactionCode,
+        Metadata = metadata,
         Note = note,
         CreatedAt = now,
         CompletedAt = now
