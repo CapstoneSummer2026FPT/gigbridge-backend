@@ -2,6 +2,7 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces.IService;
 using Domain.Entities;
 using Domain.Enums;
+using Domain.Services.Payments;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -105,6 +106,45 @@ public sealed class WalletLedgerService : IWalletLedgerService
         };
         _context.WalletTransactions.Add(transaction);
 
+        if (type is WalletTransactionType.SubscriptionPurchase or WalletTransactionType.PromotionPurchase)
+        {
+            var revenueSource = ResolveRevenueSource(type, idempotencyKey, metadata);
+            _context.PlatformRevenueEvents.Add(new PlatformRevenueEvent
+            {
+                PlatformRevenueEventId = Guid.NewGuid(),
+                Source = revenueSource,
+                WalletTransactionId = transaction.WalletTransactionsId,
+                PayerUserId = userId,
+                SourceEntityType = nameof(WalletTransaction),
+                SourceEntityId = transaction.WalletTransactionsId,
+                SourceReference = idempotencyKey,
+                GigCoinAmount = tokenAmount,
+                VndEquivalent = TokenWalletRules.ToVnd(tokenAmount),
+                VndPerGigCoin = TokenWalletRules.VndPerToken,
+                OccurredAt = now,
+                RecordedAt = now,
+                Metadata = metadata
+            });
+
+            if (type == WalletTransactionType.PromotionPurchase)
+            {
+                _context.PremiumUsageEvents.Add(new PremiumUsageEvent
+                {
+                    PremiumUsageEventId = Guid.NewGuid(),
+                    Type = revenueSource switch
+                    {
+                        PlatformRevenueSource.JobPromotionPurchase => PremiumUsageEventType.JobPromotion,
+                        PlatformRevenueSource.PromotionBoost => PremiumUsageEventType.ProfilePromotionBoost,
+                        _ => PremiumUsageEventType.ProfilePromotion
+                    },
+                    UserId = userId,
+                    IdempotencyKey = $"wallet:{transaction.WalletTransactionsId:N}:premium-usage",
+                    OccurredAt = now,
+                    Metadata = metadata
+                });
+            }
+        }
+
         try
         {
             await _context.SaveChangesAsync(cancellationToken);
@@ -127,5 +167,19 @@ public sealed class WalletLedgerService : IWalletLedgerService
                 return existing;
             throw;
         }
+    }
+
+    private static PlatformRevenueSource ResolveRevenueSource(
+        WalletTransactionType type,
+        string idempotencyKey,
+        string? metadata)
+    {
+        if (type == WalletTransactionType.SubscriptionPurchase)
+            return PlatformRevenueSource.SubscriptionPurchase;
+        if (idempotencyKey.StartsWith("job-promotion:", StringComparison.OrdinalIgnoreCase))
+            return PlatformRevenueSource.JobPromotionPurchase;
+        if (metadata?.Contains("boostTokenAmount", StringComparison.OrdinalIgnoreCase) == true)
+            return PlatformRevenueSource.PromotionBoost;
+        return PlatformRevenueSource.ProfilePromotionPurchase;
     }
 }

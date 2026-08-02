@@ -53,6 +53,7 @@ internal static class JobPostProjection
                 .ToList(),
             IsFeatured: jobPost.IsFeatured && jobPost.FeaturedUntil > utcNow,
             FeaturedUntil: jobPost.FeaturedUntil,
+            IsAiGenerated: jobPost.IsAigenerated == true,
             HasAiInterview: aiInterviewJobIds?.Contains(jobPost.JobPostsId) == true);
     }
 

@@ -67,6 +67,13 @@ public sealed class GetAiTalentMatchesQueryHandler(
             run.Status = (int)TalentMatchRunStatus.NoCandidates;
             run.CompletedAt = clock.UtcNow;
             run.LatencyMilliseconds = stopwatch.ElapsedMilliseconds;
+            context.Set<PremiumUsageEvent>().Add(new PremiumUsageEvent
+            {
+                PremiumUsageEventId = Guid.NewGuid(), Type = PremiumUsageEventType.TalentMatching,
+                UserId = query.UserId, JobPostId = query.JobPostId,
+                IdempotencyKey = $"talent-match:{run.TalentMatchRunId:N}", OccurredAt = run.CompletedAt.Value,
+                Metadata = "{\"candidateCount\":0}"
+            });
             await context.SaveChangesAsync(cancellationToken);
             return new AiTalentMatchingResultDto(run.TalentMatchRunId, query.JobPostId,
                 Mode, AlgorithmVersion, []);
@@ -203,6 +210,13 @@ public sealed class GetAiTalentMatchesQueryHandler(
         run.LatencyMilliseconds = stopwatch.ElapsedMilliseconds;
         run.Status = (int)TalentMatchRunStatus.Succeeded;
         run.CompletedAt = clock.UtcNow;
+        context.Set<PremiumUsageEvent>().Add(new PremiumUsageEvent
+        {
+            PremiumUsageEventId = Guid.NewGuid(), Type = PremiumUsageEventType.TalentMatching,
+            UserId = query.UserId, JobPostId = query.JobPostId,
+            IdempotencyKey = $"talent-match:{run.TalentMatchRunId:N}", OccurredAt = run.CompletedAt.Value,
+            Metadata = System.Text.Json.JsonSerializer.Serialize(new { candidateCount = matches.Count })
+        });
         await context.SaveChangesAsync(cancellationToken);
 
         return new AiTalentMatchingResultDto(run.TalentMatchRunId, query.JobPostId,

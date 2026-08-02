@@ -305,6 +305,7 @@ public static class DependencyInjection
         services.AddScoped<IGoogleMeetOAuthService, GoogleMeetOAuthService>();
         services.AddHostedService<GoogleMeetProvisioningWorker>();
         services.AddHostedService<PremiumExpiryWorker>();
+        services.AddHostedService<AnalyticsMaintenanceWorker>();
 
         // Data Protection for encrypted tokens
         services.AddDataProtection()

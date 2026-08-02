@@ -4,10 +4,13 @@ using Application.Features.Premium.Freelancer.Promotions.Feed;
 using Application.Features.Premium.Freelancer.Promotions.Track;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Project_API.Controllers.Common;
+using Project_API.Security;
 namespace Project_API.Controllers;
 [ApiController]
 [AllowAnonymous]
+[EnableRateLimiting(AuthRateLimitPolicies.PromotionTelemetry)]
 [Route("api/promotions")]
 public sealed class PromotionsController : BaseApiController
 {
