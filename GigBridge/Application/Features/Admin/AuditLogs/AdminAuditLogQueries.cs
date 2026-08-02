@@ -8,7 +8,7 @@ using System.Text.Json;
 
 namespace Application.Features.Admin.AuditLogs;
 
-public sealed record AdminAuditLogDto(Guid AuditLogId, Guid AdminUserId, string AdminName, string Action,
+public sealed record AdminAuditLogDto(Guid AuditLogId, Guid AdminUserId, string AdminName, string? AdminAvatar, string Action,
     string? EntityType, Guid? EntityId, JsonElement? OldValues, JsonElement? NewValues,
     Guid CorrelationId, string? UserAgent, DateTime CreatedAt);
 
@@ -56,7 +56,7 @@ public sealed class AdminAuditLogQueryHandler :
         return Map(row);
     }
     private static AdminAuditLogDto Map(AdminAuditLog x) => new(x.AdminAuditLogsId, x.AdminId,
-        x.Admin.FullName, x.Action, x.EntityType, x.EntityId, Parse(x.OldValues), Parse(x.NewValues),
+        x.Admin.FullName, x.Admin.Avatar, x.Action, x.EntityType, x.EntityId, Parse(x.OldValues), Parse(x.NewValues),
         x.CorrelationId, x.UserAgent, x.CreatedAt);
     private static JsonElement? Parse(string? value)
     {

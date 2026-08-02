@@ -19,7 +19,7 @@ public sealed record AdminViolationDto(Guid Id, int SourceType, Guid? DisputeId,
     int Number, int Type, string Reason, string? Description, int ActionTaken, DateTime? SuspendedUntil, bool IsActive, DateTime CreatedAt);
 public sealed record AdminUserReportDto(Guid Id, int Type, int Status, string Reason, string? Description, int EvidenceCount, DateTime CreatedAt);
 public sealed record AdminUserAuditDto(Guid Id, string Action, string? EntityType, Guid? EntityId, string? OldValues, string? NewValues, DateTime CreatedAt);
-public sealed record AdminUserDetailDto(Guid UserId, string FullName, string Email, int Role, DateTime CreatedAt,
+public sealed record AdminUserDetailDto(Guid UserId, string FullName, string Email, string? Avatar, int? EloPoints, int Role, DateTime CreatedAt,
     bool IsEmailVerified, bool IsActive, int AccountStatus, bool IsFlagged, int ViolationCount,
     DateTime? SuspendedUntil, DateTime? BannedAt, string? BanReason, AdminSubscriptionSummaryDto? Subscription,
     AdminUserProfileDto? Profile, AdminWalletSummaryDto? Wallet, IReadOnlyList<AdminUserReportDto> RecentReports,
@@ -56,7 +56,7 @@ public sealed class AdminUserDetailQueryHandler :
         var audits = await Audits(q.UserId, reportIds).Take(10).ToListAsync(ct);
         var subscription = await _context.Set<Subscription>().AsNoTracking().Include(x => x.SubscriptionPlans)
             .Where(x => x.UserId == q.UserId).OrderByDescending(x => x.EndDate).FirstOrDefaultAsync(ct);
-        return new AdminUserDetailDto(user.UserId, user.FullName, user.Email, user.Role, user.CreatedAt,
+        return new AdminUserDetailDto(user.UserId, user.FullName, user.Email, user.Avatar, user.UserEloScore?.CurrentPoints, user.Role, user.CreatedAt,
             user.IsEmailVerified, user.IsActive, user.AccountStatus, user.IsFlagged, user.ViolationCount,
             user.SuspendedUntil, user.BannedAt, user.BanReason,
             subscription is null ? null : new(subscription.SubscriptionPlans.Name, (int)subscription.Status, subscription.StartDate, subscription.EndDate),
