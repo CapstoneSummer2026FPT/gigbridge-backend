@@ -17,8 +17,26 @@ internal sealed class EfApplicationDbContextTransaction : IApplicationDbContextT
         long lockKey,
         CancellationToken cancellationToken)
     {
-        var dbTransaction = _transaction.GetDbTransaction();
-        await using var command = dbTransaction.Connection!.CreateCommand();
+        // Providers without a real SQL transaction (e.g. the EF Core in-memory store
+        // used by tests) expose no DbTransaction, so the Postgres advisory lock is a
+        // no-op there. Production always runs on Npgsql and takes the lock.
+        DbTransaction? dbTransaction;
+        try
+        {
+            dbTransaction = _transaction.GetDbTransaction();
+        }
+        catch (Exception exception) when (exception is NotSupportedException or InvalidOperationException)
+        {
+            // EF Core throws these when the provider is not relational (in-memory store).
+            dbTransaction = null;
+        }
+
+        if (dbTransaction?.Connection is null)
+        {
+            return;
+        }
+
+        await using var command = dbTransaction.Connection.CreateCommand();
         command.Transaction = dbTransaction;
         command.CommandText = "SELECT pg_advisory_xact_lock(@lockKey);";
 

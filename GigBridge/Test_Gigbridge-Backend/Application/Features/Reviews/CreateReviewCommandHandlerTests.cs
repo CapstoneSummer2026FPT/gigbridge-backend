@@ -7,6 +7,8 @@ using Domain.Entities;
 using Domain.Enums;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.InMemory;
 using NSubstitute;
 using Test_Gigbridge_Backend.TestSupport;
 
@@ -40,7 +42,7 @@ public class CreateReviewCommandHandlerTests
 
         Assert.Equal(seed.ContractId, response.ContractId);
         Assert.Equal(seed.FreelancerUserId, response.RevieweeId);
-        Assert.Equal(5, response.Rating);
+        Assert.Equal(4.7m, response.Rating);
         Assert.Equal("Completed contract", response.ProjectTitle);
         Assert.Equal("Strong delivery.", response.Comment);
         Assert.True(response.IsVisible);
@@ -49,12 +51,13 @@ public class CreateReviewCommandHandlerTests
         var review = await context.Reviews.SingleAsync();
         Assert.Equal(seed.ClientUserId, review.ReviewerId);
         Assert.Equal(seed.FreelancerUserId, review.RevieweeId);
+        Assert.Equal(4.7m, review.Rating);
         Assert.Equal(4, review.CommunicationRating);
         Assert.Equal(5, review.QualityRating);
         Assert.Equal(5, review.TimelinessRating);
 
         var score = await context.UserEloScores.SingleAsync(score => score.UserId == seed.FreelancerUserId);
-        Assert.Equal(170, score.CurrentPoints);
+        Assert.Equal(144, score.CurrentPoints);
 
         var transactions = await context.UserEloPointTransactions
             .Where(transaction => transaction.UserId == seed.FreelancerUserId)
@@ -62,19 +65,19 @@ public class CreateReviewCommandHandlerTests
             .ThenBy(transaction => transaction.Reason)
             .ToListAsync();
 
-        Assert.Equal(3, transactions.Count);
+        Assert.Equal(2, transactions.Count);
         Assert.Contains(transactions, transaction =>
             transaction.Reason == (int)UserEloPointReason.InitialGrant &&
             transaction.PointsDelta == 100 &&
             transaction.PointsAfter == 100);
         Assert.Contains(transactions, transaction =>
-            transaction.Reason == (int)UserEloPointReason.JobCompletion &&
-            transaction.PointsDelta == 20 &&
-            transaction.PointsAfter == 120);
-        Assert.Contains(transactions, transaction =>
-            transaction.Reason == (int)UserEloPointReason.ReviewRating &&
-            transaction.PointsDelta == 50 &&
-            transaction.PointsAfter == 170);
+            transaction.Reason == (int)UserEloPointReason.CompletedJobReview &&
+            transaction.PointsDelta == 44 &&
+            transaction.PointsAfter == 144 &&
+            transaction.PointsBefore == 100 &&
+            transaction.ContractId == seed.ContractId &&
+            transaction.ReviewId == review.ReviewsId &&
+            transaction.Rating == 4.7m);
         await notifications.Received(1).CreateNotificationAsync(
             seed.FreelancerUserId,
             NotificationType.ReviewReceived,
@@ -109,8 +112,8 @@ public class CreateReviewCommandHandlerTests
 
         Assert.Equal(seed.ClientUserId, response.RevieweeId);
         Assert.Equal("Freelancer User", response.ReviewerName);
-        Assert.Equal(4, response.Rating);
-        Assert.Equal(4, (await context.Reviews.SingleAsync()).Rating);
+        Assert.Equal(3.7m, response.Rating);
+        Assert.Equal(3.7m, (await context.Reviews.SingleAsync()).Rating);
         Assert.Equal(seed.ClientUserId, (await context.UserEloScores.SingleAsync()).UserId);
     }
 
@@ -214,6 +217,10 @@ public class CreateReviewCommandHandlerTests
     {
         var options = new DbContextOptionsBuilder<GigbridgeDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            // The handler opens a real transaction for Elo + history; the in-memory
+            // store has no transactions, so the ignored-transaction warning (which
+            // throws by default) must be suppressed in tests.
+            .ConfigureWarnings(warnings => warnings.Ignore(InMemoryEventId.TransactionIgnoredWarning))
             .Options;
 
         return new GigbridgeDbContext(options);

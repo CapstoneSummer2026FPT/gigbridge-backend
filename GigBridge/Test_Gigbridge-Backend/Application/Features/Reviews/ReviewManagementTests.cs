@@ -114,9 +114,14 @@ public class ReviewManagementTests
         await context.SaveChangesAsync();
         var clock = new FixedDateTimeService(seed.Now);
         var elo = new UserEloService(context, clock);
-        await elo.ApplyReviewScoreAsync(review.ReviewsId, seed.Freelancer.UserId, 5, CancellationToken.None);
+        await elo.ApplyCompletedJobReviewAsync(
+            review.ReviewsId,
+            seed.Contract.ContractsId,
+            seed.Freelancer.UserId,
+            5m,
+            CancellationToken.None);
         await context.SaveChangesAsync();
-        Assert.Equal(170, (await context.UserEloScores.SingleAsync()).CurrentPoints);
+        Assert.Equal(150, (await context.UserEloScores.SingleAsync()).CurrentPoints);
 
         var service = new ReviewModerationService(context, clock, elo);
         var hidden = await service.SetStatusAsync(
@@ -127,7 +132,7 @@ public class ReviewManagementTests
             CancellationToken.None);
         await context.SaveChangesAsync();
         Assert.True(hidden.Changed);
-        Assert.Equal(-70, hidden.EloDelta);
+        Assert.Equal(-50, hidden.EloDelta);
         Assert.Equal(100, (await context.UserEloScores.SingleAsync()).CurrentPoints);
         Assert.Single(context.AdminAuditLogs);
 
@@ -147,8 +152,8 @@ public class ReviewManagementTests
             "The review was restored after another check.",
             CancellationToken.None);
         await context.SaveChangesAsync();
-        Assert.Equal(70, restored.EloDelta);
-        Assert.Equal(170, (await context.UserEloScores.SingleAsync()).CurrentPoints);
+        Assert.Equal(50, restored.EloDelta);
+        Assert.Equal(150, (await context.UserEloScores.SingleAsync()).CurrentPoints);
         Assert.Equal(2, context.AdminAuditLogs.Count());
     }
 

@@ -2460,6 +2460,7 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.Property(e => e.IsVisible).HasDefaultValue(true);
             entity.Property(e => e.ModerationStatus).HasDefaultValue(0);
             entity.Property(e => e.ModerationNote).HasMaxLength(1000);
+            entity.Property(e => e.Rating).HasPrecision(3, 1);
             entity.Property(e => e.RevieweeId).HasColumnName("RevieweeId");
             entity.Property(e => e.ReviewerId).HasColumnName("ReviewerId");
 
@@ -2620,14 +2621,23 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
             entity.HasIndex(e => new { e.UserId, e.CreatedAt }, "IX_UserEloPointTransactions_UserId_CreatedAt").IsDescending(false, true);
 
+            // DB-level idempotency for completed-job review Elo: at most one delta per
+            // (reviewee, contract) for the CompletedJobReview reason.
+            entity.HasIndex(e => new { e.UserId, e.ContractId }, "IX_UserEloPointTransactions_UserId_ContractId_CompletedJobReview")
+                .IsUnique()
+                .HasFilter("\"Reason\" = 7");
+
             entity.Property(e => e.UserEloPointTransactionsId)
                 .HasDefaultValueSql("gen_random_uuid()")
                 .HasColumnName("UserEloPointTransactionsId");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.ContractId).HasColumnName("ContractId");
             entity.Property(e => e.IdempotencyKey).HasMaxLength(200);
             entity.Property(e => e.Metadata).HasColumnType("jsonb");
             entity.Property(e => e.PointsAfter).HasDefaultValue(0);
-            entity.Property(e => e.Reason).HasComment("Enum UserEloPointReason: 0=InitialGrant, 1=InactivityPenalty, 2=ReturnBonus, 3=JobCompletion, 4=ReviewRating, 5=LegacyIntegrityPenalty, 6=ReviewModeration");
+            entity.Property(e => e.Rating).HasPrecision(3, 1);
+            entity.Property(e => e.Reason).HasComment("Enum UserEloPointReason: 0=InitialGrant, 1=InactivityPenalty, 2=ReturnBonus, 3=JobCompletion, 4=ReviewRating, 5=LegacyIntegrityPenalty, 6=ReviewModeration, 7=CompletedJobReview");
+            entity.Property(e => e.ReviewId).HasColumnName("ReviewId");
             entity.Property(e => e.SourceEntityType).HasMaxLength(50);
             entity.Property(e => e.UserId).HasColumnName("UserId");
 
