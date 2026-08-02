@@ -12,6 +12,8 @@ public class ProposalDetailDto
 
     public string? FreelancerName { get; set; }
 
+    public Guid? FreelancerUserId { get; set; }
+
     public string? CoverLetter { get; set; }
 
     public decimal? ProposedBudget { get; set; }

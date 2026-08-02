@@ -96,6 +96,8 @@ public class GetMyContractsQueryHandler : IRequestHandler<GetMyContractsQuery, L
             UpdatedAt = c.UpdatedAt,
             ClientName = c.ClientProfiles?.User?.FullName ?? "Client",
             FreelancerName = c.FreelancerProfiles?.User?.FullName,
+            ClientUserId = c.ClientProfiles?.User?.UserId,
+            FreelancerUserId = c.FreelancerProfiles?.User?.UserId,
             HasReviewedByCurrentUser = reviewedContractIds.Contains(c.ContractsId),
             CanReview = c.Status == (int)ContractStatus.Completed &&
                 !reviewedContractIds.Contains(c.ContractsId)

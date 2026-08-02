@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Application.Features.Admin.Reports.AccountReports;
 
 public sealed record AccountReportEvidenceDto(Guid Id, string FileName, string ContentType, long FileSize, string? Description, Guid UploadedByUserId, DateTime CreatedAt);
-public sealed record AccountReportListItemDto(Guid Id, Guid ReporterId, string ReporterName, Guid ReportedUserId, string ReportedUserName,
+public sealed record AccountReportListItemDto(Guid Id, Guid ReporterId, string ReporterName, int ReporterRole, Guid ReportedUserId, string ReportedUserName, int ReportedUserRole,
     int Type, int Status, string Reason, DateTime CreatedAt, int EvidenceCount, int AccountStatus, int ViolationCount,
     bool IsFlagged, DateTime? SuspendedUntil, Guid? AssignedAdminId, string? AssignedAdminName);
 public sealed record AccountReportDetailDto(AccountReportListItemDto Report, string? Description, string? AdminNote, int? ResolutionAction,
@@ -48,7 +48,7 @@ public sealed class AccountReportQueryHandler : IRequestHandler<GetAccountReport
         var rows = await query.OrderBy(x => x.Report.Status).ThenByDescending(x => x.Report.CreatedAt)
             .Skip((page - 1) * size).Take(size)
             .Select(x => new AccountReportListItemDto(x.Report.ReportsId, x.Report.ReporterId,
-                x.Report.Reporter.FullName, x.Target.UserId, x.Target.FullName, x.Report.Type,
+                x.Report.Reporter.FullName, x.Report.Reporter.Role, x.Target.UserId, x.Target.FullName, x.Target.Role, x.Report.Type,
                 x.Report.Status, x.Report.Reason, x.Report.CreatedAt, x.Report.ReportEvidences.Count,
                 x.Target.AccountStatus, x.Target.ViolationCount, x.Target.IsFlagged, x.Target.SuspendedUntil,
                 x.Report.AssignedAdminId, x.Report.AssignedAdmin != null ? x.Report.AssignedAdmin.FullName : null))
@@ -70,7 +70,7 @@ public sealed class AccountReportQueryHandler : IRequestHandler<GetAccountReport
             violations.Select(x => new Admin.Users.Detail.AdminViolationDto(x.UserViolationId, x.SourceType, x.DisputeId, x.ReportId, x.ManualActionId, x.ViolationNumber, x.ViolationType, x.Reason, x.Description, x.ActionTaken, x.SuspendedUntil, x.IsActive, x.CreatedAt)).ToList(),
             audits.Select(x => new Admin.Users.Detail.AdminUserAuditDto(x.AdminAuditLogsId, x.Action, x.EntityType, x.EntityId, x.OldValues, x.NewValues, x.CreatedAt)).ToList());
     }
-    private static AccountReportListItemDto Map(Report r, User u) => new(r.ReportsId, r.ReporterId, r.Reporter.FullName, u.UserId, u.FullName, r.Type, r.Status, r.Reason, r.CreatedAt, r.ReportEvidences.Count, u.AccountStatus, u.ViolationCount, u.IsFlagged, u.SuspendedUntil, r.AssignedAdminId, r.AssignedAdmin?.FullName);
+    private static AccountReportListItemDto Map(Report r, User u) => new(r.ReportsId, r.ReporterId, r.Reporter.FullName, r.Reporter.Role, u.UserId, u.FullName, u.Role, r.Type, r.Status, r.Reason, r.CreatedAt, r.ReportEvidences.Count, u.AccountStatus, u.ViolationCount, u.IsFlagged, u.SuspendedUntil, r.AssignedAdminId, r.AssignedAdmin?.FullName);
 }
 
 public sealed record AccountReportStatusRequest(ReportStatus Status, string? AdminNote);

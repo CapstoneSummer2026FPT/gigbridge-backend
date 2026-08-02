@@ -62,6 +62,7 @@ public class GetProposalDetailQueryHandler
             JobPostTitle = proposal.JobPosts.Title,
             FreelancerProfileId = proposal.FreelancerProfilesId,
             FreelancerName = proposal.FreelancerProfiles.User.FullName,
+            FreelancerUserId = proposal.FreelancerProfiles.User?.UserId,
             CoverLetter = proposal.CoverLetter,
             ProposedBudget = proposal.ProposedBudget,
             ProposedDuration = proposal.ProposedDuration,
