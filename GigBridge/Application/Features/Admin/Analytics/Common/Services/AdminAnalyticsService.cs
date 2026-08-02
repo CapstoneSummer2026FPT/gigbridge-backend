@@ -111,13 +111,19 @@ public sealed class AdminAnalyticsService : IAdminAnalyticsService
             .Include(x => x.SubscriptionPlans)
             .Where(x => x.CreatedAt >= range.CurrentFromUtc && x.CreatedAt < range.CurrentToUtc)
             .ToListAsync(cancellationToken);
+        var cancellations = await _context.Set<Subscription>().AsNoTracking()
+            .LongCountAsync(x => x.CancelledAt != null &&
+                                 x.CancelledAt >= range.CurrentFromUtc &&
+                                 x.CancelledAt < range.CurrentToUtc, cancellationToken);
+        // Cancelling a subscription disables renewal; paid access remains valid through EndDate.
+        // Immediate administrative revocation truncates EndDate to the revocation time.
         var activePaidUsers = await _context.Set<Subscription>().AsNoTracking()
             .Where(x => x.StartDate < range.CurrentToUtc && x.EndDate >= range.CurrentToUtc &&
-                        x.Status == SubscriptionStatus.Active && x.SubscriptionPlans.Price > 0)
+                        x.SubscriptionPlans.Price > 0)
             .Select(x => x.UserId).Distinct().CountAsync(cancellationToken);
         var previousActive = await _context.Set<Subscription>().AsNoTracking()
             .Where(x => x.StartDate < range.ComparisonToUtc && x.EndDate >= range.ComparisonToUtc &&
-                        x.Status == SubscriptionStatus.Active && x.SubscriptionPlans.Price > 0)
+                        x.SubscriptionPlans.Price > 0)
             .Select(x => x.UserId).Distinct().CountAsync(cancellationToken);
         var usage = await _context.Set<PremiumUsageEvent>().AsNoTracking()
             .Where(x => x.OccurredAt >= range.CurrentFromUtc && x.OccurredAt < range.CurrentToUtc)
@@ -173,7 +179,7 @@ public sealed class AdminAnalyticsService : IAdminAnalyticsService
         return new PremiumAnalyticsResponse(
             await BuildMeta(range, cancellationToken), kpis, planRows, featureRows,
             subscriptions.LongCount(), subscriptions.LongCount(x => earlier.Contains(x.UserId)),
-            subscriptions.LongCount(x => x.CancelledAt != null), historicalJobImpressions + historicalProfileImpressions,
+            cancellations, historicalJobImpressions + historicalProfileImpressions,
             historicalJobClicks + historicalProfileClicks);
     }
 

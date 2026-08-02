@@ -50,8 +50,8 @@ app.UseSwagger();
 app.UseSwaggerUI();
 
 app.UseForwardedHeaders();
-app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseMiddleware<RequestLoggingMiddleware>();
+app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 app.UseCors(Project_API.Extensions.ServiceCollectionExtensions.FrontendCorsPolicy);
 app.UseRateLimiter();
