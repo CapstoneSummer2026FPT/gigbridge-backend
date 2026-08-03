@@ -67,6 +67,19 @@ public sealed class WalletController : BaseApiController
         return Ok(ApiResponse<IReadOnlyList<WalletTransactionResponse>>.Ok(result, "Success"));
     }
 
+    [HttpGet("transactions/summary")]
+    public async Task<IActionResult> GetTransactionsSummary()
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return InvalidTokenResponse();
+        }
+
+        var result = await Mediator.Send(new GetWalletTransactionsSummaryQuery(userId));
+
+        return Ok(ApiResponse<WalletTransactionsSummaryResponse>.Ok(result, "Success"));
+    }
+
     [HttpGet("financial-overview")]
     [Authorize(Roles = "Client,Freelancer")]
     public async Task<IActionResult> GetFinancialOverview(
