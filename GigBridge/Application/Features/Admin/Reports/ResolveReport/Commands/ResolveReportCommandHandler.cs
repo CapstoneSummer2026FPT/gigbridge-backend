@@ -2,6 +2,7 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Features.Reviews.Common.Moderation;
+using Application.Features.Admin.Reports.AccountReports;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
@@ -16,15 +17,18 @@ public class ResolveReportCommandHandler : IRequestHandler<ResolveReportCommand>
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
     private readonly IReviewModerationService _reviewModerationService;
+    private readonly IMediator? _mediator;
 
     public ResolveReportCommandHandler(
         IApplicationDbContext context,
         IDateTimeService dateTimeService,
-        IReviewModerationService reviewModerationService)
+        IReviewModerationService reviewModerationService,
+        IMediator? mediator = null)
     {
         _context = context;
         _dateTimeService = dateTimeService;
         _reviewModerationService = reviewModerationService;
+        _mediator = mediator;
     }
 
     public async Task Handle(ResolveReportCommand command, CancellationToken cancellationToken)
@@ -48,6 +52,19 @@ public class ResolveReportCommandHandler : IRequestHandler<ResolveReportCommand>
         if (report.Status is (int)ReportStatus.Resolved or (int)ReportStatus.Dismissed)
         {
             throw new BadRequestException("Resolved or dismissed reports cannot be resolved again.");
+        }
+
+        if (report.ReportedEntityType == ReportedEntityTypes.User && _mediator is not null)
+        {
+            await _mediator.Send(new ResolveAccountReportCommand(command.AdminId, command.ReportId,
+                new ResolveAccountReportRequest(
+                    command.Request.TakeAction ? AccountReportResolutionAction.PermanentBan : AccountReportResolutionAction.None,
+                    command.Request.TakeAction ? UserViolationType.PlatformPolicyViolation : null,
+                    command.Request.AdminNote ?? report.Reason,
+                    report.Description,
+                    command.Request.AdminNote,
+                    null)), cancellationToken);
+            return;
         }
 
         if (command.Request.TakeAction)
@@ -80,13 +97,14 @@ public class ResolveReportCommandHandler : IRequestHandler<ResolveReportCommand>
         switch (report.ReportedEntityType)
         {
             case ReportedEntityTypes.User:
-                var user = await _context.Set<User>()
-                    .FirstOrDefaultAsync(item => item.UserId == report.ReportedEntityId, cancellationToken);
-                if (user is null)
-                {
-                    throw new NotFoundException("Reported user does not exist.");
-                }
+                var user = await _context.Set<User>().FirstOrDefaultAsync(item => item.UserId == report.ReportedEntityId, cancellationToken)
+                    ?? throw new NotFoundException("Reported user does not exist.");
+                user.AccountStatus = (int)AccountStatus.Banned;
                 user.IsActive = false;
+                user.BannedAt = _dateTimeService.UtcNow;
+                user.BanReason = moderationNote;
+                user.RefreshTokenHash = null;
+                user.RefreshTokenExpiry = null;
                 user.UpdatedAt = _dateTimeService.UtcNow;
                 break;
 

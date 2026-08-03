@@ -113,8 +113,8 @@ internal static class ContractAmendmentWorkflow
         ContractEscrowWalletWorkflow.Refund(
             context,
             wallet,
+            escrow,
             contract.ContractsId,
-            escrow.ContractEscrowId,
             null,
             refund,
             transactionCode,
@@ -160,8 +160,19 @@ internal static class ContractAmendmentWorkflow
         var escrow = await context.Set<ContractEscrow>()
             .SingleAsync(item => item.ContractsId == contract.ContractsId, cancellationToken);
         var tokens = TokenWalletRules.ToTokens(amount);
-        WalletWorkflow.DebitAvailable(wallet, tokens, clock.UtcNow, "Wallet balance is insufficient to fund the amendment.");
+        var walletBefore = WalletBalanceAudit.Snapshot(wallet);
+        var usage = WalletWorkflow.DebitAvailable(
+            wallet,
+            tokens,
+            clock.UtcNow,
+            "Wallet balance is insufficient to fund the amendment.");
         wallet.HeldTokens += tokens;
+        var walletAfterHold = WalletBalanceAudit.Snapshot(wallet);
+
+        // Track the incremental funding source so a later refund restores each pool.
+        escrow.DepositedTokens += usage.DepositedAmount;
+        escrow.EarnedTokens += usage.EarnedAmount;
+
         await ServiceFeeWorkflow.ChargeAsync(
             context,
             clientUserId,
@@ -174,13 +185,23 @@ internal static class ContractAmendmentWorkflow
         escrow.RequiredAmount += amount;
         escrow.FundedAmount += amount;
 
+        var balanceSource = WalletBalanceAudit.ResolveSource(usage.DepositedAmount, usage.EarnedAmount);
+        var (depositedAmount, earnedAmount) = WalletBalanceAudit.ToSplitAmounts(
+            usage.DepositedAmount,
+            usage.EarnedAmount);
         context.Set<WalletTransaction>().Add(new WalletTransaction
         {
             WalletTransactionsId = Guid.NewGuid(), UserWalletsId = wallet.UserWalletsId,
             UserId = clientUserId, ContractsId = contract.ContractsId, ContractEscrowId = escrow.ContractEscrowId,
             TokenAmount = tokens, VndAmount = amount, Type = (int)WalletTransactionType.EscrowHold,
             Status = (int)WalletTransactionStatus.Succeeded, GatewayProvider = "InternalTokenWallet",
-            GatewayTransactionCode = transactionCode, CreatedAt = clock.UtcNow, CompletedAt = clock.UtcNow
+            GatewayTransactionCode = transactionCode,
+            BalanceSource = (int)balanceSource,
+            DepositedAmount = depositedAmount,
+            EarnedAmount = earnedAmount,
+            Metadata = WalletBalanceAudit.EnrichMetadata(
+                null, usage.DepositedAmount, usage.EarnedAmount, walletBefore, walletAfterHold),
+            CreatedAt = clock.UtcNow, CompletedAt = clock.UtcNow
         });
         context.Set<EscrowTransaction>().Add(new EscrowTransaction
         {

@@ -49,6 +49,8 @@ public class UpdateProposalStatusCommandHandler
             throw new NotFoundException("Proposal does not exist.");
         }
 
+        ProposalModerationGuard.EnsureActive(proposal);
+
         if (proposal.Status == 3 || proposal.Status == 4 || proposal.Status == 5)
         {
             throw new BadRequestException("Only draft, pending or shortlisted proposal can be updated.");

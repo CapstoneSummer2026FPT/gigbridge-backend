@@ -4,7 +4,8 @@ namespace Application.Common.Interfaces.IService;
 
 public interface IAiServiceClient
 {
-    Task<JobPostGenerationResponseDto> GenerateJobDescriptionAsync(JobPostGenerationRequestDto request, CancellationToken cancellationToken = default);
+    Task<JobPostDetailsGenerationResponseDto> GenerateJobDescriptionDetailsAsync(JobPostGenerationRequestDto request, CancellationToken cancellationToken = default);
+    Task<JobPostHiringPlanGenerationResponseDto> GenerateJobHiringPlanAsync(JobPostHiringPlanGenerationRequestDto request, CancellationToken cancellationToken = default);
     Task<AiInterviewDefinitionResponseDto> CreateInterviewDefinitionAsync(
         AiInterviewDefinitionRequestDto request,
         CancellationToken cancellationToken = default);

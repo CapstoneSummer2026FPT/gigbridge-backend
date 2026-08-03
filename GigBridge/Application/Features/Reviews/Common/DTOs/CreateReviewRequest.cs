@@ -4,7 +4,8 @@ public class CreateReviewRequest
 {
     public Guid ContractId { get; set; }
 
-    public int Rating { get; set; }
+    /// <summary>Overall rating 1.0–5.0, one decimal place. Recomputed from the criteria sub-ratings by the handler.</summary>
+    public decimal Rating { get; set; }
 
     public string? Comment { get; set; }
 

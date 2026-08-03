@@ -84,6 +84,10 @@ public partial class Dispute
 
     public virtual ICollection<DisputeMilestoneDecision> MilestoneDecisions { get; set; } = new List<DisputeMilestoneDecision>();
 
+    public virtual ICollection<DisputePenalty> Penalties { get; set; } = new List<DisputePenalty>();
+
+    public virtual ICollection<UserViolation> UserViolations { get; set; } = new List<UserViolation>();
+
     public virtual Milestone? Milestones { get; set; }
 
     public virtual User? ResolvedByAdmin { get; set; }

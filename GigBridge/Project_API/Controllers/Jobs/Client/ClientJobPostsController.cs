@@ -76,17 +76,47 @@ public class ClientJobPostsController : BaseApiController
         return Ok(ApiResponse<Guid>.Ok(result, "Job post created successfully"));
     }
 
-    [HttpPost("ai/generate")]
-    public async Task<IActionResult> GenerateJobDescription([FromBody] GenerateJobDescriptionCommand command)
+
+    public class GenerateJobDetailsRequestDto
+    {
+        public string ClientPrompt { get; set; } = null!;
+    }
+
+    [HttpPost("ai/generate/details")]
+    public async Task<IActionResult> GenerateJobDescriptionDetails([FromBody] GenerateJobDetailsRequestDto request)
     {
         if (!TryGetCurrentUserId(out var userId))
         {
             return InvalidTokenResponse();
         }
 
-        var result = await Mediator.Send(new GenerateJobDescriptionCommand(userId, command.ClientPrompt));
+        var result = await Mediator.Send(new GenerateJobDescriptionDetailsCommand(userId, request.ClientPrompt));
 
-        return Ok(ApiResponse<GenerateJobDescriptionResponse>.Ok(result, "Job description generated successfully"));
+        return Ok(ApiResponse<GenerateJobDescriptionDetailsResponse>.Ok(result, "Job details generated successfully"));
+    }
+
+    public class GenerateJobHiringPlanRequestDto
+    {
+        public string ClientPrompt { get; set; } = null!;
+        public string Title { get; set; } = null!;
+        public string Description { get; set; } = null!;
+    }
+
+    [HttpPost("ai/generate/hiring-plan")]
+    public async Task<IActionResult> GenerateJobHiringPlan([FromBody] GenerateJobHiringPlanRequestDto request)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return InvalidTokenResponse();
+        }
+
+        var result = await Mediator.Send(new GenerateJobHiringPlanCommand(
+            userId, 
+            request.ClientPrompt, 
+            request.Title, 
+            request.Description));
+
+        return Ok(ApiResponse<GenerateJobHiringPlanResponse>.Ok(result, "Job hiring plan generated successfully"));
     }
 
     [HttpPost("{jobPostId:guid}/promote")]

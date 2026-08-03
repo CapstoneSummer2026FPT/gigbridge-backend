@@ -9,7 +9,18 @@ public class GeneratedSkillDto
     public string Name { get; set; } = null!;
 }
 
-public class GenerateJobDescriptionResponse
+public class GeneratedJobPostMilestoneDto
+{
+    public string Title { get; set; } = null!;
+    public decimal Amount { get; set; }
+    public string EstimatedDuration { get; set; } = null!;
+    public string DueDate { get; set; } = null!;
+    public string Description { get; set; } = null!;
+    public string Deliverables { get; set; } = null!;
+    public string AcceptanceCriteria { get; set; } = null!;
+}
+
+public class GenerateJobDescriptionDetailsResponse
 {
     public string Title { get; set; } = null!;
     public Guid? MajorId { get; set; }
@@ -20,9 +31,11 @@ public class GenerateJobDescriptionResponse
     public List<GeneratedSkillDto> Skills { get; set; } = new();
     public List<string> CustomSkills { get; set; } = new();
     public string Description { get; set; } = null!;
-    public List<string> QuestionRecruitment { get; set; } = new();
-    public decimal? BudgetMin { get; set; }
-    public decimal? BudgetMax { get; set; }
-    public string? Currency { get; set; }
     public string AiDisclaimer { get; set; } = string.Empty;
+}
+
+public class GenerateJobHiringPlanResponse
+{
+    public List<string> QuestionRecruitment { get; set; } = new();
+    public List<GeneratedJobPostMilestoneDto> Milestones { get; set; } = new();
 }

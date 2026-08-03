@@ -170,6 +170,8 @@ public class GetContractByJobPostQueryHandler
             ClientEmail = clientUser?.Email,
             FreelancerName = freelancerUser?.FullName,
             FreelancerEmail = freelancerUser?.Email,
+            ClientUserId = clientUser?.UserId,
+            FreelancerUserId = freelancerUser?.UserId,
             ConversationId = conversationId,
             CurrentProductHandoff = currentProductHandoff is null
                 ? null

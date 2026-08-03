@@ -1,5 +1,6 @@
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Application.Features.Subscriptions.Common;
 using Application.Features.Subscriptions.Freelancer.DTOs;
 using Domain.Entities;
 using Domain.Enums;
@@ -24,7 +25,8 @@ public sealed class GetCurrentSubscriptionQueryHandler : IRequestHandler<GetCurr
         var now = _clock.UtcNow;
         var subscription = await _context.Set<Subscription>().AsNoTracking()
             .Include(item => item.SubscriptionPlans)
-            .Where(item => item.UserId == query.UserId && item.Status == SubscriptionStatus.Active && item.SubscriptionPlans.Price > 0 && item.EndDate > now)
+            .Where(item => item.UserId == query.UserId)
+            .EffectiveAt(UserRole.Freelancer, now)
             .OrderByDescending(item => item.EndDate)
             .FirstOrDefaultAsync(ct);
 

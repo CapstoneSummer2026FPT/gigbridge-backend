@@ -13,7 +13,11 @@ public partial class Review
 
     public Guid RevieweeId { get; set; }
 
-    public int Rating { get; set; }
+    /// <summary>
+    /// Overall rating 1.0–5.0 with one decimal place (computed from the three
+    /// criteria sub-ratings). Drives the piecewise Elo calculation.
+    /// </summary>
+    public decimal Rating { get; set; }
 
     public string? Comment { get; set; }
 

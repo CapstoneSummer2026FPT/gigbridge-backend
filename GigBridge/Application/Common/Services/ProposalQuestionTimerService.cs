@@ -1,6 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Application.Features.Proposals.Common;
 using Application.Features.Proposals.Freelancer.Answers;
 using Application.Features.Proposals.Freelancer.QuestionTimers.DTOs;
 using Domain.Entities;
@@ -269,6 +270,8 @@ public class ProposalQuestionTimerService : IProposalQuestionTimerService
         {
             throw new NotFoundException("Proposal does not exist.");
         }
+
+        ProposalModerationGuard.EnsureActive(proposal);
 
         if (proposal.FreelancerProfilesId != freelancerProfile.FreelancerProfilesId)
         {

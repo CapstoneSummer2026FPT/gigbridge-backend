@@ -10,6 +10,13 @@ namespace Infrastructure.Persistence.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
+            // Premium uses the value "GigCoin", which does not fit the legacy varchar(5)
+            // column created by InitialCreate. Keep clean database rebuilds valid.
+            migrationBuilder.Sql("""
+                ALTER TABLE "SubscriptionPlans"
+                ALTER COLUMN "Currency" TYPE text;
+                """);
+
             migrationBuilder.Sql("""
                 UPDATE "SubscriptionPlans"
                 SET "Name" = 'Freelancer Premium Monthly',

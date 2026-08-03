@@ -52,6 +52,7 @@ public sealed class StartAiInterviewCommandHandler(
             .AsNoTracking()
             .AnyAsync(proposal => proposal.JobPostsId == command.JobPostId &&
                 proposal.FreelancerProfiles.UserId == command.UserId &&
+                proposal.ModerationStatus == (int)ProposalModerationStatus.Active &&
                 (proposal.Status == 1 || proposal.Status == 2 || proposal.Status == 3),
                 cancellationToken);
         if (!hasSubmittedProposal)

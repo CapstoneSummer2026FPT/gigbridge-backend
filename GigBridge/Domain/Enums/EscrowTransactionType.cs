@@ -6,5 +6,6 @@ public enum EscrowTransactionType
     ReleaseToFreelancer = 1,
     RefundToClient = 2,
     PlatformFee = 3,
-    Adjustment = 4
+    Adjustment = 4,
+    DisputePenalty = 5
 }

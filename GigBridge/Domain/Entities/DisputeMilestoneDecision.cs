@@ -10,6 +10,8 @@ public sealed class DisputeMilestoneDecision
     public decimal ReleasedAmountSnapshot { get; set; }
     public decimal AdditionalReleaseAmount { get; set; }
     public decimal RefundAmount { get; set; }
+    public decimal PenaltyAmount { get; set; }
+    public string? Reason { get; set; }
     public Guid DecidedByAdminId { get; set; }
     public DateTime CreatedAt { get; set; }
 

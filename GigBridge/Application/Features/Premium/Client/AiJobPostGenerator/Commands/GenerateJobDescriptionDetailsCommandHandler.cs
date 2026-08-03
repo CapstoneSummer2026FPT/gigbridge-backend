@@ -9,20 +9,19 @@ using Application.Common.Models.Ai;
 using Application.Features.Premium.Client.AiJobPostGenerator.Commands;
 using Application.Features.Premium.Client.AiJobPostGenerator.DTOs;
 using Domain.Entities;
-using Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.Premium.Client.AiJobPostGenerator.Commands;
 
-public class GenerateJobDescriptionCommandHandler
-    : IRequestHandler<GenerateJobDescriptionCommand, GenerateJobDescriptionResponse>
+public class GenerateJobDescriptionDetailsCommandHandler
+    : IRequestHandler<GenerateJobDescriptionDetailsCommand, GenerateJobDescriptionDetailsResponse>
 {
     private readonly IApplicationDbContext _context;
     private readonly IAiServiceClient _aiServiceClient;
     private readonly IPremiumAccessService _premiumAccess;
 
-    public GenerateJobDescriptionCommandHandler(
+    public GenerateJobDescriptionDetailsCommandHandler(
         IApplicationDbContext context,
         IAiServiceClient aiServiceClient,
         IPremiumAccessService premiumAccess)
@@ -32,23 +31,21 @@ public class GenerateJobDescriptionCommandHandler
         _premiumAccess = premiumAccess;
     }
 
-    public async Task<GenerateJobDescriptionResponse> Handle(
-        GenerateJobDescriptionCommand command,
+    public async Task<GenerateJobDescriptionDetailsResponse> Handle(
+        GenerateJobDescriptionDetailsCommand command,
         CancellationToken cancellationToken)
     {
         await _premiumAccess.RequirePremiumClientAsync(command.UserId, cancellationToken);
 
-        // 1. Build AI request (only containing the prompt)
         var aiRequest = new JobPostGenerationRequestDto
         {
             ClientPrompt = command.ClientPrompt
         };
 
-        // 2. Invoke AI service client
-        JobPostGenerationResponseDto aiResponse;
+        JobPostDetailsGenerationResponseDto aiResponse;
         try
         {
-            aiResponse = await _aiServiceClient.GenerateJobDescriptionAsync(aiRequest, cancellationToken);
+            aiResponse = await _aiServiceClient.GenerateJobDescriptionDetailsAsync(aiRequest, cancellationToken);
         }
         catch (Application.Common.Exceptions.ExternalServiceException)
         {
@@ -60,7 +57,6 @@ public class GenerateJobDescriptionCommandHandler
                 "AI service is temporarily unavailable. Please try again later.", exception);
         }
 
-        // 3. Map selected Major and Category IDs
         Guid? selectedCategoryId = null;
         Guid? selectedMajorId = null;
         Guid? selectedMajorCategoryId = null;
@@ -75,7 +71,6 @@ public class GenerateJobDescriptionCommandHandler
             selectedMajorId = majorId;
         }
 
-        // 4. Fetch Major and Category names dynamically from the DB
         string? selectedMajorName = null;
         if (selectedMajorId.HasValue)
         {
@@ -95,7 +90,6 @@ public class GenerateJobDescriptionCommandHandler
             selectedCategoryName = category?.Name;
         }
 
-        // 5. Fetch MajorCategory relationship if both are present
         if (selectedCategoryId.HasValue && selectedMajorId.HasValue)
         {
             var majorCategory = await _context.Set<MajorCategory>()
@@ -110,7 +104,6 @@ public class GenerateJobDescriptionCommandHandler
             }
         }
 
-        // 6. Fetch only matching system skills from DB
         var parsedSystemSkillIds = new List<Guid>();
         foreach (var sysSkillIdStr in aiResponse.SystemSkillIds)
         {
@@ -133,7 +126,6 @@ public class GenerateJobDescriptionCommandHandler
             })
             .ToList();
 
-        // 7. Process custom skills (checking if they map to existing system skills)
         var finalCustomSkills = new List<string>();
 
         if (aiResponse.CustomSkills != null)
@@ -168,7 +160,7 @@ public class GenerateJobDescriptionCommandHandler
             }
         }
 
-        var response = new GenerateJobDescriptionResponse
+        return new GenerateJobDescriptionDetailsResponse
         {
             Title = aiResponse.Title,
             MajorId = selectedMajorId,
@@ -179,33 +171,7 @@ public class GenerateJobDescriptionCommandHandler
             Skills = finalSkills,
             CustomSkills = finalCustomSkills,
             Description = aiResponse.Description,
-            QuestionRecruitment = aiResponse.QuestionRecruitment,
-            BudgetMin = aiResponse.BudgetMin,
-            BudgetMax = aiResponse.BudgetMax,
-            Currency = aiResponse.Currency,
             AiDisclaimer = "AI-generated content. Review and edit all fields before publishing."
         };
-        try
-        {
-            _context.Set<PremiumUsageEvent>().Add(new PremiumUsageEvent
-            {
-                PremiumUsageEventId = Guid.NewGuid(),
-                Type = PremiumUsageEventType.AiJobGeneration,
-                UserId = command.UserId,
-                IdempotencyKey = $"ai-job-generation:{Guid.NewGuid():N}",
-                OccurredAt = DateTime.UtcNow,
-                Metadata = System.Text.Json.JsonSerializer.Serialize(new
-                {
-                    matchedSkillCount = finalSkills.Count,
-                    customSkillCount = finalCustomSkills.Count
-                })
-            });
-            await _context.SaveChangesAsync(cancellationToken);
-        }
-        catch
-        {
-            // The generated response must not be lost if analytics capture is unavailable.
-        }
-        return response;
     }
 }

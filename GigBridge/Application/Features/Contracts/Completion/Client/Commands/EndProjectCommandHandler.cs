@@ -33,6 +33,9 @@ public sealed class EndProjectCommandHandler : IRequestHandler<EndProjectCommand
 
     public async Task<EndProjectResponse> Handle(EndProjectCommand command, CancellationToken cancellationToken)
     {
+        await using var transaction = await _context.BeginTransactionAsync(cancellationToken);
+        await transaction.AcquireTransactionLockAsync(
+            ContractEscrowLock.ForContract(command.ContractId), cancellationToken);
         var contract = await _context.Set<Contract>()
             .FirstOrDefaultAsync(item => item.ContractsId == command.ContractId, cancellationToken)
             ?? throw new NotFoundException("Contract does not exist.");
@@ -109,6 +112,7 @@ public sealed class EndProjectCommandHandler : IRequestHandler<EndProjectCommand
             now,
             cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         var payload = new
         {
