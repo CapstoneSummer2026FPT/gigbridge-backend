@@ -12,6 +12,7 @@ using Project_API.Services.Notification;
 using Project_API.Services.SystemTracking;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddScoped<Application.Common.Interfaces.IService.IRequestMetadataAccessor, Project_API.Services.RequestMetadataAccessor>();
 
 if (builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Testing"))
 {

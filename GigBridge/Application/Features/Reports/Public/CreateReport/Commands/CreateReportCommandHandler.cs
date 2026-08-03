@@ -53,6 +53,7 @@ public class CreateReportCommandHandler : IRequestHandler<CreateReportCommand, G
             ReportedEntityType = entityType,
             Type = (int)command.Request.Type,
             Reason = command.Request.Reason.Trim(),
+            Description = command.Request.Description?.Trim(),
             Status = (int)ReportStatus.Pending,
             CreatedAt = _dateTimeService.UtcNow
         };

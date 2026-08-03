@@ -1,6 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Application.Features.Subscriptions.Common;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;

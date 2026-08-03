@@ -53,8 +53,11 @@ jobs:
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
+            set -eu
             cd ~/app
             echo "${{ secrets.DEPLOY_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             docker compose pull web-api
+            docker compose run --rm --no-deps --entrypoint /bin/sh web-api \
+              -c 'exec /app/efbundle --connection "$ConnectionStrings__DefaultConnection"'
             docker compose up -d web-api
             docker image prune -f

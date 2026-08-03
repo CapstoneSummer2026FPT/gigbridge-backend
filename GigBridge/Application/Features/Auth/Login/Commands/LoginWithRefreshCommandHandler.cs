@@ -1,6 +1,7 @@
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Features.Auth.Common;
+using Application.Common.Services;
 using Application.Features.Auth.Shared.DTOs;
 using AutoMapper;
 using Domain.Entities;
@@ -71,15 +72,7 @@ namespace Application.Features.Auth.Login.Commands
 
         private static void EnsureUserCanLogin(User user, DateTime now)
         {
-            if (!user.IsActive)
-            {
-                throw new UnauthorizedAccessException("Your account has been suspended by the administrator");
-            }
-
-            if (user.SuspendedUntil.HasValue && user.SuspendedUntil.Value > now)
-            {
-                throw new UnauthorizedAccessException($"Your account is suspended until {user.SuspendedUntil.Value:O}");
-            }
+            UserAccountEnforcement.EnsureCanAuthenticate(user, now);
 
             if (!user.IsEmailVerified)
             {

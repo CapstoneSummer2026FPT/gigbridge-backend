@@ -46,6 +46,8 @@ public class ContractDetailResponse
     public string? ClientEmail { get; set; }
     public string? FreelancerName { get; set; }
     public string? FreelancerEmail { get; set; }
+    public Guid? ClientUserId { get; set; }
+    public Guid? FreelancerUserId { get; set; }
     public Guid? ConversationId { get; set; }
 
     public ContractProductHandoffResponse? CurrentProductHandoff { get; set; }

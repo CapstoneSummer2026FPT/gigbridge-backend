@@ -6,7 +6,12 @@ public sealed record AdminDisputePartyResponse(
     Guid UserId,
     Guid ProfileId,
     string FullName,
-    string Email);
+    string Email,
+    int ViolationCount,
+    bool IsFlagged,
+    int AccountStatus,
+    DateTime? SuspendedUntil,
+    DateTime? BannedAt);
 
 public sealed record AdminDisputeListItemResponse(
     Guid DisputeId,
@@ -92,6 +97,10 @@ public sealed record AdminMilestoneResponse(
     decimal Amount,
     decimal ReleasedAmount,
     decimal AllocatableAmount,
+    decimal RefundedAmount,
+    decimal PenaltyAmount,
+    decimal LockedAmount,
+    bool IsInDisputeScope,
     int Status,
     string? Deliverables,
     string? SubmissionDescription,
@@ -108,6 +117,7 @@ public sealed record AdminEscrowSummaryResponse(
     decimal FundedAmount,
     decimal ReleasedAmount,
     decimal RefundedAmount,
+    decimal PenaltyAmount,
     decimal ServiceFeeAmount,
     decimal RemainingAmount,
     int? Status);
@@ -132,7 +142,20 @@ public sealed record AdminMilestoneDecisionResponse(
     decimal ReleasedBeforeDecision,
     decimal AdditionalRelease,
     decimal Refund,
+    decimal Penalty,
+    string? Reason,
     Guid DecidedByAdminId,
+    DateTime CreatedAt);
+
+public sealed record AdminDisputePenaltyResponse(
+    Guid PenaltyId,
+    Guid MilestoneId,
+    Guid? ViolatingUserId,
+    decimal Amount,
+    string Reason,
+    Guid? ClientDebitWalletTransactionId,
+    Guid? EscrowTransactionId,
+    int Status,
     DateTime CreatedAt);
 
 public sealed record AdminDisputeDetailResponse(
@@ -174,4 +197,6 @@ public sealed record AdminDisputeDetailResponse(
     AdminEscrowSummaryResponse Escrow,
     AdminConversationReferencesResponse Conversations,
     IReadOnlyList<AdminAuditEventResponse> AuditTrail,
-    IReadOnlyList<AdminMilestoneDecisionResponse> MilestoneDecisions);
+    IReadOnlyList<AdminMilestoneDecisionResponse> MilestoneDecisions,
+    IReadOnlyList<AdminDisputePenaltyResponse> Penalties,
+    Guid? ResolutionAuditId);

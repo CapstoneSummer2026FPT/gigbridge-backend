@@ -26,12 +26,29 @@ public sealed record AdminMilestoneDecisionRequest(
     decimal AdditionalReleaseToFreelancer,
     decimal RefundToClient);
 
+public sealed record AdminMilestoneAllocationRequest(
+    Guid MilestoneId,
+    DisputeMilestoneOutcome Outcome,
+    decimal FreelancerAward,
+    decimal ClientRefund,
+    decimal PenaltyAmount,
+    string? Reason);
+
+public sealed record AdminViolationRequest(
+    bool IsViolation,
+    UserViolationType? ViolationType,
+    string? Reason,
+    string? Description);
+
 public sealed record AdminResolveDisputeRequest(
     DisputeResolution Resolution,
     string ResolutionNote,
     string? InternalNotes,
+    List<AdminMilestoneAllocationRequest>? MilestoneAllocations,
     List<AdminMilestoneDecisionRequest>? MilestoneDecisions,
-    int ContractAction);
+    int ContractAction,
+    AdminViolationRequest? ClientViolation,
+    AdminViolationRequest? FreelancerViolation);
 
 public sealed record AdminRequestEvidenceRequest(
     string Reason,
@@ -206,12 +223,23 @@ public sealed class AdminDisputesController : BaseApiController
             request.Resolution,
             request.ResolutionNote,
             request.InternalNotes,
-            request.MilestoneDecisions?.Select(item => new AdminMilestoneDecisionInput(
-                item.MilestoneId,
-                item.Outcome,
-                item.AdditionalReleaseToFreelancer,
-                item.RefundToClient)).ToList() ?? [],
-            (AdminContractAction)request.ContractAction);
+            request.MilestoneAllocations?.Select(item => new AdminMilestoneAllocationInput(
+                item.MilestoneId, item.Outcome, item.FreelancerAward, item.ClientRefund,
+                item.PenaltyAmount, item.Reason)).ToList()
+            ?? request.MilestoneDecisions?.Select(item => new AdminMilestoneAllocationInput(
+                item.MilestoneId, item.Outcome, item.AdditionalReleaseToFreelancer,
+                item.RefundToClient, 0m, null)).ToList() ?? [],
+            (AdminContractAction)request.ContractAction,
+            request.ClientViolation is null
+                ? new AdminViolationInput(false, null, null, null)
+                : new AdminViolationInput(request.ClientViolation.IsViolation,
+                    request.ClientViolation.ViolationType, request.ClientViolation.Reason,
+                    request.ClientViolation.Description),
+            request.FreelancerViolation is null
+                ? new AdminViolationInput(false, null, null, null)
+                : new AdminViolationInput(request.FreelancerViolation.IsViolation,
+                    request.FreelancerViolation.ViolationType, request.FreelancerViolation.Reason,
+                    request.FreelancerViolation.Description));
 
         var result = await Mediator.Send(command);
 

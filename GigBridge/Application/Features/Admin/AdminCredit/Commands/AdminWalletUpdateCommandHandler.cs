@@ -72,11 +72,15 @@ public sealed class AdminWalletUpdateCommandHandler :
             now,
             cancellationToken);
 
-        WalletWorkflow.DebitAvailable(
+        var walletBefore = WalletBalanceAudit.Snapshot(wallet);
+        var usage = WalletWorkflow.DebitAvailable(
             wallet,
             command.Request.TokenAmount,
             now,
             "Insufficient wallet balance for debit operation.");
+        var (depositedAmount, earnedAmount) = WalletBalanceAudit.ToSplitAmounts(
+            usage.DepositedAmount,
+            usage.EarnedAmount);
 
         var transaction = new WalletTransaction
         {
@@ -85,10 +89,15 @@ public sealed class AdminWalletUpdateCommandHandler :
             UserId = command.TargetUserId,
             TokenAmount = command.Request.TokenAmount,
             VndAmount = TokenWalletRules.ToVnd(command.Request.TokenAmount),
+            BalanceSource = (int)WalletBalanceAudit.ResolveSource(usage.DepositedAmount, usage.EarnedAmount),
+            DepositedAmount = depositedAmount,
+            EarnedAmount = earnedAmount,
             Type = (int)WalletTransactionType.Adjustment,
             Status = (int)WalletTransactionStatus.Succeeded,
             IdempotencyKey = command.Request.IdempotencyKey,
             GatewayProvider = "Admin",
+            Metadata = WalletBalanceAudit.EnrichMetadata(
+                null, usage.DepositedAmount, usage.EarnedAmount, walletBefore, wallet),
             Note = command.Request.Note,
             CreatedAt = now,
             CompletedAt = now

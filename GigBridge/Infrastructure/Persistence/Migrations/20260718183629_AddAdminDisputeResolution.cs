@@ -18,9 +18,16 @@ namespace Infrastructure.Persistence.Migrations
             // 1 -> 2 (UnderReview)
             // 2 -> 5 (Resolved)
             // 3 -> 6 (Closed)
-            migrationBuilder.Sql("UPDATE \"Disputes\" SET \"Status\" = 2 WHERE \"Status\" = 1");
-            migrationBuilder.Sql("UPDATE \"Disputes\" SET \"Status\" = 5 WHERE \"Status\" = 2");
-            migrationBuilder.Sql("UPDATE \"Disputes\" SET \"Status\" = 6 WHERE \"Status\" = 3");
+            migrationBuilder.Sql("""
+                UPDATE "Disputes"
+                SET "Status" = CASE "Status"
+                    WHEN 1 THEN 2
+                    WHEN 2 THEN 5
+                    WHEN 3 THEN 6
+                    ELSE "Status"
+                END
+                WHERE "Status" IN (1, 2, 3);
+                """);
 
             migrationBuilder.AlterColumn<int>(
                 name: "Status",
@@ -80,9 +87,16 @@ namespace Infrastructure.Persistence.Migrations
             // 2 -> 1 (UnderReview)
             // 5 -> 2 (Resolved)
             // 6 -> 3 (Closed)
-            migrationBuilder.Sql("UPDATE \"Disputes\" SET \"Status\" = 1 WHERE \"Status\" = 2");
-            migrationBuilder.Sql("UPDATE \"Disputes\" SET \"Status\" = 2 WHERE \"Status\" = 5");
-            migrationBuilder.Sql("UPDATE \"Disputes\" SET \"Status\" = 3 WHERE \"Status\" = 6");
+            migrationBuilder.Sql("""
+                UPDATE "Disputes"
+                SET "Status" = CASE "Status"
+                    WHEN 2 THEN 1
+                    WHEN 5 THEN 2
+                    WHEN 6 THEN 3
+                    ELSE "Status"
+                END
+                WHERE "Status" IN (2, 5, 6);
+                """);
 
             migrationBuilder.AlterColumn<int>(
                 name: "Status",

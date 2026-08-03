@@ -99,7 +99,12 @@ public class UserEloService : IUserEloService
         score.UpdatedAt = now;
     }
 
-    public async Task ApplyReviewScoreAsync(Guid reviewId, Guid revieweeId, int rating, CancellationToken cancellationToken)
+    public async Task ApplyCompletedJobReviewAsync(
+        Guid reviewId,
+        Guid contractId,
+        Guid revieweeId,
+        decimal rating,
+        CancellationToken cancellationToken)
     {
         var reviewee = await _context.Set<User>()
             .FirstOrDefaultAsync(user => user.UserId == revieweeId, cancellationToken);
@@ -114,45 +119,46 @@ public class UserEloService : IUserEloService
             return;
         }
 
+        // Safety gate: Elo may only be applied once the job/contract is Completed.
+        // A review-only or in-progress contract must not move Elo.
+        var contractIsCompleted = await _context.Set<Contract>()
+            .AsNoTracking()
+            .AnyAsync(
+                contract => contract.ContractsId == contractId &&
+                            contract.Status == (int)ContractStatus.Completed,
+                cancellationToken);
+
+        if (!contractIsCompleted)
+        {
+            return;
+        }
+
+        // Reject ratings outside 1.0–5.0 or with more than one decimal place.
+        EloCalculationService.EnsureValidRating(rating);
+
         var now = _dateTimeService.UtcNow;
         var score = await EnsureScoreAsync(reviewee.UserId, now, cancellationToken);
-        var completionDelta = UserEloCalculator.CalculateCompletionDelta(rating);
-        var ratingDelta = UserEloCalculator.CalculateReviewRatingDelta(rating);
-
-        if (completionDelta > 0)
-        {
-            await ApplyDeltaAsync(
-                score,
-                completionDelta,
-                UserEloPointReason.JobCompletion,
-                ReviewSource,
-                reviewId,
-                $"review:{reviewId}:{revieweeId}:completion",
-                new
-                {
-                    rating,
-                    component = "job_completion",
-                    requestedDelta = completionDelta
-                },
-                now,
-                cancellationToken);
-        }
+        var delta = EloCalculationService.CalculateEloChange(rating);
 
         await ApplyDeltaAsync(
             score,
-            ratingDelta,
-            UserEloPointReason.ReviewRating,
+            delta,
+            UserEloPointReason.CompletedJobReview,
             ReviewSource,
             reviewId,
-            $"review:{reviewId}:{revieweeId}:rating",
+            CreateCompletedJobReviewKey(contractId, revieweeId),
             new
             {
                 rating,
-                component = "review_rating",
-                requestedDelta = ratingDelta
+                contractId,
+                reviewId,
+                requestedDelta = delta
             },
             now,
-            cancellationToken);
+            cancellationToken,
+            contractId: contractId,
+            reviewId: reviewId,
+            rating: rating);
     }
 
     public async Task<int> ApplyReviewModerationAsync(
@@ -181,7 +187,8 @@ public class UserEloService : IUserEloService
                     transaction.SourceEntityType == ReviewSource &&
                     transaction.SourceEntityId == reviewId &&
                     (transaction.Reason == (int)UserEloPointReason.JobCompletion ||
-                     transaction.Reason == (int)UserEloPointReason.ReviewRating))
+                     transaction.Reason == (int)UserEloPointReason.ReviewRating ||
+                     transaction.Reason == (int)UserEloPointReason.CompletedJobReview))
                 .SumAsync(transaction => transaction.PointsDelta, cancellationToken);
             requestedDelta = -originalDelta;
         }
@@ -272,7 +279,10 @@ public class UserEloService : IUserEloService
         string idempotencyKey,
         object metadata,
         DateTime now,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Guid? contractId = null,
+        Guid? reviewId = null,
+        decimal? rating = null)
     {
         if (await TransactionExistsAsync(idempotencyKey, cancellationToken))
         {
@@ -297,7 +307,10 @@ public class UserEloService : IUserEloService
             idempotencyKey,
             metadata,
             now,
-            cancellationToken);
+            cancellationToken,
+            contractId: contractId,
+            reviewId: reviewId,
+            rating: rating);
     }
 
     private async Task AddTransactionIfMissingAsync(
@@ -311,7 +324,10 @@ public class UserEloService : IUserEloService
         string idempotencyKey,
         object metadata,
         DateTime now,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Guid? contractId = null,
+        Guid? reviewId = null,
+        decimal? rating = null)
     {
         if (await TransactionExistsAsync(idempotencyKey, cancellationToken))
         {
@@ -330,6 +346,9 @@ public class UserEloService : IUserEloService
             SourceEntityId = sourceEntityId,
             IdempotencyKey = idempotencyKey,
             Metadata = JsonSerializer.Serialize(metadata),
+            ContractId = contractId,
+            ReviewId = reviewId,
+            Rating = rating,
             CreatedAt = now
         });
     }
@@ -394,6 +413,11 @@ public class UserEloService : IUserEloService
     private static string CreateInitialGrantKey(Guid userId)
     {
         return $"initial:{userId}";
+    }
+
+    private static string CreateCompletedJobReviewKey(Guid contractId, Guid revieweeId)
+    {
+        return $"completed-job-review:{contractId}:{revieweeId}";
     }
 
     private static string CreateInactivityPenaltyKey(Guid userId, DateTime previousLastActivityAt)

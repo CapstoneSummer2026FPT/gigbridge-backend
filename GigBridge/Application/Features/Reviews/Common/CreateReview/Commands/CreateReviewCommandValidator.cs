@@ -21,8 +21,8 @@ public class CreateReviewCommandValidator : AbstractValidator<CreateReviewComman
                 .WithMessage("ContractId is required.");
 
             RuleFor(command => command.Request.Rating)
-                .InclusiveBetween(1, 5)
-                .WithMessage("Rating must be between 1 and 5.");
+                .InclusiveBetween(1m, 5m)
+                .WithMessage("Rating must be between 1.0 and 5.0.");
 
             RuleFor(command => command.Request.Comment)
                 .MaximumLength(1000)

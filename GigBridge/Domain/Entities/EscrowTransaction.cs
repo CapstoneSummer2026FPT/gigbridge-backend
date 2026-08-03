@@ -13,7 +13,7 @@ public partial class EscrowTransaction
     public decimal Amount { get; set; }
 
     /// <summary>
-    /// Enum EscrowTransactionType: 0=Deposit, 1=ReleaseToFreelancer, 2=RefundToClient, 3=PlatformFee, 4=Adjustment
+    /// Enum EscrowTransactionType: 0=Deposit, 1=ReleaseToFreelancer, 2=RefundToClient, 3=PlatformFee, 4=Adjustment, 5=DisputePenalty
     /// </summary>
     public int Type { get; set; }
 

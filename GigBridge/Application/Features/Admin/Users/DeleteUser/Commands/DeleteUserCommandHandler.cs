@@ -2,6 +2,7 @@ using Application.Common.Interfaces;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Application.Common.Exceptions;
 
 namespace Application.Features.Admin.Users.DeleteUser.Commands;
 
@@ -25,8 +26,6 @@ public class DeleteUserCommandHandler : IRequestHandler<DeleteUserCommand, bool>
             return false;
         }
 
-        _context.Set<User>().Remove(user);
-        await _context.SaveChangesAsync(cancellationToken);
-        return true;
+        throw new ConflictException("Hard deletion is disabled. Use suspension, ban, or deactivation so business and audit history is preserved.");
     }
 }

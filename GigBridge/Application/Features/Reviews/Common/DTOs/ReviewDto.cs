@@ -16,7 +16,8 @@ public class ReviewDto
 
     public Guid RevieweeId { get; set; }
 
-    public int Rating { get; set; }
+    /// <summary>Overall rating 1.0–5.0, one decimal place.</summary>
+    public decimal Rating { get; set; }
 
     public string? Comment { get; set; }
 

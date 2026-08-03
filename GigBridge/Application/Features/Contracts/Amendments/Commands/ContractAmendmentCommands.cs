@@ -221,6 +221,9 @@ public sealed class SignContractAmendmentCommandHandler : IRequestHandler<SignCo
     public async Task<bool> Handle(SignContractAmendmentCommand command, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(command.Request.SignatureData)) throw new BadRequestException("Signature is required.");
+        await using var transaction = await _context.BeginTransactionAsync(cancellationToken);
+        await transaction.AcquireTransactionLockAsync(
+            ContractEscrowLock.ForContract(command.ContractId), cancellationToken);
         var contract = await MilestoneWorkflowGuard.GetContractAsync(_context, command.ContractId, cancellationToken);
         MilestoneWorkflowGuard.EnsureContractActive(contract);
         var role = await MilestoneWorkflowGuard.EnsureParticipantAsync(_context, contract, command.UserId, cancellationToken);
@@ -250,6 +253,7 @@ public sealed class SignContractAmendmentCommandHandler : IRequestHandler<SignCo
             }
         }
         await _context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
         return true;
     }
 }
@@ -261,6 +265,9 @@ public sealed class FundContractAmendmentCommandHandler : IRequestHandler<FundCo
     public FundContractAmendmentCommandHandler(IApplicationDbContext context, IDateTimeService clock) { _context = context; _clock = clock; }
     public async Task<bool> Handle(FundContractAmendmentCommand command, CancellationToken cancellationToken)
     {
+        await using var transaction = await _context.BeginTransactionAsync(cancellationToken);
+        await transaction.AcquireTransactionLockAsync(
+            ContractEscrowLock.ForContract(command.ContractId), cancellationToken);
         var contract = await MilestoneWorkflowGuard.GetContractAsync(_context, command.ContractId, cancellationToken);
         MilestoneWorkflowGuard.EnsureContractActive(contract);
         await ContractParticipantGuard.EnsureClientAsync(_context, contract, command.UserId, cancellationToken);
@@ -272,6 +279,7 @@ public sealed class FundContractAmendmentCommandHandler : IRequestHandler<FundCo
             throw new BadRequestException("This amendment is not awaiting additional funding.");
         await ContractAmendmentWorkflow.FundIncreaseAsync(_context, _clock, contract, amendment, command.UserId, cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
         return true;
     }
 }

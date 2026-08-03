@@ -82,6 +82,8 @@ public sealed class AdminCreditWalletCommandHandler :
             UserId = command.TargetUserId,
             TokenAmount = command.Request.TokenAmount,
             VndAmount = TokenWalletRules.ToVnd(command.Request.TokenAmount),
+            BalanceSource = (int)WalletBalanceSource.Deposited,
+            DepositedAmount = command.Request.TokenAmount,
             Type = (int)WalletTransactionType.AdminCredit,
             Status = (int)WalletTransactionStatus.Succeeded,
             IdempotencyKey = command.Request.IdempotencyKey,

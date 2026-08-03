@@ -21,4 +21,6 @@ public sealed record EscalateReportToDisputeCommand(
     string RequestedResolution,
     DisputeUrgency? Urgency,
     bool DeclarationAccepted,
-    IReadOnlyList<DisputeEvidenceFile> EvidenceFiles) : IRequest<DisputeResponse>;
+    IReadOnlyList<DisputeEvidenceFile> EvidenceFiles,
+    Guid? AdminActorId = null,
+    string? AdminReason = null) : IRequest<DisputeResponse>;
