@@ -9,25 +9,6 @@ public class GeneratedSkillDto
     public string Name { get; set; } = null!;
 }
 
-public class GenerateJobDescriptionResponse
-{
-    public string Title { get; set; } = null!;
-    public Guid? MajorId { get; set; }
-    public string? MajorName { get; set; }
-    public Guid? CategoryId { get; set; }
-    public string? CategoryName { get; set; }
-    public Guid? MajorCategoryId { get; set; }
-    public List<GeneratedSkillDto> Skills { get; set; } = new();
-    public List<string> CustomSkills { get; set; } = new();
-    public string Description { get; set; } = null!;
-    public List<string> QuestionRecruitment { get; set; } = new();
-    public decimal? BudgetMin { get; set; }
-    public decimal? BudgetMax { get; set; }
-    public string? Currency { get; set; }
-    public string AiDisclaimer { get; set; } = string.Empty;
-    public List<GeneratedJobPostMilestoneDto> Milestones { get; set; } = new();
-}
-
 public class GeneratedJobPostMilestoneDto
 {
     public string Title { get; set; } = null!;
