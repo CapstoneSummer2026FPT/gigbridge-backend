@@ -1244,6 +1244,10 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<int>("Channel")
                         .HasColumnType("integer");
 
+                    b.Property<Guid?>("ClaimToken")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
@@ -1289,9 +1293,41 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ScheduleId");
 
-                    b.HasIndex("Status", "NextAttemptAt");
+                    b.HasIndex("Channel", "Status", "NextAttemptAt", "DeliveryOutboxId")
+                        .HasDatabaseName("IX_DeliveryOutboxes_Active_Channel_Status_Due_Id")
+                        .HasFilter("\"Status\" IN (0, 1)");
+
+                    b.HasIndex("Status", "DeliveredAt")
+                        .HasDatabaseName("IX_DeliveryOutboxes_Delivered_Retention")
+                        .HasFilter("\"Status\" = 2 AND \"DeliveredAt\" IS NOT NULL");
 
                     b.ToTable("DeliveryOutboxes");
+                });
+
+            modelBuilder.Entity("Domain.Entities.DeliveryOutboxMaintenanceState", b =>
+                {
+                    b.Property<string>("Operation")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("LastScheduleId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("LastScheduledAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("WindowStartAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Operation");
+
+                    b.ToTable("DeliveryOutboxMaintenanceStates");
                 });
 
             modelBuilder.Entity("Domain.Entities.Dispute", b =>

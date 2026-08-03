@@ -57,6 +57,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
     public virtual DbSet<DeliveryOutbox> DeliveryOutboxes { get; set; }
 
+    public virtual DbSet<DeliveryOutboxMaintenanceState> DeliveryOutboxMaintenanceStates { get; set; }
+
     public virtual DbSet<PayoutOutbox> PayoutOutboxes { get; set; }
 
     public virtual DbSet<GoogleMeetConnection> GoogleMeetConnections { get; set; }
@@ -1802,8 +1804,19 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
         {
             entity.HasKey(e => e.DeliveryOutboxId);
             entity.HasIndex(e => e.DeliveryKey).IsUnique();
-            entity.HasIndex(e => new { e.Status, e.NextAttemptAt });
+            entity.HasIndex(e => new
+                {
+                    e.Channel,
+                    e.Status,
+                    e.NextAttemptAt,
+                    e.DeliveryOutboxId
+                }, "IX_DeliveryOutboxes_Active_Channel_Status_Due_Id")
+                .HasFilter("\"Status\" IN (0, 1)");
+            entity.HasIndex(e => new { e.Status, e.DeliveredAt },
+                    "IX_DeliveryOutboxes_Delivered_Retention")
+                .HasFilter("\"Status\" = 2 AND \"DeliveredAt\" IS NOT NULL");
             entity.Property(e => e.DeliveryOutboxId).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.ClaimToken).IsConcurrencyToken();
             entity.Property(e => e.DeliveryKey).HasMaxLength(250).IsRequired();
             entity.Property(e => e.Payload).HasColumnType("jsonb");
             entity.Property(e => e.LastError).HasMaxLength(2000);
@@ -1813,6 +1826,12 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
                 .HasForeignKey(e => e.ScheduleId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<User>().WithMany()
                 .HasForeignKey(e => e.RecipientUserId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<DeliveryOutboxMaintenanceState>(entity =>
+        {
+            entity.HasKey(e => e.Operation);
+            entity.Property(e => e.Operation).HasMaxLength(100);
         });
 
         modelBuilder.Entity<PayoutOutbox>(entity =>
