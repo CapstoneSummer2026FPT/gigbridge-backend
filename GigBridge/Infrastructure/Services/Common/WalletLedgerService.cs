@@ -2,6 +2,7 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces.IService;
 using Domain.Entities;
 using Domain.Enums;
+using Domain.Services;
 using Domain.Services.Payments;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -62,34 +63,50 @@ public sealed class WalletLedgerService : IWalletLedgerService
             ?? throw new NotFoundException("Wallet does not exist.");
 
         var now = _clock.UtcNow;
+        var usage = WalletSpendingService.CalculateBalanceUsage(
+            wallet.AvailableTokens,
+            wallet.WithdrawableTokens,
+            tokenAmount);
+        if (usage is null)
+        {
+            throw new BadRequestException("Insufficient wallet balance.");
+        }
+
         var affected = await _context.UserWallets
             .Where(x => x.UserWalletsId == wallet.UserWalletsId &&
                         x.Version == wallet.Version &&
-                        x.AvailableTokens >= tokenAmount)
+                        x.AvailableTokens + x.WithdrawableTokens >= tokenAmount)
             .ExecuteUpdateAsync(setters => setters
-                .SetProperty(x => x.AvailableTokens, x => x.AvailableTokens - tokenAmount)
+                // Spend the deposited balance first, then the earned balance.
+                .SetProperty(
+                    x => x.AvailableTokens,
+                    x => x.AvailableTokens - (tokenAmount > x.AvailableTokens ? x.AvailableTokens : tokenAmount))
                 .SetProperty(
                     x => x.WithdrawableTokens,
-                    x => x.WithdrawableTokens -
-                        (tokenAmount > x.AvailableTokens - x.WithdrawableTokens
-                            ? tokenAmount - (x.AvailableTokens - x.WithdrawableTokens)
-                            : 0m))
+                    x => x.WithdrawableTokens - (tokenAmount > x.AvailableTokens ? tokenAmount - x.AvailableTokens : 0m))
                 .SetProperty(x => x.Version, x => x.Version + 1)
                 .SetProperty(x => x.UpdatedAt, now), cancellationToken);
 
         if (affected != 1)
         {
             _context.ChangeTracker.Clear();
-            var balance = await _context.UserWallets
+            var balances = await _context.UserWallets
                 .AsNoTracking()
                 .Where(x => x.UserWalletsId == wallet.UserWalletsId)
-                .Select(x => x.AvailableTokens)
+                .Select(x => new { x.AvailableTokens, x.WithdrawableTokens })
                 .SingleAsync(cancellationToken);
-            if (balance < tokenAmount)
+            if (balances.AvailableTokens + balances.WithdrawableTokens < tokenAmount)
                 throw new BadRequestException("Insufficient wallet balance.");
             throw new ConflictException("The wallet changed concurrently. Retry the operation with the same idempotency key.");
         }
 
+        var balanceSource = usage.Value.DepositedAmount > 0m && usage.Value.EarnedAmount > 0m
+            ? WalletBalanceSource.Combined
+            : usage.Value.EarnedAmount > 0m
+                ? WalletBalanceSource.Earned
+                : WalletBalanceSource.Deposited;
+        decimal? depositedAmount = usage.Value.DepositedAmount > 0m ? usage.Value.DepositedAmount : null;
+        decimal? earnedAmount = usage.Value.EarnedAmount > 0m ? usage.Value.EarnedAmount : null;
         var transaction = new WalletTransaction
         {
             WalletTransactionsId = Guid.NewGuid(),
@@ -97,6 +114,9 @@ public sealed class WalletLedgerService : IWalletLedgerService
             UserId = userId,
             TokenAmount = tokenAmount,
             VndAmount = 0,
+            BalanceSource = (int)balanceSource,
+            DepositedAmount = depositedAmount,
+            EarnedAmount = earnedAmount,
             Type = (int)type,
             Status = (int)WalletTransactionStatus.Succeeded,
             IdempotencyKey = idempotencyKey,

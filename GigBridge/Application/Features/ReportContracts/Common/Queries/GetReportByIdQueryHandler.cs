@@ -69,7 +69,7 @@ public sealed class GetReportByIdQueryHandler :
             .OrderBy(a => a.UploadedAt)
             .Select(a => new ReportContractAttachmentResponse(
                 a.ReportContractAttachmentId,
-                a.FileUrl,
+                string.Empty,
                 a.FileName,
                 a.ContentType,
                 a.FileSize,

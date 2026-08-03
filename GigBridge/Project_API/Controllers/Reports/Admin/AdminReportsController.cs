@@ -7,6 +7,8 @@ using Application.Features.Admin.Reports.ResolveReport.DTOs;
 using Application.Features.Admin.Reports.UpdateReportStatus.Commands;
 using Application.Features.Admin.Reports.UpdateReportStatus.DTOs;
 using Application.Features.Reports.Common.DTOs;
+using Application.Features.Admin.Reports.AccountReports;
+using Application.Features.Reports.Evidence;
 using Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -18,6 +20,34 @@ namespace Project_API.Controllers.Admin;
 [Authorize(Roles = nameof(UserRole.Admin))]
 public class AdminReportsController : BaseApiController
 {
+    [HttpGet("accounts")]
+    public async Task<IActionResult> GetAccountReports([FromQuery] GetAccountReportsQuery query)
+        => Ok(ApiResponse<PaginatedList<AccountReportListItemDto>>.Ok(await Mediator.Send(query), "Account reports retrieved successfully."));
+
+    [HttpGet("accounts/{reportId:guid}")]
+    public async Task<IActionResult> GetAccountReport(Guid reportId)
+        => Ok(ApiResponse<AccountReportDetailDto>.Ok(await Mediator.Send(new GetAccountReportDetailQuery(reportId)), "Account report retrieved successfully."));
+
+    [HttpPut("accounts/{reportId:guid}/status")]
+    public async Task<IActionResult> UpdateAccountReportStatus(Guid reportId, [FromBody] AccountReportStatusRequest request)
+    {
+        if (!TryGetCurrentUserId(out var adminId)) return InvalidTokenResponse();
+        return Ok(ApiResponse<AccountReportDetailDto>.Ok(await Mediator.Send(new UpdateAccountReportStatusCommand(adminId, reportId, request)), "Account report status updated successfully."));
+    }
+
+    [HttpPut("accounts/{reportId:guid}/resolve")]
+    public async Task<IActionResult> ResolveAccountReport(Guid reportId, [FromBody] ResolveAccountReportRequest request)
+    {
+        if (!TryGetCurrentUserId(out var adminId)) return InvalidTokenResponse();
+        return Ok(ApiResponse<AccountReportDetailDto>.Ok(await Mediator.Send(new ResolveAccountReportCommand(adminId, reportId, request)), "Account report resolved successfully."));
+    }
+
+    [HttpGet("accounts/{reportId:guid}/evidence/{evidenceId:guid}/download")]
+    public async Task<IActionResult> DownloadAccountReportEvidence(Guid reportId, Guid evidenceId)
+    {
+        if (!TryGetCurrentUserId(out var adminId)) return InvalidTokenResponse();
+        return Ok(ApiResponse<ReportEvidenceDownloadDto>.Ok(await Mediator.Send(new GetReportEvidenceDownloadQuery(reportId, evidenceId, adminId, true)), "Evidence download authorized."));
+    }
     [HttpGet]
     public async Task<IActionResult> GetReports(
         [FromQuery] int page = 1,

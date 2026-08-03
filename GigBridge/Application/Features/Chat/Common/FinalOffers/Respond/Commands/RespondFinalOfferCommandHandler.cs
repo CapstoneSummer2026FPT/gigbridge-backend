@@ -6,6 +6,7 @@ using Application.Features.Chat.Common.FinalOffers.Respond.DTOs;
 using Application.Features.Chat.Common.FinalOffers.Shared.Email;
 using Application.Features.Chat.Common.Messages.Send.DTOs;
 using Application.Features.JobPosts.Common;
+using Application.Features.Proposals.Common;
 using Application.Features.Premium.Client.SmartTalentMatching.Feedback;
 using Domain.Entities;
 using Domain.Enums;
@@ -61,6 +62,13 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
         if (offer is null)
         {
             throw new NotFoundException("Negotiation offer does not exist.");
+        }
+
+        if (offer.ProposalsId.HasValue)
+        {
+            var moderatedProposal = await _context.Set<Proposal>().AsNoTracking()
+                .FirstOrDefaultAsync(x => x.ProposalsId == offer.ProposalsId.Value, cancellationToken);
+            if (moderatedProposal is not null) ProposalModerationGuard.EnsureActive(moderatedProposal);
         }
 
         if (offer.Status != (int)NegotiationOfferStatus.PendingFreelancerConfirmation)

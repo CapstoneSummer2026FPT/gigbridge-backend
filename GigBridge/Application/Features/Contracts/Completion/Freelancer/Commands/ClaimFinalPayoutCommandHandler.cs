@@ -31,6 +31,9 @@ public sealed class ClaimFinalPayoutCommandHandler : IRequestHandler<ClaimFinalP
         ClaimFinalPayoutCommand command,
         CancellationToken cancellationToken)
     {
+        await using var transaction = await _context.BeginTransactionAsync(cancellationToken);
+        await transaction.AcquireTransactionLockAsync(
+            ContractEscrowLock.ForContract(command.ContractId), cancellationToken);
         var contract = await _context.Set<Contract>()
             .FirstOrDefaultAsync(item => item.ContractsId == command.ContractId, cancellationToken)
             ?? throw new NotFoundException("Contract does not exist.");
@@ -94,6 +97,7 @@ public sealed class ClaimFinalPayoutCommandHandler : IRequestHandler<ClaimFinalP
         await ContractConversationEvents.AddSystemMessageAsync(
             _context, contract.ContractsId, "Final payout claimed by freelancer.", now, cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         var payload = new
         {

@@ -31,6 +31,15 @@ internal sealed class FakeMediaService : IMediaService
             : _urls.Dequeue();
     }
 
+    public Task<string> UploadPrivateFileAsync(Stream fileStream, string fileName, string contentType, string folder, CancellationToken cancellationToken = default)
+        => UploadFileAsync(fileStream, fileName, contentType, folder, cancellationToken);
+
+    public Task<string> GetPrivateDownloadUrlAsync(string storageKey, string contentType, CancellationToken cancellationToken = default)
+        => Task.FromResult(storageKey);
+
+    public Task DeletePrivateFileAsync(string storageKey, string contentType, CancellationToken cancellationToken = default)
+        => Task.CompletedTask;
+
     public sealed record UploadCall(
         string FileName,
         string ContentType,

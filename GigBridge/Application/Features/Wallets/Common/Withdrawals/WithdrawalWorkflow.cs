@@ -104,6 +104,10 @@ internal static class WithdrawalWorkflow
                 UserId = current.UserId,
                 TokenAmount = current.TokenAmount,
                 VndAmount = current.VndAmount,
+                BalanceSource = (int)(target == WithdrawalStatus.Success
+                    ? WalletBalanceSource.PendingWithdrawal
+                    : WalletBalanceSource.Earned),
+                EarnedAmount = current.TokenAmount,
                 Type = (int)transactionType,
                 Status = (int)WalletTransactionStatus.Succeeded,
                 IdempotencyKey = idempotencyKey,
@@ -113,7 +117,7 @@ internal static class WithdrawalWorkflow
                 Metadata = withdrawalId.ToString("D"),
                 Note = target == WithdrawalStatus.Success
                     ? "Withdrawal payout completed."
-                    : "Withdrawal failed and balance was refunded.",
+                    : "Withdrawal failed and earned balance was refunded.",
                 CreatedAt = now,
                 CompletedAt = now
             });
@@ -267,7 +271,6 @@ internal static class WithdrawalWorkflow
                 : await query.ExecuteUpdateAsync(
                     setters => setters
                         .SetProperty(wallet => wallet.PendingWithdrawalTokens, wallet => wallet.PendingWithdrawalTokens - withdrawal.TokenAmount)
-                        .SetProperty(wallet => wallet.AvailableTokens, wallet => wallet.AvailableTokens + withdrawal.TokenAmount)
                         .SetProperty(wallet => wallet.WithdrawableTokens, wallet => wallet.WithdrawableTokens + withdrawal.TokenAmount)
                         .SetProperty(wallet => wallet.Version, wallet => wallet.Version + 1)
                         .SetProperty(wallet => wallet.UpdatedAt, now),
@@ -282,7 +285,7 @@ internal static class WithdrawalWorkflow
             wallet.PendingWithdrawalTokens -= withdrawal.TokenAmount;
             if (target == WithdrawalStatus.Failed)
             {
-                wallet.AvailableTokens += withdrawal.TokenAmount;
+                // A rejected/cancelled/failed withdrawal returns only to the earned pool.
                 wallet.WithdrawableTokens += withdrawal.TokenAmount;
             }
             wallet.Version++;

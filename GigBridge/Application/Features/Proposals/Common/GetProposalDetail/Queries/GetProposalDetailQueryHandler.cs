@@ -62,6 +62,7 @@ public class GetProposalDetailQueryHandler
             JobPostTitle = proposal.JobPosts.Title,
             FreelancerProfileId = proposal.FreelancerProfilesId,
             FreelancerName = proposal.FreelancerProfiles.User.FullName,
+            FreelancerUserId = proposal.FreelancerProfiles.User?.UserId,
             CoverLetter = proposal.CoverLetter,
             ProposedBudget = proposal.ProposedBudget,
             ProposedDuration = proposal.ProposedDuration,
@@ -79,6 +80,8 @@ public class GetProposalDetailQueryHandler
                 .Select(ProposalPlanMapper.ToDto)
                 .ToList(),
             Status = proposal.Status,
+            ModerationStatus = proposal.ModerationStatus,
+            InvalidationReason = proposal.InvalidationReason,
             SubmittedAt = proposal.SubmittedAt,
             UpdatedAt = proposal.UpdatedAt,
             IsAigenerated = proposal.IsAigenerated

@@ -1,6 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Application.Features.Contracts.Common.Internal;
 using Application.Features.Reviews.Common;
 using Application.Features.Reviews.Common.DTOs;
 using Domain.Entities;
@@ -31,6 +32,12 @@ public class CreateReviewCommandHandler : IRequestHandler<CreateReviewCommand, R
 
     public async Task<ReviewDto> Handle(CreateReviewCommand command, CancellationToken cancellationToken)
     {
+        // Review creation + Elo update + Elo history are one transaction, serialized
+        // per contract so concurrent duplicate submissions cannot double-apply Elo.
+        await using var transaction = await _context.BeginTransactionAsync(cancellationToken);
+        await transaction.AcquireTransactionLockAsync(
+            ContractEscrowLock.ForContract(command.Request.ContractId), cancellationToken);
+
         var contract = await _context.Set<Contract>()
             .Include(contract => contract.ClientProfiles)
                 .ThenInclude(clientProfile => clientProfile.User)
@@ -82,13 +89,18 @@ public class CreateReviewCommandHandler : IRequestHandler<CreateReviewCommand, R
         };
 
         _context.Set<Review>().Add(review);
-        await _userEloService.ApplyReviewScoreAsync(
+
+        // Elo is applied only when the contract is Completed (verified above) and a
+        // valid final rating exists. Idempotent per (reviewee, contract).
+        await _userEloService.ApplyCompletedJobReviewAsync(
             review.ReviewsId,
+            contract.ContractsId,
             revieweeId,
             review.Rating,
             cancellationToken);
 
         await _context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         review.Contracts = contract;
         review.Reviewer = command.UserId == contract.ClientProfiles.UserId
@@ -107,14 +119,15 @@ public class CreateReviewCommandHandler : IRequestHandler<CreateReviewCommand, R
         return ReviewProjection.ToDto(review);
     }
 
-    private static int CalculateOverallRating(CreateReviewRequest request)
+    private static decimal CalculateOverallRating(CreateReviewRequest request)
     {
         var average = (
             request.CommunicationRating!.Value +
             request.QualityRating!.Value +
             request.TimelinessRating!.Value) / 3m;
 
-        return (int)Math.Round(average, MidpointRounding.AwayFromZero);
+        // 1.0–5.0 with one decimal place, e.g. (3+3+4)/3 → 3.3.
+        return Math.Round(average, 1, MidpointRounding.AwayFromZero);
     }
 
     private static Guid ResolveRevieweeId(Contract contract, Guid reviewerId)

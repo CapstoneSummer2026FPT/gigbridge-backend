@@ -24,7 +24,10 @@ public class GetAllUsersQueryHandler : IRequestHandler<GetAllUsersQuery, GetAllU
     {
         var page = Math.Max(request.Page, 1);
         var pageSize = Math.Clamp(request.PageSize, 1, 100);
-        var query = ApplyFilters(_context.Set<User>().AsNoTracking(), request.Search, request.Status);
+        var query = ApplyFilters(
+            _context.Set<User>().AsNoTracking().Where(user => user.Provider != "System"),
+            request.Search,
+            request.Status);
         var now = DateTime.UtcNow;
         if (request.Premium.HasValue)
         {

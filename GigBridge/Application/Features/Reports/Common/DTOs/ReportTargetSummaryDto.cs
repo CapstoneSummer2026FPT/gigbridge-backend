@@ -8,5 +8,5 @@ public class ReportTargetSummaryDto
     public string? Description { get; set; }
     public string? Email { get; set; }
     public int? Role { get; set; }
-    public int? Rating { get; set; }
+    public decimal? Rating { get; set; }
 }

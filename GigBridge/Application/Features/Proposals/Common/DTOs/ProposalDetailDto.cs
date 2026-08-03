@@ -12,6 +12,8 @@ public class ProposalDetailDto
 
     public string? FreelancerName { get; set; }
 
+    public Guid? FreelancerUserId { get; set; }
+
     public string? CoverLetter { get; set; }
 
     public decimal? ProposedBudget { get; set; }
@@ -36,6 +38,10 @@ public class ProposalDetailDto
     /// Enum ProposalStatus: 0=Draft, 1=Pending, 2=Shortlisted, 3=Accepted, 4=Rejected, 5=Withdrawn
     /// </summary>
     public int Status { get; set; }
+
+    public int ModerationStatus { get; set; }
+
+    public string? InvalidationReason { get; set; }
 
     public DateTime? SubmittedAt { get; set; }
 

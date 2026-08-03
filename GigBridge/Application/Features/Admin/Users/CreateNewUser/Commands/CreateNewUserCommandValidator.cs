@@ -20,7 +20,7 @@ public class CreateNewUserCommandValidator : AbstractValidator<CreateNewUserComm
             .MinimumLength(6).WithMessage("Password must be at least 6 characters");
 
         RuleFor(x => x.Request.Role)
-            .InclusiveBetween(0, 2).WithMessage("Role must be 0 (Client), 1 (Freelancer), or 2 (Admin)");
+            .InclusiveBetween(0, 1).WithMessage("Role must be 0 (Client) or 1 (Freelancer). Admin accounts cannot be created through User management.");
 
         When(x => x.Request.PhoneNumber is not null, () =>
         {

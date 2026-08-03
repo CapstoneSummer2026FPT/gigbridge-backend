@@ -57,7 +57,16 @@ internal static class ServiceFeeWorkflow
             throw new BadRequestException("Insufficient GigCoin balance to pay the service fee.");
         }
 
-        WalletWorkflow.DebitAvailable(wallet, serviceFeeTokens, now, "Insufficient GigCoin balance to pay the service fee.");
+        var walletBefore = WalletBalanceAudit.Snapshot(wallet);
+        var usage = WalletWorkflow.DebitAvailable(
+            wallet,
+            serviceFeeTokens,
+            now,
+            "Insufficient GigCoin balance to pay the service fee.");
+        var balanceSource = WalletBalanceAudit.ResolveSource(usage.DepositedAmount, usage.EarnedAmount);
+        var (depositedAmount, earnedAmount) = WalletBalanceAudit.ToSplitAmounts(
+            usage.DepositedAmount,
+            usage.EarnedAmount);
 
         var walletTransaction = new WalletTransaction
         {
@@ -67,12 +76,20 @@ internal static class ServiceFeeWorkflow
             ContractsId = contractId,
             TokenAmount = serviceFeeTokens,
             VndAmount = serviceFeeVnd,
+            BalanceSource = (int)balanceSource,
+            DepositedAmount = depositedAmount,
+            EarnedAmount = earnedAmount,
             Type = (int)WalletTransactionType.Adjustment,
             Status = (int)WalletTransactionStatus.Succeeded,
             IdempotencyKey = idempotencyKey,
             GatewayProvider = "InternalTokenWallet",
             GatewayTransactionCode = idempotencyKey,
-            Metadata = "{\"category\":\"ServiceFee\",\"rate\":0.01}",
+            Metadata = WalletBalanceAudit.EnrichMetadata(
+                "{\"category\":\"ServiceFee\",\"rate\":0.01}",
+                usage.DepositedAmount,
+                usage.EarnedAmount,
+                walletBefore,
+                wallet),
             Note = note,
             CreatedAt = now,
             CompletedAt = now

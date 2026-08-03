@@ -37,6 +37,16 @@ public sealed class AdminOverrideMilestoneCommandHandler :
             throw new ForbiddenAccessException("Only admins can perform milestone overrides.");
         }
 
+        var contractId = await _context.Set<Milestone>()
+            .AsNoTracking()
+            .Where(item => item.MilestonesId == request.MilestoneId)
+            .Select(item => (Guid?)item.ContractsId)
+            .FirstOrDefaultAsync(cancellationToken)
+            ?? throw new NotFoundException("Milestone does not exist.");
+        await using var transaction = await _context.BeginTransactionAsync(cancellationToken);
+        await transaction.AcquireTransactionLockAsync(
+            ContractEscrowLock.ForContract(contractId), cancellationToken);
+
         var milestone = await _context.Set<Milestone>()
             .FirstOrDefaultAsync(m => m.MilestonesId == request.MilestoneId, cancellationToken);
 
@@ -126,8 +136,8 @@ public sealed class AdminOverrideMilestoneCommandHandler :
                 _context,
                 clientWallet,
                 freelancerWallet,
+                escrow,
                 contract.ContractsId,
-                escrow.ContractEscrowId,
                 milestone.MilestonesId,
                 releasableVnd,
                 transactionCode,
@@ -187,8 +197,8 @@ public sealed class AdminOverrideMilestoneCommandHandler :
             ContractEscrowWalletWorkflow.Refund(
                 _context,
                 clientWallet,
+                escrow,
                 contract.ContractsId,
-                escrow.ContractEscrowId,
                 milestone.MilestonesId,
                 refundableVnd,
                 transactionCode,
@@ -234,6 +244,7 @@ public sealed class AdminOverrideMilestoneCommandHandler :
         }
 
         await _context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         return true;
     }
