@@ -20,12 +20,20 @@ public partial class Report
 
     public string Reason { get; set; } = null!;
 
+    public string? Description { get; set; }
+
     /// <summary>
     /// Enum ReportStatus: 0=Pending, 1=Reviewing, 2=Resolved, 3=Dismissed
     /// </summary>
     public int Status { get; set; }
 
     public string? AdminNote { get; set; }
+
+    public int? ResolutionAction { get; set; }
+
+    public Guid? AssignedAdminId { get; set; }
+
+    public DateTime? AssignedAt { get; set; }
 
     public Guid? ResolvedByAdminId { get; set; }
 
@@ -37,5 +45,11 @@ public partial class Report
 
     public virtual User? ResolvedByAdmin { get; set; }
 
+    public virtual User? AssignedAdmin { get; set; }
+
     public virtual User Reporter { get; set; } = null!;
+
+    public virtual ICollection<ReportEvidence> ReportEvidences { get; set; } = new List<ReportEvidence>();
+
+    public virtual ICollection<UserViolation> UserViolations { get; set; } = new List<UserViolation>();
 }

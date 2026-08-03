@@ -9,6 +9,7 @@ using Application.Common.Models.Ai;
 using Application.Features.Premium.Client.AiJobPostGenerator.Commands;
 using Application.Features.Premium.Client.AiJobPostGenerator.DTOs;
 using Domain.Entities;
+using Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -167,7 +168,7 @@ public class GenerateJobDescriptionCommandHandler
             }
         }
 
-        return new GenerateJobDescriptionResponse
+        var response = new GenerateJobDescriptionResponse
         {
             Title = aiResponse.Title,
             MajorId = selectedMajorId,
@@ -182,7 +183,39 @@ public class GenerateJobDescriptionCommandHandler
             BudgetMin = aiResponse.BudgetMin,
             BudgetMax = aiResponse.BudgetMax,
             Currency = aiResponse.Currency,
-            AiDisclaimer = "AI-generated content. Review and edit all fields before publishing."
+            AiDisclaimer = "AI-generated content. Review and edit all fields before publishing.",
+            Milestones = aiResponse.Milestones?.Select(m => new GeneratedJobPostMilestoneDto
+            {
+                Title = m.Title,
+                Amount = m.Amount,
+                EstimatedDuration = m.EstimatedDuration,
+                DueDate = m.DueDate,
+                Description = m.Description,
+                Deliverables = m.Deliverables,
+                AcceptanceCriteria = m.AcceptanceCriteria
+            }).ToList() ?? new()
         };
+        try
+        {
+            _context.Set<PremiumUsageEvent>().Add(new PremiumUsageEvent
+            {
+                PremiumUsageEventId = Guid.NewGuid(),
+                Type = PremiumUsageEventType.AiJobGeneration,
+                UserId = command.UserId,
+                IdempotencyKey = $"ai-job-generation:{Guid.NewGuid():N}",
+                OccurredAt = DateTime.UtcNow,
+                Metadata = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    matchedSkillCount = finalSkills.Count,
+                    customSkillCount = finalCustomSkills.Count
+                })
+            });
+            await _context.SaveChangesAsync(cancellationToken);
+        }
+        catch
+        {
+            // The generated response must not be lost if analytics capture is unavailable.
+        }
+        return response;
     }
 }

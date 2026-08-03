@@ -14,7 +14,7 @@ public sealed class ManagedReviewDto
     public Guid RevieweeId { get; init; }
     public string RevieweeName { get; init; } = string.Empty;
     public int RevieweeRole { get; init; }
-    public int Rating { get; init; }
+    public decimal Rating { get; init; }
     public string? Comment { get; init; }
     public int? CommunicationRating { get; init; }
     public int? QualityRating { get; init; }

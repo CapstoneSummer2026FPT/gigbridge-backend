@@ -227,7 +227,7 @@ public static class TalentMatchingCandidateLoader
                     userIds.Contains(review.RevieweeId) &&
                     review.ModerationStatus == (int)ReviewModerationStatus.Active)
                 .GroupBy(review => review.RevieweeId)
-                .Select(group => new ReviewAggregate(group.Key, group.Average(review => review.Rating), group.Count()))
+                .Select(group => new ReviewAggregate(group.Key, group.Average(review => (double?)review.Rating) ?? 0, group.Count()))
                 .ToDictionaryAsync(item => item.UserId, cancellationToken);
 
         var candidates = profiles.Select(profile =>

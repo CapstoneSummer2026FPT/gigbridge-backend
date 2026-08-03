@@ -127,6 +127,7 @@ public sealed class RespondToReportCommandHandler :
         report.RejectReason = command.RejectReason?.Trim();
         report.Status = (int)Domain.Enums.ContractReportStatus.WaitingReporterConfirmation;
         report.RespondedAt = now;
+        report.UpdatedAt = now;
 
         // Upload and save respondent attachments
         foreach (var attachment in command.Attachments)
@@ -238,7 +239,7 @@ public sealed class RespondToReportCommandHandler :
             .OrderBy(a => a.UploadedAt)
             .Select(a => new ReportContractAttachmentResponse(
                 a.ReportContractAttachmentId,
-                a.FileUrl,
+                string.Empty,
                 a.FileName,
                 a.ContentType,
                 a.FileSize,

@@ -97,6 +97,14 @@ public sealed class ContractReportsController : BaseApiController
         return Ok(ApiResponse<ReportContractResponse>.Ok(result, "Success"));
     }
 
+    [HttpGet("{reportId:guid}/attachments/{attachmentId:guid}/download")]
+    public async Task<IActionResult> DownloadAttachment(Guid contractId, Guid reportId, Guid attachmentId)
+    {
+        if (!TryGetCurrentUserId(out var userId)) return InvalidTokenResponse();
+        var result = await Mediator.Send(new GetReportContractAttachmentDownloadQuery(contractId, reportId, attachmentId, userId));
+        return Ok(ApiResponse<ReportContractAttachmentDownloadResponse>.Ok(result, "Attachment download authorized."));
+    }
+
     /// <summary>
     /// Respond to a report (respondent only) with optional attachments.
     /// </summary>

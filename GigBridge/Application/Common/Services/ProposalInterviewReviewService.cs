@@ -1,6 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Application.Features.Proposals.Common;
 using Application.Features.Proposals.Freelancer.InterviewReview.DTOs;
 using Domain.Entities;
 using Domain.Enums;
@@ -134,6 +135,8 @@ public class ProposalInterviewReviewService : IProposalInterviewReviewService
         {
             throw new NotFoundException("Proposal does not exist.");
         }
+
+        ProposalModerationGuard.EnsureActive(proposal);
 
         if (proposal.FreelancerProfilesId != freelancerProfile.FreelancerProfilesId)
         {

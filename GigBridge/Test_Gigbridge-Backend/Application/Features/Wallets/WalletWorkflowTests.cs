@@ -442,7 +442,7 @@ public class WalletWorkflowTests
     }
 
     [Fact]
-    public async Task Withdrawal_CreateLocksAvailableBalanceAndCreatesOutbox()
+    public async Task Withdrawal_CreateLocksEarnedBalanceAndCreatesOutbox()
     {
         var fixture = new WalletFixture();
         fixture.SeedFreelancerWallet(100m);
@@ -457,7 +457,7 @@ public class WalletWorkflowTests
 
         Assert.Equal((int)WithdrawalStatus.Pending, result.Status);
         var wallet = Assert.Single(fixture.Wallets.Entities.Where(wallet => wallet.UserId == fixture.FreelancerUserId));
-        Assert.Equal(70m, wallet.AvailableTokens);
+        Assert.Equal(100m, wallet.AvailableTokens);
         Assert.Equal(70m, wallet.WithdrawableTokens);
         Assert.Equal(30m, wallet.PendingWithdrawalTokens);
         Assert.Single(fixture.Withdrawals.Entities);
@@ -658,7 +658,7 @@ public class WalletWorkflowTests
         var duplicate = await handler.Handle(new SyncWithdrawalCommand(withdrawal.WithdrawalId, fixture.FreelancerUserId, false), CancellationToken.None);
 
         var wallet = Assert.Single(fixture.Wallets.Entities.Where(wallet => wallet.UserId == fixture.FreelancerUserId));
-        Assert.Equal(60m, wallet.AvailableTokens);
+        Assert.Equal(100m, wallet.AvailableTokens);
         Assert.Equal(60m, wallet.WithdrawableTokens);
         Assert.Equal(0m, wallet.PendingWithdrawalTokens);
         Assert.Equal((int)WithdrawalStatus.Success, duplicate.Status);
@@ -716,7 +716,7 @@ public class WalletWorkflowTests
             CancellationToken.None);
 
         var wallet = Assert.Single(fixture.Wallets.Entities.Where(wallet => wallet.UserId == fixture.FreelancerUserId));
-        Assert.Equal(75m, wallet.AvailableTokens);
+        Assert.Equal(100m, wallet.AvailableTokens);
         Assert.Equal(75m, wallet.WithdrawableTokens);
         Assert.Equal(25m, wallet.PendingWithdrawalTokens);
         Assert.Equal((int)WithdrawalStatus.SyncRequired, result.Status);
@@ -724,7 +724,7 @@ public class WalletWorkflowTests
     }
 
     [Fact]
-    public void WalletDebitAvailable_UsesNonWithdrawableBeforeProjectEarnings()
+    public void WalletDebitAvailable_SpendsDepositedPoolBeforeEarnedPool()
     {
         var wallet = new UserWallet
         {
@@ -734,13 +734,57 @@ public class WalletWorkflowTests
             WithdrawableTokens = 40m
         };
 
+        // First debit is fully covered by the deposited pool.
         WalletWorkflow.DebitAvailable(wallet, 50m, fixtureNow, "insufficient");
         Assert.Equal(50m, wallet.AvailableTokens);
         Assert.Equal(40m, wallet.WithdrawableTokens);
 
+        // Second debit still fits entirely within the deposited pool.
         WalletWorkflow.DebitAvailable(wallet, 30m, fixtureNow, "insufficient");
         Assert.Equal(20m, wallet.AvailableTokens);
-        Assert.Equal(20m, wallet.WithdrawableTokens);
+        Assert.Equal(40m, wallet.WithdrawableTokens);
+
+        // Third debit exhausts the deposited pool and draws the remainder from earned.
+        WalletWorkflow.DebitAvailable(wallet, 50m, fixtureNow, "insufficient");
+        Assert.Equal(0m, wallet.AvailableTokens);
+        Assert.Equal(10m, wallet.WithdrawableTokens);
+    }
+
+    [Fact]
+    public void WalletDebitAvailable_RejectsWhenCombinedBalanceIsInsufficient()
+    {
+        var wallet = new UserWallet
+        {
+            UserWalletsId = Guid.NewGuid(),
+            UserId = Guid.NewGuid(),
+            AvailableTokens = 20m,
+            WithdrawableTokens = 30m
+        };
+
+        Assert.Throws<BadRequestException>(() =>
+            WalletWorkflow.DebitAvailable(wallet, 51m, fixtureNow, "Insufficient wallet balance."));
+
+        Assert.Equal(20m, wallet.AvailableTokens);
+        Assert.Equal(30m, wallet.WithdrawableTokens);
+    }
+
+    [Fact]
+    public void WalletDebitAvailable_ReturnsBalanceUsageSplit()
+    {
+        var wallet = new UserWallet
+        {
+            UserWalletsId = Guid.NewGuid(),
+            UserId = Guid.NewGuid(),
+            AvailableTokens = 25m,
+            WithdrawableTokens = 40m
+        };
+
+        var usage = WalletWorkflow.DebitAvailable(wallet, 35m, fixtureNow, "insufficient");
+
+        Assert.Equal(25m, usage.DepositedAmount);
+        Assert.Equal(10m, usage.EarnedAmount);
+        Assert.Equal(0m, wallet.AvailableTokens);
+        Assert.Equal(30m, wallet.WithdrawableTokens);
     }
 
     private static readonly DateTime fixtureNow = new(2026, 6, 11, 10, 0, 0, DateTimeKind.Utc);

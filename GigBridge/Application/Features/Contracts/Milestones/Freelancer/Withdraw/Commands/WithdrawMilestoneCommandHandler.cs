@@ -16,7 +16,6 @@ namespace Application.Features.Contracts.Milestones.Freelancer.Withdraw.Commands
 public sealed class WithdrawMilestoneCommandHandler :
     IRequestHandler<WithdrawMilestoneCommand, WithdrawMilestoneResponse>
 {
-    private const long EarlyWithdrawalLockNamespace = 0x4541524C59504159;
     public const decimal NormalFreelancerReleasePercentage = 0.8m;
 
     private readonly IApplicationDbContext _context;
@@ -46,9 +45,8 @@ public sealed class WithdrawMilestoneCommandHandler :
             cancellationToken);
 
         await using var transaction = await _context.BeginTransactionAsync(cancellationToken);
-        var lockKey = BitConverter.ToInt64(command.MilestoneId.ToByteArray(), 0) ^
-            EarlyWithdrawalLockNamespace;
-        await transaction.AcquireTransactionLockAsync(lockKey, cancellationToken);
+        await transaction.AcquireTransactionLockAsync(
+            ContractEscrowLock.ForContract(command.ContractId), cancellationToken);
 
         var milestone = await MilestoneWorkflowGuard.GetMilestoneAsync(
             _context,
@@ -127,8 +125,8 @@ public sealed class WithdrawMilestoneCommandHandler :
             _context,
             clientWallet,
             freelancerWallet,
+            escrow,
             contract.ContractsId,
-            escrow.ContractEscrowId,
             milestone.MilestonesId,
             releasableVnd,
             transactionCode,

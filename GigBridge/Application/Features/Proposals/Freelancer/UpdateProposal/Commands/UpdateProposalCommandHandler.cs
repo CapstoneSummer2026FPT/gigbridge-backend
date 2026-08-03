@@ -49,6 +49,8 @@ public class UpdateProposalCommandHandler : IRequestHandler<UpdateProposalComman
             throw new NotFoundException("Proposal does not exist or you do not have permission to update it.");
         }
 
+        ProposalModerationGuard.EnsureActive(proposal);
+
         if (proposal.Status != 0)
         {
             throw new Exception("Only pending proposal can be updated.");

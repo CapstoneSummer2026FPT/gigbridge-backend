@@ -57,9 +57,18 @@ internal static class ServiceFeeWorkflow
             throw new BadRequestException("Insufficient GigCoin balance to pay the service fee.");
         }
 
-        WalletWorkflow.DebitAvailable(wallet, serviceFeeTokens, now, "Insufficient GigCoin balance to pay the service fee.");
+        var walletBefore = WalletBalanceAudit.Snapshot(wallet);
+        var usage = WalletWorkflow.DebitAvailable(
+            wallet,
+            serviceFeeTokens,
+            now,
+            "Insufficient GigCoin balance to pay the service fee.");
+        var balanceSource = WalletBalanceAudit.ResolveSource(usage.DepositedAmount, usage.EarnedAmount);
+        var (depositedAmount, earnedAmount) = WalletBalanceAudit.ToSplitAmounts(
+            usage.DepositedAmount,
+            usage.EarnedAmount);
 
-        context.Set<WalletTransaction>().Add(new WalletTransaction
+        var walletTransaction = new WalletTransaction
         {
             WalletTransactionsId = Guid.NewGuid(),
             UserWalletsId = wallet.UserWalletsId,
@@ -67,15 +76,43 @@ internal static class ServiceFeeWorkflow
             ContractsId = contractId,
             TokenAmount = serviceFeeTokens,
             VndAmount = serviceFeeVnd,
+            BalanceSource = (int)balanceSource,
+            DepositedAmount = depositedAmount,
+            EarnedAmount = earnedAmount,
             Type = (int)WalletTransactionType.Adjustment,
             Status = (int)WalletTransactionStatus.Succeeded,
             IdempotencyKey = idempotencyKey,
             GatewayProvider = "InternalTokenWallet",
             GatewayTransactionCode = idempotencyKey,
-            Metadata = "{\"category\":\"ServiceFee\",\"rate\":0.01}",
+            Metadata = WalletBalanceAudit.EnrichMetadata(
+                "{\"category\":\"ServiceFee\",\"rate\":0.01}",
+                usage.DepositedAmount,
+                usage.EarnedAmount,
+                walletBefore,
+                wallet),
             Note = note,
             CreatedAt = now,
             CompletedAt = now
+        };
+        context.Set<WalletTransaction>().Add(walletTransaction);
+        context.Set<PlatformRevenueEvent>().Add(new PlatformRevenueEvent
+        {
+            PlatformRevenueEventId = Guid.NewGuid(),
+            Source = idempotencyKey.StartsWith(ClientFundingFeePrefix, StringComparison.Ordinal)
+                ? PlatformRevenueSource.ContractFundingFee
+                : PlatformRevenueSource.ContractReleaseFee,
+            WalletTransactionId = walletTransaction.WalletTransactionsId,
+            PayerUserId = userId,
+            ContractId = contractId,
+            SourceEntityType = nameof(WalletTransaction),
+            SourceEntityId = walletTransaction.WalletTransactionsId,
+            SourceReference = idempotencyKey,
+            GigCoinAmount = serviceFeeTokens,
+            VndEquivalent = serviceFeeVnd,
+            VndPerGigCoin = TokenWalletRules.VndPerToken,
+            OccurredAt = now,
+            RecordedAt = now,
+            Metadata = "{\"rate\":0.01,\"capture\":\"atomic\"}"
         });
 
         return serviceFeeTokens;

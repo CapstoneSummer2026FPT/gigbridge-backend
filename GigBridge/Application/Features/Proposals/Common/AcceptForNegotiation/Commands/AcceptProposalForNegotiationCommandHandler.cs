@@ -74,6 +74,8 @@ public class AcceptProposalForNegotiationCommandHandler : IRequestHandler<Accept
             throw new NotFoundException("Proposal does not exist.");
         }
 
+        ProposalModerationGuard.EnsureActive(proposal);
+
         if (proposal.JobPosts.ClientProfilesId != clientProfile.ClientProfilesId)
         {
             throw new ForbiddenAccessException("You do not own this job post.");

@@ -139,8 +139,20 @@ internal static class AdminDisputeSupport
                 item.ReleasedAmountSnapshot,
                 item.AdditionalReleaseAmount,
                 item.RefundAmount,
+                item.PenaltyAmount,
+                item.Reason,
                 item.DecidedByAdminId,
                 item.CreatedAt))
+            .ToListAsync(cancellationToken);
+
+        var penalties = await context.Set<DisputePenalty>()
+            .AsNoTracking()
+            .Where(item => item.DisputeId == dispute.DisputesId)
+            .OrderBy(item => item.CreatedAt)
+            .Select(item => new AdminDisputePenaltyResponse(
+                item.DisputePenaltyId, item.MilestoneId, item.ViolatingUserId,
+                item.Amount, item.Reason, item.ClientDebitWalletTransactionId,
+                item.EscrowTransactionId, item.Status, item.CreatedAt))
             .ToListAsync(cancellationToken);
 
         var clientProfile = dispute.Contracts.ClientProfiles;
@@ -149,14 +161,24 @@ internal static class AdminDisputeSupport
             clientProfile.UserId,
             clientProfile.ClientProfilesId,
             clientProfile.User.FullName,
-            clientProfile.User.Email);
+            clientProfile.User.Email,
+            clientProfile.User.ViolationCount,
+            clientProfile.User.IsFlagged,
+            clientProfile.User.AccountStatus,
+            clientProfile.User.SuspendedUntil,
+            clientProfile.User.BannedAt);
         var freelancer = freelancerProfile is null
             ? null
             : new AdminDisputePartyResponse(
                 freelancerProfile.UserId,
                 freelancerProfile.FreelancerProfilesId,
                 freelancerProfile.User.FullName,
-                freelancerProfile.User.Email);
+                freelancerProfile.User.Email,
+                freelancerProfile.User.ViolationCount,
+                freelancerProfile.User.IsFlagged,
+                freelancerProfile.User.AccountStatus,
+                freelancerProfile.User.SuspendedUntil,
+                freelancerProfile.User.BannedAt);
 
         var initiatorRole = dispute.InitiatorId == client.UserId
             ? "Client"
@@ -173,6 +195,24 @@ internal static class AdminDisputeSupport
             .Where(item => item.Type == (int)EscrowTransactionType.RefundToClient &&
                            item.Status == (int)EscrowTransactionStatus.Succeeded)
             .Sum(item => item.Amount) ?? 0m;
+        var penaltyAmount = escrow?.EscrowTransactions
+            .Where(item => item.Type == (int)EscrowTransactionType.DisputePenalty &&
+                           item.Status == (int)EscrowTransactionStatus.Succeeded)
+            .Sum(item => item.Amount) ?? 0m;
+        var refundsByMilestone = escrow?.EscrowTransactions
+            .Where(item => item.MilestonesId.HasValue &&
+                           item.Type == (int)EscrowTransactionType.RefundToClient &&
+                           item.Status == (int)EscrowTransactionStatus.Succeeded)
+            .GroupBy(item => item.MilestonesId!.Value)
+            .ToDictionary(group => group.Key, group => group.Sum(item => item.Amount))
+            ?? new Dictionary<Guid, decimal>();
+        var penaltiesByMilestone = escrow?.EscrowTransactions
+            .Where(item => item.MilestonesId.HasValue &&
+                           item.Type == (int)EscrowTransactionType.DisputePenalty &&
+                           item.Status == (int)EscrowTransactionStatus.Succeeded)
+            .GroupBy(item => item.MilestonesId!.Value)
+            .ToDictionary(group => group.Key, group => group.Sum(item => item.Amount))
+            ?? new Dictionary<Guid, decimal>();
         var remainingAmount = escrow is null
             ? 0m
             : Math.Max(0m, escrow.FundedAmount - escrow.ReleasedAmount);
@@ -285,7 +325,15 @@ internal static class AdminDisputeSupport
                     item.Description,
                     item.Amount,
                     item.ReleasedAmount,
-                    Math.Max(0m, item.Amount - item.ReleasedAmount),
+                    Math.Max(0m, item.Amount - item.ReleasedAmount -
+                        refundsByMilestone.GetValueOrDefault(item.MilestonesId) -
+                        penaltiesByMilestone.GetValueOrDefault(item.MilestonesId)),
+                    refundsByMilestone.GetValueOrDefault(item.MilestonesId),
+                    penaltiesByMilestone.GetValueOrDefault(item.MilestonesId),
+                    Math.Max(0m, item.Amount - item.ReleasedAmount -
+                        refundsByMilestone.GetValueOrDefault(item.MilestonesId) -
+                        penaltiesByMilestone.GetValueOrDefault(item.MilestonesId)),
+                    item.Status == (int)MilestoneStatus.Disputed || item.MilestonesId == dispute.MilestonesId,
                     item.Status,
                     item.Deliverables,
                     item.SubmissionDescription,
@@ -311,6 +359,7 @@ internal static class AdminDisputeSupport
                 escrow?.FundedAmount ?? 0m,
                 escrow?.ReleasedAmount ?? 0m,
                 refundedAmount,
+                penaltyAmount,
                 serviceFees,
                 remainingAmount,
                 escrow?.Status),
@@ -320,7 +369,9 @@ internal static class AdminDisputeSupport
                     !item.DisputesId.HasValue)?.ConversationsId,
                 conversations.FirstOrDefault(item => item.DisputesId == dispute.DisputesId)?.ConversationsId),
             auditTrail,
-            decisions);
+            decisions,
+            penalties,
+            auditTrail.FirstOrDefault(item => item.Action == "Dispute.FinalResolution")?.AuditId);
     }
 
     public static async Task NotifyParticipantsAsync(

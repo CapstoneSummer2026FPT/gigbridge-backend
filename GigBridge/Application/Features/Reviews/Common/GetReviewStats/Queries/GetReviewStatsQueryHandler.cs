@@ -33,12 +33,14 @@ public class GetReviewStatsQueryHandler : IRequestHandler<GetReviewStatsQuery, R
             TotalReviews = ratings.Count,
             AverageRating = ratings.Count == 0
                 ? 0
-                : Math.Round(ratings.Average(), 1)
+                : (double)Math.Round(ratings.Average(), 1)
         };
 
         foreach (var rating in ratings)
         {
-            stats.RatingDistribution[rating] = stats.RatingDistribution.GetValueOrDefault(rating) + 1;
+            // Star-bucket distribution: 3.3 and 3.7 both land in the 3-star bucket.
+            var bucket = (int)Math.Round(rating, 0, MidpointRounding.AwayFromZero);
+            stats.RatingDistribution[bucket] = stats.RatingDistribution.GetValueOrDefault(bucket) + 1;
         }
 
         return stats;

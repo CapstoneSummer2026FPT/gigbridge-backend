@@ -26,5 +26,6 @@ public record JobPostSummaryDto(
     List<string> SkillNames,
     bool IsFeatured,
     DateTime? FeaturedUntil,
+    bool IsAiGenerated,
     bool HasAiInterview
 );
