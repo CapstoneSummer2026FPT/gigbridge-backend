@@ -28,58 +28,6 @@ public class AiServiceClient : IAiServiceClient
         _httpClient.DefaultRequestHeaders.Add("X-API-Key", _options.ApiKey);
     }
 
-    public async Task<JobPostGenerationResponseDto> GenerateJobDescriptionAsync(
-        JobPostGenerationRequestDto request,
-        CancellationToken cancellationToken = default)
-    {
-        var response = await _httpClient.PostAsJsonAsync("api/ai/job-posts/generate", request, cancellationToken);
-        
-        if (!response.IsSuccessStatusCode)
-        {
-            try
-            {
-                var errorResponse = await response.Content.ReadFromJsonAsync<ApiResponse<object>>(
-                    cancellationToken: cancellationToken);
-                if (errorResponse != null && !string.IsNullOrWhiteSpace(errorResponse.Message))
-                {
-                    if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
-                    {
-                        throw new BadRequestException(errorResponse.Message);
-                    }
-                    throw new HttpRequestException(errorResponse.Message);
-                }
-            }
-            catch (BadRequestException)
-            {
-                throw;
-            }
-            catch
-            {
-                // Fallback to default EnsureSuccessStatusCode behavior if parsing fails
-            }
-
-            response.EnsureSuccessStatusCode();
-        }
-
-        // take response from Ai server then prase it to json 
-        // if not success throw HttpRequestException
-        
-        var apiResponse = await response.Content.ReadFromJsonAsync<ApiResponse<JobPostGenerationResponseDto>>(
-            cancellationToken: cancellationToken);
-
-        if (apiResponse == null || !apiResponse.Success || apiResponse.Data == null)
-        {
-            var errorMessage = apiResponse?.Message ?? "Failed to generate job description from AI service.";
-            if (apiResponse?.Errors != null)
-            {
-                errorMessage += " Errors: " + apiResponse.Errors.ToString();
-            }
-            throw new HttpRequestException(errorMessage);
-        }
-
-        return apiResponse.Data;
-    }
-
     public async Task<JobPostDetailsGenerationResponseDto> GenerateJobDescriptionDetailsAsync(
         JobPostGenerationRequestDto request,
         CancellationToken cancellationToken = default)

@@ -76,18 +76,6 @@ public class ClientJobPostsController : BaseApiController
         return Ok(ApiResponse<Guid>.Ok(result, "Job post created successfully"));
     }
 
-    [HttpPost("ai/generate")]
-    public async Task<IActionResult> GenerateJobDescription([FromBody] GenerateJobDescriptionCommand command)
-    {
-        if (!TryGetCurrentUserId(out var userId))
-        {
-            return InvalidTokenResponse();
-        }
-
-        var result = await Mediator.Send(new GenerateJobDescriptionCommand(userId, command.ClientPrompt));
-
-        return Ok(ApiResponse<GenerateJobDescriptionResponse>.Ok(result, "Job description generated successfully"));
-    }
 
     public class GenerateJobDetailsRequestDto
     {
