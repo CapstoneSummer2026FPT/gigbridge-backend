@@ -1,4 +1,5 @@
 using FluentValidation;
+using Application.Features.Portfolios.Common;
 
 namespace Application.Features.Profiles.FreelancerProfile.UpdateFreelancerProfile.Commands;
 
@@ -44,27 +45,6 @@ public class UpdateFreelancerProfileCommandValidator : AbstractValidator<UpdateF
             .WithMessage("Duplicate portfolio item IDs are not allowed.");
 
         RuleForEach(v => v.Dto.PortfolioItems)
-            .ChildRules(portfolioItem =>
-            {
-                portfolioItem.RuleFor(item => item.Title)
-                    .NotEmpty().WithMessage("Portfolio title is required.")
-                    .MaximumLength(200).WithMessage("Portfolio title cannot exceed 200 characters.");
-                portfolioItem.RuleFor(item => item.Description)
-                    .MaximumLength(2000).WithMessage("Portfolio description cannot exceed 2000 characters.");
-                portfolioItem.RuleFor(item => item.ProjectUrl)
-                    .MaximumLength(2048).WithMessage("Portfolio project URL cannot exceed 2048 characters.")
-                    .Must(BeValidHttpUrl).WithMessage("Portfolio project URL must be an absolute HTTP or HTTPS URL.")
-                    .When(item => !string.IsNullOrWhiteSpace(item.ProjectUrl));
-                portfolioItem.RuleFor(item => item.ImageUrl)
-                    .MaximumLength(2048).WithMessage("Portfolio image URL cannot exceed 2048 characters.")
-                    .Must(BeValidHttpUrl).WithMessage("Portfolio image URL must be an absolute HTTP or HTTPS URL.")
-                    .When(item => !string.IsNullOrWhiteSpace(item.ImageUrl));
-            });
-    }
-
-    private static bool BeValidHttpUrl(string? value)
-    {
-        return Uri.TryCreate(value, UriKind.Absolute, out var uri) &&
-            (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps);
+            .SetValidator(new PortfolioItemInputDtoValidator());
     }
 }
