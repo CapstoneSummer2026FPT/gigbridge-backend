@@ -35,7 +35,10 @@ internal sealed class FakeMediaService : IMediaService
     public Task<string> UploadPrivateFileAsync(Stream fileStream, string fileName, string contentType, string folder, CancellationToken cancellationToken = default)
         => UploadFileAsync(fileStream, fileName, contentType, folder, cancellationToken);
 
-    public Task DeleteFileAsync(string fileUrl, CancellationToken cancellationToken = default)
+    public Task DeleteFileAsync(
+        string fileUrl,
+        string expectedFolder,
+        CancellationToken cancellationToken = default)
     {
         DeletedFiles.Add(fileUrl);
         return Task.CompletedTask;

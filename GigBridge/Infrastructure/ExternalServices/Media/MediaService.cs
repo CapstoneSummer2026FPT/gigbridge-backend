@@ -113,10 +113,16 @@ public class MediaService : IMediaService
 
     public async Task DeleteFileAsync(
         string fileUrl,
+        string expectedFolder,
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (!TryGetPublicId(fileUrl, out var publicId))
+        {
+            return;
+        }
+
+        if (!IsInExpectedFolder(publicId, expectedFolder))
         {
             return;
         }
@@ -229,6 +235,15 @@ public class MediaService : IMediaService
         publicId = string.Join('/', publicIdSegments);
         return publicId.StartsWith("gigbridge/", StringComparison.Ordinal) &&
             publicId.Length > "gigbridge/".Length;
+    }
+
+    internal static bool IsInExpectedFolder(string publicId, string expectedFolder)
+    {
+        var normalizedFolder = expectedFolder.Trim().Trim('/');
+        return normalizedFolder.Length > 0 &&
+            publicId.StartsWith(
+                $"gigbridge/{normalizedFolder}/",
+                StringComparison.Ordinal);
     }
 
     private string GetSecureUrl(UploadResult uploadResult, string resourceType)

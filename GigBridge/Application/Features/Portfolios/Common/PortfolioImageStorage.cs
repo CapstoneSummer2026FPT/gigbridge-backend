@@ -59,7 +59,7 @@ internal static class PortfolioImageStorage
 
         try
         {
-            await mediaService.DeleteFileAsync(imageUrl, CancellationToken.None);
+            await mediaService.DeleteFileAsync(imageUrl, "portfolio", CancellationToken.None);
         }
         catch (Exception exception)
         {
