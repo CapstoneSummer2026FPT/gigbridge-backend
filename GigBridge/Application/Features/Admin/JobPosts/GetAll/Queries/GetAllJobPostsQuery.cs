@@ -30,5 +30,6 @@ public record GetAllJobPostsQuery(
     string? SortBy = null,
     bool SortDesc = true,
     bool IncludeSummary = true,
+    // Retained for request compatibility; totals are always derived from the current filtered query.
     int? KnownTotalItems = null
 ) : IRequest<AdminJobPostListResponse>;

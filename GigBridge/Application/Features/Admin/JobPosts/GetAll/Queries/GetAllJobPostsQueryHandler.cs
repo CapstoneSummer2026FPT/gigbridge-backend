@@ -26,7 +26,7 @@ public class GetAllJobPostsQueryHandler : IRequestHandler<GetAllJobPostsQuery, A
 
         var query = allJobPosts.AsQueryable();
         query = ApplyFilters(query, request);
-        var totalItems = ResolveKnownTotal(request, stats);
+        var totalItems = ResolveSummaryTotal(request, stats);
         if (!totalItems.HasValue)
         {
             totalItems = await query.CountAsync(cancellationToken);
@@ -99,13 +99,8 @@ public class GetAllJobPostsQueryHandler : IRequestHandler<GetAllJobPostsQuery, A
         return stats ?? new AdminJobPostStatsDto(0, 0, 0, 0, 0, 0);
     }
 
-    private static int? ResolveKnownTotal(GetAllJobPostsQuery request, AdminJobPostStatsDto? stats)
+    private static int? ResolveSummaryTotal(GetAllJobPostsQuery request, AdminJobPostStatsDto? stats)
     {
-        if (!request.IncludeSummary && request.KnownTotalItems is >= 0)
-        {
-            return request.KnownTotalItems.Value;
-        }
-
         if (stats is null || HasNonStatusFilters(request))
         {
             return null;

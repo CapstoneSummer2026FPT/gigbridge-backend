@@ -56,14 +56,15 @@ public class GetAllJobPostsQueryHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ReusesKnownTotalWithoutReturningSummaryOnLaterPages()
+    public async Task Handle_IgnoresStaleKnownTotalAndCountsFilteredQueryWithoutSummary()
     {
         await using var context = CreateContext();
         var client = AddClient(context);
-        for (var index = 0; index < 30; index++)
+        for (var index = 0; index < 23; index++)
         {
             AddJob(context, client, $"Paged Job {index:00}", status: 1, visibility: 0);
         }
+        AddJob(context, client, "Cancelled Job", status: 3, visibility: 0);
         await context.SaveChangesAsync();
 
         var handler = new GetAllJobPostsQueryHandler(context);
@@ -73,11 +74,11 @@ public class GetAllJobPostsQueryHandlerTests
                 PageSize: 10,
                 Status: 1,
                 IncludeSummary: false,
-                KnownTotalItems: 30),
+                KnownTotalItems: 0),
             CancellationToken.None);
 
         Assert.Equal(10, result.Items.Count);
-        Assert.Equal(30, result.TotalItems);
+        Assert.Equal(23, result.TotalItems);
         Assert.Equal(3, result.TotalPages);
         Assert.Null(result.Stats);
     }
