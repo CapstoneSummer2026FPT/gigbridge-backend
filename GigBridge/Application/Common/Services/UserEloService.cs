@@ -13,6 +13,7 @@ public class UserEloService : IUserEloService
 {
     private const string UserSource = "User";
     private const string ReviewSource = "Review";
+    private const string DisputeSource = "Dispute";
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
 
@@ -228,6 +229,50 @@ public class UserEloService : IUserEloService
         return score.CurrentPoints - pointsBefore;
     }
 
+    /// <summary>
+    /// Deducts 50% of the user's current Elo points (rounded half-up) as a
+    /// dispute-resolution penalty. Idempotent per (dispute, user): a retry after a
+    /// partial failure does not double-deduct. No-op when there is nothing to deduct.
+    /// </summary>
+    public async Task ApplyDisputeResolutionPenaltyAsync(
+        Guid userId,
+        Guid disputeId,
+        CancellationToken cancellationToken)
+    {
+        var user = await _context.Set<User>()
+            .FirstOrDefaultAsync(item => item.UserId == userId, cancellationToken)
+            ?? throw new NotFoundException("User does not exist.");
+
+        if (!IsEligibleRole(user.Role))
+        {
+            return;
+        }
+
+        var now = _dateTimeService.UtcNow;
+        var score = await EnsureScoreAsync(userId, now, cancellationToken);
+        var requestedDelta = UserEloCalculator.CalculateDisputeResolutionDelta(score.CurrentPoints);
+        if (requestedDelta == 0)
+        {
+            return;
+        }
+
+        await ApplyDeltaAsync(
+            score,
+            requestedDelta,
+            UserEloPointReason.DisputeResolutionPenalty,
+            DisputeSource,
+            disputeId,
+            CreateDisputeResolutionPenaltyKey(disputeId, userId),
+            new
+            {
+                disputeId,
+                requestedDelta,
+                deductionRatio = 0.5m
+            },
+            now,
+            cancellationToken);
+    }
+
     private async Task<UserEloScore> EnsureScoreAsync(Guid userId, DateTime now, CancellationToken cancellationToken)
     {
         var scores = _context.Set<UserEloScore>();
@@ -428,5 +473,10 @@ public class UserEloService : IUserEloService
     private static string CreateReturnBonusKey(Guid userId, DateTime previousLastActivityAt)
     {
         return $"return:{userId}:{previousLastActivityAt:O}";
+    }
+
+    private static string CreateDisputeResolutionPenaltyKey(Guid disputeId, Guid userId)
+    {
+        return $"dispute-resolution-penalty:{disputeId}:{userId}";
     }
 }
