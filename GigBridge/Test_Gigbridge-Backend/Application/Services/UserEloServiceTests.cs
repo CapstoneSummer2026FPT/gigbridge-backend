@@ -170,6 +170,152 @@ public class UserEloServiceTests
             service.ApplyCompletedJobReviewAsync(Guid.NewGuid(), contract.ContractsId, Guid.NewGuid(), 5m, CancellationToken.None));
     }
 
+    [Fact]
+    public async Task ApplyDisputeResolutionPenalty_DeductsHalfRoundedHalfUp()
+    {
+        await using var context = CreateContext();
+        var now = new DateTime(2026, 7, 1, 9, 0, 0, DateTimeKind.Utc);
+        var user = AddUser(context, UserRole.Freelancer, now);
+        context.UserEloScores.Add(new UserEloScore
+        {
+            UserEloScoresId = Guid.NewGuid(),
+            UserId = user.UserId,
+            CurrentPoints = 1501,
+            LastActivityAt = now,
+            CreatedAt = now
+        });
+        await context.SaveChangesAsync();
+
+        var service = new UserEloService(context, new FixedDateTimeService(now));
+        var disputeId = Guid.NewGuid();
+
+        // 1501 / 2 = 750.5 -> standard rounding (half-up) yields 751. Deduct 750.
+        await service.ApplyDisputeResolutionPenaltyAsync(user.UserId, disputeId, CancellationToken.None);
+        await context.SaveChangesAsync();
+
+        var score = await context.UserEloScores.SingleAsync();
+        Assert.Equal(751, score.CurrentPoints);
+
+        var transaction = await context.UserEloPointTransactions
+            .SingleAsync(item => item.Reason == (int)UserEloPointReason.DisputeResolutionPenalty);
+        Assert.Equal(-750, transaction.PointsDelta);
+        Assert.Equal(1501, transaction.PointsBefore);
+        Assert.Equal(751, transaction.PointsAfter);
+        Assert.Equal("Dispute", transaction.SourceEntityType);
+        Assert.Equal(disputeId, transaction.SourceEntityId);
+        Assert.Equal($"dispute-resolution-penalty:{disputeId}:{user.UserId}", transaction.IdempotencyKey);
+    }
+
+    [Fact]
+    public async Task ApplyDisputeResolutionPenalty_IsIdempotentPerDisputeAndUser()
+    {
+        await using var context = CreateContext();
+        var now = new DateTime(2026, 7, 1, 9, 0, 0, DateTimeKind.Utc);
+        var user = AddUser(context, UserRole.Freelancer, now);
+        context.UserEloScores.Add(new UserEloScore
+        {
+            UserEloScoresId = Guid.NewGuid(),
+            UserId = user.UserId,
+            CurrentPoints = 1000,
+            LastActivityAt = now,
+            CreatedAt = now
+        });
+        await context.SaveChangesAsync();
+
+        var service = new UserEloService(context, new FixedDateTimeService(now));
+        var disputeId = Guid.NewGuid();
+
+        await service.ApplyDisputeResolutionPenaltyAsync(user.UserId, disputeId, CancellationToken.None);
+        await service.ApplyDisputeResolutionPenaltyAsync(user.UserId, disputeId, CancellationToken.None);
+        await context.SaveChangesAsync();
+
+        var score = await context.UserEloScores.SingleAsync();
+        Assert.Equal(500, score.CurrentPoints);
+
+        var transactions = await context.UserEloPointTransactions.ToListAsync();
+        Assert.Single(transactions);
+        Assert.Equal((int)UserEloPointReason.DisputeResolutionPenalty, transactions[0].Reason);
+    }
+
+    [Fact]
+    public async Task ApplyDisputeResolutionPenalty_SkipsIneligibleRole()
+    {
+        await using var context = CreateContext();
+        var now = new DateTime(2026, 7, 1, 9, 0, 0, DateTimeKind.Utc);
+        var admin = AddUser(context, UserRole.Admin, now);
+        await context.SaveChangesAsync();
+
+        var service = new UserEloService(context, new FixedDateTimeService(now));
+
+        await service.ApplyDisputeResolutionPenaltyAsync(admin.UserId, Guid.NewGuid(), CancellationToken.None);
+        await context.SaveChangesAsync();
+
+        Assert.Empty(context.UserEloScores);
+        Assert.Empty(context.UserEloPointTransactions);
+    }
+
+    [Fact]
+    public async Task ApplyDisputeResolutionPenalty_ThrowsWhenUserDoesNotExist()
+    {
+        await using var context = CreateContext();
+        var now = new DateTime(2026, 7, 1, 9, 0, 0, DateTimeKind.Utc);
+
+        var service = new UserEloService(context, new FixedDateTimeService(now));
+
+        await Assert.ThrowsAsync<global::Application.Common.Exceptions.NotFoundException>(() =>
+            service.ApplyDisputeResolutionPenaltyAsync(Guid.NewGuid(), Guid.NewGuid(), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task ApplyDisputeResolutionPenalty_DoesNothingWhenRoundingLeavesPointsUnchanged()
+    {
+        await using var context = CreateContext();
+        var now = new DateTime(2026, 7, 1, 9, 0, 0, DateTimeKind.Utc);
+        var user = AddUser(context, UserRole.Freelancer, now);
+        context.UserEloScores.Add(new UserEloScore
+        {
+            UserEloScoresId = Guid.NewGuid(),
+            UserId = user.UserId,
+            CurrentPoints = 1,
+            LastActivityAt = now,
+            CreatedAt = now
+        });
+        await context.SaveChangesAsync();
+
+        var service = new UserEloService(context, new FixedDateTimeService(now));
+
+        await service.ApplyDisputeResolutionPenaltyAsync(user.UserId, Guid.NewGuid(), CancellationToken.None);
+        await context.SaveChangesAsync();
+
+        var score = await context.UserEloScores.SingleAsync();
+        Assert.Equal(1, score.CurrentPoints);
+        Assert.Empty(context.UserEloPointTransactions);
+    }
+
+    [Fact]
+    public async Task ApplyDisputeResolutionPenalty_CreatesScoreAtBaselineThenDeducts()
+    {
+        await using var context = CreateContext();
+        var now = new DateTime(2026, 7, 1, 9, 0, 0, DateTimeKind.Utc);
+        var user = AddUser(context, UserRole.Freelancer, now);
+        await context.SaveChangesAsync();
+
+        var service = new UserEloService(context, new FixedDateTimeService(now));
+
+        await service.ApplyDisputeResolutionPenaltyAsync(user.UserId, Guid.NewGuid(), CancellationToken.None);
+        await context.SaveChangesAsync();
+
+        var score = await context.UserEloScores.SingleAsync();
+        Assert.Equal(50, score.CurrentPoints);
+
+        var transactions = await context.UserEloPointTransactions
+            .OrderBy(transaction => transaction.Reason)
+            .ToListAsync();
+        Assert.Equal(2, transactions.Count);
+        Assert.Contains(transactions, transaction => transaction.Reason == (int)UserEloPointReason.InitialGrant);
+        Assert.Contains(transactions, transaction => transaction.Reason == (int)UserEloPointReason.DisputeResolutionPenalty);
+    }
+
     private static GigbridgeDbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<GigbridgeDbContext>()

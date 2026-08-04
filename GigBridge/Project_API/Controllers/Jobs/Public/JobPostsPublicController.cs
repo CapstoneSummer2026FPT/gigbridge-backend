@@ -1,6 +1,7 @@
 using Application.Common.Models;
 using Application.Features.JobPosts.Public.GetAvailableJobPosts.DTOs;
 using Application.Features.JobPosts.Public.GetAvailableJobPosts.Queries;
+using Application.Features.JobPosts.Public.GetClientOpenJobPosts.Queries;
 using Application.Features.JobPosts.Public.GetJobPostDetail.DTOs;
 using Application.Features.JobPosts.Public.GetJobPostDetail.Queries;
 using Application.Features.JobPosts.Public.SearchAvailableJobPosts.Commands;
@@ -46,6 +47,17 @@ public class JobPostsPublicController : BaseApiController
         var query = new GetJobPostDetailQuery(id);
         var result = await Mediator.Send(query);
         return Ok(ApiResponse<JobPostDetailDto>.Ok(result, "Success"));
+    }
+
+    [HttpGet("client/{userId:guid}")]
+    public async Task<IActionResult> GetClientOpenJobPosts(
+        Guid userId,
+        [FromQuery] int pageIndex = 1,
+        [FromQuery] int pageSize = 50)
+    {
+        var query = new GetClientOpenJobPostsQuery(userId, pageIndex, pageSize);
+        var result = await Mediator.Send(query);
+        return Ok(ApiResponse<IEnumerable<JobPostSummaryDto>>.Ok(result, "Success"));
     }
 
     private string ResolveAnalyticsActor()
