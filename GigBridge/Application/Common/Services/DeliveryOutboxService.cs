@@ -38,6 +38,7 @@ public sealed class DeliveryOutboxService : BackgroundService
     private readonly ILogger<DeliveryOutboxService> _logger;
     private readonly IScheduleEmailRenderer _emailRenderer;
     private readonly DeliveryOutboxOptions _options;
+    private readonly DeliveryOutboxDatabaseGate _databaseGate;
     private readonly string _frontendBaseUrl;
 
     public DeliveryOutboxService(
@@ -51,7 +52,14 @@ public sealed class DeliveryOutboxService : BackgroundService
         _logger = logger;
         _emailRenderer = emailRenderer;
         _options = options.Value;
+        _databaseGate = new DeliveryOutboxDatabaseGate(_options.MaxConcurrentDbConnections);
         _frontendBaseUrl = (configuration["FrontendBaseUrl"] ?? "http://localhost:5173").TrimEnd('/');
+    }
+
+    public override void Dispose()
+    {
+        _databaseGate.Dispose();
+        base.Dispose();
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -115,104 +123,136 @@ public sealed class DeliveryOutboxService : BackgroundService
         DeliveryChannel channel,
         CancellationToken ct)
     {
-        IReadOnlyList<DeliveryOutboxLease> leases;
-        var now = DateTime.UtcNow;
-        using (var claimScope = _scopeFactory.CreateScope())
-        {
-            var store = claimScope.ServiceProvider.GetRequiredService<IDeliveryOutboxStore>();
-            leases = await store.ClaimDueAsync(
-                channel,
-                now,
-                now.AddMinutes(_options.LeaseMinutes),
-                _options.BatchSize,
-                ct);
-        }
-
-        if (leases.Count == 0)
+        // Phase 1: finish all database preparation before network dispatch begins.
+        var batch = await ClaimAndPrepareBatchAsync(channel, ct);
+        if (batch.Leases.Count == 0)
         {
             return false;
         }
 
-        var concurrency = channel == DeliveryChannel.NotificationRealtime
-            ? _options.RealtimeMaxConcurrency
-            : _options.EmailMaxConcurrency;
-        await Parallel.ForEachAsync(
-            leases,
-            new ParallelOptions
-            {
-                CancellationToken = ct,
-                MaxDegreeOfParallelism = concurrency
-            },
-            async (lease, cancellationToken) =>
-                await ProcessLeasedDeliveryAsync(lease, cancellationToken));
-        return true;
-    }
-
-    private static TimeSpan NextIdleInterval(TimeSpan current, TimeSpan maximum) =>
-        TimeSpan.FromTicks(Math.Min(current.Ticks * 2, maximum.Ticks));
-
-    private async Task ProcessLeasedDeliveryAsync(
-        DeliveryOutboxLease lease,
-        CancellationToken ct)
-    {
-        DeliveryOutbox? job = null;
+        IReadOnlyList<DeliveryOutcome> dispatchedOutcomes;
         try
         {
-            using var scope = _scopeFactory.CreateScope();
-            var context = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
-            job = await context.Set<DeliveryOutbox>()
-                .AsNoTracking()
-                .FirstOrDefaultAsync(x =>
-                    x.DeliveryOutboxId == lease.DeliveryOutboxId &&
-                    x.Status == (int)DeliveryOutboxStatus.Processing &&
-                    x.ClaimToken == lease.ClaimToken, ct);
-            if (job is null)
-            {
-                return;
-            }
-
-            await DispatchDeliveryAsync(context, scope.ServiceProvider, job, ct);
-            using var outcomeTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-            var completed = await CompleteLeaseAsync(
-                lease,
-                DateTime.UtcNow,
-                outcomeTimeout.Token);
-            if (completed == 0)
-            {
-                _logger.LogInformation(
-                    "Delivery {DeliveryKey} completed after lease ownership changed; the current state was preserved.",
-                    job.DeliveryKey);
-            }
+            // Phase 2: these scoped services perform network I/O only. No
+            // IApplicationDbContext is resolved while deliveries run in parallel.
+            dispatchedOutcomes = await DispatchBatchAsync(
+                batch.Deliveries,
+                channel == DeliveryChannel.NotificationRealtime
+                    ? _options.RealtimeMaxConcurrency
+                    : _options.EmailMaxConcurrency,
+                ct);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
-            await TryReleaseLeaseOnShutdownAsync(lease);
+            await ReleaseLeasesAsync(batch.Leases);
             throw;
         }
-        catch (Exception ex)
-        {
-            if (job is null)
-            {
-                _logger.LogError(ex,
-                    "Delivery {DeliveryOutboxId} could not be loaded after it was claimed.",
-                    lease.DeliveryOutboxId);
-                return;
-            }
 
-            await FailLeaseAsync(lease, job, ex, ct);
+        var outcomes = batch.PreparationOutcomes
+            .Concat(dispatchedOutcomes)
+            .ToArray();
+        // Phase 3: serialize outcome persistence through one database scope.
+        await PersistOutcomesAsync(outcomes, ct);
+        return true;
+    }
+
+    private async Task<PreparedDeliveryBatch> ClaimAndPrepareBatchAsync(
+        DeliveryChannel channel,
+        CancellationToken ct)
+    {
+        IReadOnlyList<DeliveryOutboxLease> leases = [];
+
+        try
+        {
+            return await _databaseGate.RunAsync(async () =>
+            {
+                var now = DateTime.UtcNow;
+                using var scope = _scopeFactory.CreateScope();
+                var store = scope.ServiceProvider.GetRequiredService<IDeliveryOutboxStore>();
+                leases = await store.ClaimDueAsync(
+                    channel,
+                    now,
+                    now.AddMinutes(_options.LeaseMinutes),
+                    _options.BatchSize,
+                    ct);
+                if (leases.Count == 0)
+                {
+                    return PreparedDeliveryBatch.Empty;
+                }
+
+                var context = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
+                var leaseById = leases.ToDictionary(x => x.DeliveryOutboxId);
+                var deliveryIds = leaseById.Keys.ToArray();
+                var jobs = await context.Set<DeliveryOutbox>()
+                    .AsNoTracking()
+                    .Where(x =>
+                        deliveryIds.Contains(x.DeliveryOutboxId) &&
+                        x.Status == (int)DeliveryOutboxStatus.Processing)
+                    .ToListAsync(ct);
+                var deliveries = new List<PreparedDelivery>(jobs.Count);
+                var outcomes = new List<DeliveryOutcome>();
+
+                foreach (var job in jobs)
+                {
+                    if (!leaseById.TryGetValue(job.DeliveryOutboxId, out var lease) ||
+                        job.ClaimToken != lease.ClaimToken)
+                    {
+                        continue;
+                    }
+
+                    try
+                    {
+                        var prepared = await PrepareDeliveryAsync(context, lease, job, ct);
+                        if (prepared is null)
+                        {
+                            outcomes.Add(DeliveryOutcome.Delivered(
+                                lease,
+                                job.DeliveryKey,
+                                job.AttemptCount,
+                                DateTime.UtcNow));
+                        }
+                        else
+                        {
+                            deliveries.Add(prepared);
+                        }
+                    }
+                    catch (OperationCanceledException) when (ct.IsCancellationRequested)
+                    {
+                        throw;
+                    }
+                    catch (Exception ex)
+                    {
+                        outcomes.Add(FailedOutcome(lease, job.DeliveryKey, job.AttemptCount, ex));
+                    }
+                }
+
+                await context.SaveChangesAsync(ct);
+                return new PreparedDeliveryBatch(leases, deliveries, outcomes);
+            }, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            await ReleaseLeasesAsync(leases);
+            throw;
+        }
+        catch
+        {
+            // No network delivery has started, so every claimed item can be made
+            // immediately available instead of waiting for lease recovery.
+            await ReleaseLeasesAsync(leases);
+            throw;
         }
     }
 
-    private async Task DispatchDeliveryAsync(
+    private async Task<PreparedDelivery?> PrepareDeliveryAsync(
         IApplicationDbContext context,
-        IServiceProvider services,
+        DeliveryOutboxLease lease,
         DeliveryOutbox job,
         CancellationToken ct)
     {
         if (job.ScheduleId is null)
         {
-            await SendFinalContractEmailAsync(context, services, job, ct);
-            return;
+            return await PrepareFinalContractEmailAsync(context, lease, job, ct);
         }
 
         var payload = JsonSerializer.Deserialize<ScheduleDeliveryPayload>(job.Payload, JsonOptions)
@@ -220,31 +260,32 @@ public sealed class DeliveryOutboxService : BackgroundService
         switch ((DeliveryChannel)job.Channel)
         {
             case DeliveryChannel.Email:
-            {
-                var email = services.GetRequiredService<IEmailService>();
-                await email.SendEmailAsync(new EmailRequest
                 {
-                    To = payload.Email,
-                    Subject = payload.Subject,
-                    Body = payload.HtmlBody,
-                    TextBody = payload.TextBody,
-                    IsHtml = true,
-                    IdempotencyKey = job.DeliveryKey,
-                    MessageId = $"<{job.DeliveryKey.Replace(':', '.')}@gigbridge.local>"
-                }, ct);
-                break;
-            }
+                    return PreparedDelivery.ForEmail(
+                        lease,
+                        job.DeliveryKey,
+                        job.AttemptCount,
+                        new EmailRequest
+                        {
+                            To = payload.Email,
+                            Subject = payload.Subject,
+                            Body = payload.HtmlBody,
+                            TextBody = payload.TextBody,
+                            IsHtml = true,
+                            IdempotencyKey = job.DeliveryKey,
+                            MessageId = $"<{job.DeliveryKey.Replace(':', '.')}@gigbridge.local>"
+                        });
+                }
             case DeliveryChannel.NotificationRealtime:
-                await SendScheduleNotificationAsync(context, services, job, payload, ct);
-                break;
+                return await PrepareScheduledNotificationAsync(context, lease, job, payload, ct);
             default:
                 throw new InvalidOperationException($"Unsupported delivery channel {job.Channel}.");
         }
     }
 
-    private async Task SendScheduleNotificationAsync(
+    private async Task<PreparedDelivery?> PrepareScheduledNotificationAsync(
         IApplicationDbContext context,
-        IServiceProvider services,
+        DeliveryOutboxLease lease,
         DeliveryOutbox job,
         ScheduleDeliveryPayload payload,
         CancellationToken ct)
@@ -278,7 +319,6 @@ public sealed class DeliveryOutboxService : BackgroundService
             notification.IsRead = false;
             notification.ReadAt = null;
             notification.CreatedAt = DateTime.UtcNow;
-            await context.SaveChangesAsync(ct);
         }
 
         if (notification is null)
@@ -287,56 +327,183 @@ public sealed class DeliveryOutboxService : BackgroundService
                 "Notification {NotificationId} for schedule delivery {DeliveryKey} was not found; marking the delivery as completed.",
                 payload.NotificationId,
                 job.DeliveryKey);
+            return null;
+        }
+
+        return PreparedDelivery.ForNotification(
+            lease,
+            job.DeliveryKey,
+            job.AttemptCount,
+            payload.UserId,
+            ToNotificationDto(notification));
+    }
+
+    private async Task<IReadOnlyList<DeliveryOutcome>> DispatchBatchAsync(
+        IReadOnlyList<PreparedDelivery> deliveries,
+        int concurrency,
+        CancellationToken ct)
+    {
+        if (deliveries.Count == 0)
+        {
+            return [];
+        }
+
+        using var gate = new SemaphoreSlim(concurrency);
+        var tasks = deliveries.Select(async delivery =>
+        {
+            await gate.WaitAsync(ct);
+            try
+            {
+                return await DispatchPreparedDeliveryAsync(delivery, ct);
+            }
+            finally
+            {
+                gate.Release();
+            }
+        });
+        return await Task.WhenAll(tasks);
+    }
+
+    private async Task<DeliveryOutcome> DispatchPreparedDeliveryAsync(
+        PreparedDelivery delivery,
+        CancellationToken ct)
+    {
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            if (delivery.Email is not null)
+            {
+                var email = scope.ServiceProvider.GetRequiredService<IEmailService>();
+                await email.SendEmailAsync(delivery.Email, ct);
+            }
+            else if (delivery.Notification is not null && delivery.NotificationUserId.HasValue)
+            {
+                var sender = scope.ServiceProvider.GetRequiredService<INotificationSender>();
+                await sender.SendToUserAsync(
+                    delivery.NotificationUserId.Value,
+                    delivery.Notification,
+                    ct);
+            }
+            else
+            {
+                throw new InvalidOperationException(
+                    $"Delivery {delivery.DeliveryKey} has no dispatch payload.");
+            }
+
+            return DeliveryOutcome.Delivered(
+                delivery.Lease,
+                delivery.DeliveryKey,
+                delivery.AttemptCount,
+                DateTime.UtcNow);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            return FailedOutcome(
+                delivery.Lease,
+                delivery.DeliveryKey,
+                delivery.AttemptCount,
+                ex);
+        }
+    }
+
+    private async Task PersistOutcomesAsync(
+        IReadOnlyCollection<DeliveryOutcome> outcomes,
+        CancellationToken ct)
+    {
+        if (outcomes.Count == 0)
+        {
             return;
         }
 
-        var sender = services.GetRequiredService<INotificationSender>();
-        await sender.SendToUserAsync(payload.UserId, new NotificationDto
+        await _databaseGate.RunAsync(async () =>
         {
-            Id = notification.NotificationsId,
-            Source = "Personal",
-            NotificationId = notification.NotificationsId,
-            ReadTargetId = notification.NotificationsId,
-            Type = (NotificationType)notification.Type,
-            Title = notification.Title,
-            Content = notification.Content,
-            ReferenceId = notification.ReferenceId,
-            ReferenceType = notification.ReferenceType,
-            Metadata = notification.Metadata,
-            Revision = notification.Revision,
-            IsRead = notification.IsRead ?? false,
-            ReadAt = notification.ReadAt,
-            CreatedAt = notification.CreatedAt
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeout.CancelAfter(TimeSpan.FromSeconds(10));
+            var databaseToken = timeout.Token;
+            using var scope = _scopeFactory.CreateScope();
+            var context = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
+            foreach (var outcome in outcomes)
+            {
+                int updated;
+                if (outcome.Succeeded)
+                {
+                    updated = await context.Set<DeliveryOutbox>()
+                        .Where(x =>
+                            x.DeliveryOutboxId == outcome.Lease.DeliveryOutboxId &&
+                            x.Status == (int)DeliveryOutboxStatus.Processing &&
+                            x.ClaimToken == outcome.Lease.ClaimToken)
+                        .ExecuteUpdateAsync(setters => setters
+                            .SetProperty(x => x.Status, (int)DeliveryOutboxStatus.Delivered)
+                            .SetProperty(x => x.DeliveredAt, outcome.DeliveredAt)
+                            .SetProperty(x => x.ClaimToken, (Guid?)null)
+                            .SetProperty(x => x.LastError, (string?)null), databaseToken);
+                }
+                else
+                {
+                    updated = await context.Set<DeliveryOutbox>()
+                        .Where(x =>
+                            x.DeliveryOutboxId == outcome.Lease.DeliveryOutboxId &&
+                            x.Status == (int)DeliveryOutboxStatus.Processing &&
+                            x.ClaimToken == outcome.Lease.ClaimToken)
+                        .ExecuteUpdateAsync(setters => setters
+                            .SetProperty(x => x.Status, outcome.DeadLettered
+                                ? (int)DeliveryOutboxStatus.DeadLettered
+                                : (int)DeliveryOutboxStatus.Pending)
+                            .SetProperty(x => x.AttemptCount, outcome.AttemptCount)
+                            .SetProperty(x => x.NextAttemptAt, outcome.NextAttemptAt!.Value)
+                            .SetProperty(x => x.ClaimToken, (Guid?)null)
+                            .SetProperty(x => x.LastError, outcome.Error), databaseToken);
+                }
+
+                LogOutcome(outcome, updated);
+            }
         }, ct);
     }
 
-    private async Task<int> CompleteLeaseAsync(
-        DeliveryOutboxLease lease,
-        DateTime deliveredAt,
-        CancellationToken ct)
+    private void LogOutcome(DeliveryOutcome outcome, int updated)
     {
-        using var scope = _scopeFactory.CreateScope();
-        var context = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
-        return await context.Set<DeliveryOutbox>()
-            .Where(x =>
-                x.DeliveryOutboxId == lease.DeliveryOutboxId &&
-                x.Status == (int)DeliveryOutboxStatus.Processing &&
-                x.ClaimToken == lease.ClaimToken)
-            .ExecuteUpdateAsync(setters => setters
-                .SetProperty(x => x.Status, (int)DeliveryOutboxStatus.Delivered)
-                .SetProperty(x => x.DeliveredAt, deliveredAt)
-                .SetProperty(x => x.ClaimToken, (Guid?)null)
-                .SetProperty(x => x.LastError, (string?)null), ct);
+        if (updated == 0)
+        {
+            _logger.LogInformation(
+                "Delivery {DeliveryKey} finished after lease ownership changed; the current state was preserved.",
+                outcome.DeliveryKey);
+            return;
+        }
+
+        if (outcome.Succeeded)
+        {
+            return;
+        }
+
+        if (outcome.DeadLettered)
+        {
+            _logger.LogError(outcome.Exception,
+                "Delivery {DeliveryKey} dead-lettered after {Attempts} attempts.",
+                outcome.DeliveryKey,
+                outcome.AttemptCount);
+        }
+        else
+        {
+            _logger.LogWarning(outcome.Exception,
+                "Delivery {DeliveryKey} failed; attempt {Attempt} scheduled for {NextAttemptAt}.",
+                outcome.DeliveryKey,
+                outcome.AttemptCount,
+                outcome.NextAttemptAt);
+        }
     }
 
-    private async Task FailLeaseAsync(
+    private static DeliveryOutcome FailedOutcome(
         DeliveryOutboxLease lease,
-        DeliveryOutbox job,
-        Exception exception,
-        CancellationToken ct)
+        string deliveryKey,
+        int currentAttemptCount,
+        Exception exception)
     {
         var now = DateTime.UtcNow;
-        var attempt = job.AttemptCount + 1;
+        var attempt = currentAttemptCount + 1;
         var error = string.IsNullOrWhiteSpace(exception.Message)
             ? exception.GetType().Name
             : exception.Message;
@@ -345,74 +512,55 @@ public sealed class DeliveryOutboxService : BackgroundService
             error = error[..2_000];
         }
 
-        var deadLetter = IsPermanentFailure(exception) || attempt > RetryDelays.Length;
-        var nextAttemptAt = deadLetter
-            ? now
-            : now.Add(RetryDelays[attempt - 1]);
-        using var scope = _scopeFactory.CreateScope();
-        var context = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
-        var updated = await context.Set<DeliveryOutbox>()
-            .Where(x =>
-                x.DeliveryOutboxId == lease.DeliveryOutboxId &&
-                x.Status == (int)DeliveryOutboxStatus.Processing &&
-                x.ClaimToken == lease.ClaimToken)
-            .ExecuteUpdateAsync(setters => setters
-                .SetProperty(x => x.Status, deadLetter
-                    ? (int)DeliveryOutboxStatus.DeadLettered
-                    : (int)DeliveryOutboxStatus.Pending)
-                .SetProperty(x => x.AttemptCount, attempt)
-                .SetProperty(x => x.NextAttemptAt, nextAttemptAt)
-                .SetProperty(x => x.ClaimToken, (Guid?)null)
-                .SetProperty(x => x.LastError, error), ct);
-        if (updated == 0)
+        var deadLettered = IsPermanentFailure(exception) || attempt > RetryDelays.Length;
+        return DeliveryOutcome.Failed(
+            lease,
+            deliveryKey,
+            attempt,
+            deadLettered,
+            deadLettered ? now : now.Add(RetryDelays[attempt - 1]),
+            error,
+            exception);
+    }
+
+    private async Task ReleaseLeasesAsync(
+        IReadOnlyCollection<DeliveryOutboxLease> leases)
+    {
+        if (leases.Count == 0)
         {
-            _logger.LogInformation(
-                "Delivery {DeliveryKey} failed after lease ownership changed; the current state was preserved.",
-                job.DeliveryKey);
             return;
         }
 
-        if (deadLetter)
-        {
-            _logger.LogError(exception,
-                "Delivery {DeliveryKey} dead-lettered after {Attempts} attempts.",
-                job.DeliveryKey,
-                attempt);
-        }
-        else
-        {
-            _logger.LogWarning(exception,
-                "Delivery {DeliveryKey} failed; attempt {Attempt} scheduled for {NextAttemptAt}.",
-                job.DeliveryKey,
-                attempt,
-                nextAttemptAt);
-        }
-    }
-
-    private async Task TryReleaseLeaseOnShutdownAsync(DeliveryOutboxLease lease)
-    {
         try
         {
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-            using var scope = _scopeFactory.CreateScope();
-            var context = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
-            await context.Set<DeliveryOutbox>()
-                .Where(x =>
-                    x.DeliveryOutboxId == lease.DeliveryOutboxId &&
-                    x.Status == (int)DeliveryOutboxStatus.Processing &&
-                    x.ClaimToken == lease.ClaimToken)
-                .ExecuteUpdateAsync(setters => setters
-                    .SetProperty(x => x.Status, (int)DeliveryOutboxStatus.Pending)
-                    .SetProperty(x => x.NextAttemptAt, DateTime.UtcNow)
-                    .SetProperty(x => x.ClaimToken, (Guid?)null), timeout.Token);
+            await _databaseGate.RunAsync(async () =>
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var context = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
+                foreach (var lease in leases)
+                {
+                    await context.Set<DeliveryOutbox>()
+                        .Where(x =>
+                            x.DeliveryOutboxId == lease.DeliveryOutboxId &&
+                            x.Status == (int)DeliveryOutboxStatus.Processing &&
+                            x.ClaimToken == lease.ClaimToken)
+                        .ExecuteUpdateAsync(setters => setters
+                            .SetProperty(x => x.Status, (int)DeliveryOutboxStatus.Pending)
+                            .SetProperty(x => x.NextAttemptAt, DateTime.UtcNow)
+                            .SetProperty(x => x.ClaimToken, (Guid?)null), timeout.Token);
+                }
+            }, timeout.Token);
         }
         catch (Exception ex)
         {
             _logger.LogDebug(ex,
-                "Delivery {DeliveryOutboxId} lease could not be released during shutdown.",
-                lease.DeliveryOutboxId);
+                "Delivery outbox leases could not be released.");
         }
     }
+
+    private static TimeSpan NextIdleInterval(TimeSpan current, TimeSpan maximum) =>
+        TimeSpan.FromTicks(Math.Min(current.Ticks * 2, maximum.Ticks));
 
     private async Task RunMaintenanceLoopAsync(CancellationToken stoppingToken)
     {
@@ -457,25 +605,30 @@ public sealed class DeliveryOutboxService : BackgroundService
 
     private async Task RecoverExpiredLeasesAsync(DateTime now, CancellationToken ct)
     {
-        var recovered = 0;
-        foreach (var channel in DeliveryChannels)
+        var recovered = await _databaseGate.RunAsync(async () =>
         {
-            using var scope = _scopeFactory.CreateScope();
-            var context = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
-            recovered += await context.Set<DeliveryOutbox>()
-                .Where(x =>
-                    x.Channel == (int)channel &&
-                    x.Status == (int)DeliveryOutboxStatus.Processing &&
-                    x.NextAttemptAt <= now)
-                .ExecuteUpdateAsync(setters => setters
-                    .SetProperty(x => x.Status, x => x.AttemptCount >= RetryDelays.Length
-                        ? (int)DeliveryOutboxStatus.DeadLettered
-                        : (int)DeliveryOutboxStatus.Pending)
-                    .SetProperty(x => x.AttemptCount, x => x.AttemptCount + 1)
-                    .SetProperty(x => x.NextAttemptAt, now)
-                    .SetProperty(x => x.ClaimToken, (Guid?)null)
-                    .SetProperty(x => x.LastError, "The delivery processing lease expired."), ct);
-        }
+            var recoveredCount = 0;
+            foreach (var channel in DeliveryChannels)
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var context = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
+                recoveredCount += await context.Set<DeliveryOutbox>()
+                    .Where(x =>
+                        x.Channel == (int)channel &&
+                        x.Status == (int)DeliveryOutboxStatus.Processing &&
+                        x.NextAttemptAt <= now)
+                    .ExecuteUpdateAsync(setters => setters
+                        .SetProperty(x => x.Status, x => x.AttemptCount >= RetryDelays.Length
+                            ? (int)DeliveryOutboxStatus.DeadLettered
+                            : (int)DeliveryOutboxStatus.Pending)
+                        .SetProperty(x => x.AttemptCount, x => x.AttemptCount + 1)
+                        .SetProperty(x => x.NextAttemptAt, now)
+                        .SetProperty(x => x.ClaimToken, (Guid?)null)
+                        .SetProperty(x => x.LastError, "The delivery processing lease expired."), ct);
+            }
+
+            return recoveredCount;
+        }, ct);
 
         if (recovered > 0)
         {
@@ -489,33 +642,43 @@ public sealed class DeliveryOutboxService : BackgroundService
         var total = 0;
         for (var batch = 0; batch < 10; batch++)
         {
-            using var scope = _scopeFactory.CreateScope();
-            var context = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
-            var ids = await context.Set<DeliveryOutbox>()
-                .AsNoTracking()
-                .Where(x =>
-                    x.Status == (int)DeliveryOutboxStatus.Delivered &&
-                    x.DeliveredAt <= cutoff &&
-                    x.Payload != CompactedPayload)
-                .OrderBy(x => x.DeliveredAt)
-                .ThenBy(x => x.DeliveryOutboxId)
-                .Select(x => x.DeliveryOutboxId)
-                .Take(_options.RetentionBatchSize)
-                .ToListAsync(ct);
-            if (ids.Count == 0)
+            var result = await _databaseGate.RunAsync(async () =>
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var context = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
+                var ids = await context.Set<DeliveryOutbox>()
+                    .AsNoTracking()
+                    .Where(x =>
+                        x.Status == (int)DeliveryOutboxStatus.Delivered &&
+                        x.DeliveredAt <= cutoff &&
+                        x.Payload != CompactedPayload)
+                    .OrderBy(x => x.DeliveredAt)
+                    .ThenBy(x => x.DeliveryOutboxId)
+                    .Select(x => x.DeliveryOutboxId)
+                    .Take(_options.RetentionBatchSize)
+                    .ToListAsync(ct);
+                if (ids.Count == 0)
+                {
+                    return (Selected: 0, Updated: 0);
+                }
+
+                var updated = await context.Set<DeliveryOutbox>()
+                    .Where(x =>
+                        ids.Contains(x.DeliveryOutboxId) &&
+                        x.Status == (int)DeliveryOutboxStatus.Delivered &&
+                        x.DeliveredAt <= cutoff)
+                    .ExecuteUpdateAsync(setters => setters
+                        .SetProperty(x => x.Payload, CompactedPayload)
+                        .SetProperty(x => x.LastError, (string?)null), ct);
+                return (Selected: ids.Count, Updated: updated);
+            }, ct);
+            if (result.Selected == 0)
             {
                 break;
             }
 
-            total += await context.Set<DeliveryOutbox>()
-                .Where(x =>
-                    ids.Contains(x.DeliveryOutboxId) &&
-                    x.Status == (int)DeliveryOutboxStatus.Delivered &&
-                    x.DeliveredAt <= cutoff)
-                .ExecuteUpdateAsync(setters => setters
-                    .SetProperty(x => x.Payload, CompactedPayload)
-                    .SetProperty(x => x.LastError, (string?)null), ct);
-            if (ids.Count < _options.RetentionBatchSize)
+            total += result.Updated;
+            if (result.Selected < _options.RetentionBatchSize)
             {
                 break;
             }
@@ -555,191 +718,194 @@ public sealed class DeliveryOutboxService : BackgroundService
 
     private async Task<bool> ProcessScheduleStartBackfillPageAsync(CancellationToken ct)
     {
-        using var scope = _scopeFactory.CreateScope();
-        var context = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
-        var store = scope.ServiceProvider.GetRequiredService<IDeliveryOutboxStore>();
-        await using var transaction = await context.BeginTransactionAsync(ct);
-        await transaction.AcquireTransactionLockAsync(ScheduleStartBackfillLockKey, ct);
-
-        var now = DateTime.UtcNow;
-        var state = await context.Set<DeliveryOutboxMaintenanceState>()
-            .FirstOrDefaultAsync(x => x.Operation == ScheduleStartBackfillOperation, ct);
-        if (state is null)
+        return await _databaseGate.RunAsync(async () =>
         {
-            state = new DeliveryOutboxMaintenanceState
+            using var scope = _scopeFactory.CreateScope();
+            var context = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
+            var store = scope.ServiceProvider.GetRequiredService<IDeliveryOutboxStore>();
+            await using var transaction = await context.BeginTransactionAsync(ct);
+            await transaction.AcquireTransactionLockAsync(ScheduleStartBackfillLockKey, ct);
+
+            var now = DateTime.UtcNow;
+            var state = await context.Set<DeliveryOutboxMaintenanceState>()
+                .FirstOrDefaultAsync(x => x.Operation == ScheduleStartBackfillOperation, ct);
+            if (state is null)
             {
-                Operation = ScheduleStartBackfillOperation,
-                WindowStartAt = now.AddHours(-24),
-                UpdatedAt = now
-            };
-            context.Set<DeliveryOutboxMaintenanceState>().Add(state);
-        }
-        else if (state.CompletedAt.HasValue)
-        {
-            await transaction.CommitAsync(ct);
-            return false;
-        }
-
-        var schedules = await store.LoadScheduleStartBackfillPageAsync(
-            state.WindowStartAt,
-            state.LastScheduledAtUtc,
-            state.LastScheduleId,
-            _options.BackfillPageSize,
-            ct);
-        if (schedules.Count == 0)
-        {
-            state.CompletedAt = now;
-            state.UpdatedAt = now;
-            await context.SaveChangesAsync(ct);
-            await transaction.CommitAsync(ct);
-            return false;
-        }
-
-        var scheduleIds = schedules.Select(x => x.ScheduleId).ToArray();
-        var conversationIds = schedules.Select(x => x.ConversationId).Distinct().ToArray();
-        var messageRows = await context.Set<Message>()
-            .AsNoTracking()
-            .Where(x => x.ScheduleId.HasValue && scheduleIds.Contains(x.ScheduleId.Value))
-            .Select(x => new BackfillMessage(
-                x.ScheduleId!.Value,
-                x.MessagesId,
-                x.ScheduleEventSequence ?? 0))
-            .ToListAsync(ct);
-        var latestMessages = messageRows
-            .GroupBy(x => x.ScheduleId)
-            .ToDictionary(
-                group => group.Key,
-                group => group
-                    .OrderByDescending(x => x.EventSequence)
-                    .ThenByDescending(x => x.MessageId)
-                    .First().MessageId);
-        var participants = await context.Set<ConversationParticipant>()
-            .AsNoTracking()
-            .Where(x =>
-                conversationIds.Contains(x.ConversationsId) &&
-                x.LeftAt == null &&
-                x.DeletedAt == null)
-            .Select(x => new BackfillParticipant(
-                x.ConversationsId,
-                x.UserId,
-                x.User.FullName,
-                x.User.Email))
-            .ToListAsync(ct);
-        var participantsByConversation = participants
-            .GroupBy(x => x.ConversationId)
-            .ToDictionary(group => group.Key, group => group.ToArray());
-        var existingRows = await context.Set<DeliveryOutbox>()
-            .AsNoTracking()
-            .Where(x =>
-                x.ScheduleId.HasValue &&
-                scheduleIds.Contains(x.ScheduleId.Value) &&
-                x.DeliveryKey.Contains(":start:"))
-            .Select(x => new BackfillExistingDelivery(x.DeliveryKey, x.Payload))
-            .ToListAsync(ct);
-        var existingByKey = existingRows.ToDictionary(x => x.DeliveryKey, StringComparer.Ordinal);
-        var inserts = new List<ScheduleStartDeliveryInsert>();
-
-        foreach (var schedule in schedules)
-        {
-            if (!participantsByConversation.TryGetValue(schedule.ConversationId, out var scheduleParticipants))
+                state = new DeliveryOutboxMaintenanceState
+                {
+                    Operation = ScheduleStartBackfillOperation,
+                    WindowStartAt = now.AddHours(-24),
+                    UpdatedAt = now
+                };
+                context.Set<DeliveryOutboxMaintenanceState>().Add(state);
+            }
+            else if (state.CompletedAt.HasValue)
             {
-                continue;
+                await transaction.CommitAsync(ct);
+                return false;
             }
 
-            latestMessages.TryGetValue(schedule.ScheduleId, out var scheduleMessageId);
-            var scheduleUrl = $"{_frontendBaseUrl}/messages?conversationId={schedule.ConversationId:D}" +
-                (scheduleMessageId != Guid.Empty ? $"&messageId={scheduleMessageId:D}" : string.Empty);
-            var formattedTime = FormatVietnamTime(schedule.ScheduledAtUtc);
-            var metadata = JsonSerializer.Serialize(new
+            var schedules = await store.LoadScheduleStartBackfillPageAsync(
+                state.WindowStartAt,
+                state.LastScheduledAtUtc,
+                state.LastScheduleId,
+                _options.BackfillPageSize,
+                ct);
+            if (schedules.Count == 0)
             {
-                schemaVersion = 3,
-                scheduleId = schedule.ScheduleId,
-                conversationId = schedule.ConversationId,
-                scheduledAtUtc = schedule.ScheduledAtUtc,
-                agreementStatus = (int)schedule.AgreementStatus
-            }, JsonOptions);
-            var title = "Meeting time reached";
-            var content = $"{schedule.Title} is starting now.";
+                state.CompletedAt = now;
+                state.UpdatedAt = now;
+                await context.SaveChangesAsync(ct);
+                await transaction.CommitAsync(ct);
+                return false;
+            }
 
-            foreach (var participant in scheduleParticipants)
+            var scheduleIds = schedules.Select(x => x.ScheduleId).ToArray();
+            var conversationIds = schedules.Select(x => x.ConversationId).Distinct().ToArray();
+            var messageRows = await context.Set<Message>()
+                .AsNoTracking()
+                .Where(x => x.ScheduleId.HasValue && scheduleIds.Contains(x.ScheduleId.Value))
+                .Select(x => new BackfillMessage(
+                    x.ScheduleId!.Value,
+                    x.MessagesId,
+                    x.ScheduleEventSequence ?? 0))
+                .ToListAsync(ct);
+            var latestMessages = messageRows
+                .GroupBy(x => x.ScheduleId)
+                .ToDictionary(
+                    group => group.Key,
+                    group => group
+                        .OrderByDescending(x => x.EventSequence)
+                        .ThenByDescending(x => x.MessageId)
+                        .First().MessageId);
+            var participants = await context.Set<ConversationParticipant>()
+                .AsNoTracking()
+                .Where(x =>
+                    conversationIds.Contains(x.ConversationsId) &&
+                    x.LeftAt == null &&
+                    x.DeletedAt == null)
+                .Select(x => new BackfillParticipant(
+                    x.ConversationsId,
+                    x.UserId,
+                    x.User.FullName,
+                    x.User.Email))
+                .ToListAsync(ct);
+            var participantsByConversation = participants
+                .GroupBy(x => x.ConversationId)
+                .ToDictionary(group => group.Key, group => group.ToArray());
+            var existingRows = await context.Set<DeliveryOutbox>()
+                .AsNoTracking()
+                .Where(x =>
+                    x.ScheduleId.HasValue &&
+                    scheduleIds.Contains(x.ScheduleId.Value) &&
+                    x.DeliveryKey.Contains(":start:"))
+                .Select(x => new BackfillExistingDelivery(x.DeliveryKey, x.Payload))
+                .ToListAsync(ct);
+            var existingByKey = existingRows.ToDictionary(x => x.DeliveryKey, StringComparer.Ordinal);
+            var inserts = new List<ScheduleStartDeliveryInsert>();
+
+            foreach (var schedule in schedules)
             {
-                var realtimeKey = StartDeliveryKey(
-                    schedule.ScheduleId,
-                    participant.UserId,
-                    DeliveryChannel.NotificationRealtime);
-                var emailKey = StartDeliveryKey(
-                    schedule.ScheduleId,
-                    participant.UserId,
-                    DeliveryChannel.Email);
-                var hasRealtime = existingByKey.TryGetValue(realtimeKey, out var existingRealtime);
-                var hasEmail = existingByKey.TryGetValue(emailKey, out var existingEmail);
-                if (hasRealtime && hasEmail)
+                if (!participantsByConversation.TryGetValue(schedule.ConversationId, out var scheduleParticipants))
                 {
                     continue;
                 }
 
-                var notificationId = TryGetNotificationId(existingRealtime?.Payload) ??
-                    TryGetNotificationId(existingEmail?.Payload) ??
-                    Guid.NewGuid();
-                var email = _emailRenderer.Render(
-                    ScheduleNotificationType.MeetingStarting,
-                    new ScheduleEmailModel(
-                        participant.FullName,
-                        "GigBridge",
-                        false,
-                        schedule.Title,
-                        formattedTime,
-                        schedule.Details,
-                        null,
-                        scheduleUrl,
-                        schedule.MeetingStatus == MeetingProvisioningStatus.Ready
-                            ? schedule.MeetingJoinUri
-                            : null));
-
-                if (!hasRealtime)
+                latestMessages.TryGetValue(schedule.ScheduleId, out var scheduleMessageId);
+                var scheduleUrl = $"{_frontendBaseUrl}/messages?conversationId={schedule.ConversationId:D}" +
+                    (scheduleMessageId != Guid.Empty ? $"&messageId={scheduleMessageId:D}" : string.Empty);
+                var formattedTime = FormatVietnamTime(schedule.ScheduledAtUtc);
+                var metadata = JsonSerializer.Serialize(new
                 {
-                    inserts.Add(CreateStartDelivery(
-                        schedule,
-                        participant,
-                        DeliveryChannel.NotificationRealtime,
-                        realtimeKey,
-                        notificationId,
-                        metadata,
-                        title,
-                        content,
-                        email,
-                        now));
-                }
+                    schemaVersion = 3,
+                    scheduleId = schedule.ScheduleId,
+                    conversationId = schedule.ConversationId,
+                    scheduledAtUtc = schedule.ScheduledAtUtc,
+                    agreementStatus = (int)schedule.AgreementStatus
+                }, JsonOptions);
+                var title = "Meeting time reached";
+                var content = $"{schedule.Title} is starting now.";
 
-                if (!hasEmail)
+                foreach (var participant in scheduleParticipants)
                 {
-                    inserts.Add(CreateStartDelivery(
-                        schedule,
-                        participant,
-                        DeliveryChannel.Email,
-                        emailKey,
-                        notificationId,
-                        metadata,
-                        title,
-                        content,
-                        email,
-                        now));
+                    var realtimeKey = StartDeliveryKey(
+                        schedule.ScheduleId,
+                        participant.UserId,
+                        DeliveryChannel.NotificationRealtime);
+                    var emailKey = StartDeliveryKey(
+                        schedule.ScheduleId,
+                        participant.UserId,
+                        DeliveryChannel.Email);
+                    var hasRealtime = existingByKey.TryGetValue(realtimeKey, out var existingRealtime);
+                    var hasEmail = existingByKey.TryGetValue(emailKey, out var existingEmail);
+                    if (hasRealtime && hasEmail)
+                    {
+                        continue;
+                    }
+
+                    var notificationId = TryGetNotificationId(existingRealtime?.Payload) ??
+                        TryGetNotificationId(existingEmail?.Payload) ??
+                        Guid.NewGuid();
+                    var email = _emailRenderer.Render(
+                        ScheduleNotificationType.MeetingStarting,
+                        new ScheduleEmailModel(
+                            participant.FullName,
+                            "GigBridge",
+                            false,
+                            schedule.Title,
+                            formattedTime,
+                            schedule.Details,
+                            null,
+                            scheduleUrl,
+                            schedule.MeetingStatus == MeetingProvisioningStatus.Ready
+                                ? schedule.MeetingJoinUri
+                                : null));
+
+                    if (!hasRealtime)
+                    {
+                        inserts.Add(CreateStartDelivery(
+                            schedule,
+                            participant,
+                            DeliveryChannel.NotificationRealtime,
+                            realtimeKey,
+                            notificationId,
+                            metadata,
+                            title,
+                            content,
+                            email,
+                            now));
+                    }
+
+                    if (!hasEmail)
+                    {
+                        inserts.Add(CreateStartDelivery(
+                            schedule,
+                            participant,
+                            DeliveryChannel.Email,
+                            emailKey,
+                            notificationId,
+                            metadata,
+                            title,
+                            content,
+                            email,
+                            now));
+                    }
                 }
             }
-        }
 
-        var inserted = await store.InsertScheduleStartDeliveriesAsync(inserts, ct);
-        var last = schedules[^1];
-        state.LastScheduledAtUtc = last.ScheduledAtUtc;
-        state.LastScheduleId = last.ScheduleId;
-        state.UpdatedAt = now;
-        await context.SaveChangesAsync(ct);
-        await transaction.CommitAsync(ct);
-        _logger.LogInformation(
-            "Meeting-start delivery backfill scanned {ScheduleCount} schedules and inserted {InsertedCount} missing deliveries.",
-            schedules.Count,
-            inserted);
-        return true;
+            var inserted = await store.InsertScheduleStartDeliveriesAsync(inserts, ct);
+            var last = schedules[^1];
+            state.LastScheduledAtUtc = last.ScheduledAtUtc;
+            state.LastScheduleId = last.ScheduleId;
+            state.UpdatedAt = now;
+            await context.SaveChangesAsync(ct);
+            await transaction.CommitAsync(ct);
+            _logger.LogInformation(
+                "Meeting-start delivery backfill scanned {ScheduleCount} schedules and inserted {InsertedCount} missing deliveries.",
+                schedules.Count,
+                inserted);
+            return true;
+        }, ct);
     }
 
     internal static IQueryable<DeliveryOutbox> DueDeliveriesForChannel(
@@ -796,9 +962,9 @@ public sealed class DeliveryOutboxService : BackgroundService
             schedule.ScheduledAtUtc);
     }
 
-    private static async Task SendFinalContractEmailAsync(
+    private static async Task<PreparedDelivery> PrepareFinalContractEmailAsync(
         IApplicationDbContext context,
-        IServiceProvider services,
+        DeliveryOutboxLease lease,
         DeliveryOutbox job,
         CancellationToken ct)
     {
@@ -831,22 +997,43 @@ public sealed class DeliveryOutboxService : BackgroundService
         var recipientName = WebUtility.HtmlEncode(payload.RecipientName);
         var contractTitle = WebUtility.HtmlEncode(payload.ContractTitle);
         var code = WebUtility.HtmlEncode(document.DocumentCode);
-        var email = services.GetRequiredService<IEmailService>();
-        await email.SendEmailAsync(new EmailRequest
-        {
-            To = payload.Email,
-            Subject = $"[GigBridge] Hợp đồng {document.DocumentCode} đã hoàn tất",
-            Body = $"<p>Xin chào {recipientName},</p><p>Hợp đồng <strong>{contractTitle}</strong> ({code}) đã được Client và Freelancer ký đầy đủ.</p><p>Bản DOCX hoàn tất được đính kèm email này.</p>",
-            TextBody = $"Xin chào {payload.RecipientName}, hợp đồng {payload.ContractTitle} ({document.DocumentCode}) đã được ký đầy đủ. Bản DOCX hoàn tất được đính kèm email này.",
-            IsHtml = true,
-            IdempotencyKey = job.DeliveryKey,
-            MessageId = $"<{job.DeliveryKey.Replace(':', '.')}@gigbridge.local>",
-            ByteAttachments =
-            [
-                new EmailByteAttachment(document.FileName, document.Content, document.MimeType)
-            ]
-        }, ct);
+        return PreparedDelivery.ForEmail(
+            lease,
+            job.DeliveryKey,
+            job.AttemptCount,
+            new EmailRequest
+            {
+                To = payload.Email,
+                Subject = $"[GigBridge] Hợp đồng {document.DocumentCode} đã hoàn tất",
+                Body = $"<p>Xin chào {recipientName},</p><p>Hợp đồng <strong>{contractTitle}</strong> ({code}) đã được Client và Freelancer ký đầy đủ.</p><p>Bản DOCX hoàn tất được đính kèm email này.</p>",
+                TextBody = $"Xin chào {payload.RecipientName}, hợp đồng {payload.ContractTitle} ({document.DocumentCode}) đã được ký đầy đủ. Bản DOCX hoàn tất được đính kèm email này.",
+                IsHtml = true,
+                IdempotencyKey = job.DeliveryKey,
+                MessageId = $"<{job.DeliveryKey.Replace(':', '.')}@gigbridge.local>",
+                ByteAttachments =
+                [
+                    new EmailByteAttachment(document.FileName, document.Content, document.MimeType)
+                ]
+            });
     }
+
+    private static NotificationDto ToNotificationDto(Notification notification) => new()
+    {
+        Id = notification.NotificationsId,
+        Source = "Personal",
+        NotificationId = notification.NotificationsId,
+        ReadTargetId = notification.NotificationsId,
+        Type = (NotificationType)notification.Type,
+        Title = notification.Title,
+        Content = notification.Content,
+        ReferenceId = notification.ReferenceId,
+        ReferenceType = notification.ReferenceType,
+        Metadata = notification.Metadata,
+        Revision = notification.Revision,
+        IsRead = notification.IsRead ?? false,
+        ReadAt = notification.ReadAt,
+        CreatedAt = notification.CreatedAt
+    };
 
     private static bool IsPermanentFailure(Exception exception) =>
         exception is JsonException or InvalidOperationException;
@@ -902,4 +1089,74 @@ public sealed class DeliveryOutboxService : BackgroundService
         byte[]? Content,
         string? FileName,
         string? MimeType);
+
+    private sealed record PreparedDelivery(
+        DeliveryOutboxLease Lease,
+        string DeliveryKey,
+        int AttemptCount,
+        EmailRequest? Email,
+        Guid? NotificationUserId,
+        NotificationDto? Notification)
+    {
+        public static PreparedDelivery ForEmail(
+            DeliveryOutboxLease lease,
+            string deliveryKey,
+            int attemptCount,
+            EmailRequest email) =>
+            new(lease, deliveryKey, attemptCount, email, null, null);
+
+        public static PreparedDelivery ForNotification(
+            DeliveryOutboxLease lease,
+            string deliveryKey,
+            int attemptCount,
+            Guid userId,
+            NotificationDto notification) =>
+            new(lease, deliveryKey, attemptCount, null, userId, notification);
+    }
+
+    private sealed record PreparedDeliveryBatch(
+        IReadOnlyList<DeliveryOutboxLease> Leases,
+        IReadOnlyList<PreparedDelivery> Deliveries,
+        IReadOnlyList<DeliveryOutcome> PreparationOutcomes)
+    {
+        public static PreparedDeliveryBatch Empty { get; } = new([], [], []);
+    }
+
+    private sealed record DeliveryOutcome(
+        DeliveryOutboxLease Lease,
+        string DeliveryKey,
+        int AttemptCount,
+        bool Succeeded,
+        bool DeadLettered,
+        DateTime? DeliveredAt,
+        DateTime? NextAttemptAt,
+        string? Error,
+        Exception? Exception)
+    {
+        public static DeliveryOutcome Delivered(
+            DeliveryOutboxLease lease,
+            string deliveryKey,
+            int attemptCount,
+            DateTime deliveredAt) =>
+            new(lease, deliveryKey, attemptCount, true, false, deliveredAt, null, null, null);
+
+        public static DeliveryOutcome Failed(
+            DeliveryOutboxLease lease,
+            string deliveryKey,
+            int attemptCount,
+            bool deadLettered,
+            DateTime nextAttemptAt,
+            string error,
+            Exception exception) =>
+            new(
+                lease,
+                deliveryKey,
+                attemptCount,
+                false,
+                deadLettered,
+                null,
+                nextAttemptAt,
+                error,
+                exception);
+    }
 }

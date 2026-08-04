@@ -1,3 +1,5 @@
+using Application.Features.Portfolios.Common.DTOs;
+
 namespace Application.Features.Profiles.FreelancerProfile.UpdateFreelancerProfile.DTOs;
 
 public class UpdateFreelancerProfileDto
@@ -12,12 +14,7 @@ public class UpdateFreelancerProfileDto
     public IReadOnlyCollection<UpdatePortfolioItemDto>? PortfolioItems { get; set; }
 }
 
-public sealed class UpdatePortfolioItemDto
+public sealed class UpdatePortfolioItemDto : PortfolioItemInputDto
 {
     public Guid? PortfolioItemId { get; set; }
-    public string Title { get; set; } = null!;
-    public string? Description { get; set; }
-    public string? ProjectUrl { get; set; }
-    public string? ImageUrl { get; set; }
-    public DateOnly? ProjectDate { get; set; }
 }

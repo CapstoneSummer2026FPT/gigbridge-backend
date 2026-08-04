@@ -7,6 +7,7 @@ using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Features.Chat.Common.Messages.GetConversationMessages.DTOs;
 using Application.Features.Chat.Common.Messages.Send.DTOs;
+using Application.Features.Notifications.Common.DTOs;
 using Domain.Entities;
 using Domain.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -25,6 +26,7 @@ public sealed class ScheduleWorkflowService
     private readonly IChatRealtimeNotifier _chat;
     private readonly IGoogleMeetOAuthService _meetOAuth;
     private readonly IScheduleEmailRenderer _emailRenderer;
+    private readonly INotificationSender? _notificationSender;
     private readonly string _frontendBaseUrl;
 
     public ScheduleWorkflowService(
@@ -33,13 +35,15 @@ public sealed class ScheduleWorkflowService
         IChatRealtimeNotifier chat,
         IGoogleMeetOAuthService meetOAuth,
         IScheduleEmailRenderer emailRenderer,
-        IConfiguration? configuration = null)
+        IConfiguration? configuration = null,
+        INotificationSender? notificationSender = null)
     {
         _context = context;
         _clock = clock;
         _chat = chat;
         _meetOAuth = meetOAuth;
         _emailRenderer = emailRenderer;
+        _notificationSender = notificationSender;
         _frontendBaseUrl = (configuration?["FrontendBaseUrl"] ?? "http://localhost:5173").TrimEnd('/');
     }
 
@@ -449,6 +453,7 @@ public sealed class ScheduleWorkflowService
         List<ConversationParticipant> participants, User actor, ScheduleEventType eventType, string? reason,
         DateTime now, CancellationToken ct, bool sendEmail = true)
     {
+        var realtimeNotifications = new List<(Guid UserId, Notification Notification)>();
         var messageContent = eventType switch
         {
             ScheduleEventType.Created => $"Scheduled: {schedule.Title}",
@@ -536,7 +541,8 @@ public sealed class ScheduleWorkflowService
                 notification.CreatedAt = now;
             }
 
-            AddOutbox(schedule, participant.UserId, notification.NotificationsId, eventType, actor,
+            realtimeNotifications.Add((participant.UserId, notification));
+            AddEmailOutbox(schedule, participant.UserId, notification.NotificationsId, eventType, actor,
                 participant.User, metadata, now, snapshot.ScheduleMessageId, sendEmail);
         }
 
@@ -545,6 +551,15 @@ public sealed class ScheduleWorkflowService
         try { await _context.SaveChangesAsync(ct); }
         catch (DbUpdateConcurrencyException ex) { throw new ConflictException("The schedule was changed by the other participant.", ex); }
         catch (DbUpdateException ex) { throw new ConflictException("A concurrent schedule event was already persisted. Refresh and retry.", ex); }
+
+        if (_notificationSender is not null)
+        {
+            await Task.WhenAll(realtimeNotifications.Select(item =>
+                _notificationSender.SendToUserAsync(
+                    item.UserId,
+                    ToNotificationDto(item.Notification),
+                    ct)));
+        }
 
         // Send realtime events
         MessageResponse? actorMessageResponse = null;
@@ -587,33 +602,52 @@ public sealed class ScheduleWorkflowService
             actorMessageResponse ?? throw new InvalidOperationException("The schedule actor is not an active participant."));
     }
 
-    private void AddOutbox(Schedule schedule, Guid recipientId, Guid notificationId, ScheduleEventType type,
+    private void AddEmailOutbox(Schedule schedule, Guid recipientId, Guid notificationId, ScheduleEventType type,
         User actor, User recipient, string metadata, DateTime now, Guid scheduleMessageId, bool sendEmail)
     {
+        if (!sendEmail)
+        {
+            return;
+        }
+
         var email = _emailRenderer.Render(ResolveNotificationType(type, schedule.AgreementStatus),
             new ScheduleEmailModel(recipient.FullName, actor.FullName, recipient.UserId == actor.UserId,
                 schedule.Title, FormatVietnamTime(EventTime(schedule)), schedule.Details,
                 schedule.CancellationReason, BuildScheduleUrl(schedule.ConversationId, scheduleMessageId)));
         var payload = JsonSerializer.Serialize(new ScheduleDeliveryPayload(notificationId, recipientId, recipient.Email,
             email.Subject, email.HtmlBody, metadata, TextBody: email.TextBody), JsonOptions);
-        var channels = sendEmail
-            ? new[] { DeliveryChannel.NotificationRealtime, DeliveryChannel.Email }
-            : new[] { DeliveryChannel.NotificationRealtime };
-        foreach (var channel in channels)
-            _context.Set<DeliveryOutbox>().Add(new DeliveryOutbox
-            {
-                DeliveryOutboxId = Guid.NewGuid(),
-                DeliveryKey = $"schedule:{schedule.ScheduleId}:{schedule.Version}:{recipientId}:{(int)channel}",
-                ScheduleId = schedule.ScheduleId,
-                RecipientUserId = recipientId,
-                EventSequence = schedule.Version,
-                Channel = (int)channel,
-                Payload = payload,
-                Status = (int)DeliveryOutboxStatus.Pending,
-                NextAttemptAt = now,
-                CreatedAt = now
-            });
+        _context.Set<DeliveryOutbox>().Add(new DeliveryOutbox
+        {
+            DeliveryOutboxId = Guid.NewGuid(),
+            DeliveryKey = $"schedule:{schedule.ScheduleId}:{schedule.Version}:{recipientId}:{(int)DeliveryChannel.Email}",
+            ScheduleId = schedule.ScheduleId,
+            RecipientUserId = recipientId,
+            EventSequence = schedule.Version,
+            Channel = (int)DeliveryChannel.Email,
+            Payload = payload,
+            Status = (int)DeliveryOutboxStatus.Pending,
+            NextAttemptAt = now,
+            CreatedAt = now
+        });
     }
+
+    private static NotificationDto ToNotificationDto(Notification notification) => new()
+    {
+        Id = notification.NotificationsId,
+        Source = "Personal",
+        NotificationId = notification.NotificationsId,
+        ReadTargetId = notification.NotificationsId,
+        Type = (NotificationType)notification.Type,
+        Title = notification.Title,
+        Content = notification.Content,
+        ReferenceId = notification.ReferenceId,
+        ReferenceType = notification.ReferenceType,
+        Metadata = notification.Metadata,
+        Revision = notification.Revision,
+        IsRead = notification.IsRead ?? false,
+        ReadAt = notification.ReadAt,
+        CreatedAt = notification.CreatedAt
+    };
 
     private async Task SyncMeetingStartDeliveries(Schedule schedule,
         List<ConversationParticipant> participants, ScheduleEventResponse eventDto, DateTime now,
