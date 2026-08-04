@@ -44,11 +44,30 @@ public sealed class DeliveryOutboxTimingTests
             due.Select(x => x.DeliveryOutboxId));
     }
 
+    [Fact]
+    public void DueDeliveriesForChannel_UsesIdAsDeterministicTieBreaker()
+    {
+        var now = new DateTime(2026, 7, 29, 12, 0, 0, DateTimeKind.Utc);
+        var firstId = Guid.Parse("00000000-0000-0000-0000-000000000001");
+        var secondId = Guid.Parse("00000000-0000-0000-0000-000000000002");
+        var first = Delivery(DeliveryChannel.Email, now, firstId);
+        var second = Delivery(DeliveryChannel.Email, now, secondId);
+
+        var due = DeliveryOutboxService.DueDeliveriesForChannel(
+                new[] { second, first }.AsQueryable(),
+                DeliveryChannel.Email,
+                now)
+            .ToList();
+
+        Assert.Equal([firstId, secondId], due.Select(x => x.DeliveryOutboxId));
+    }
+
     private static DeliveryOutbox Delivery(
         DeliveryChannel channel,
-        DateTime nextAttemptAt) => new()
+        DateTime nextAttemptAt,
+        Guid? deliveryOutboxId = null) => new()
     {
-        DeliveryOutboxId = Guid.NewGuid(),
+        DeliveryOutboxId = deliveryOutboxId ?? Guid.NewGuid(),
         Channel = (int)channel,
         Status = (int)DeliveryOutboxStatus.Pending,
         NextAttemptAt = nextAttemptAt

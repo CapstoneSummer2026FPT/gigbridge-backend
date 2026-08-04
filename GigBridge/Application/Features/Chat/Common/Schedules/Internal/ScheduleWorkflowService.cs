@@ -633,6 +633,7 @@ public sealed class ScheduleWorkflowService
                          (int)DeliveryOutboxStatus.Processing))
             {
                 job.Status = (int)DeliveryOutboxStatus.Cancelled;
+                job.ClaimToken = null;
                 job.LastError = "Schedule is no longer awaiting its start time.";
             }
             return;
@@ -678,6 +679,7 @@ public sealed class ScheduleWorkflowService
                     job.EventSequence = schedule.Version;
                     job.Payload = payload;
                     job.Status = (int)DeliveryOutboxStatus.Pending;
+                    job.ClaimToken = null;
                     job.AttemptCount = 0;
                     job.NextAttemptAt = schedule.ScheduledAtUtc;
                     job.LastError = null;

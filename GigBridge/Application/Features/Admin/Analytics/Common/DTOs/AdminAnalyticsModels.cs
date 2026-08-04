@@ -64,6 +64,35 @@ public sealed record PremiumFeatureMetric(
     long DistinctUsers,
     decimal? ClickThroughRate);
 
+public sealed record PremiumPromotionSummary(
+    string Type,
+    string Role,
+    long Total,
+    long Active,
+    decimal TokenSpend,
+    long Impressions,
+    long Clicks,
+    decimal ClickThroughRate);
+
+public sealed record PremiumPromotionRecord(
+    Guid PromotionId,
+    string Type,
+    string Role,
+    Guid OwnerUserId,
+    string OwnerName,
+    string OwnerEmail,
+    Guid SubjectId,
+    string SubjectName,
+    string Status,
+    decimal TokenCost,
+    int ImpressionCount,
+    int ClickCount,
+    decimal ClickThroughRate,
+    DateTime StartsAt,
+    DateTime EndsAt,
+    DateTime CreatedAt,
+    IReadOnlyDictionary<string, string?> Attributes);
+
 public sealed record PremiumAnalyticsResponse(
     AnalyticsResponseMeta Meta,
     IReadOnlyList<AnalyticsKpi> Kpis,
@@ -73,7 +102,11 @@ public sealed record PremiumAnalyticsResponse(
     long Renewals,
     long Cancellations,
     long HistoricalPromotionImpressions,
-    long HistoricalPromotionClicks);
+    long HistoricalPromotionClicks,
+    IReadOnlyList<PremiumPromotionSummary> PromotionSummaries,
+    IReadOnlyList<PremiumPromotionRecord> Promotions,
+    long PromotionRecordCount,
+    bool PromotionsTruncated);
 
 public sealed record AdminTransactionFilter(
     AdminAnalyticsRangeRequest Range,

@@ -16,8 +16,10 @@ namespace Infrastructure.BackgroundJobs;
 public class GoogleMeetProvisioningWorker : BackgroundService
 {
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(5);
+    private static readonly TimeSpan MaxIdlePollInterval = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan LeaseDuration = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan LeaseMonitorInterval = TimeSpan.FromSeconds(15);
+    private static readonly TimeSpan MaxIdleLeaseMonitorInterval = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan PendingJobTimeout = TimeSpan.FromMinutes(2);
 
     private readonly IServiceScopeFactory _scopeFactory;
@@ -43,29 +45,42 @@ public class GoogleMeetProvisioningWorker : BackgroundService
         _logger.LogInformation("Google Meet provisioning worker started");
 
         _ = RunLeaseMonitorAsync(stoppingToken);
+        var idleInterval = PollInterval;
 
         while (!stoppingToken.IsCancellationRequested)
         {
+            var processedWork = false;
             try
             {
-                await ProcessPendingJobsAsync(stoppingToken);
-                await Task.Delay(PollInterval, stoppingToken);
+                processedWork = await ProcessPendingJobsAsync(stoppingToken);
             }
-            catch (OperationCanceledException)
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
                 break;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Provisioning worker encountered an error");
-                await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken);
+            }
+
+            var delay = processedWork ? PollInterval : idleInterval;
+            idleInterval = processedWork
+                ? PollInterval
+                : NextIdleInterval(idleInterval, MaxIdlePollInterval);
+            try
+            {
+                await Task.Delay(delay, stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
             }
         }
 
         _logger.LogInformation("Google Meet provisioning worker stopped");
     }
 
-    private async Task ProcessPendingJobsAsync(CancellationToken ct)
+    private async Task<bool> ProcessPendingJobsAsync(CancellationToken ct)
     {
         using var scope = _scopeFactory.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
@@ -77,15 +92,18 @@ public class GoogleMeetProvisioningWorker : BackgroundService
         var dbContext = (DbContext)context;
         var jobIds = new List<Guid>();
 
-        // Claim pending jobs atomically using the DbContext's connection
-        var conn = dbContext.Database.GetDbConnection();
-        await conn.OpenAsync(ct);
-        await using var tx = await conn.BeginTransactionAsync(ct);
-
-        await using var cmd = conn.CreateCommand();
-        cmd.Transaction = tx;
-
-        cmd.CommandText = @"
+        List<GoogleMeetProvisioningJob> claimedJobs;
+        await dbContext.Database.OpenConnectionAsync(ct);
+        try
+        {
+            // Claim pending jobs atomically, then release the physical connection
+            // before calling the external Google APIs.
+            var conn = dbContext.Database.GetDbConnection();
+            await using (var tx = await conn.BeginTransactionAsync(ct))
+            await using (var cmd = conn.CreateCommand())
+            {
+                cmd.Transaction = tx;
+                cmd.CommandText = @"
             UPDATE ""GoogleMeetProvisioningJobs"" j
             SET ""Status"" = @processing,
                 ""StartedAt"" = @now,
@@ -107,41 +125,48 @@ public class GoogleMeetProvisioningWorker : BackgroundService
             )
             RETURNING j.""GoogleMeetProvisioningJobId""";
 
-        var nowParam = cmd.CreateParameter();
-        nowParam.ParameterName = "now";
-        nowParam.Value = now;
-        cmd.Parameters.Add(nowParam);
+                var nowParam = cmd.CreateParameter();
+                nowParam.ParameterName = "now";
+                nowParam.Value = now;
+                cmd.Parameters.Add(nowParam);
 
-        AddIntParam(cmd, "pending", (int)GoogleMeetProvisioningJobStatus.Pending);
-        AddIntParam(cmd, "scheduled", (int)ScheduleStatus.Scheduled);
-        AddIntParam(cmd, "active", (int)ConversationStatus.Active);
-        AddIntParam(cmd, "meetPending", (int)MeetingProvisioningStatus.Pending);
-        AddIntParam(cmd, "processing", (int)GoogleMeetProvisioningJobStatus.Processing);
+                AddIntParam(cmd, "pending", (int)GoogleMeetProvisioningJobStatus.Pending);
+                AddIntParam(cmd, "scheduled", (int)ScheduleStatus.Scheduled);
+                AddIntParam(cmd, "active", (int)ConversationStatus.Active);
+                AddIntParam(cmd, "meetPending", (int)MeetingProvisioningStatus.Pending);
+                AddIntParam(cmd, "processing", (int)GoogleMeetProvisioningJobStatus.Processing);
 
-        try
-        {
-            await using var reader = await cmd.ExecuteReaderAsync(ct);
-            while (await reader.ReadAsync(ct))
-            {
-                jobIds.Add(reader.GetGuid(0));
+                await using (var reader = await cmd.ExecuteReaderAsync(ct))
+                {
+                    while (await reader.ReadAsync(ct))
+                    {
+                        jobIds.Add(reader.GetGuid(0));
+                    }
+                }
+
+                await tx.CommitAsync(ct);
             }
+
+            if (jobIds.Count == 0)
+            {
+                return false;
+            }
+
+            claimedJobs = await context.Set<GoogleMeetProvisioningJob>()
+                .Where(j => jobIds.Contains(j.GoogleMeetProvisioningJobId))
+                .ToListAsync(ct);
         }
         finally
         {
-            await tx.CommitAsync(ct);
+            await dbContext.Database.CloseConnectionAsync();
         }
-
-        if (jobIds.Count == 0)
-            return;
-
-        var claimedJobs = await context.Set<GoogleMeetProvisioningJob>()
-            .Where(j => jobIds.Contains(j.GoogleMeetProvisioningJobId))
-            .ToListAsync(ct);
 
         foreach (var job in claimedJobs)
         {
             await ProcessJobAsync(job, dbContext, meetOAuth, meetApi, chat, ct);
         }
+
+        return claimedJobs.Count > 0;
     }
 
     private async Task ProcessJobAsync(
@@ -408,22 +433,28 @@ public class GoogleMeetProvisioningWorker : BackgroundService
 
     private async Task RunLeaseMonitorAsync(CancellationToken ct)
     {
+        var idleInterval = LeaseMonitorInterval;
         while (!ct.IsCancellationRequested)
         {
+            var processedWork = false;
             try
             {
-                await Task.Delay(LeaseMonitorInterval, ct);
-                await ExpireStaleLeasesAsync(ct);
+                await Task.Delay(idleInterval, ct);
+                processedWork = await ExpireStaleLeasesAsync(ct);
             }
             catch (OperationCanceledException) { break; }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Lease monitor encountered an error");
             }
+
+            idleInterval = processedWork
+                ? LeaseMonitorInterval
+                : NextIdleInterval(idleInterval, MaxIdleLeaseMonitorInterval);
         }
     }
 
-    private async Task ExpireStaleLeasesAsync(CancellationToken ct)
+    private async Task<bool> ExpireStaleLeasesAsync(CancellationToken ct)
     {
         using var scope = _scopeFactory.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
@@ -439,7 +470,7 @@ public class GoogleMeetProvisioningWorker : BackgroundService
                 j.CreatedAt < now - PendingJobTimeout)
             .Select(j => j.GoogleMeetProvisioningJobId)
             .ToListAsync(ct);
-        if (processingCandidateIds.Count == 0 && pendingCandidateIds.Count == 0) return;
+        if (processingCandidateIds.Count == 0 && pendingCandidateIds.Count == 0) return false;
 
         var expiredProcessingCount = await context.Set<GoogleMeetProvisioningJob>()
             .Where(j => processingCandidateIds.Contains(j.GoogleMeetProvisioningJobId) &&
@@ -500,7 +531,12 @@ public class GoogleMeetProvisioningWorker : BackgroundService
                 expiredProcessingCount,
                 expiredPendingCount);
         }
+
+        return expiredCount > 0;
     }
+
+    private static TimeSpan NextIdleInterval(TimeSpan current, TimeSpan maximum) =>
+        TimeSpan.FromTicks(Math.Min(current.Ticks * 2, maximum.Ticks));
 
     private static string FormatVietnamTime(DateTime utc)
     {

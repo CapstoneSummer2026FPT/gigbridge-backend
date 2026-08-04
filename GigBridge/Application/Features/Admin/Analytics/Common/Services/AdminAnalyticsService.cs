@@ -13,6 +13,8 @@ namespace Application.Features.Admin.Analytics.Common.Services;
 
 public sealed class AdminAnalyticsService : IAdminAnalyticsService
 {
+    private const int PremiumPromotionRecordLimit = 200;
+
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _clock;
 
@@ -99,6 +101,7 @@ public sealed class AdminAnalyticsService : IAdminAnalyticsService
         CancellationToken cancellationToken)
     {
         var range = AdminAnalyticsRangeResolver.Resolve(request, _clock.UtcNow);
+        var now = _clock.UtcNow;
         var subscriptionVnd = await _context.Set<PlatformRevenueEvent>().AsNoTracking()
             .Where(x => x.Source == PlatformRevenueSource.SubscriptionPurchase &&
                         x.OccurredAt >= range.CurrentFromUtc && x.OccurredAt < range.CurrentToUtc)
@@ -168,6 +171,72 @@ public sealed class AdminAnalyticsService : IAdminAnalyticsService
         var historicalProfileImpressions = await _context.Set<FreelancerProfilePromotion>().AsNoTracking().SumAsync(x => (long?)x.ImpressionCount, cancellationToken) ?? 0;
         var historicalProfileClicks = await _context.Set<FreelancerProfilePromotion>().AsNoTracking().SumAsync(x => (long?)x.ClickCount, cancellationToken) ?? 0;
 
+        var jobPromotionQuery = _context.Set<JobPostPromotion>().AsNoTracking()
+            .Where(x =>
+                x.FeaturedFrom < range.CurrentToUtc && x.FeaturedUntil >= range.CurrentFromUtc ||
+                x.FeaturedFrom <= now && x.FeaturedUntil > now);
+        var profilePromotionQuery = _context.Set<FreelancerProfilePromotion>().AsNoTracking()
+            .Where(x =>
+                x.StartTime < range.CurrentToUtc && x.EndTime >= range.CurrentFromUtc ||
+                x.Status == PromotionStatus.Active && x.StartTime <= now && x.EndTime > now);
+        var unlinkedActiveJobQuery = _context.Set<JobPost>().AsNoTracking()
+            .Where(x => x.IsFeatured && x.FeaturedFrom <= now && x.FeaturedUntil > now &&
+                !_context.Set<JobPostPromotion>().Any(promotion =>
+                    promotion.JobPostId == x.JobPostsId &&
+                    promotion.FeaturedFrom <= now && promotion.FeaturedUntil > now));
+        var jobPromotionCount = await jobPromotionQuery.LongCountAsync(cancellationToken);
+        var profilePromotionCount = await profilePromotionQuery.LongCountAsync(cancellationToken);
+        var unlinkedActiveJobCount = await unlinkedActiveJobQuery.LongCountAsync(cancellationToken);
+        var jobPromotionActiveCount = await jobPromotionQuery.LongCountAsync(
+            x => x.FeaturedFrom <= now && x.FeaturedUntil > now,
+            cancellationToken);
+        var profilePromotionActiveCount = await profilePromotionQuery.LongCountAsync(
+            x => x.Status == PromotionStatus.Active && x.StartTime <= now && x.EndTime > now,
+            cancellationToken);
+        var jobPromotionSpend = await jobPromotionQuery.SumAsync(x => (decimal?)x.TokenCost, cancellationToken) ?? 0m;
+        var profilePromotionSpend = await profilePromotionQuery.SumAsync(x => (decimal?)x.TokenCost, cancellationToken) ?? 0m;
+        var jobPromotionPeriodImpressions = await jobPromotionQuery.SumAsync(x => (long?)x.ImpressionCount, cancellationToken) ?? 0;
+        var profilePromotionPeriodImpressions = await profilePromotionQuery.SumAsync(x => (long?)x.ImpressionCount, cancellationToken) ?? 0;
+        var jobPromotionPeriodClicks = await jobPromotionQuery.SumAsync(x => (long?)x.ClickCount, cancellationToken) ?? 0;
+        var profilePromotionPeriodClicks = await profilePromotionQuery.SumAsync(x => (long?)x.ClickCount, cancellationToken) ?? 0;
+        var jobPromotionRows = await jobPromotionQuery
+            .Include(x => x.ClientUser)
+            .Include(x => x.JobPost)
+            .OrderByDescending(x => x.FeaturedFrom <= now && x.FeaturedUntil > now)
+            .ThenByDescending(x => x.CreatedAt)
+            .Take(PremiumPromotionRecordLimit)
+            .ToListAsync(cancellationToken);
+        var profilePromotionRows = await profilePromotionQuery
+            .Include(x => x.FreelancerProfile)
+            .ThenInclude(x => x.User)
+            .OrderByDescending(x => x.Status == PromotionStatus.Active && x.StartTime <= now && x.EndTime > now)
+            .ThenByDescending(x => x.CreatedAt)
+            .Take(PremiumPromotionRecordLimit)
+            .ToListAsync(cancellationToken);
+        var unlinkedActiveJobRows = await unlinkedActiveJobQuery
+            .Include(x => x.ClientProfiles)
+            .ThenInclude(x => x.User)
+            .OrderByDescending(x => x.FeaturedFrom)
+            .Take(PremiumPromotionRecordLimit)
+            .ToListAsync(cancellationToken);
+        var promotionRecords = jobPromotionRows.Select(x => MapJobPromotion(x, now))
+            .Concat(profilePromotionRows.Select(MapProfilePromotion))
+            .Concat(unlinkedActiveJobRows.Select(MapUnlinkedActiveJobPromotion))
+            .OrderByDescending(x => string.Equals(x.Status, "Active", StringComparison.Ordinal))
+            .ThenByDescending(x => x.CreatedAt)
+            .Take(PremiumPromotionRecordLimit)
+            .ToList();
+        var promotionSummaries = new List<PremiumPromotionSummary>
+        {
+            BuildPromotionSummary(
+                "Job promotion", "Client", jobPromotionCount + unlinkedActiveJobCount,
+                jobPromotionActiveCount + unlinkedActiveJobCount,
+                jobPromotionSpend, jobPromotionPeriodImpressions, jobPromotionPeriodClicks),
+            BuildPromotionSummary(
+                "Profile promotion", "Freelancer", profilePromotionCount, profilePromotionActiveCount,
+                profilePromotionSpend, profilePromotionPeriodImpressions, profilePromotionPeriodClicks)
+        };
+
         var kpis = new List<AnalyticsKpi>
         {
             Kpi("premiumRevenue", subscriptionVnd + promotionRevenueVnd,
@@ -180,7 +249,124 @@ public sealed class AdminAnalyticsService : IAdminAnalyticsService
             await BuildMeta(range, cancellationToken), kpis, planRows, featureRows,
             subscriptions.LongCount(), subscriptions.LongCount(x => earlier.Contains(x.UserId)),
             cancellations, historicalJobImpressions + historicalProfileImpressions,
-            historicalJobClicks + historicalProfileClicks);
+            historicalJobClicks + historicalProfileClicks, promotionSummaries, promotionRecords,
+            jobPromotionCount + profilePromotionCount + unlinkedActiveJobCount,
+            jobPromotionCount + profilePromotionCount + unlinkedActiveJobCount > PremiumPromotionRecordLimit);
+    }
+
+    private static PremiumPromotionRecord MapJobPromotion(JobPostPromotion promotion, DateTime now)
+    {
+        var ctr = promotion.ImpressionCount == 0
+            ? 0m
+            : promotion.ClickCount * 100m / promotion.ImpressionCount;
+        var status = promotion.FeaturedFrom > now
+            ? "Scheduled"
+            : promotion.FeaturedUntil > now ? "Active" : "Expired";
+        return new PremiumPromotionRecord(
+            promotion.JobPostPromotionsId,
+            "Job promotion",
+            "Client",
+            promotion.ClientUserId,
+            promotion.ClientUser.FullName,
+            promotion.ClientUser.Email,
+            promotion.JobPostId,
+            promotion.JobPost.Title,
+            status,
+            promotion.TokenCost,
+            promotion.ImpressionCount,
+            promotion.ClickCount,
+            ctr,
+            promotion.FeaturedFrom,
+            promotion.FeaturedUntil,
+            promotion.CreatedAt,
+            new Dictionary<string, string?>
+            {
+                ["Promotion title"] = promotion.PromotionTitle,
+                ["Description"] = promotion.PromotionDescription,
+                ["Image URL"] = promotion.ImageUrl
+            });
+    }
+
+    private static PremiumPromotionRecord MapProfilePromotion(FreelancerProfilePromotion promotion)
+    {
+        var ctr = promotion.ImpressionCount == 0
+            ? 0m
+            : promotion.ClickCount * 100m / promotion.ImpressionCount;
+        return new PremiumPromotionRecord(
+            promotion.FreelancerProfilePromotionsId,
+            "Profile promotion",
+            "Freelancer",
+            promotion.FreelancerProfile.UserId,
+            promotion.FreelancerProfile.User.FullName,
+            promotion.FreelancerProfile.User.Email,
+            promotion.FreelancerProfileId,
+            promotion.DisplayName,
+            promotion.Status.ToString(),
+            promotion.TokenCost,
+            promotion.ImpressionCount,
+            promotion.ClickCount,
+            ctr,
+            promotion.StartTime,
+            promotion.EndTime,
+            promotion.CreatedAt,
+            new Dictionary<string, string?>
+            {
+                ["Package"] = promotion.PackageName,
+                ["Duration"] = $"{promotion.DurationDays.ToString(CultureInfo.InvariantCulture)} days",
+                ["Boost weight"] = promotion.BoostWeight.ToString(CultureInfo.InvariantCulture),
+                ["Queue position"] = promotion.QueuePosition.ToString(CultureInfo.InvariantCulture),
+                ["Target clicks"] = promotion.TargetClickCount.ToString(CultureInfo.InvariantCulture),
+                ["Quote"] = promotion.ShowQuote ? promotion.Quote : "Hidden",
+                ["Job title"] = promotion.ShowJobTitle ? promotion.JobTitle : "Hidden",
+                ["Photo URL"] = promotion.PhotoUrl
+            });
+    }
+
+    private static PremiumPromotionRecord MapUnlinkedActiveJobPromotion(JobPost jobPost)
+    {
+        return new PremiumPromotionRecord(
+            jobPost.JobPostsId,
+            "Job promotion (unlinked)",
+            "Client",
+            jobPost.ClientProfiles.UserId,
+            jobPost.ClientProfiles.User.FullName,
+            jobPost.ClientProfiles.User.Email,
+            jobPost.JobPostsId,
+            jobPost.Title,
+            "Active",
+            0m,
+            0,
+            0,
+            0m,
+            jobPost.FeaturedFrom!.Value,
+            jobPost.FeaturedUntil!.Value,
+            jobPost.CreatedAt,
+            new Dictionary<string, string?>
+            {
+                ["Data source"] = "Job post featured state",
+                ["Audit warning"] = "The job is actively featured but has no matching active promotion record.",
+                ["Job status"] = jobPost.Status.ToString(CultureInfo.InvariantCulture)
+            });
+    }
+
+    private static PremiumPromotionSummary BuildPromotionSummary(
+        string type,
+        string role,
+        long total,
+        long active,
+        decimal tokenSpend,
+        long impressions,
+        long clicks)
+    {
+        return new PremiumPromotionSummary(
+            type,
+            role,
+            total,
+            active,
+            tokenSpend,
+            impressions,
+            clicks,
+            impressions == 0 ? 0m : clicks * 100m / impressions);
     }
 
     public async Task<AdminTransactionPage> GetTransactionsAsync(
