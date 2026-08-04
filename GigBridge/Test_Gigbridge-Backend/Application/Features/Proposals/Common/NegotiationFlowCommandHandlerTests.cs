@@ -320,6 +320,44 @@ public class NegotiationFlowCommandHandlerTests
     }
 
     [Fact]
+    public async Task RespondFinalOffer_AcceptChargesOnePercentFreelancerServiceFee()
+    {
+        var fixture = new NegotiationFixture();
+        fixture.AddConversationWithParticipants();
+        fixture.AddOfferWithSnapshot(1500m, 600m, 900m);
+
+        var handler = new RespondFinalOfferCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopChatRealtimeNotifier());
+
+        var result = await handler.Handle(
+            new RespondFinalOfferCommand(
+                fixture.FreelancerUserId,
+                new RespondFinalOfferRequest(
+                    fixture.OfferId,
+                    FinalOfferResponse.Accept,
+                    null)),
+            CancellationToken.None);
+
+        Assert.NotNull(result.ContractId);
+
+        // 1% of 1500 = 15 deducted from the freelancer's spendable balance.
+        var freelancerWallet = fixture.Context.Set<UserWallet>()
+            .Single(wallet => wallet.UserId == fixture.FreelancerUserId);
+        Assert.Equal(85m, freelancerWallet.AvailableTokens);
+
+        // The deduction is recorded as a SERVICE-FEE-ACCEPT- wallet transaction so it
+        // shows up in the freelancer's transaction history.
+        var feeTransaction = fixture.Context.Set<WalletTransaction>()
+            .Single(transaction =>
+                transaction.IdempotencyKey.StartsWith("SERVICE-FEE-ACCEPT-", StringComparison.Ordinal));
+        Assert.Equal(15m, feeTransaction.TokenAmount);
+        Assert.Equal(freelancerWallet.UserId, feeTransaction.UserId);
+        Assert.Equal(result.ContractId, feeTransaction.ContractsId);
+    }
+
+    [Fact]
     public async Task RespondFinalOffer_AcceptRejectsWhenJobPostIsClosed()
     {
         var fixture = new NegotiationFixture();
