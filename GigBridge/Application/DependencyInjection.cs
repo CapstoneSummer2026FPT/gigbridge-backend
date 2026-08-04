@@ -24,6 +24,37 @@ public static class DependencyInjection
 
     public static IServiceCollection AddApplicationServices(this IServiceCollection services, IConfiguration configuration)
     {
+        services.Configure<DeliveryOutboxOptions>(options =>
+        {
+            var section = configuration.GetSection(DeliveryOutboxOptions.SectionName);
+            options.RealtimePollMilliseconds = Math.Clamp(
+                ReadInt(section["RealtimePollMilliseconds"], options.RealtimePollMilliseconds), 50, 1_000);
+            options.EmailPollMilliseconds = Math.Clamp(
+                ReadInt(section["EmailPollMilliseconds"], options.EmailPollMilliseconds), 250, 60_000);
+            options.BatchSize = Math.Clamp(
+                ReadInt(section["BatchSize"], options.BatchSize), 1, 100);
+            options.RealtimeMaxConcurrency = Math.Clamp(
+                ReadInt(section["RealtimeMaxConcurrency"], options.RealtimeMaxConcurrency), 1, 32);
+            options.EmailMaxConcurrency = Math.Clamp(
+                ReadInt(section["EmailMaxConcurrency"], options.EmailMaxConcurrency), 1, 16);
+            options.LeaseMinutes = Math.Clamp(
+                ReadInt(section["LeaseMinutes"], options.LeaseMinutes), 1, 120);
+            options.LeaseRecoveryIntervalSeconds = Math.Clamp(
+                ReadInt(section["LeaseRecoveryIntervalSeconds"], options.LeaseRecoveryIntervalSeconds), 10, 600);
+            options.BackfillPageSize = Math.Clamp(
+                ReadInt(section["BackfillPageSize"], options.BackfillPageSize), 1, 200);
+            options.DeliveredPayloadRetentionDays = Math.Clamp(
+                ReadInt(section["DeliveredPayloadRetentionDays"], options.DeliveredPayloadRetentionDays), 1, 365);
+            options.RetentionIntervalMinutes = Math.Clamp(
+                ReadInt(section["RetentionIntervalMinutes"], options.RetentionIntervalMinutes), 5, 1_440);
+            options.RetentionBatchSize = Math.Clamp(
+                ReadInt(section["RetentionBatchSize"], options.RetentionBatchSize), 100, 10_000);
+            if (bool.TryParse(section["ScheduleStartBackfillEnabled"], out var backfillEnabled))
+            {
+                options.ScheduleStartBackfillEnabled = backfillEnabled;
+            }
+        });
+
         services.Configure<WalletWithdrawalOptions>(options =>
         {
             var section = configuration.GetSection(WalletWithdrawalOptions.SectionName);

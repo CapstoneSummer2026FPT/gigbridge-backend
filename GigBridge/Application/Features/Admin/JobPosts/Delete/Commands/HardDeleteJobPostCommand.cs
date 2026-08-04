@@ -25,14 +25,6 @@ public sealed class HardDeleteJobPostCommandHandler :
         HardDeleteJobPostCommand request,
         CancellationToken cancellationToken)
     {
-        var admin = await _context.Set<User>()
-            .FirstOrDefaultAsync(user => user.UserId == request.AdminUserId, cancellationToken);
-
-        if (admin is null || admin.Role != (int)UserRole.Admin)
-        {
-            throw new ForbiddenAccessException("Only admins can perform a hard delete on job posts.");
-        }
-
         var jobPost = await _context.Set<JobPost>()
             .Include(jp => jp.JobPostAttachments)
             .Include(jp => jp.JobPostSkills)
@@ -41,10 +33,25 @@ public sealed class HardDeleteJobPostCommandHandler :
             .Include(jp => jp.JobInvitations)
             .Include(jp => jp.Proposals)
                 .ThenInclude(p => p.ProposalAnswers)
-            .FirstOrDefaultAsync(jp => jp.JobPostsId == request.JobPostId, cancellationToken);
+            .AsSplitQuery()
+            .Where(jp => jp.JobPostsId == request.JobPostId)
+            .Where(_ => _context.Set<User>().Any(user =>
+                user.UserId == request.AdminUserId && user.Role == (int)UserRole.Admin))
+            .FirstOrDefaultAsync(cancellationToken);
 
         if (jobPost is null)
         {
+            var isAdmin = await _context.Set<User>()
+                .AsNoTracking()
+                .AnyAsync(user =>
+                    user.UserId == request.AdminUserId && user.Role == (int)UserRole.Admin,
+                    cancellationToken);
+
+            if (!isAdmin)
+            {
+                throw new ForbiddenAccessException("Only admins can perform a hard delete on job posts.");
+            }
+
             throw new NotFoundException("Job post does not exist.");
         }
 
@@ -73,12 +80,14 @@ public sealed class HardDeleteJobPostCommandHandler :
             .Where(c => c.JobPostsId == request.JobPostId)
             .ToListAsync(cancellationToken);
 
-        foreach (var contract in contracts)
+        var contractIds = contracts.Select(contract => contract.ContractsId).ToList();
+
+        if (contractIds.Count > 0)
         {
             // Milestone attachments
             var milestones = await _context.Set<Milestone>()
                 .Include(m => m.MilestoneAttachments)
-                .Where(m => m.ContractsId == contract.ContractsId)
+                .Where(m => contractIds.Contains(m.ContractsId))
                 .ToListAsync(cancellationToken);
 
             foreach (var m in milestones)
@@ -89,20 +98,28 @@ public sealed class HardDeleteJobPostCommandHandler :
             // Escrow transactions and contract escrows
             var contractEscrows = await _context.Set<ContractEscrow>()
                 .Include(ce => ce.EscrowTransactions)
-                .Where(ce => ce.ContractsId == contract.ContractsId)
+                .Where(ce => contractIds.Contains(ce.ContractsId))
                 .ToListAsync(cancellationToken);
 
-            foreach (var ce in contractEscrows)
+            var contractEscrowIds = contractEscrows
+                .Select(contractEscrow => contractEscrow.ContractEscrowId)
+                .ToList();
+
+            if (contractEscrowIds.Count > 0)
             {
                 // Nullify references in wallet transactions first
                 var walletTxnsEscrow = await _context.Set<WalletTransaction>()
-                    .Where(wt => wt.ContractEscrowId == ce.ContractEscrowId)
+                    .Where(wt => wt.ContractEscrowId.HasValue &&
+                        contractEscrowIds.Contains(wt.ContractEscrowId.Value))
                     .ToListAsync(cancellationToken);
                 foreach (var wt in walletTxnsEscrow)
                 {
                     wt.ContractEscrowId = null;
                 }
+            }
 
+            foreach (var ce in contractEscrows)
+            {
                 _context.Set<EscrowTransaction>().RemoveRange(ce.EscrowTransactions);
             }
             _context.Set<ContractEscrow>().RemoveRange(contractEscrows);
@@ -110,7 +127,7 @@ public sealed class HardDeleteJobPostCommandHandler :
             // Disputes and dispute evidences
             var disputes = await _context.Set<Dispute>()
                 .Include(d => d.DisputeEvidences)
-                .Where(d => d.ContractsId == contract.ContractsId)
+                .Where(d => contractIds.Contains(d.ContractsId))
                 .ToListAsync(cancellationToken);
 
             foreach (var d in disputes)
@@ -121,19 +138,19 @@ public sealed class HardDeleteJobPostCommandHandler :
 
             // Contract product handoffs
             var handoffs = await _context.Set<ContractProductHandoff>()
-                .Where(h => h.ContractsId == contract.ContractsId)
+                .Where(h => contractIds.Contains(h.ContractsId))
                 .ToListAsync(cancellationToken);
             _context.Set<ContractProductHandoff>().RemoveRange(handoffs);
 
             // Reviews
             var reviews = await _context.Set<Review>()
-                .Where(r => r.ContractsId == contract.ContractsId)
+                .Where(r => contractIds.Contains(r.ContractsId))
                 .ToListAsync(cancellationToken);
             _context.Set<Review>().RemoveRange(reviews);
 
             // Nullify or clean up wallet transactions referencing the contract
             var walletTxnsContract = await _context.Set<WalletTransaction>()
-                .Where(wt => wt.ContractsId == contract.ContractsId)
+                .Where(wt => wt.ContractsId.HasValue && contractIds.Contains(wt.ContractsId.Value))
                 .ToListAsync(cancellationToken);
             foreach (var wt in walletTxnsContract)
             {
@@ -153,6 +170,7 @@ public sealed class HardDeleteJobPostCommandHandler :
             .Include(c => c.Schedules)
                 .ThenInclude(s => s.MeetProvisioningJobs)
             .Where(c => c.JobPostsId == request.JobPostId)
+            .AsSplitQuery()
             .ToListAsync(cancellationToken);
 
         // Break circular last message ID reference first

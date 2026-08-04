@@ -230,6 +230,18 @@ internal sealed class GoogleMeetOAuthService : IGoogleMeetOAuthService
         if (connection is null)
             return new GoogleMeetConnectionStatusResponse(false, null, null, false);
 
+        if (connection.Status == GoogleMeetConnectionStatus.Active)
+        {
+            try
+            {
+                _ = UnprotectString(connection.EncryptedRefreshToken);
+            }
+            catch (Exception ex) when (ex is CryptographicException or FormatException)
+            {
+                await MarkReconnectRequiredAsync(connection, userId, ex, cancellationToken);
+            }
+        }
+
         return new GoogleMeetConnectionStatusResponse(
             connection.Status == GoogleMeetConnectionStatus.Active,
             connection.GoogleEmail,
@@ -280,10 +292,19 @@ internal sealed class GoogleMeetOAuthService : IGoogleMeetOAuthService
         if (connection is null || connection.Status != GoogleMeetConnectionStatus.Active)
             return null;
 
+        string refreshToken;
         try
         {
-            var refreshToken = UnprotectString(connection.EncryptedRefreshToken);
+            refreshToken = UnprotectString(connection.EncryptedRefreshToken);
+        }
+        catch (Exception ex) when (ex is CryptographicException or FormatException)
+        {
+            await MarkReconnectRequiredAsync(connection, userId, ex, cancellationToken);
+            return null;
+        }
 
+        try
+        {
             var tokenResponse = await _httpClient.PostAsync(
                 _options.TokenEndpoint,
                 new FormUrlEncodedContent(new Dictionary<string, string>
@@ -343,6 +364,23 @@ internal sealed class GoogleMeetOAuthService : IGoogleMeetOAuthService
     private string UnprotectString(string protectedText)
     {
         return Encoding.UTF8.GetString(_protector.Unprotect(Convert.FromBase64String(protectedText)));
+    }
+
+    private async Task MarkReconnectRequiredAsync(
+        GoogleMeetConnection connection,
+        Guid userId,
+        Exception exception,
+        CancellationToken cancellationToken)
+    {
+        connection.Status = GoogleMeetConnectionStatus.ReconnectRequired;
+        connection.LastFailureCode = "data_protection_key_missing";
+        connection.Version++;
+        await _context.SaveChangesAsync(cancellationToken);
+
+        _logger.LogWarning(
+            exception,
+            "Stored Google Meet token could not be decrypted for user {UserId}; reconnection is required",
+            userId);
     }
 
     private record GoogleTokenExchangeResponse(

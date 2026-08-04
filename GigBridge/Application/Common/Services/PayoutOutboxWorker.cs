@@ -14,6 +14,8 @@ namespace Application.Common.Services;
 
 public sealed class PayoutOutboxWorker : BackgroundService
 {
+    private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(20);
+    private static readonly TimeSpan MaxIdlePollInterval = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan[] RetryDelays =
     [
         TimeSpan.FromMinutes(1),
@@ -39,35 +41,53 @@ public sealed class PayoutOutboxWorker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        var idleInterval = PollInterval;
         while (!stoppingToken.IsCancellationRequested)
         {
+            var processedWork = false;
             try
             {
-                await ProcessBatchAsync(stoppingToken);
-                await SyncStaleWithdrawalsAsync(stoppingToken);
+                var processedOutbox = await ProcessBatchAsync(stoppingToken);
+                var syncedWithdrawals = await SyncStaleWithdrawalsAsync(stoppingToken);
+                processedWork = processedOutbox || syncedWithdrawals;
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 _logger.LogError(ex, "Payout outbox batch failed.");
             }
 
-            await Task.Delay(TimeSpan.FromSeconds(20), stoppingToken);
+            var delay = processedWork ? PollInterval : idleInterval;
+            idleInterval = processedWork
+                ? PollInterval
+                : NextIdleInterval(idleInterval, MaxIdlePollInterval);
+            try
+            {
+                await Task.Delay(delay, stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
         }
     }
 
-    internal async Task ProcessBatchAsync(CancellationToken cancellationToken)
+    internal async Task<bool> ProcessBatchAsync(CancellationToken cancellationToken)
     {
-        if (!_options.Enabled) return;
+        if (!_options.Enabled) return false;
 
         using var scope = _scopeFactory.CreateScope();
         var provider = scope.ServiceProvider.GetRequiredService<IPayoutProvider>();
-        if (!(await provider.CheckAvailabilityAsync(cancellationToken)).IsAvailable) return;
+        if (!(await provider.CheckAvailabilityAsync(cancellationToken)).IsAvailable) return false;
 
         var context = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
         var now = DateTime.UtcNow;
         var timeout = now.AddMinutes(_options.ProcessingTimeoutMinutes);
 
-        await context.Set<PayoutOutbox>()
+        var recovered = await context.Set<PayoutOutbox>()
             .Where(outbox =>
                 outbox.Status == (int)PayoutOutboxStatus.Processing &&
                 outbox.NextAttemptAt <= now)
@@ -87,6 +107,7 @@ public sealed class PayoutOutboxWorker : BackgroundService
             .Take(Math.Clamp(_options.OutboxBatchSize, 1, 100))
             .ToListAsync(cancellationToken);
 
+        var processed = false;
         foreach (var outboxId in candidateIds)
         {
             var claimed = await context.Set<PayoutOutbox>()
@@ -105,17 +126,20 @@ public sealed class PayoutOutboxWorker : BackgroundService
             }
 
             await ProcessOutboxAsync(scope.ServiceProvider, outboxId, cancellationToken);
+            processed = true;
         }
+
+        return recovered > 0 || processed;
     }
 
-    internal async Task SyncStaleWithdrawalsAsync(CancellationToken cancellationToken)
+    internal async Task<bool> SyncStaleWithdrawalsAsync(CancellationToken cancellationToken)
     {
-        if (!_options.Enabled) return;
+        if (!_options.Enabled) return false;
 
         using var scope = _scopeFactory.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
         var provider = scope.ServiceProvider.GetRequiredService<IPayoutProvider>();
-        if (!(await provider.CheckAvailabilityAsync(cancellationToken)).IsAvailable) return;
+        if (!(await provider.CheckAvailabilityAsync(cancellationToken)).IsAvailable) return false;
 
         var dateTimeService = scope.ServiceProvider.GetRequiredService<IDateTimeService>();
         var now = dateTimeService.UtcNow;
@@ -131,6 +155,7 @@ public sealed class PayoutOutboxWorker : BackgroundService
             .Take(Math.Clamp(_options.OutboxBatchSize, 1, 100))
             .ToListAsync(cancellationToken);
 
+        var processed = false;
         foreach (var withdrawal in withdrawals)
         {
             var delay = GetReconciliationDelay(withdrawal.CreatedAt, now);
@@ -139,6 +164,7 @@ public sealed class PayoutOutboxWorker : BackgroundService
                 continue;
             }
 
+            processed = true;
             try
             {
                 var status = await provider.GetPayoutStatusAsync(
@@ -170,6 +196,8 @@ public sealed class PayoutOutboxWorker : BackgroundService
                     cancellationToken);
             }
         }
+
+        return processed;
     }
 
     private TimeSpan GetReconciliationDelay(DateTime createdAt, DateTime now)
@@ -184,6 +212,9 @@ public sealed class PayoutOutboxWorker : BackgroundService
     }
 
     private static TimeSpan Max(TimeSpan left, TimeSpan right) => left >= right ? left : right;
+
+    private static TimeSpan NextIdleInterval(TimeSpan current, TimeSpan maximum) =>
+        TimeSpan.FromTicks(Math.Min(current.Ticks * 2, maximum.Ticks));
 
     private async Task ProcessOutboxAsync(
         IServiceProvider serviceProvider,

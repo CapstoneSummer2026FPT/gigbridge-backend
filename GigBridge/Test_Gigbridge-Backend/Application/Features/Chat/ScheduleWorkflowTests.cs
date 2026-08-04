@@ -8,6 +8,7 @@ using Domain.Enums;
 using Infrastructure.Persistence;
 using Infrastructure.Services.Email;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Test_Gigbridge_Backend.TestSupport;
 
 namespace Test_Gigbridge_Backend.Application.Features.Chat;
@@ -336,19 +337,42 @@ public class ScheduleWorkflowTests
             new CreateScheduleRequest(fixture.ConversationId, "Review", null, new DateTimeOffset(now.AddDays(3)))), default);
         var accepted = await handler.Handle(new AcceptScheduleCommand(fixture.FreelancerId,
             created.Schedule.ScheduleId, new ScheduleVersionRequest(created.Schedule.Version)), default);
+        var startDeliveries = await db.DeliveryOutboxes
+            .Where(x => x.ScheduleId == created.Schedule.ScheduleId && x.DeliveryKey.Contains(":start:"))
+            .ToListAsync();
+        foreach (var delivery in startDeliveries)
+        {
+            delivery.Status = (int)DeliveryOutboxStatus.Processing;
+            delivery.ClaimToken = Guid.NewGuid();
+        }
+        await db.SaveChangesAsync();
+
         var newStart = now.AddDays(4);
         var edited = await handler.Handle(new UpdateScheduleCommand(fixture.ClientId, created.Schedule.ScheduleId,
             new UpdateScheduleRequest("Review", null, new DateTimeOffset(newStart), accepted.Schedule.Version)), default);
 
-        var startDeliveries = await db.DeliveryOutboxes
-            .Where(x => x.ScheduleId == created.Schedule.ScheduleId && x.DeliveryKey.Contains(":start:"))
-            .ToListAsync();
         Assert.Equal(4, startDeliveries.Count);
-        Assert.All(startDeliveries, x => Assert.Equal(newStart, x.NextAttemptAt));
+        Assert.All(startDeliveries, delivery =>
+        {
+            Assert.Equal((int)DeliveryOutboxStatus.Pending, delivery.Status);
+            Assert.Equal(newStart, delivery.NextAttemptAt);
+            Assert.Null(delivery.ClaimToken);
+        });
+
+        foreach (var delivery in startDeliveries)
+        {
+            delivery.Status = (int)DeliveryOutboxStatus.Processing;
+            delivery.ClaimToken = Guid.NewGuid();
+        }
+        await db.SaveChangesAsync();
 
         await handler.Handle(new CancelScheduleCommand(fixture.ClientId, created.Schedule.ScheduleId,
             new CancelScheduleRequest("No longer needed", edited.Schedule.Version)), default);
-        Assert.All(startDeliveries, x => Assert.Equal((int)DeliveryOutboxStatus.Cancelled, x.Status));
+        Assert.All(startDeliveries, delivery =>
+        {
+            Assert.Equal((int)DeliveryOutboxStatus.Cancelled, delivery.Status);
+            Assert.Null(delivery.ClaimToken);
+        });
     }
 
     [Fact]
@@ -698,6 +722,63 @@ public class ScheduleWorkflowTests
         Assert.Equal("\"Status\" = 0", index.GetFilter());
         Assert.Collection(index.Properties,
             property => Assert.Equal(nameof(Schedule.ConversationId), property.Name));
+    }
+
+    [Fact]
+    public void Model_HasPartialActiveDeliveryIndexAlignedWithClaimOrdering()
+    {
+        using var db = CreateContext();
+
+        var entity = db.Model.FindEntityType(typeof(DeliveryOutbox))!;
+        var index = entity.GetIndexes()
+            .Single(x => x.Name == "IX_DeliveryOutboxes_Active_Channel_Status_Due_Id");
+
+        Assert.Equal("\"Status\" IN (0, 1)", index.GetFilter());
+        Assert.Collection(index.Properties,
+            property => Assert.Equal(nameof(DeliveryOutbox.Channel), property.Name),
+            property => Assert.Equal(nameof(DeliveryOutbox.Status), property.Name),
+            property => Assert.Equal(nameof(DeliveryOutbox.NextAttemptAt), property.Name),
+            property => Assert.Equal(nameof(DeliveryOutbox.DeliveryOutboxId), property.Name));
+        Assert.True(entity.FindProperty(nameof(DeliveryOutbox.ClaimToken))!.IsConcurrencyToken);
+    }
+
+    [Fact]
+    public async Task ClaimToken_PreventsAStaleScheduleWriteFromOverwritingAWorkerClaim()
+    {
+        var root = new InMemoryDatabaseRoot();
+        var databaseName = Guid.NewGuid().ToString();
+        var options = new DbContextOptionsBuilder<GigbridgeDbContext>()
+            .UseInMemoryDatabase(databaseName, root)
+            .Options;
+        var deliveryId = Guid.NewGuid();
+        await using (var seed = new GigbridgeDbContext(options))
+        {
+            seed.DeliveryOutboxes.Add(new DeliveryOutbox
+            {
+                DeliveryOutboxId = deliveryId,
+                DeliveryKey = $"test:{deliveryId}",
+                RecipientUserId = Guid.NewGuid(),
+                Payload = "{}",
+                Status = (int)DeliveryOutboxStatus.Pending,
+                NextAttemptAt = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow
+            });
+            await seed.SaveChangesAsync();
+        }
+
+        await using var scheduleContext = new GigbridgeDbContext(options);
+        var staleDelivery = await scheduleContext.DeliveryOutboxes.SingleAsync();
+        await using (var workerContext = new GigbridgeDbContext(options))
+        {
+            var claimedDelivery = await workerContext.DeliveryOutboxes.SingleAsync();
+            claimedDelivery.Status = (int)DeliveryOutboxStatus.Processing;
+            claimedDelivery.ClaimToken = Guid.NewGuid();
+            await workerContext.SaveChangesAsync();
+        }
+
+        staleDelivery.Status = (int)DeliveryOutboxStatus.Cancelled;
+        await Assert.ThrowsAsync<DbUpdateConcurrencyException>(
+            () => scheduleContext.SaveChangesAsync());
     }
 
     private static GigbridgeDbContext CreateContext() => new(new DbContextOptionsBuilder<GigbridgeDbContext>()
