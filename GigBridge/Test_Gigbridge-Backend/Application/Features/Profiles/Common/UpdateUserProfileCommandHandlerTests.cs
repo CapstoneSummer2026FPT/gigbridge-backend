@@ -34,7 +34,7 @@ public sealed class UpdateUserProfileCommandHandlerTests
             new UpdateUserProfileCommand(new UpdateUserProfileDto
             {
                 FullName = " New Name ",
-                Email = " NEW@Example.com ",
+                Email = " OLD@example.com ",
                 Avatar = " https://cdn.example.com/new.png ",
                 PhoneNumber = " +84987654321 ",
                 PreferredLanguage = " EN "
@@ -44,7 +44,7 @@ public sealed class UpdateUserProfileCommandHandlerTests
         Assert.Equal(user.UserId, result.UserId);
         Assert.Equal((int)UserRole.Client, result.Role);
         Assert.Equal("New Name", user.FullName);
-        Assert.Equal("new@example.com", user.Email);
+        Assert.Equal("old@example.com", user.Email);
         Assert.Equal("https://cdn.example.com/new.png", user.Avatar);
         Assert.Equal("+84987654321", user.PhoneNumber);
         Assert.Equal("en", user.PreferredLanguage);
@@ -89,7 +89,7 @@ public sealed class UpdateUserProfileCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_ThrowsConflictWhenEmailBelongsToAnotherUser()
+    public async Task Handle_RejectsEmailChangeThroughProfileUpdates()
     {
         var context = new InMemoryApplicationDbContext();
         var currentUser = new User
@@ -98,20 +98,14 @@ public sealed class UpdateUserProfileCommandHandlerTests
             FullName = "Current",
             Email = "current@example.com"
         };
-        var otherUser = new User
-        {
-            UserId = Guid.NewGuid(),
-            FullName = "Other",
-            Email = "taken@example.com"
-        };
-        context.AddSet(currentUser, otherUser);
+        context.AddSet(currentUser);
         var handler = CreateHandler(context, currentUser.UserId);
 
-        await Assert.ThrowsAsync<ConflictException>(() => handler.Handle(
+        await Assert.ThrowsAsync<BadRequestException>(() => handler.Handle(
             new UpdateUserProfileCommand(new UpdateUserProfileDto
             {
                 FullName = "Current",
-                Email = "taken@example.com"
+                Email = "new@example.com"
             }),
             CancellationToken.None));
 
