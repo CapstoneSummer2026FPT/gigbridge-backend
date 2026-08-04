@@ -40,10 +40,15 @@ public class MappingProfile : Profile
         CreateMap<FreelancerSkill, FreelancerSkillDto>()
             .ForMember(dest => dest.SkillId, opt => opt.MapFrom(src => src.SkillsId))
             .ForMember(dest => dest.SkillName, opt => opt.MapFrom(src => src.Skills.Name));
+        CreateMap<PortfolioItem, PortfolioItemDto>()
+            .ForMember(dest => dest.PortfolioItemId, opt => opt.MapFrom(src => src.PortfolioItemsId))
+            .ForMember(dest => dest.ProjectDate, opt => opt.MapFrom(src =>
+                src.ProjectDate.HasValue ? src.ProjectDate.Value.ToString("yyyy-MM-dd") : null));
         CreateMap<FreelancerProfile, FreelancerProfileResponseDto>()
             .ForMember(dest => dest.MajorName, opt => opt.MapFrom(src => src.Major != null ? src.Major.Name : null))
             .ForMember(dest => dest.Categories, opt => opt.MapFrom(src => src.FreelancerProfileCategories))
-            .ForMember(dest => dest.Skills, opt => opt.MapFrom(src => src.FreelancerSkills));
+            .ForMember(dest => dest.Skills, opt => opt.MapFrom(src => src.FreelancerSkills))
+            .ForMember(dest => dest.PortfolioItems, opt => opt.MapFrom(src => src.PortfolioItems));
         CreateMap<ClientProfile, ClientProfileResponseDto>();
     }
 }

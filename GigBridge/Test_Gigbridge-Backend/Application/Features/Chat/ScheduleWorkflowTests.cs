@@ -3,12 +3,14 @@ using Application.Common.Interfaces.IService;
 using Application.Features.Chat.Common.Messages;
 using Application.Features.Chat.Common.Messages.Send.DTOs;
 using Application.Features.Chat.Common.Schedules;
+using Application.Features.Notifications.Common.DTOs;
 using Domain.Entities;
 using Domain.Enums;
 using Infrastructure.Persistence;
 using Infrastructure.Services.Email;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using NSubstitute;
 using Test_Gigbridge_Backend.TestSupport;
 
 namespace Test_Gigbridge_Backend.Application.Features.Chat;
@@ -58,6 +60,8 @@ public class ScheduleWorkflowTests
         Assert.False(MessageHelpers.ParseScheduleMetadata(persistedMessage, fixture.FreelancerId, now)!.CanEdit);
 
         var emailJobs = await db.DeliveryOutboxes.Where(x => x.Channel == (int)DeliveryChannel.Email).ToListAsync();
+        Assert.Equal(2, emailJobs.Count);
+        Assert.Equal(emailJobs.Count, await db.DeliveryOutboxes.CountAsync());
         var json = new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web);
         var clientEmail = System.Text.Json.JsonSerializer.Deserialize<ScheduleDeliveryPayload>(
             emailJobs.Single(x => x.RecipientUserId == fixture.ClientId).Payload, json)!;
@@ -73,24 +77,31 @@ public class ScheduleWorkflowTests
     }
 
     [Fact]
-    public async Task Create_WithEmailDisabled_QueuesOnlyRealtimeNotifications()
+    public async Task Create_WithEmailDisabled_SendsRealtimeDirectlyWithoutOutboxRows()
     {
         var now = new DateTime(2026, 6, 21, 6, 0, 0, DateTimeKind.Utc);
         await using var db = CreateContext();
         var fixture = Seed(db, now);
+        var notificationSender = Substitute.For<INotificationSender>();
         var handler = new ScheduleWorkflowService(db, new FixedClock(now),
-            new NoopChatRealtimeNotifier(), new NoopGoogleMeetOAuthService(), EmailRenderer);
+            new NoopChatRealtimeNotifier(), new NoopGoogleMeetOAuthService(), EmailRenderer,
+            notificationSender: notificationSender);
 
         await handler.Handle(new CreateScheduleCommand(fixture.ClientId,
             new CreateScheduleRequest(fixture.ConversationId, "Review", null,
                 new DateTimeOffset(now.AddDays(3)), SendEmailNotification: false)), default);
 
         var deliveries = await db.DeliveryOutboxes.ToListAsync();
-        Assert.DoesNotContain(deliveries,
-            delivery => delivery.Channel == (int)DeliveryChannel.Email);
-        Assert.Equal(2, deliveries.Count(delivery =>
-            delivery.Channel == (int)DeliveryChannel.NotificationRealtime));
+        Assert.Empty(deliveries);
         Assert.Equal(2, await db.Notifications.CountAsync());
+        await notificationSender.Received(1).SendToUserAsync(
+            fixture.ClientId,
+            Arg.Any<NotificationDto>(),
+            Arg.Any<CancellationToken>());
+        await notificationSender.Received(1).SendToUserAsync(
+            fixture.FreelancerId,
+            Arg.Any<NotificationDto>(),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]

@@ -3,6 +3,7 @@ using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Features.Profiles.FreelancerProfile.Common.DTOs;
 using Application.Features.Profiles.FreelancerProfile.Common;
+using Application.Features.Profiles.FreelancerProfile.UpdateFreelancerProfile.DTOs;
 using AutoMapper;
 using Domain.Entities;
 using MediatR;
@@ -45,6 +46,7 @@ public class UpdateFreelancerProfileCommandHandler
 
         var user = await _context.Set<User>()
             .Include(u => u.FreelancerProfile)
+                .ThenInclude(profile => profile!.PortfolioItems)
             .FirstOrDefaultAsync(u => u.UserId == currentUserId, cancellationToken);
 
         if (user == null)
@@ -102,6 +104,11 @@ public class UpdateFreelancerProfileCommandHandler
                 cancellationToken);
         }
 
+        if (request.Dto.PortfolioItems is not null)
+        {
+            SynchronizePortfolioItems(freelancerProfile, request.Dto.PortfolioItems);
+        }
+
         freelancerProfile.ProfileCompletionScore = FreelancerProfileTaxonomy.CalculateCompletionScore(freelancerProfile);
 
         if (FreelancerProfileTaxonomy.IsSetupComplete(freelancerProfile))
@@ -140,4 +147,68 @@ public class UpdateFreelancerProfileCommandHandler
 
         return _mapper.Map<FreelancerProfileResponseDto>(freelancerProfile);
     }
+
+    private void SynchronizePortfolioItems(
+        FreelancerProfileEntity freelancerProfile,
+        IReadOnlyCollection<UpdatePortfolioItemDto> requestedItems)
+    {
+        var requestedIds = requestedItems
+            .Where(item => item.PortfolioItemId.HasValue)
+            .Select(item => item.PortfolioItemId!.Value)
+            .ToList();
+        if (requestedIds.Distinct().Count() != requestedIds.Count)
+        {
+            throw new BadRequestException("Duplicate portfolio item IDs are not allowed.");
+        }
+
+        var existingById = freelancerProfile.PortfolioItems
+            .ToDictionary(item => item.PortfolioItemsId);
+        var unknownItemId = requestedIds.FirstOrDefault(id => !existingById.ContainsKey(id));
+        if (unknownItemId != Guid.Empty)
+        {
+            throw new BadRequestException("A portfolio item does not belong to the current freelancer profile.");
+        }
+
+        var requestedIdSet = requestedIds.ToHashSet();
+        var itemsToRemove = freelancerProfile.PortfolioItems
+            .Where(item => !requestedIdSet.Contains(item.PortfolioItemsId))
+            .ToList();
+        if (itemsToRemove.Count > 0)
+        {
+            _context.Set<PortfolioItem>().RemoveRange(itemsToRemove);
+            foreach (var item in itemsToRemove)
+            {
+                freelancerProfile.PortfolioItems.Remove(item);
+            }
+        }
+
+        foreach (var requestedItem in requestedItems)
+        {
+            PortfolioItem portfolioItem;
+            if (requestedItem.PortfolioItemId.HasValue)
+            {
+                portfolioItem = existingById[requestedItem.PortfolioItemId.Value];
+            }
+            else
+            {
+                portfolioItem = new PortfolioItem
+                {
+                    PortfolioItemsId = Guid.NewGuid(),
+                    FreelancerId = freelancerProfile.FreelancerProfilesId,
+                    Freelancer = freelancerProfile
+                };
+                freelancerProfile.PortfolioItems.Add(portfolioItem);
+                _context.Set<PortfolioItem>().Add(portfolioItem);
+            }
+
+            portfolioItem.Title = requestedItem.Title.Trim();
+            portfolioItem.Description = NormalizeOptional(requestedItem.Description);
+            portfolioItem.ProjectUrl = NormalizeOptional(requestedItem.ProjectUrl);
+            portfolioItem.ImageUrl = NormalizeOptional(requestedItem.ImageUrl);
+            portfolioItem.ProjectDate = requestedItem.ProjectDate;
+        }
+    }
+
+    private static string? NormalizeOptional(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

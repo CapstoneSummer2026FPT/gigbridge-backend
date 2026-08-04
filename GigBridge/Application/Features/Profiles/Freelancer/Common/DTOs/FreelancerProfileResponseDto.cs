@@ -17,4 +17,5 @@ public sealed class FreelancerProfileResponseDto
     public string? MajorName { get; set; }
     public List<FreelancerProfileCategoryDto> Categories { get; set; } = [];
     public List<FreelancerSkillDto> Skills { get; set; } = [];
+    public List<PortfolioItemDto> PortfolioItems { get; set; } = [];
 }
