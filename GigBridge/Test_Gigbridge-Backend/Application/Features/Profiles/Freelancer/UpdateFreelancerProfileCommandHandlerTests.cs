@@ -334,7 +334,6 @@ public class UpdateFreelancerProfileCommandHandlerTests
                 Title = " Updated project ",
                 Description = " Portfolio description ",
                 ProjectUrl = " https://example.com/project ",
-                ImageUrl = " https://example.com/project.png ",
                 ProjectDate = new DateOnly(2026, 7, 15)
             },
             new UpdatePortfolioItemDto
@@ -352,7 +351,7 @@ public class UpdateFreelancerProfileCommandHandlerTests
         Assert.Equal("Updated project", retainedItem.Title);
         Assert.Equal("Portfolio description", retainedItem.Description);
         Assert.Equal("https://example.com/project", retainedItem.ProjectUrl);
-        Assert.Equal("https://example.com/project.png", retainedItem.ImageUrl);
+        Assert.Null(retainedItem.ImageUrl);
         Assert.Equal(new DateOnly(2026, 7, 15), retainedItem.ProjectDate);
         Assert.Equal(2, portfolioItems.Entities.Count);
         Assert.Equal(2, result.PortfolioItems.Count);
@@ -482,7 +481,8 @@ public class UpdateFreelancerProfileCommandHandlerTests
             context,
             new FixedCurrentUserService(userId),
             CreateMapper(),
-            NullLogger<UpdateFreelancerProfileCommandHandler>.Instance);
+            NullLogger<UpdateFreelancerProfileCommandHandler>.Instance,
+            new FakeMediaService());
 
     private static IMapper CreateMapper()
     {

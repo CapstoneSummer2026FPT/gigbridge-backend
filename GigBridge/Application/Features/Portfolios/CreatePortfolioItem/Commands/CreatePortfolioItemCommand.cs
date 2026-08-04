@@ -4,5 +4,8 @@ using MediatR;
 
 namespace Application.Features.Portfolios.CreatePortfolioItem.Commands;
 
-public sealed record CreatePortfolioItemCommand(Guid UserId, PortfolioItemInputDto Dto)
+public sealed record CreatePortfolioItemCommand(
+    Guid UserId,
+    PortfolioItemInputDto Dto,
+    PortfolioImageUpload? Image = null)
     : IRequest<PortfolioItemDto>;

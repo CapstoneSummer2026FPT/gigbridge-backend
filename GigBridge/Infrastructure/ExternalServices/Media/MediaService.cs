@@ -111,6 +111,38 @@ public class MediaService : IMediaService
         }
     }
 
+    public async Task DeleteFileAsync(
+        string fileUrl,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!TryGetPublicId(fileUrl, out var publicId))
+        {
+            return;
+        }
+
+        try
+        {
+            var result = await _cloudinary.DestroyAsync(new DeletionParams(publicId)
+            {
+                ResourceType = ResourceType.Image
+            });
+            if (result.Error is not null)
+            {
+                throw new ExternalServiceException(UploadFailureMessage);
+            }
+        }
+        catch (Exception exception) when (exception is not ExternalServiceException &&
+                                         exception is not OperationCanceledException)
+        {
+            _logger.LogWarning(
+                exception,
+                "Cloudinary image deletion failed for public ID {PublicId}.",
+                publicId);
+            throw new ExternalServiceException("Media deletion failed. Try again later.", exception);
+        }
+    }
+
     public async Task<string> UploadPrivateFileAsync(
         Stream fileStream, string fileName, string contentType, string folder,
         CancellationToken cancellationToken = default)
@@ -156,6 +188,48 @@ public class MediaService : IMediaService
 
     private static string ResolveResourceType(string contentType) =>
         contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase) ? "image" : "raw";
+
+    internal static bool TryGetPublicId(string fileUrl, out string publicId)
+    {
+        publicId = string.Empty;
+        if (!Uri.TryCreate(fileUrl, UriKind.Absolute, out var uri) ||
+            uri.Scheme != Uri.UriSchemeHttps ||
+            !(uri.Host.Equals("res.cloudinary.com", StringComparison.OrdinalIgnoreCase) ||
+              uri.Host.EndsWith(".cloudinary.com", StringComparison.OrdinalIgnoreCase)))
+        {
+            return false;
+        }
+
+        var segments = uri.AbsolutePath
+            .Split('/', StringSplitOptions.RemoveEmptyEntries)
+            .Select(Uri.UnescapeDataString)
+            .ToList();
+        var uploadIndex = segments.FindIndex(segment =>
+            segment.Equals("upload", StringComparison.OrdinalIgnoreCase));
+        if (uploadIndex < 0 || uploadIndex + 1 >= segments.Count)
+        {
+            return false;
+        }
+
+        var publicIdSegments = segments.Skip(uploadIndex + 1).ToList();
+        if (publicIdSegments.Count > 0 &&
+            publicIdSegments[0].Length > 1 &&
+            publicIdSegments[0][0] == 'v' &&
+            publicIdSegments[0].AsSpan(1).ToString().All(char.IsDigit))
+        {
+            publicIdSegments.RemoveAt(0);
+        }
+
+        if (publicIdSegments.Count == 0)
+        {
+            return false;
+        }
+
+        publicIdSegments[^1] = Path.GetFileNameWithoutExtension(publicIdSegments[^1]);
+        publicId = string.Join('/', publicIdSegments);
+        return publicId.StartsWith("gigbridge/", StringComparison.Ordinal) &&
+            publicId.Length > "gigbridge/".Length;
+    }
 
     private string GetSecureUrl(UploadResult uploadResult, string resourceType)
     {
