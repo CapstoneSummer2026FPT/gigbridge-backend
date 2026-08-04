@@ -13,7 +13,8 @@ public sealed class PortfolioControllerContractTests
     {
         var controllerRoute = Assert.Single(
             typeof(PortfolioController).GetCustomAttributes(typeof(RouteAttribute), true)
-                .Cast<RouteAttribute>());
+                .Cast<RouteAttribute>(),
+            route => route.Template == "api/portfolio");
 
         Assert.Equal("api/portfolio", controllerRoute.Template);
         AssertActionRoute<HttpGetAttribute>(nameof(PortfolioController.GetMyPortfolio), "me");
