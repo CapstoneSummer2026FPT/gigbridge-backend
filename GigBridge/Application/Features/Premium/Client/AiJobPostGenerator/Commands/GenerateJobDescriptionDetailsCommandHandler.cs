@@ -171,6 +171,9 @@ public class GenerateJobDescriptionDetailsCommandHandler
             Skills = finalSkills,
             CustomSkills = finalCustomSkills,
             Description = aiResponse.Description,
+            BudgetMin = aiResponse.BudgetMin,
+            BudgetMax = aiResponse.BudgetMax,
+            EstimatedDuration = aiResponse.EstimatedDuration,
             AiDisclaimer = "AI-generated content. Review and edit all fields before publishing."
         };
     }
