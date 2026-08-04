@@ -246,9 +246,9 @@ public sealed class ResolveAdminDisputeCommandHandler :
         if (conversation is not null)
         {
             AddSystemMessage(conversation, $"Milestone decisions recorded for {allocations.Count} milestone(s).", now, systemMessages);
-            if (totalRefund > 0) AddSystemMessage(conversation, $"{totalRefund:N2} VND refunded to the client.", now, systemMessages);
-            if (totalRelease > 0) AddSystemMessage(conversation, $"{totalRelease:N2} VND released to the freelancer.", now, systemMessages);
-            if (totalPenalty > 0) AddSystemMessage(conversation, $"{totalPenalty:N2} VND retained by the platform as a dispute penalty.", now, systemMessages);
+            if (totalRefund > 0) AddSystemMessage(conversation, $"{totalRefund:N2} G-coin refunded to the client.", now, systemMessages);
+            if (totalRelease > 0) AddSystemMessage(conversation, $"{totalRelease:N2} G-coin released to the freelancer.", now, systemMessages);
+            if (totalPenalty > 0) AddSystemMessage(conversation, $"{totalPenalty:N2} G-coin retained by the platform as a dispute penalty.", now, systemMessages);
             AddSystemMessage(conversation, command.ContractAction == AdminContractAction.Resume
                 ? "Contract has been resumed." : "Contract has been terminated.", now, systemMessages);
             AddSystemMessage(conversation,

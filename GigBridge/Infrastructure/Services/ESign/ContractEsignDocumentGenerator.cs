@@ -5,6 +5,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Application.Common.Interfaces.IService;
 using Application.Features.Contracts.Common.DTOs;
+using Domain.Services.Payments;
 using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Validation;
@@ -232,8 +233,9 @@ public sealed class ContractEsignDocumentGenerator(HttpClient httpClient) : ICon
         ["{{MilestoneStartDate}}"] = FormatDate(milestone.StartDate),
         ["{{MilestoneDueDate}}"] = FormatDate(milestone.DueDate),
         ["{{MilestoneRevisionLimit}}"] = ValueOr(milestone.RevisionLimit, "Không áp dụng"),
-        ["{{MilestoneValueVND}}"] = FormatNumber(milestone.ValueVnd),
-        ["{{MilestoneValueGigCoin}}"] = FormatNumber(ToGigCoin(milestone.ValueVnd))
+        // Snapshot amounts are G-coin: the VND column converts to VND, the G-coin column renders the value directly.
+        ["{{MilestoneValueVND}}"] = FormatNumber(TokenWalletRules.ToVnd(milestone.ValueVnd)),
+        ["{{MilestoneValueGigCoin}}"] = FormatNumber(milestone.ValueVnd)
     };
 
     private static Dictionary<string, string> BuildReplacements(
@@ -270,16 +272,16 @@ public sealed class ContractEsignDocumentGenerator(HttpClient httpClient) : ICon
             ["{{OutOfScope}}"] = ValueOr(snapshot.OutOfScope, "Không áp dụng"),
             ["{{StartDate}}"] = FormatDate(snapshot.StartDate),
             ["{{EndDate}}"] = FormatDate(snapshot.EndDate),
-            ["{{TotalContractValueVND}}"] = FormatNumber(snapshot.TotalContractValueVnd),
-            ["{{TotalContractValueGigCoin}}"] = FormatNumber(ToGigCoin(snapshot.TotalContractValueVnd)),
-            ["{{ClientPlatformFeeVND}}"] = FormatNumber(clientFee),
-            ["{{ClientPlatformFeeGigCoin}}"] = FormatNumber(ToGigCoin(clientFee)),
-            ["{{ClientFundingTotalVND}}"] = FormatNumber(snapshot.TotalContractValueVnd + clientFee),
-            ["{{ClientFundingTotalGigCoin}}"] = FormatNumber(ToGigCoin(snapshot.TotalContractValueVnd + clientFee)),
-            ["{{InitialReleaseTotalVND}}"] = FormatNumber(initialRelease),
-            ["{{InitialReleaseTotalGigCoin}}"] = FormatNumber(ToGigCoin(initialRelease)),
-            ["{{RetentionTotalVND}}"] = FormatNumber(retention),
-            ["{{RetentionTotalGigCoin}}"] = FormatNumber(ToGigCoin(retention)),
+            ["{{TotalContractValueVND}}"] = FormatNumber(TokenWalletRules.ToVnd(snapshot.TotalContractValueVnd)),
+            ["{{TotalContractValueGigCoin}}"] = FormatNumber(snapshot.TotalContractValueVnd),
+            ["{{ClientPlatformFeeVND}}"] = FormatNumber(TokenWalletRules.ToVnd(clientFee)),
+            ["{{ClientPlatformFeeGigCoin}}"] = FormatNumber(clientFee),
+            ["{{ClientFundingTotalVND}}"] = FormatNumber(TokenWalletRules.ToVnd(snapshot.TotalContractValueVnd + clientFee)),
+            ["{{ClientFundingTotalGigCoin}}"] = FormatNumber(snapshot.TotalContractValueVnd + clientFee),
+            ["{{InitialReleaseTotalVND}}"] = FormatNumber(TokenWalletRules.ToVnd(initialRelease)),
+            ["{{InitialReleaseTotalGigCoin}}"] = FormatNumber(initialRelease),
+            ["{{RetentionTotalVND}}"] = FormatNumber(TokenWalletRules.ToVnd(retention)),
+            ["{{RetentionTotalGigCoin}}"] = FormatNumber(retention),
             ["{{DeliverableFormats}}"] = "Theo mô tả milestone và thỏa thuận trên GigBridge",
             ["{{RepositoryOrFolder}}"] = "Theo thỏa thuận trên GigBridge",
             ["{{RequiredSourceFiles}}"] = "Theo phạm vi công việc và milestone",
@@ -510,8 +512,6 @@ public sealed class ContractEsignDocumentGenerator(HttpClient httpClient) : ICon
     private static string ComputeSnapshotHash(ContractDocumentSnapshot snapshot) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(System.Text.Json.JsonSerializer.Serialize(snapshot))))
             .ToLowerInvariant();
-
-    private static decimal ToGigCoin(decimal vnd) => vnd / 1000m;
 
     private static string FormatNumber(decimal value) => value.ToString("#,##0.###", VietnamCulture);
 
