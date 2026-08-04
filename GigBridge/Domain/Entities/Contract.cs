@@ -38,6 +38,8 @@ public partial class Contract
 
     public DateTime? UpdatedAt { get; set; }
 
+    public int RevisionNumber { get; set; } = 1;
+
     public virtual ClientProfile ClientProfiles { get; set; } = null!;
 
     public virtual ICollection<Conversation> Conversations { get; set; } = new List<Conversation>();
@@ -46,7 +48,7 @@ public partial class Contract
 
     public virtual ContractEscrow? ContractEscrow { get; set; }
 
-    public virtual EsignDocument? EsignDocument { get; set; }
+    public virtual ICollection<EsignDocument> EsignDocuments { get; set; } = new List<EsignDocument>();
 
     public virtual FreelancerProfile? FreelancerProfiles { get; set; }
 
@@ -56,9 +58,19 @@ public partial class Contract
 
     public virtual ICollection<NegotiationOffer> NegotiationOffers { get; set; } = new List<NegotiationOffer>();
 
+    public virtual ICollection<ContractProductHandoff> ContractProductHandoffs { get; set; } = new List<ContractProductHandoff>();
+
+    public virtual ICollection<ReportContract> ReportContracts { get; set; } = new List<ReportContract>();
+
     public virtual Proposal? Proposals { get; set; }
 
     public virtual ICollection<Review> Reviews { get; set; } = new List<Review>();
 
     public virtual ICollection<WalletTransaction> WalletTransactions { get; set; } = new List<WalletTransaction>();
+
+    public virtual ICollection<ContractChangeRequest> ChangeRequests { get; set; } = new List<ContractChangeRequest>();
+
+    public virtual ICollection<ContractAmendment> Amendments { get; set; } = new List<ContractAmendment>();
+
+    public virtual ICollection<ContractPlanRevision> PlanRevisions { get; set; } = new List<ContractPlanRevision>();
 }

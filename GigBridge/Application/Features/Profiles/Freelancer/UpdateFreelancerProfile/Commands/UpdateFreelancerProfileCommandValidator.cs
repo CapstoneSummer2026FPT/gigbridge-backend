@@ -1,4 +1,5 @@
 using FluentValidation;
+using Application.Features.Portfolios.Common;
 
 namespace Application.Features.Profiles.FreelancerProfile.UpdateFreelancerProfile.Commands;
 
@@ -20,5 +21,30 @@ public class UpdateFreelancerProfileCommandValidator : AbstractValidator<UpdateF
         RuleFor(v => v.Dto.Location)
             .NotEmpty().WithMessage("Location is required.")
             .MaximumLength(300).WithMessage("Location cannot exceed 300 characters.");
+
+        RuleFor(v => v.Dto.MajorId)
+            .NotEmpty().WithMessage("Major is required.");
+
+        RuleFor(v => v.Dto.CategoryIds)
+            .NotEmpty().WithMessage("At least one category is required.")
+            .Must(categoryIds => categoryIds is not null && categoryIds.Distinct().Count() == categoryIds.Count)
+            .WithMessage("Duplicate categories are not allowed.");
+
+        RuleFor(v => v.Dto.SkillIds)
+            .Must(skillIds => skillIds is null || skillIds.Distinct().Count() == skillIds.Count)
+            .WithMessage("Duplicate skills are not allowed.");
+
+        RuleFor(v => v.Dto.PortfolioItems)
+            .Must(items => items is null || items.Count <= 20)
+            .WithMessage("A profile cannot contain more than 20 portfolio items.")
+            .Must(items => items is null ||
+                items.Where(item => item.PortfolioItemId.HasValue)
+                    .Select(item => item.PortfolioItemId!.Value)
+                    .Distinct()
+                    .Count() == items.Count(item => item.PortfolioItemId.HasValue))
+            .WithMessage("Duplicate portfolio item IDs are not allowed.");
+
+        RuleForEach(v => v.Dto.PortfolioItems)
+            .SetValidator(new PortfolioItemInputDtoValidator());
     }
 }

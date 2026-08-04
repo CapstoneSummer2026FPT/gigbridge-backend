@@ -17,6 +17,9 @@ namespace Application.Features.Auth.Shared.DTOs
         public bool IsEmailVerified { get; set; }
         public bool IsActive { get; set; }
         public bool IsSetup { get; set; }
+        public DateTime? SuspendedUntil { get; set; }
+        public DateTime? SuspendedAt { get; set; }
+        public string? SuspensionReason { get; set; }
         public string? PreferredLanguage { get; set; }
         public string? Provider { get; set; }
         public int EloPoints { get; set; }

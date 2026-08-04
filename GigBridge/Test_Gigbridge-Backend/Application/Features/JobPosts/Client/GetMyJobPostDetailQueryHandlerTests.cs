@@ -1,6 +1,8 @@
+using Application.Features.JobPosts.Client.Common;
 using Application.Common.Exceptions;
 using Application.Features.JobPosts.Client.GetMyJobPostDetail.Queries;
 using Domain.Entities;
+using Domain.Enums;
 using Test_Gigbridge_Backend.TestSupport;
 
 namespace Test_Gigbridge_Backend.Application.Features.JobPosts.Client;
@@ -68,7 +70,6 @@ public class GetMyJobPostDetailQueryHandlerTests
         jobPost.BudgetMax = 2500m;
         jobPost.Currency = "USD";
         jobPost.EstimatedDuration = "3 weeks";
-        jobPost.MaxHires = 1;
         jobPost.Location = "Remote";
         jobPost.Status = 3;
         jobPost.Visibility = 2;
@@ -116,7 +117,6 @@ public class GetMyJobPostDetailQueryHandlerTests
         Assert.Equal(2500m, dto.BudgetMax);
         Assert.Equal("USD", dto.Currency);
         Assert.Equal("3 weeks", dto.EstimatedDuration);
-        Assert.Equal(1, dto.MaxHires);
         Assert.Equal("Remote", dto.Location);
         Assert.Equal(2, dto.Visibility);
         Assert.Equal(3, dto.Status);
@@ -161,6 +161,61 @@ public class GetMyJobPostDetailQueryHandlerTests
 
         Assert.Equal(status, dto.Status);
         Assert.Equal(visibility, dto.Visibility);
+    }
+
+    [Fact]
+    public async Task Handle_ReturnsProjectRequestSetupProgressForResumeFlow()
+    {
+        var context = new InMemoryApplicationDbContext();
+        var userId = Guid.NewGuid();
+        var clientProfileId = Guid.NewGuid();
+        var jobPostId = Guid.NewGuid();
+        var contractId = Guid.NewGuid();
+        var documentId = Guid.NewGuid();
+        var createdAt = new DateTime(2026, 6, 20, 9, 0, 0, DateTimeKind.Utc);
+        var jobPost = CreateJobPost(clientProfileId, "Needs milestones", createdAt);
+        jobPost.JobPostsId = jobPostId;
+
+        context.AddSet(new ClientProfile { ClientProfilesId = clientProfileId, UserId = userId });
+        context.AddSet(jobPost);
+        context.AddSet(new Contract
+        {
+            ContractsId = contractId,
+            JobPostsId = jobPostId,
+            ClientProfilesId = clientProfileId,
+            Title = jobPost.Title,
+            Description = jobPost.Description,
+            TotalBudget = 100m,
+            Status = (int)ContractStatus.PendingFreelancerSelection,
+            CreatedAt = createdAt
+        });
+        context.AddSet(new EsignDocument
+        {
+            EsignDocumentsId = documentId,
+            EsignTemplatesId = Guid.NewGuid(),
+            JobPostsId = jobPostId,
+            ContractsId = null,
+            DocumentCode = $"DOC-{documentId:N}"[..32],
+            RenderedHtmlContent = "<p>Job</p>",
+            Status = (int)ESignDocumentStatus.FullySigned,
+            CreatedAt = createdAt
+        });
+        context.AddSet<Milestone>();
+
+        var handler = new GetMyJobPostDetailQueryHandler(context);
+
+        var dto = await handler.Handle(
+            new GetMyJobPostDetailQuery(userId, jobPostId),
+            CancellationToken.None);
+
+        Assert.NotNull(dto.SetupProgress);
+        Assert.Equal(JobPostSetupStepNames.ReadyToPublish, dto.SetupProgress.NextIncompleteStep);
+        Assert.True(dto.SetupProgress.IsDetailsComplete);
+        Assert.Null(dto.SetupProgress.ContractId);
+        Assert.Null(dto.SetupProgress.ESignDocumentId);
+        Assert.Null(dto.SetupProgress.ESignStatus);
+        Assert.False(dto.SetupProgress.HasMilestones);
+        Assert.True(dto.SetupProgress.CanPublish);
     }
 
     [Fact]
@@ -223,6 +278,7 @@ public class GetMyJobPostDetailQueryHandlerTests
             ClientProfilesId = clientProfileId,
             Title = title,
             Description = $"{title} description",
+            MajorCategoryId = Guid.NewGuid(),
             Status = 0,
             Visibility = 0,
             CreatedAt = createdAt

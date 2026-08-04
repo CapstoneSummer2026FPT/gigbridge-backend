@@ -11,8 +11,6 @@ public record CreateJobPostRequest(
     decimal? BudgetMax,
     string? Currency,
     string? EstimatedDuration,
-    int? MaxHires,
-    string? Location,
     int? Visibility,
     DateTime? EndDate,
     List<Guid>? SkillIds,

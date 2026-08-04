@@ -1,6 +1,8 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Features.Contracts.Common.GetContractByJobPost.DTOs;
+using Application.Features.Contracts.Common.Internal;
+using Application.Features.Contracts.ProductHandoffs.Common;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
@@ -41,7 +43,46 @@ public class GetContractByJobPostQueryHandler
                 escrow => escrow.ContractsId == contract.ContractsId,
                 cancellationToken);
 
-        return ToResponse(contract, escrow);
+        var jobPost = await _context.Set<JobPost>()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(jp => jp.JobPostsId == contract.JobPostsId, cancellationToken);
+
+        var clientProfile = await _context.Set<ClientProfile>()
+            .AsNoTracking()
+            .Include(cp => cp.User)
+            .FirstOrDefaultAsync(cp => cp.ClientProfilesId == contract.ClientProfilesId, cancellationToken);
+        var clientUser = clientProfile?.User;
+
+        User? freelancerUser = null;
+        if (contract.FreelancerProfilesId.HasValue)
+        {
+            var freelancerProfile = await _context.Set<FreelancerProfile>()
+                .AsNoTracking()
+                .Include(fp => fp.User)
+                .FirstOrDefaultAsync(fp => fp.FreelancerProfilesId == contract.FreelancerProfilesId.Value, cancellationToken);
+            freelancerUser = freelancerProfile?.User;
+        }
+
+        var conversationId = await _context.Set<Conversation>()
+            .AsNoTracking()
+            .Where(c => c.ContractsId == contract.ContractsId)
+            .OrderByDescending(c => c.CreatedAt)
+            .Select(c => (Guid?)c.ConversationsId)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var reviewState = await ContractReviewReadiness.GetStateAsync(
+            _context,
+            contract,
+            request.UserId,
+            cancellationToken);
+
+        var currentProductHandoff = await _context.Set<ContractProductHandoff>()
+            .AsNoTracking()
+            .Where(handoff => handoff.ContractsId == contract.ContractsId && handoff.IsCurrent)
+            .OrderByDescending(handoff => handoff.Version)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return ToResponse(contract, escrow, jobPost, clientUser, freelancerUser, conversationId, reviewState, currentProductHandoff);
     }
 
     private async Task EnsureCanViewContract(
@@ -93,7 +134,15 @@ public class GetContractByJobPostQueryHandler
         throw new ForbiddenAccessException("You do not have permission to view this contract.");
     }
 
-    private static ContractDetailResponse ToResponse(Contract contract, ContractEscrow? escrow)
+    private static ContractDetailResponse ToResponse(
+        Contract contract,
+        ContractEscrow? escrow,
+        JobPost? jobPost,
+        User? clientUser,
+        User? freelancerUser,
+        Guid? conversationId,
+        ContractReviewState reviewState,
+        ContractProductHandoff? currentProductHandoff)
     {
         return new ContractDetailResponse
         {
@@ -106,24 +155,27 @@ public class GetContractByJobPostQueryHandler
             Description = contract.Description,
             TotalBudget = contract.TotalBudget,
             Status = contract.Status,
+            RevisionNumber = contract.RevisionNumber,
             StartDate = contract.StartDate,
             EndDate = contract.EndDate,
+            CompletedAt = contract.CompletedAt,
             CreatedAt = contract.CreatedAt,
             UpdatedAt = contract.UpdatedAt,
-            Escrow = escrow is null
+            CanReview = reviewState.CanReview,
+            HasReviewedByCurrentUser = reviewState.HasReviewedByCurrentUser,
+            Escrow = escrow is null ? null : ContractEscrowResponseMapper.ToResponse(escrow),
+            JobTitle = jobPost?.Title,
+            JobDescription = jobPost?.Description,
+            ClientName = clientUser?.FullName ?? "Client",
+            ClientEmail = clientUser?.Email,
+            FreelancerName = freelancerUser?.FullName,
+            FreelancerEmail = freelancerUser?.Email,
+            ClientUserId = clientUser?.UserId,
+            FreelancerUserId = freelancerUser?.UserId,
+            ConversationId = conversationId,
+            CurrentProductHandoff = currentProductHandoff is null
                 ? null
-                : new ContractEscrowResponse
-                {
-                    ContractEscrowId = escrow.ContractEscrowId,
-                    RequiredAmount = escrow.RequiredAmount,
-                    FundedAmount = escrow.FundedAmount,
-                    ReleasedAmount = escrow.ReleasedAmount,
-                    RequiredPercentage = escrow.RequiredPercentage,
-                    Currency = escrow.Currency,
-                    Status = escrow.Status,
-                    CreatedAt = escrow.CreatedAt,
-                    FundedAt = escrow.FundedAt
-                }
+                : ContractProductHandoffMapper.ToResponse(currentProductHandoff)
         };
     }
 }

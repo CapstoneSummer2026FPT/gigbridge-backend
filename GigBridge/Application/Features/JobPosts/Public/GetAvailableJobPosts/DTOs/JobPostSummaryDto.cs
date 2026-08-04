@@ -16,8 +16,16 @@ public record JobPostSummaryDto(
     decimal? BudgetMin,
     decimal? BudgetMax,
     DateTime CreatedAt,
+    int Status,
+    int? Visibility,
     int EloPoints,
+    Guid ClientProfilesId,
+    string? ClientFullName,
     List<JobPostSkillDto> Skills,
     List<string> CustomSkillNames,
-    List<string> SkillNames
+    List<string> SkillNames,
+    bool IsFeatured,
+    DateTime? FeaturedUntil,
+    bool IsAiGenerated,
+    bool HasAiInterview
 );

@@ -53,6 +53,7 @@ public class CreateReportCommandHandler : IRequestHandler<CreateReportCommand, G
             ReportedEntityType = entityType,
             Type = (int)command.Request.Type,
             Reason = command.Request.Reason.Trim(),
+            Description = command.Request.Description?.Trim(),
             Status = (int)ReportStatus.Pending,
             CreatedAt = _dateTimeService.UtcNow
         };
@@ -100,10 +101,13 @@ public class CreateReportCommandHandler : IRequestHandler<CreateReportCommand, G
 
             case ReportedEntityTypes.Review:
                 var reviewExists = await _context.Set<Review>()
-                    .AnyAsync(review => review.ReviewsId == entityId, cancellationToken);
+                    .AnyAsync(review =>
+                        review.ReviewsId == entityId &&
+                        review.RevieweeId == reporterId,
+                        cancellationToken);
                 if (!reviewExists)
                 {
-                    throw new NotFoundException("Reported review does not exist.");
+                    throw new NotFoundException("The received review does not exist.");
                 }
                 break;
         }

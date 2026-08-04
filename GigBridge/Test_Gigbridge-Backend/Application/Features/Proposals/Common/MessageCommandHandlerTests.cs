@@ -1,6 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces.IService;
 using Application.Features.Chat.Common.Conversations.MarkAsRead.Commands;
+using Application.Features.Chat.Common.Messages.GetAround;
 using Application.Features.Chat.Common.Messages.GetConversationMessages.Queries;
 using Application.Features.Chat.Common.Messages.Send.Commands;
 using Application.Features.Chat.Common.Messages.Send.DTOs;
@@ -76,6 +77,46 @@ public class MessageCommandHandlerTests
     }
 
     [Fact]
+    public async Task SendMessage_DisputedWorkspaceConversationIsReadOnly()
+    {
+        var fixture = new MessageFixture();
+        var contractId = Guid.NewGuid();
+        fixture.Conversation.ConversationType = (int)ConversationType.ContractWorkroom;
+        fixture.Conversation.ContractsId = contractId;
+        fixture.Context.AddSet(new Contract
+        {
+            ContractsId = contractId,
+            Title = "Disputed contract",
+            Status = (int)ContractStatus.Disputed,
+            CreatedAt = fixture.Now
+        });
+
+        var handler = new SendMessageCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopChatRealtimeNotifier());
+
+        var exception = await Assert.ThrowsAsync<BadRequestException>(() =>
+            handler.Handle(
+                new SendMessageCommand(
+                    fixture.ClientUserId,
+                    new SendMessageRequest(
+                        fixture.ConversationId,
+                        "disputed-workspace-1",
+                        "This must not be sent.",
+                        null,
+                        [])),
+                CancellationToken.None));
+
+        Assert.Equal(
+            "This contract is currently under dispute. Please continue communication in the dispute conversation.",
+            exception.Message);
+        Assert.Empty(fixture.Messages.Entities);
+        Assert.Null(fixture.Conversation.LastMessageId);
+        Assert.Equal(0, fixture.Context.SaveChangesCount);
+    }
+
+    [Fact]
     public async Task SendMessage_CreatesMessageAndIncrementsUnreadForOtherParticipants()
     {
         var fixture = new MessageFixture();
@@ -97,6 +138,37 @@ public class MessageCommandHandlerTests
         Assert.Equal(message.MessagesId, fixture.Conversation.LastMessageId);
         Assert.Equal(0, fixture.ClientParticipant.UnreadCount);
         Assert.Equal(1, fixture.FreelancerParticipant.UnreadCount);
+    }
+
+    [Fact]
+    public async Task SendMessage_FromFreelancerBroadcastsToClientAndFreelancerUsers()
+    {
+        var fixture = new MessageFixture();
+        var notifier = new CapturingChatRealtimeNotifier();
+        var handler = new SendMessageCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            notifier);
+
+        var response = await handler.Handle(
+            new SendMessageCommand(
+                fixture.FreelancerUserId,
+                new SendMessageRequest(
+                    fixture.ConversationId,
+                    "freelancer-realtime-1",
+                    "Message from freelancer",
+                    null,
+                    [])),
+            CancellationToken.None);
+
+        var receiveEvent = Assert.Single(
+            notifier.UsersEvents,
+            realtimeEvent => realtimeEvent.EventName == "ReceiveMessage");
+        Assert.Contains(fixture.ClientUserId, receiveEvent.UserIds);
+        Assert.Contains(fixture.FreelancerUserId, receiveEvent.UserIds);
+        Assert.Equal(fixture.FreelancerUserId, response.SenderUserId);
+        Assert.Equal(1, fixture.ClientParticipant.UnreadCount);
+        Assert.Equal(0, fixture.FreelancerParticipant.UnreadCount);
     }
 
     [Fact]
@@ -249,6 +321,55 @@ public class MessageCommandHandlerTests
             messages,
             message => Assert.Equal(second.MessagesId, message.MessageId),
             message => Assert.Equal(third.MessagesId, message.MessageId));
+    }
+
+    [Fact]
+    public async Task GetMessagesAround_DeletedMessageSuppressesAttachmentsAndSchedulePayload()
+    {
+        var fixture = new MessageFixture();
+        var deletedMessage = new Message
+        {
+            MessagesId = Guid.NewGuid(),
+            ConversationsId = fixture.ConversationId,
+            SenderUserId = fixture.ClientUserId,
+            MessageType = (int)MessageType.Schedule,
+            Content = "Deleted schedule",
+            Metadata = "{}",
+            ClientMessageId = "deleted-schedule",
+            SentAt = fixture.Now.AddMinutes(1),
+            EditedAt = fixture.Now.AddMinutes(2),
+            DeletedForEveryoneAt = fixture.Now.AddMinutes(3)
+        };
+        fixture.Messages.Add(deletedMessage);
+        fixture.Attachments.Add(new MessageAttachment
+        {
+            MessageAttachmentsId = Guid.NewGuid(),
+            MessagesId = deletedMessage.MessagesId,
+            FileName = "private.pdf",
+            FileUrl = "https://files.example/private.pdf",
+            StorageProvider = "cloudinary",
+            MimeType = "application/pdf",
+            FileExtension = ".pdf",
+            FileSizeBytes = 256,
+            CreatedAt = fixture.Now
+        });
+
+        var handler = new GetMessagesAroundQueryHandler(fixture.Context);
+
+        var messages = await handler.Handle(
+            new GetMessagesAroundQuery(
+                fixture.ConversationId,
+                deletedMessage.MessagesId,
+                fixture.ClientUserId),
+            CancellationToken.None);
+
+        var response = Assert.Single(messages);
+        Assert.True(response.IsDeleted);
+        Assert.Null(response.Content);
+        Assert.Null(response.Metadata);
+        Assert.Null(response.EditedAt);
+        Assert.Empty(response.Attachments);
+        Assert.Null(response.Schedule);
     }
 
     [Fact]

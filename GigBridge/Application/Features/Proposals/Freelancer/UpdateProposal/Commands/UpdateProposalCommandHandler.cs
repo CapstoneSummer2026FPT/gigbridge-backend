@@ -1,6 +1,7 @@
 ﻿using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Application.Features.Proposals.Common;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -35,6 +36,8 @@ public class UpdateProposalCommandHandler : IRequestHandler<UpdateProposalComman
         }
 
         var proposal = await _context.Set<Proposal>()
+            .Include(item => item.ProposalWorkBreakdownItems)
+            .Include(item => item.ProposalMilestonePlans)
             .FirstOrDefaultAsync(
                 proposal =>
                     proposal.ProposalsId == command.ProposalId &&
@@ -46,20 +49,44 @@ public class UpdateProposalCommandHandler : IRequestHandler<UpdateProposalComman
             throw new NotFoundException("Proposal does not exist or you do not have permission to update it.");
         }
 
+        ProposalModerationGuard.EnsureActive(proposal);
+
         if (proposal.Status != 0)
         {
             throw new Exception("Only pending proposal can be updated.");
         }
 
+        var milestonePlans = (command.Request.MilestonePlans ?? []).ToList();
+
         proposal.CoverLetter = string.IsNullOrWhiteSpace(command.Request.CoverLetter)
             ? null
             : command.Request.CoverLetter.Trim();
 
-        proposal.ProposedBudget = command.Request.ProposedBudget;
+        proposal.ProposedBudget = ProposalTotalsCalculator.ResolveBudget(command.Request.ProposedBudget, milestonePlans);
+        proposal.ProposedDuration = ProposalTotalsCalculator.ResolveDuration(command.Request.ProposedDuration, milestonePlans);
 
-        proposal.ProposedDuration = string.IsNullOrWhiteSpace(command.Request.ProposedDuration)
-            ? null
-            : command.Request.ProposedDuration.Trim();
+        proposal.AnalysisSummary = ProposalPlanMapper.Clean(command.Request.AnalysisSummary);
+        proposal.SolutionApproach = ProposalPlanMapper.Clean(command.Request.SolutionApproach);
+        proposal.Deliverables = ProposalPlanMapper.Clean(command.Request.Deliverables);
+        proposal.Assumptions = ProposalPlanMapper.Clean(command.Request.Assumptions);
+        proposal.OutOfScope = ProposalPlanMapper.Clean(command.Request.OutOfScope);
+
+        _context.Set<ProposalWorkBreakdownItem>().RemoveRange(proposal.ProposalWorkBreakdownItems);
+        _context.Set<ProposalMilestonePlan>().RemoveRange(proposal.ProposalMilestonePlans);
+
+        proposal.ProposalMilestonePlans = milestonePlans
+            .Select((item, index) => ProposalPlanMapper.ToEntity(proposal.ProposalsId, item, index))
+            .ToList();
+        var milestoneIdsByOrder = proposal.ProposalMilestonePlans.ToDictionary(item => item.OrderIndex, item => item.ProposalMilestonePlansId);
+        proposal.ProposalWorkBreakdownItems = ProposalPlanMapper.ResolveWorkItems(command.Request.WorkBreakdownItems, milestonePlans)
+            .Select((item, index) => ProposalPlanMapper.ToEntity(
+                proposal.ProposalsId,
+                item,
+                index,
+                item.MilestoneOrderIndex.HasValue && milestoneIdsByOrder.TryGetValue(item.MilestoneOrderIndex.Value, out var milestoneId)
+                    ? milestoneId
+                    : null))
+            .ToList();
 
         proposal.UpdatedAt = _dateTimeService.UtcNow;
 

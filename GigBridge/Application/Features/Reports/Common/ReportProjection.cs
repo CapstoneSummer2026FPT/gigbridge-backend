@@ -14,6 +14,19 @@ public static class ReportProjection
         CancellationToken cancellationToken)
     {
         var targetSummaries = await GetTargetSummariesAsync(context, reports, cancellationToken);
+        var reporterIds = reports.Select(report => report.ReporterId).Distinct().ToList();
+        var now = DateTime.UtcNow;
+        var premiumReporterIds = await context.Set<Subscription>()
+            .AsNoTracking()
+            .Where(subscription =>
+                reporterIds.Contains(subscription.UserId) &&
+                subscription.Status == SubscriptionStatus.Active &&
+                subscription.StartDate <= now &&
+                subscription.EndDate > now)
+            .Select(subscription => subscription.UserId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+        var premiumReporterSet = premiumReporterIds.ToHashSet();
 
         return reports.Select(report =>
         {
@@ -33,7 +46,9 @@ public static class ReportProjection
                 ReportedEntityType = report.ReportedEntityType,
                 Type = (ReportType)report.Type,
                 Status = (ReportStatus)report.Status,
+                IsPremiumReporter = premiumReporterSet.Contains(report.ReporterId),
                 Reason = report.Reason,
+                Description = report.Description,
                 AdminNote = report.AdminNote,
                 ResolvedByAdmin = report.ResolvedByAdmin is null
                     ? null

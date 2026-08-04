@@ -1,4 +1,5 @@
 using Application.Common.Exceptions;
+using Application.Features.Contracts.Common.Internal;
 using Application.Features.Contracts.Common.GetContractByJobPost.Queries;
 using Domain.Entities;
 using Domain.Enums;
@@ -41,7 +42,39 @@ public class GetContractByJobPostQueryHandlerTests
         Assert.Equal(fixture.FreelancerProfileId, result.FreelancerProfileId);
         Assert.NotNull(result.Escrow);
         Assert.Equal(400m, result.Escrow.RequiredAmount);
+        Assert.Equal(400m, result.Escrow.RequiredTokens);
+        Assert.Equal(0.01m, result.Escrow.FundingFeeRate);
+        Assert.Equal(4000m, result.Escrow.FundingFeeVnd);
+        Assert.Equal(4m, result.Escrow.FundingFeeTokens);
+        Assert.Equal(404m, result.Escrow.TotalDebitTokens);
         Assert.Equal((int)ContractEscrowStatus.PendingFunding, result.Escrow.Status);
+    }
+
+    [Theory]
+    // Contract/escrow amounts are G-coin: required tokens equal the required amount
+    // directly (no VND -> token division) and the 1% fee is charged on the G-coin amount.
+    [InlineData(1_000_000, 1_000_000, 10_000_000, 10_000, 1_010_000)]
+    [InlineData(24, 24, 240, 0.24, 24.24)]
+    public void FundingQuote_UsesDirectGCoinAmountsAndOnePercentFee(
+        decimal requiredAmount,
+        decimal requiredTokens,
+        decimal fundingFeeVnd,
+        decimal fundingFeeTokens,
+        decimal totalDebitTokens)
+    {
+        var response = ContractEscrowResponseMapper.ToResponse(new ContractEscrow
+        {
+            ContractEscrowId = Guid.NewGuid(),
+            RequiredAmount = requiredAmount,
+            Currency = "VND",
+            CreatedAt = DateTime.UtcNow
+        });
+
+        Assert.Equal(requiredTokens, response.RequiredTokens);
+        Assert.Equal(0.01m, response.FundingFeeRate);
+        Assert.Equal(fundingFeeVnd, response.FundingFeeVnd);
+        Assert.Equal(fundingFeeTokens, response.FundingFeeTokens);
+        Assert.Equal(totalDebitTokens, response.TotalDebitTokens);
     }
 
     [Fact]

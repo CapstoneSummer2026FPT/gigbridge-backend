@@ -1,0 +1,12 @@
+{
+  "actor": {
+    "subject": "You declined the schedule: {{TITLE}}", "badge": "Declined", "headline": "You declined the proposed schedule",
+    "introduction": "Choose a new date and time in GigBridge when you are ready to send a counterproposal.",
+    "accent": "#b91c1c", "badgeBackground": "#fef2f2", "actorLabel": "Action by"
+  },
+  "recipient": {
+    "subject": "Schedule declined: {{TITLE}}", "badge": "Declined", "headline": "The proposed schedule was declined",
+    "introduction": "{{ACTOR_NAME}} declined the proposed time and can now suggest a replacement.",
+    "accent": "#b91c1c", "badgeBackground": "#fef2f2", "actorLabel": "Action by"
+  }
+}

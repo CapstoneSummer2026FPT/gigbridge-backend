@@ -14,5 +14,14 @@ public enum NotificationType
     ReviewReceived = 9,
     SystemAlert = 10,
     AIInterviewInvite = 11,
-    SubscriptionExpiring = 12
+    SubscriptionExpiring = 12,
+    Schedule = 13,
+    SubscriptionActivated = 14,
+    SubscriptionCancelled = 15,
+    PromotionActivated = 16,
+    PromotionExpired = 17,
+    RankProtectionActivated = 18,
+    RankProtectionExpired = 19,
+    ReportUpdate = 20,
+    ReviewRequested = 21
 }

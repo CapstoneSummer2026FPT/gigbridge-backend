@@ -6,4 +6,5 @@ namespace Application.Features.Contracts.Milestones.Common.Get.Queries;
 
 public sealed record GetMilestoneByIdQuery(
     Guid MilestoneId,
-    Guid UserId) : IRequest<ContractMilestoneResponse>;
+    Guid UserId,
+    Guid? ContractId = null) : IRequest<ContractMilestoneResponse>;

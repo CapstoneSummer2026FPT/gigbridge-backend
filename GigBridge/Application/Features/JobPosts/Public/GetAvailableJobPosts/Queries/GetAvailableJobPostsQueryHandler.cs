@@ -1,7 +1,9 @@
 using Application.Common.Interfaces;
 using Application.Features.JobPosts.Common;
 using Application.Features.JobPosts.Public.GetAvailableJobPosts.DTOs;
+using Application.Common.Interfaces.IService;
 using Domain.Entities;
+using Domain.Enums;
 using Domain.Services;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -11,10 +13,12 @@ namespace Application.Features.JobPosts.Public.GetAvailableJobPosts.Queries;
 public class GetAvailableJobPostsQueryHandler : IRequestHandler<GetAvailableJobPostsQuery, IEnumerable<JobPostSummaryDto>>
 {
     private readonly IApplicationDbContext _context;
+    private readonly IDateTimeService _clock;
 
-    public GetAvailableJobPostsQueryHandler(IApplicationDbContext context)
+    public GetAvailableJobPostsQueryHandler(IApplicationDbContext context, IDateTimeService clock)
     {
         _context = context;
+        _clock = clock;
     }
 
     public async Task<IEnumerable<JobPostSummaryDto>> Handle(GetAvailableJobPostsQuery request, CancellationToken cancellationToken)
@@ -33,17 +37,29 @@ public class GetAvailableJobPostsQueryHandler : IRequestHandler<GetAvailableJobP
             .Where(jobPost => jobPost.Status == 1 && (jobPost.Visibility == null || jobPost.Visibility == 0));
 
         query = ApplyFilters(query, request);
-        query = ApplySorting(query, request);
+        query = ApplySorting(query, request, _clock.UtcNow);
 
         var jobPosts = await query
             .Skip((NormalizePageIndex(request.PageIndex) - 1) * NormalizePageSize(request.PageSize))
             .Take(NormalizePageSize(request.PageSize))
             .ToListAsync(cancellationToken);
 
-        return JobPostProjection.ToSummaryDtos(jobPosts);
+        var jobPostIds = jobPosts.Select(jobPost => jobPost.JobPostsId).ToList();
+        var aiInterviewJobIds = jobPostIds.Count == 0
+            ? new HashSet<Guid>()
+            : (await _context.Set<AiInterviewDefinition>()
+                .AsNoTracking()
+                .Where(definition => jobPostIds.Contains(definition.JobPostId) &&
+                    definition.Status != AiInterviewDefinitionStatus.Closed)
+                .Select(definition => definition.JobPostId)
+                .Distinct()
+                .ToListAsync(cancellationToken))
+                .ToHashSet();
+
+        return JobPostProjection.ToSummaryDtos(jobPosts, _clock.UtcNow, aiInterviewJobIds);
     }
 
-    private static IQueryable<JobPost> ApplyFilters(IQueryable<JobPost> query, GetAvailableJobPostsQuery request)
+    internal static IQueryable<JobPost> ApplyFilters(IQueryable<JobPost> query, GetAvailableJobPostsQuery request)
     {
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
@@ -53,7 +69,9 @@ public class GetAvailableJobPostsQueryHandler : IRequestHandler<GetAvailableJobP
                 jobPost.Description.ToLower().Contains(keyword) ||
                 jobPost.JobPostSkills.Any(jobPostSkill =>
                     jobPostSkill.Skills != null &&
-                    jobPostSkill.Skills.Name.ToLower().Contains(keyword)));
+                    jobPostSkill.Skills.Name.ToLower().Contains(keyword)) ||
+                jobPost.CustomSkillNames.Any(skillName =>
+                    skillName.ToLower().Contains(keyword)));
         }
 
         if (request.SkillIds is { Count: > 0 })
@@ -75,35 +93,44 @@ public class GetAvailableJobPostsQueryHandler : IRequestHandler<GetAvailableJobP
         return query;
     }
 
-    private static IQueryable<JobPost> ApplySorting(IQueryable<JobPost> query, GetAvailableJobPostsQuery request)
+    internal static IQueryable<JobPost> ApplySorting(
+        IQueryable<JobPost> query,
+        GetAvailableJobPostsQuery request,
+        DateTime now)
     {
         return request.SortBy?.Trim().ToLowerInvariant() switch
         {
             "budgetmin" => request.SortDesc
-                ? query.OrderByDescending(jobPost => jobPost.BudgetMin)
-                : query.OrderBy(jobPost => jobPost.BudgetMin),
+                ? query.OrderByDescending(jobPost => jobPost.IsFeatured && jobPost.FeaturedUntil > now)
+                    .ThenByDescending(jobPost => jobPost.BudgetMin)
+                : query.OrderByDescending(jobPost => jobPost.IsFeatured && jobPost.FeaturedUntil > now)
+                    .ThenBy(jobPost => jobPost.BudgetMin),
             "budgetmax" => request.SortDesc
-                ? query.OrderByDescending(jobPost => jobPost.BudgetMax)
-                : query.OrderBy(jobPost => jobPost.BudgetMax),
+                ? query.OrderByDescending(jobPost => jobPost.IsFeatured && jobPost.FeaturedUntil > now)
+                    .ThenByDescending(jobPost => jobPost.BudgetMax)
+                : query.OrderByDescending(jobPost => jobPost.IsFeatured && jobPost.FeaturedUntil > now)
+                    .ThenBy(jobPost => jobPost.BudgetMax),
             "newest" => query
-                .OrderByDescending(jobPost => jobPost.ClientProfiles.User.UserEloScore != null
+                .OrderByDescending(jobPost => jobPost.IsFeatured && jobPost.FeaturedUntil > now)
+                .ThenByDescending(jobPost => jobPost.ClientProfiles.User.UserEloScore != null
                     ? jobPost.ClientProfiles.User.UserEloScore.CurrentPoints
                     : UserEloCalculator.DefaultPoints)
                 .ThenByDescending(jobPost => jobPost.CreatedAt),
             _ => query
-                .OrderByDescending(jobPost => jobPost.ClientProfiles.User.UserEloScore != null
+                .OrderByDescending(jobPost => jobPost.IsFeatured && jobPost.FeaturedUntil > now)
+                .ThenByDescending(jobPost => jobPost.ClientProfiles.User.UserEloScore != null
                     ? jobPost.ClientProfiles.User.UserEloScore.CurrentPoints
                     : UserEloCalculator.DefaultPoints)
                 .ThenByDescending(jobPost => jobPost.CreatedAt)
         };
     }
 
-    private static int NormalizePageIndex(int pageIndex)
+    internal static int NormalizePageIndex(int pageIndex)
     {
         return pageIndex < 1 ? 1 : pageIndex;
     }
 
-    private static int NormalizePageSize(int pageSize)
+    internal static int NormalizePageSize(int pageSize)
     {
         return pageSize is < 1 or > 100 ? 10 : pageSize;
     }

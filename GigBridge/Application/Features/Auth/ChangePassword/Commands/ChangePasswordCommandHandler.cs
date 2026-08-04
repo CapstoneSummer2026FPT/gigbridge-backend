@@ -52,6 +52,8 @@ public class ChangePasswordCommandHandler : IRequestHandler<ChangePasswordComman
         }
 
         user.Password = _passwordHasher.HashPassword(request.Request.NewPassword);
+        user.RefreshTokenHash = null;
+        user.RefreshTokenExpiry = null;
         await _context.SaveChangesAsync(cancellationToken);
     }
 }

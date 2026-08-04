@@ -7,12 +7,13 @@ namespace Application.Features.Contracts.Common.Internal;
 
 internal static class ContractConversationEvents
 {
-    public static async Task AddSystemMessageAsync(
+    public static async Task<Message?> AddSystemMessageAsync(
         IApplicationDbContext context,
         Guid contractId,
         string content,
         DateTime now,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? metadata = null)
     {
         var conversation = await context.Set<Conversation>()
             .Where(conversation => conversation.ContractsId == contractId)
@@ -21,17 +22,18 @@ internal static class ContractConversationEvents
 
         if (conversation is null)
         {
-            return;
+            return null;
         }
 
-        AddSystemMessage(context, conversation, content, now);
+        return AddSystemMessage(context, conversation, content, now, metadata);
     }
 
-    public static void AddSystemMessage(
+    public static Message AddSystemMessage(
         IApplicationDbContext context,
         Conversation conversation,
         string content,
-        DateTime now)
+        DateTime now,
+        string? metadata = null)
     {
         var message = new Message
         {
@@ -40,6 +42,7 @@ internal static class ContractConversationEvents
             SenderUserId = null,
             MessageType = (int)MessageType.ContractEvent,
             Content = content,
+            Metadata = metadata,
             SentAt = now
         };
 
@@ -47,5 +50,7 @@ internal static class ContractConversationEvents
         conversation.LastMessageId = message.MessagesId;
         conversation.LastMessageAt = now;
         conversation.UpdatedAt = now;
+
+        return message;
     }
 }

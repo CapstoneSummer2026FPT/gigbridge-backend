@@ -73,6 +73,8 @@ public class SendMessageCommandHandler : IRequestHandler<SendMessageCommand, Mes
             throw new ForbiddenAccessException("You are not a participant in this conversation.");
         }
 
+        await EnsureConversationWritable(conversation, participant, cancellationToken);
+
         await EnsureReplyTargetBelongsToConversation(request, cancellationToken);
 
         var existingMessage = await _context.Set<Message>()
@@ -105,13 +107,17 @@ public class SendMessageCommandHandler : IRequestHandler<SendMessageCommand, Mes
             MessagesId = Guid.NewGuid(),
             ConversationsId = request.ConversationId,
             SenderUserId = command.UserId,
-            MessageType = attachments.Count > 0
-                ? (int)MessageType.File
-                : (int)MessageType.Text,
+            MessageType = participant.ParticipantRole == (int)ParticipantRole.Admin &&
+                          conversation.ConversationType == (int)ConversationType.Dispute
+                ? (int)MessageType.AdminOfficial
+                : attachments.Count > 0
+                    ? (int)MessageType.File
+                    : (int)MessageType.Text,
             Content = string.IsNullOrWhiteSpace(request.Content)
                 ? null
                 : request.Content.Trim(),
             ReplyToMessageId = request.ReplyToMessageId,
+            Metadata = command.ServerMetadata,
             ClientMessageId = clientMessageId,
             SentAt = now
         };
@@ -222,6 +228,36 @@ public class SendMessageCommandHandler : IRequestHandler<SendMessageCommand, Mes
         if (!replyExists)
         {
             throw new BadRequestException("ReplyToMessageId must belong to the same conversation.");
+        }
+    }
+
+    private async Task EnsureConversationWritable(
+        Conversation conversation,
+        ConversationParticipant participant,
+        CancellationToken cancellationToken)
+    {
+        if (conversation.ConversationType == (int)ConversationType.ContractWorkroom &&
+            participant.ParticipantRole == (int)ParticipantRole.Admin)
+        {
+            throw new ForbiddenAccessException("Administrators may only read Workspace conversations.");
+        }
+
+        if (conversation.ConversationType != (int)ConversationType.ContractWorkroom ||
+            !conversation.ContractsId.HasValue)
+        {
+            return;
+        }
+
+        var contractStatus = await _context.Set<Contract>()
+            .AsNoTracking()
+            .Where(contract => contract.ContractsId == conversation.ContractsId.Value)
+            .Select(contract => (int?)contract.Status)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (contractStatus == (int)ContractStatus.Disputed)
+        {
+            throw new BadRequestException(
+                "This contract is currently under dispute. Please continue communication in the dispute conversation.");
         }
     }
 

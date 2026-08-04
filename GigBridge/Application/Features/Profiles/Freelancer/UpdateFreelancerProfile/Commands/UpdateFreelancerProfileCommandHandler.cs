@@ -1,11 +1,14 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
-using Application.Features.Profiles.FreelancerProfile.CreateFreelancerProfile.DTOs;
+using Application.Features.Profiles.FreelancerProfile.Common.DTOs;
+using Application.Features.Profiles.FreelancerProfile.Common;
+using Application.Features.Profiles.FreelancerProfile.UpdateFreelancerProfile.DTOs;
 using AutoMapper;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using FreelancerProfileEntity = Domain.Entities.FreelancerProfile;
 
 namespace Application.Features.Profiles.FreelancerProfile.UpdateFreelancerProfile.Commands;
@@ -16,15 +19,18 @@ public class UpdateFreelancerProfileCommandHandler
     private readonly IApplicationDbContext _context;
     private readonly ICurrentUserService _currentUserService;
     private readonly IMapper _mapper;
+    private readonly ILogger<UpdateFreelancerProfileCommandHandler> _logger;
 
     public UpdateFreelancerProfileCommandHandler(
         IApplicationDbContext context,
         ICurrentUserService currentUserService,
-        IMapper mapper)
+        IMapper mapper,
+        ILogger<UpdateFreelancerProfileCommandHandler> logger)
     {
         _context = context;
         _currentUserService = currentUserService;
         _mapper = mapper;
+        _logger = logger;
     }
 
     public async Task<FreelancerProfileResponseDto> Handle(
@@ -36,8 +42,11 @@ public class UpdateFreelancerProfileCommandHandler
             throw new BadRequestException("User ID from token is invalid or missing.");
         }
 
+        await using var transaction = await _context.BeginTransactionAsync(cancellationToken);
+
         var user = await _context.Set<User>()
             .Include(u => u.FreelancerProfile)
+                .ThenInclude(profile => profile!.PortfolioItems)
             .FirstOrDefaultAsync(u => u.UserId == currentUserId, cancellationToken);
 
         if (user == null)
@@ -69,24 +78,137 @@ public class UpdateFreelancerProfileCommandHandler
         freelancerProfile.Location = request.Dto.Location?.Trim();
         freelancerProfile.UpdatedAt = now;
 
-        int score = 0;
-        if (!string.IsNullOrWhiteSpace(freelancerProfile.Title)) score += 30;
-        if (!string.IsNullOrWhiteSpace(freelancerProfile.Bio)) score += 30;
-        if (freelancerProfile.Availability != null) score += 20;
-        if (!string.IsNullOrWhiteSpace(freelancerProfile.Location)) score += 20;
-        freelancerProfile.ProfileCompletionScore = score;
+        var taxonomyMappings = await FreelancerProfileTaxonomy.ValidateAndLoadAsync(
+            _context,
+            request.Dto.MajorId,
+            request.Dto.CategoryIds,
+            cancellationToken);
+        await FreelancerProfileTaxonomy.SynchronizeSelectionsAsync(
+            _context,
+            freelancerProfile,
+            request.Dto.MajorId,
+            taxonomyMappings,
+            now,
+            cancellationToken);
 
-        bool requirementsMet = !string.IsNullOrWhiteSpace(freelancerProfile.Title) &&
-                               !string.IsNullOrWhiteSpace(freelancerProfile.Bio) &&
-                               !string.IsNullOrWhiteSpace(freelancerProfile.Location);
+        if (request.Dto.SkillIds is not null)
+        {
+            var skills = await FreelancerProfileSkills.ValidateAndLoadAsync(
+                _context,
+                request.Dto.SkillIds,
+                cancellationToken);
+            await FreelancerProfileSkills.SynchronizeAsync(
+                _context,
+                freelancerProfile,
+                skills,
+                cancellationToken);
+        }
 
-        if (requirementsMet)
+        if (request.Dto.PortfolioItems is not null)
+        {
+            SynchronizePortfolioItems(freelancerProfile, request.Dto.PortfolioItems);
+        }
+
+        freelancerProfile.ProfileCompletionScore = FreelancerProfileTaxonomy.CalculateCompletionScore(freelancerProfile);
+
+        if (FreelancerProfileTaxonomy.IsSetupComplete(freelancerProfile))
         {
             user.IsSetup = true;
         }
 
-        await _context.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _context.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException exception)
+        {
+            foreach (var entry in exception.Entries)
+            {
+                var primaryKey = entry.Metadata.FindPrimaryKey();
+                var key = primaryKey is null
+                    ? "<none>"
+                    : string.Join(
+                        ", ",
+                        primaryKey.Properties.Select(property =>
+                            $"{property.Name}={entry.Property(property.Name).CurrentValue}"));
+                _logger.LogWarning(
+                    exception,
+                    "Freelancer profile persistence conflict. Entity={EntityType}, State={EntityState}, Key={PrimaryKey}",
+                    entry.Metadata.ClrType.Name,
+                    entry.State,
+                    key);
+            }
+
+            throw new ConflictException(
+                "Your freelancer profile was updated by another request. Reload the latest profile and try again.",
+                exception);
+        }
 
         return _mapper.Map<FreelancerProfileResponseDto>(freelancerProfile);
     }
+
+    private void SynchronizePortfolioItems(
+        FreelancerProfileEntity freelancerProfile,
+        IReadOnlyCollection<UpdatePortfolioItemDto> requestedItems)
+    {
+        var requestedIds = requestedItems
+            .Where(item => item.PortfolioItemId.HasValue)
+            .Select(item => item.PortfolioItemId!.Value)
+            .ToList();
+        if (requestedIds.Distinct().Count() != requestedIds.Count)
+        {
+            throw new BadRequestException("Duplicate portfolio item IDs are not allowed.");
+        }
+
+        var existingById = freelancerProfile.PortfolioItems
+            .ToDictionary(item => item.PortfolioItemsId);
+        var unknownItemId = requestedIds.FirstOrDefault(id => !existingById.ContainsKey(id));
+        if (unknownItemId != Guid.Empty)
+        {
+            throw new BadRequestException("A portfolio item does not belong to the current freelancer profile.");
+        }
+
+        var requestedIdSet = requestedIds.ToHashSet();
+        var itemsToRemove = freelancerProfile.PortfolioItems
+            .Where(item => !requestedIdSet.Contains(item.PortfolioItemsId))
+            .ToList();
+        if (itemsToRemove.Count > 0)
+        {
+            _context.Set<PortfolioItem>().RemoveRange(itemsToRemove);
+            foreach (var item in itemsToRemove)
+            {
+                freelancerProfile.PortfolioItems.Remove(item);
+            }
+        }
+
+        foreach (var requestedItem in requestedItems)
+        {
+            PortfolioItem portfolioItem;
+            if (requestedItem.PortfolioItemId.HasValue)
+            {
+                portfolioItem = existingById[requestedItem.PortfolioItemId.Value];
+            }
+            else
+            {
+                portfolioItem = new PortfolioItem
+                {
+                    PortfolioItemsId = Guid.NewGuid(),
+                    FreelancerId = freelancerProfile.FreelancerProfilesId,
+                    Freelancer = freelancerProfile
+                };
+                freelancerProfile.PortfolioItems.Add(portfolioItem);
+                _context.Set<PortfolioItem>().Add(portfolioItem);
+            }
+
+            portfolioItem.Title = requestedItem.Title.Trim();
+            portfolioItem.Description = NormalizeOptional(requestedItem.Description);
+            portfolioItem.ProjectUrl = NormalizeOptional(requestedItem.ProjectUrl);
+            portfolioItem.ImageUrl = NormalizeOptional(requestedItem.ImageUrl);
+            portfolioItem.ProjectDate = requestedItem.ProjectDate;
+        }
+    }
+
+    private static string? NormalizeOptional(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 }

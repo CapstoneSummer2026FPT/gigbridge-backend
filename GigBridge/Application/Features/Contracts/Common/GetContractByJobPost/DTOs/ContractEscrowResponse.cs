@@ -6,6 +6,16 @@ public class ContractEscrowResponse
 
     public decimal RequiredAmount { get; set; }
 
+    public decimal RequiredTokens { get; set; }
+
+    public decimal FundingFeeRate { get; set; }
+
+    public decimal FundingFeeVnd { get; set; }
+
+    public decimal FundingFeeTokens { get; set; }
+
+    public decimal TotalDebitTokens { get; set; }
+
     public decimal FundedAmount { get; set; }
 
     public decimal ReleasedAmount { get; set; }

@@ -1,0 +1,58 @@
+using Application.Common.Exceptions;
+using Application.Common.Interfaces;
+using Application.Features.Disputes.Common.DTOs;
+using Application.Features.Disputes.Common.Internal;
+using Domain.Entities;
+using MediatR;
+using Microsoft.EntityFrameworkCore;
+
+namespace Application.Features.Disputes.Common.Queries;
+
+public sealed class GetDisputeEvidenceDownloadQueryHandler :
+    IRequestHandler<GetDisputeEvidenceDownloadQuery, DisputeEvidenceDownloadResponse>
+{
+    private readonly IApplicationDbContext _context;
+
+    public GetDisputeEvidenceDownloadQueryHandler(IApplicationDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<DisputeEvidenceDownloadResponse> Handle(
+        GetDisputeEvidenceDownloadQuery query,
+        CancellationToken cancellationToken)
+    {
+        var contract = await DisputeAccess.GetContractAsync(
+            _context,
+            query.ContractId,
+            cancellationToken);
+        await DisputeAccess.EnsureParticipantAsync(
+            _context,
+            contract,
+            query.UserId,
+            cancellationToken);
+
+        var evidence = await (
+                from dispute in _context.Set<Dispute>().AsNoTracking()
+                join item in _context.Set<DisputeEvidence>().AsNoTracking()
+                    on dispute.DisputesId equals item.DisputesId
+                where dispute.ContractsId == query.ContractId
+                      && dispute.DisputesId == query.DisputeId
+                      && item.DisputeEvidenceId == query.EvidenceId
+                select item)
+            .FirstOrDefaultAsync(cancellationToken)
+            ?? throw new NotFoundException("Dispute evidence does not exist.");
+
+        if (!evidence.IsRequestFulfilled && evidence.IsRequestedByAdmin ||
+            string.IsNullOrWhiteSpace(evidence.FileUrl) ||
+            string.IsNullOrWhiteSpace(evidence.FileName))
+        {
+            throw new BadRequestException("Dispute evidence does not have a downloadable URL.");
+        }
+
+        return new DisputeEvidenceDownloadResponse(
+            evidence.DisputeEvidenceId,
+            evidence.FileName,
+            evidence.FileUrl);
+    }
+}

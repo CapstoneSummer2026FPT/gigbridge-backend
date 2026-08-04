@@ -30,6 +30,10 @@ public sealed class GetESignDocumentQueryHandler
             request.UserId,
             cancellationToken);
 
-        return await ESignDocumentProjection.ToResponseAsync(_context, document, cancellationToken);
+        return await ESignDocumentProjection.ToResponseAsync(
+            _context,
+            document,
+            request.UserId,
+            cancellationToken);
     }
 }

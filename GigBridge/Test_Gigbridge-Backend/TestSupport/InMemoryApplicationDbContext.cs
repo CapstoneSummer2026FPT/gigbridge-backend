@@ -33,10 +33,74 @@ internal sealed class InMemoryApplicationDbContext : IApplicationDbContext
 
     public int SaveChangesCount { get; private set; }
 
+    public int TransactionBeginCount { get; private set; }
+
+    public int TransactionCommitCount { get; private set; }
+
+    public int TransactionLockCount { get; private set; }
+
+    public long? LastTransactionLockKey { get; private set; }
+
+    public Action<int>? OnSaveChanges { get; set; }
+
+    public Exception? SaveChangesException { get; set; }
+
+    public Task<IApplicationDbContextTransaction> BeginTransactionAsync(CancellationToken cancellationToken)
+    {
+        TransactionBeginCount++;
+        return Task.FromResult<IApplicationDbContextTransaction>(
+            new NoopApplicationDbContextTransaction(
+                () => TransactionCommitCount++,
+                lockKey =>
+                {
+                    TransactionLockCount++;
+                    LastTransactionLockKey = lockKey;
+                }));
+    }
+
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken)
     {
         SaveChangesCount++;
+        OnSaveChanges?.Invoke(SaveChangesCount);
+        if (SaveChangesException is not null)
+        {
+            return Task.FromException<int>(SaveChangesException);
+        }
+
         return Task.FromResult(1);
+    }
+}
+
+internal sealed class NoopApplicationDbContextTransaction : IApplicationDbContextTransaction
+{
+    private readonly Action? _onCommit;
+    private readonly Action<long>? _onAcquireLock;
+
+    public NoopApplicationDbContextTransaction(
+        Action? onCommit = null,
+        Action<long>? onAcquireLock = null)
+    {
+        _onCommit = onCommit;
+        _onAcquireLock = onAcquireLock;
+    }
+
+    public Task AcquireTransactionLockAsync(
+        long lockKey,
+        CancellationToken cancellationToken)
+    {
+        _onAcquireLock?.Invoke(lockKey);
+        return Task.CompletedTask;
+    }
+
+    public Task CommitAsync(CancellationToken cancellationToken)
+    {
+        _onCommit?.Invoke();
+        return Task.CompletedTask;
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        return ValueTask.CompletedTask;
     }
 }
 

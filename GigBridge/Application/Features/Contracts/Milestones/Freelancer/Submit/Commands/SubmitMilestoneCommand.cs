@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.IO;
 using Application.Features.Contracts.Milestones.Common.DTOs;
 using MediatR;
@@ -16,11 +15,11 @@ public sealed record SubmitMilestoneCommand(
     Guid ContractId,
     Guid MilestoneId,
     Guid UserId,
-    string Description = "",
-    IReadOnlyList<SubmitMilestoneFile>? Files = null) : IRequest<ContractMilestoneResponse>
+    string? Description = null,
+    SubmitMilestoneFile? File = null) : IRequest<ContractMilestoneResponse>
 {
     public SubmitMilestoneCommand(Guid contractId, Guid milestoneId, Guid userId)
-        : this(contractId, milestoneId, userId, string.Empty, Array.Empty<SubmitMilestoneFile>())
+        : this(contractId, milestoneId, userId, null, null)
     {
     }
 }

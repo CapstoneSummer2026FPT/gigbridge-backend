@@ -1,12 +1,25 @@
 using Application;
 using Application.Common.Interfaces.IService;
+using Application.Features.Admin.SystemTracking.Common.Interfaces;
 using Infrastructure;
 using Project_API.Extensions;
 using Project_API.Hubs;
+using Project_API.Middleware;
+using Project_API.Security;
+using Project_API.Services;
 using Project_API.Services.Chat;
 using Project_API.Services.Notification;
+using Project_API.Services.SystemTracking;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddScoped<Application.Common.Interfaces.IService.IRequestMetadataAccessor, Project_API.Services.RequestMetadataAccessor>();
+
+if (builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Testing"))
+{
+    builder.Logging.ClearProviders();
+    builder.Logging.AddConsole();
+    builder.Logging.AddDebug();
+}
 
 builder.Services.AddControllers();
 
@@ -17,42 +30,32 @@ builder.Services.AddInfrastructureServices(builder.Configuration);
 // API-layer concerns
 builder.Services.AddJwtAuthentication(builder.Configuration);
 builder.Services.AddSwaggerWithBearerAuth();
-builder.Services.AddCorsPolicy();
+builder.Services.AddCorsPolicy(builder.Configuration, builder.Environment);
+builder.Services.AddAuthRateLimiting();
+builder.Services.AddTrustedProxyForwarding();
 builder.Services.AddHttpContextAccessor();
-builder.Services.AddScoped<ICurrentUserService, Project_API.Services.CurrentUserService>();
+builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddScoped<IChatRealtimeNotifier, SignalRChatRealtimeNotifier>();
 builder.Services.AddScoped<INotificationSender, SignalRNotificationSender>();
 builder.Services.AddSignalR();
-
-if (!builder.Environment.IsEnvironment("Testing"))
-{
-}
+builder.Services.AddSingleton<SystemTrackingStore>();
+builder.Services.AddSingleton<ISystemTrackingReader>(provider => provider.GetRequiredService<SystemTrackingStore>());
 
 builder.Services.AddHybridCache(builder.Configuration);
 
 var app = builder.Build();
 
-// Enable Swagger in all environments for testing
+await app.EnsureLocalESignTemplatesAsync();
+
 app.UseSwagger();
 app.UseSwaggerUI();
 
-//using (var scope = app.Services.CreateScope())
-//{
-//    try
-//    {
-//        var db = scope.ServiceProvider.GetRequiredService<GigbridgeDbContext>();
-//        await DbSeeder.SeedLocalOnlyAsync<GigbridgeDbContext>(app.Services);
-//    }
-//    catch (Exception ex)
-//    {
-//        Console.WriteLine($"Seed failed: {ex.Message}");
-//    }
-//}
+app.UseForwardedHeaders();
+app.UseMiddleware<RequestLoggingMiddleware>();
+app.UseMiddleware<ExceptionHandlingMiddleware>();
 
-app.UseMiddleware<Project_API.Middleware.ExceptionHandlingMiddleware>();
-app.UseMiddleware<Project_API.Middleware.RequestLoggingMiddleware>();
-
-app.UseCors("AllowAll"); // CORS must be BEFORE UseHttpsRedirection and MapControllers
+app.UseCors(Project_API.Extensions.ServiceCollectionExtensions.FrontendCorsPolicy);
+app.UseRateLimiter();
 if (!app.Environment.IsEnvironment("Testing"))
 {
     app.UseHttpsRedirection();
@@ -60,16 +63,15 @@ if (!app.Environment.IsEnvironment("Testing"))
 }
 
 app.UseAuthentication();
+app.UseMiddleware<AccountStatusMiddleware>();
 app.UseAuthorization();
 
 app.MapHealthChecks("/health");
 app.MapControllers();
 app.MapHub<ChatHub>("/hubs/chat");
 app.MapHub<NotificationHub>("/hubs/notification");
+app.MapHub<SystemTrackingHub>("/hubs/system-tracking");
 
-if (!app.Environment.IsEnvironment("Testing"))
-{
-}
 
 app.Run();
 

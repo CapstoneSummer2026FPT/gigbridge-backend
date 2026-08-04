@@ -1,11 +1,16 @@
-﻿using FluentValidation;
+using Application.Common.Interfaces.IService;
+using FluentValidation;
 
 namespace Application.Features.JobPosts.Client.UpdateJobPost.Commands;
 
 public class UpdateJobPostCommandValidator : AbstractValidator<UpdateJobPostCommand>
 {
-    public UpdateJobPostCommandValidator()
+    private readonly IContentModerationService _contentModerationService;
+
+    public UpdateJobPostCommandValidator(IContentModerationService contentModerationService)
     {
+        _contentModerationService = contentModerationService;
+
         RuleFor(x => x.JobPostId)
             .NotEmpty()
             .WithMessage("JobPostId is required.");
@@ -28,6 +33,29 @@ public class UpdateJobPostCommandValidator : AbstractValidator<UpdateJobPostComm
             .NotEmpty()
             .WithMessage("Description is required.");
 
+        RuleFor(x => x.Request)
+            .Custom((request, context) =>
+            {
+                if (request is null)
+                {
+                    return;
+                }
+
+                var moderationResult = _contentModerationService.ValidateJobPostContent(
+                    request.Title,
+                    request.Description);
+
+                if (moderationResult.IsAllowed)
+                {
+                    return;
+                }
+
+                foreach (var violation in GetViolationMessages(moderationResult))
+                {
+                    context.AddFailure("JobPostContent", violation);
+                }
+            });
+
         RuleFor(x => x.Request.BudgetMin)
             .GreaterThanOrEqualTo(0)
             .When(x => x.Request.BudgetMin.HasValue)
@@ -45,11 +73,6 @@ public class UpdateJobPostCommandValidator : AbstractValidator<UpdateJobPostComm
                 request.BudgetMin.Value <= request.BudgetMax.Value)
             .WithMessage("BudgetMin must be less than or equal to BudgetMax.");
 
-        RuleFor(x => x.Request.MaxHires)
-            .GreaterThan(0)
-            .When(x => x.Request.MaxHires.HasValue)
-            .WithMessage("MaxHires must be greater than 0.");
-
         RuleFor(x => x.Request.Visibility)
             .NotNull()
             .WithMessage("Visibility is required.")
@@ -60,5 +83,23 @@ public class UpdateJobPostCommandValidator : AbstractValidator<UpdateJobPostComm
             .GreaterThan(DateTime.UtcNow)
             .When(x => x.Request.EndDate.HasValue)
             .WithMessage("EndDate must be in the future.");
+
+        RuleFor(x => (x.Request.SkillIds != null ? x.Request.SkillIds.Count : 0) + 
+                     (x.Request.CustomSkillNames != null ? x.Request.CustomSkillNames.Count : 0))
+            .LessThanOrEqualTo(10)
+            .When(x => x.Request != null)
+            .WithMessage("You can select up to 10 skills in total (including custom skills).");
+    }
+
+    private static IEnumerable<string> GetViolationMessages(ContentModerationResult moderationResult)
+    {
+        var violations = moderationResult.Violations
+            .Where(violation => !string.IsNullOrWhiteSpace(violation))
+            .Distinct()
+            .ToArray();
+
+        return violations.Length > 0
+            ? violations
+            : new[] { ContentModerationMessages.JobPostContentViolation };
     }
 }

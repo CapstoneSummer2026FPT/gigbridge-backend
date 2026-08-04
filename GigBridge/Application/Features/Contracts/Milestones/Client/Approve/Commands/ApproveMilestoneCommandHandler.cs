@@ -4,8 +4,10 @@ using Application.Common.Interfaces.IService;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.Contracts.Milestones.Common.DTOs;
 using Application.Features.Contracts.Milestones.Common.Internal;
+using Domain.Entities;
 using Domain.Enums;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.Contracts.Milestones.Client.Approve.Commands;
 
@@ -44,6 +46,11 @@ public sealed class ApproveMilestoneCommandHandler :
             command.MilestoneId,
             cancellationToken);
 
+        if (milestone.Status == (int)MilestoneStatus.Approved && milestone.ReleasedAmount >= milestone.Amount)
+        {
+            return MilestoneWorkflowGuard.ToResponse(milestone);
+        }
+
         if (milestone.Status != (int)MilestoneStatus.Submitted)
         {
             throw new BadRequestException("Only submitted milestones can be approved.");
@@ -54,6 +61,20 @@ public sealed class ApproveMilestoneCommandHandler :
         milestone.ApprovedAt = now;
         milestone.UpdatedAt = now;
         contract.UpdatedAt = now;
+
+        var milestones = await MilestoneWorkflowGuard.OrderMilestones(
+                _context.Set<Milestone>().Where(item => item.ContractsId == contract.ContractsId))
+            .ToListAsync(cancellationToken);
+        var next = milestones.FirstOrDefault(candidate =>
+            candidate.Status == (int)MilestoneStatus.Pending &&
+            milestones.Where(previous => (previous.SortOrder ?? 0) < (candidate.SortOrder ?? 0))
+                .All(previous => previous.Status == (int)MilestoneStatus.Approved));
+        if (next is not null)
+        {
+            next.Status = (int)MilestoneStatus.InProgress;
+            next.StartedAt = now;
+            next.UpdatedAt = now;
+        }
 
         await ContractConversationEvents.AddSystemMessageAsync(
             _context,

@@ -1,4 +1,4 @@
-using Application.Features.Profiles.FreelancerProfile.CreateFreelancerProfile.DTOs;
+using Application.Features.Profiles.FreelancerProfile.Common.DTOs;
 using Application.Features.Profiles.FreelancerProfile.UpdateFreelancerProfile.DTOs;
 using MediatR;
 

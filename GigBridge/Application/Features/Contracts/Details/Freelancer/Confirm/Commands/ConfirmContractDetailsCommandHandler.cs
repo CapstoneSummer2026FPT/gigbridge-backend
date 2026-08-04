@@ -15,13 +15,19 @@ public sealed class ConfirmContractDetailsCommandHandler :
 {
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
+    private readonly IChatRealtimeNotifier _chatRealtimeNotifier;
+    private readonly IContractEsignDocumentGenerator _documentGenerator;
 
     public ConfirmContractDetailsCommandHandler(
         IApplicationDbContext context,
-        IDateTimeService dateTimeService)
+        IDateTimeService dateTimeService,
+        IChatRealtimeNotifier chatRealtimeNotifier,
+        IContractEsignDocumentGenerator documentGenerator)
     {
         _context = context;
         _dateTimeService = dateTimeService;
+        _chatRealtimeNotifier = chatRealtimeNotifier;
+        _documentGenerator = documentGenerator;
     }
 
     public async Task<ContractWorkflowResponse> Handle(
@@ -44,10 +50,11 @@ public sealed class ConfirmContractDetailsCommandHandler :
         await ContractParticipantGuard.EnsureFreelancerAsync(_context, contract, command.UserId, cancellationToken);
 
         var milestones = await _context.Set<Milestone>()
+            .Include(item => item.WorkItems)
             .Where(milestone => milestone.ContractsId == contract.ContractsId)
             .ToListAsync(cancellationToken);
 
-        ContractDetailsValidator.ValidateMilestones(contract, milestones);
+        ContractDetailsValidator.ValidateMilestonesForSubmitOrPublish(contract, milestones);
 
         var now = _dateTimeService.UtcNow;
         var escrow = await _context.Set<ContractEscrow>()
@@ -71,6 +78,8 @@ public sealed class ConfirmContractDetailsCommandHandler :
 
         contract.Status = (int)ContractStatus.PendingSignature;
         contract.UpdatedAt = now;
+        var document = await ContractEsignRenderer.EnsureDocumentAsync(
+            _context, _documentGenerator, contract, now, cancellationToken);
 
         await ContractConversationEvents.AddSystemMessageAsync(
             _context,
@@ -81,6 +90,22 @@ public sealed class ConfirmContractDetailsCommandHandler :
 
         await _context.SaveChangesAsync(cancellationToken);
 
-        return new ContractWorkflowResponse(contract.ContractsId, contract.Status, escrow.ContractEscrowId, null);
+        var participantUserIds = await _context.Set<ConversationParticipant>()
+            .AsNoTracking()
+            .Where(p => p.Conversations.ContractsId == contract.ContractsId && p.LeftAt == null && p.DeletedAt == null)
+            .Select(p => p.UserId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        if (participantUserIds.Any())
+        {
+            await _chatRealtimeNotifier.SendUsersEventAsync(
+                [.. participantUserIds],
+                "ContractDetailsConfirmed",
+                new { contractId = contract.ContractsId },
+                cancellationToken);
+        }
+
+        return new ContractWorkflowResponse(contract.ContractsId, contract.Status, escrow.ContractEscrowId, document.EsignDocumentsId);
     }
 }

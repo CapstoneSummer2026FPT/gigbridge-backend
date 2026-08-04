@@ -1,3 +1,5 @@
+using Application.Features.JobPosts.Client.Common;
+
 namespace Application.Features.JobPosts.Client.GetMyJobPosts.DTOs;
 
 public sealed class GetMyJobPostDto
@@ -32,8 +34,6 @@ public sealed class GetMyJobPostDto
 
     public string? EstimatedDuration { get; set; }
 
-    public int? MaxHires { get; set; }
-
     public string? Location { get; set; }
 
     public int Status { get; set; }
@@ -43,10 +43,14 @@ public sealed class GetMyJobPostDto
     public DateTime? EndDate { get; set; }
 
     public bool? IsAigenerated { get; set; }
+    public bool IsFeatured { get; set; }
+    public DateTime? FeaturedUntil { get; set; }
 
     public DateTime CreatedAt { get; set; }
 
     public DateTime? UpdatedAt { get; set; }
 
     public int ProposalCount { get; set; }
+
+    public JobPostSetupProgressDto? SetupProgress { get; set; }
 }

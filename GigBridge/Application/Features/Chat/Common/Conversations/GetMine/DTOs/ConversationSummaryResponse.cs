@@ -23,5 +23,14 @@ public record ConversationSummaryResponse(
     string? OtherParticipantRoleTitle,
     Guid? LastOfferId,
     decimal? LastOfferPrice,
-    int? LastOfferStatus);
+    int? LastOfferStatus,
+    decimal? JobBudgetMin,
+    decimal? JobBudgetMax,
+    string? JobCurrency,
+    string? JobCategoryName,
+    decimal? ProposalBudget,
+    string? ProposalDuration,
+    int? JobStatus,
+    int? JobVisibility,
+    bool CanNegotiate);
 

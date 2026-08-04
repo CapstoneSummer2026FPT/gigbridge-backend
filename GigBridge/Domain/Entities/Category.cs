@@ -19,6 +19,4 @@ public partial class Category
     public virtual ICollection<MajorCategory> MajorCategories { get; set; } = new List<MajorCategory>();
 
     public virtual ICollection<CategorySkill> CategorySkills { get; set; } = new List<CategorySkill>();
-
-    public virtual ICollection<PortfolioItem> PortfolioItems { get; set; } = new List<PortfolioItem>();
 }

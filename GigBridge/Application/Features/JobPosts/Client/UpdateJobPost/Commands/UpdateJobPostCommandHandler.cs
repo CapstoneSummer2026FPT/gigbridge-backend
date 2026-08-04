@@ -1,7 +1,10 @@
-﻿using Application.Common.Exceptions;
+using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Application.Common.Models.Ai;
+using Application.Features.JobPosts.Client.Common;
 using Domain.Entities;
+using Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,17 +14,36 @@ public class UpdateJobPostCommandHandler : IRequestHandler<UpdateJobPostCommand,
 {
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
+    private readonly IContentModerationService _contentModerationService;
+    private readonly IAiServiceClient? _aiServiceClient;
 
     public UpdateJobPostCommandHandler(
         IApplicationDbContext context,
-        IDateTimeService dateTimeService)
+        IDateTimeService dateTimeService,
+        IContentModerationService contentModerationService)
+        : this(context, dateTimeService, contentModerationService, null)
+    {
+    }
+
+    public UpdateJobPostCommandHandler(
+        IApplicationDbContext context,
+        IDateTimeService dateTimeService,
+        IContentModerationService contentModerationService,
+        IAiServiceClient? aiServiceClient)
     {
         _context = context;
         _dateTimeService = dateTimeService;
+        _contentModerationService = contentModerationService;
+        _aiServiceClient = aiServiceClient;
     }
 
     public async Task<bool> Handle(UpdateJobPostCommand command, CancellationToken cancellationToken)
     {
+        JobPostContentModerationGuard.EnsureAllowed(
+            _contentModerationService,
+            command.Request.Title,
+            command.Request.Description);
+
         var clientProfile = await _context.Set<ClientProfile>()
             .FirstOrDefaultAsync(
                 profile => profile.UserId == command.UserId,
@@ -45,57 +67,67 @@ public class UpdateJobPostCommandHandler : IRequestHandler<UpdateJobPostCommand,
             throw new NotFoundException("Job post does not exist or you do not have permission to update it.");
         }
 
-        await ValidateMajorCategory(command.Request.MajorCategoryId, cancellationToken);
-        await ValidateSkillIds(command.Request.SkillIds, cancellationToken);
+        if (jobPost.Visibility == 3)
+        {
+            throw new BadRequestException("This job post has been locked by an admin and cannot be updated.");
+        }
 
-        UpdateJobPost(jobPost, command);
+        var normalizedSkills = await JobPostSkillNormalizer.NormalizeAsync(
+            _context,
+            command.Request.MajorCategoryId,
+            command.Request.SkillIds,
+            command.Request.CustomSkillNames,
+            cancellationToken);
 
-        await UpdateJobPostSkills(jobPost, command.Request.SkillIds, cancellationToken);
+        UpdateJobPost(jobPost, command, normalizedSkills);
+
+        await UpdateJobPostSkills(jobPost, normalizedSkills.SkillIds, cancellationToken);
+
+        var activeDefinition = await _context.Set<AiInterviewDefinition>()
+            .FirstOrDefaultAsync(
+                x => x.JobPostId == jobPost.JobPostsId &&
+                     x.Status == AiInterviewDefinitionStatus.Active,
+                cancellationToken);
+
+        if (activeDefinition != null && _aiServiceClient != null)
+        {
+            var systemSkillNames = await _context.Set<Skill>()
+                .AsNoTracking()
+                .Where(s => normalizedSkills.SkillIds.Contains(s.SkillsId))
+                .Select(s => s.Name)
+                .ToListAsync(cancellationToken);
+
+            var skills = systemSkillNames.Concat(normalizedSkills.CustomSkillNames)
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            var registered = await _aiServiceClient.CreateInterviewDefinitionAsync(
+                new AiInterviewDefinitionRequestDto
+                {
+                    JobId = jobPost.JobPostsId.ToString(),
+                    JobTitle = jobPost.Title,
+                    JobDescription = jobPost.Description,
+                    JobSkills = skills,
+                    Mode = activeDefinition.Mode,
+                    Language = activeDefinition.Language,
+                    QuestionCount = activeDefinition.QuestionCount
+                },
+                cancellationToken);
+
+            activeDefinition.ExternalReference = registered.DefinitionReference;
+            activeDefinition.UpdatedAt = _dateTimeService.UtcNow;
+        }
 
         await _context.SaveChangesAsync(cancellationToken);
 
         return true;
     }
 
-    private async Task ValidateMajorCategory(Guid? majorCategoryId, CancellationToken cancellationToken)
-    {
-        if (!majorCategoryId.HasValue)
-        {
-            return;
-        }
-
-        var majorCategoryExists = await _context.Set<MajorCategory>()
-            .AnyAsync(
-                majorCategory => majorCategory.MajorCategoriesId == majorCategoryId.Value,
-                cancellationToken);
-
-        if (!majorCategoryExists)
-        {
-            throw new NotFoundException("Major category does not exist.");
-        }
-    }
-
-    private async Task ValidateSkillIds(List<Guid>? skillIds, CancellationToken cancellationToken)
-    {
-        var distinctSkillIds = (skillIds ?? new List<Guid>())
-            .Distinct()
-            .ToList();
-
-        if (distinctSkillIds.Count == 0)
-        {
-            return;
-        }
-
-        var existingSkillCount = await _context.Set<Skill>()
-            .CountAsync(skill => distinctSkillIds.Contains(skill.SkillsId), cancellationToken);
-
-        if (existingSkillCount != distinctSkillIds.Count)
-        {
-            throw new NotFoundException("One or more skills do not exist.");
-        }
-    }
-
-    private void UpdateJobPost(JobPost jobPost, UpdateJobPostCommand command)
+    private void UpdateJobPost(
+        JobPost jobPost,
+        UpdateJobPostCommand command,
+        NormalizedJobPostSkills normalizedSkills)
     {
         var request = command.Request;
 
@@ -111,23 +143,18 @@ public class UpdateJobPostCommandHandler : IRequestHandler<UpdateJobPostCommand,
             : request.Currency.Trim();
 
         jobPost.EstimatedDuration = request.EstimatedDuration;
-        jobPost.MaxHires = request.MaxHires;
-        jobPost.Location = request.Location;
+        jobPost.Location = null;
         jobPost.Visibility = request.Visibility!.Value;
         jobPost.EndDate = request.EndDate;
 
-        jobPost.CustomSkillNames = (request.CustomSkillNames ?? new List<string>())
-            .Where(skillName => !string.IsNullOrWhiteSpace(skillName))
-            .Select(skillName => skillName.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        jobPost.CustomSkillNames = normalizedSkills.CustomSkillNames;
 
         jobPost.UpdatedAt = _dateTimeService.UtcNow;
     }
 
     private async Task UpdateJobPostSkills(
         JobPost jobPost,
-        List<Guid>? skillIds,
+        IReadOnlyList<Guid> skillIds,
         CancellationToken cancellationToken)
     {
         var oldSkills = await _context.Set<JobPostSkill>()
@@ -136,7 +163,7 @@ public class UpdateJobPostCommandHandler : IRequestHandler<UpdateJobPostCommand,
 
         _context.Set<JobPostSkill>().RemoveRange(oldSkills);
 
-        foreach (var skillId in (skillIds ?? []).Distinct())
+        foreach (var skillId in skillIds)
         {
             _context.Set<JobPostSkill>().Add(new JobPostSkill
             {

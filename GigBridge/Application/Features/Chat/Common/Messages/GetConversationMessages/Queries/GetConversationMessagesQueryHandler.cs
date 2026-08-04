@@ -1,5 +1,6 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
+using Application.Features.Chat.Common.Messages;
 using Application.Features.Chat.Common.Messages.GetConversationMessages.DTOs;
 using Domain.Entities;
 using MediatR;
@@ -34,7 +35,7 @@ public class GetConversationMessagesQueryHandler
                     participant.DeletedAt == null,
                 cancellationToken);
 
-        if (!isParticipant)
+        if (!isParticipant && !await CanAdminReadDisputeConversationAsync(request, cancellationToken))
         {
             throw new ForbiddenAccessException("You are not a participant in this conversation.");
         }
@@ -73,17 +74,67 @@ public class GetConversationMessagesQueryHandler
         var attachmentsByMessage = attachments
             .GroupBy(attachment => attachment.MessagesId)
             .ToDictionary(group => group.Key, group => group.Select(ToAttachmentResponse).ToList());
+        var scheduleIds = messages
+            .Where(message => message.ScheduleId.HasValue)
+            .Select(message => message.ScheduleId!.Value)
+            .ToHashSet();
+        var schedulesById = await _context.Set<Schedule>()
+            .AsNoTracking()
+            .Where(schedule => scheduleIds.Contains(schedule.ScheduleId))
+            .ToDictionaryAsync(schedule => schedule.ScheduleId, cancellationToken);
+        var now = DateTime.UtcNow;
 
         return messages
             .Select(message => ToMessageResponse(
                 message,
-                attachmentsByMessage.GetValueOrDefault(message.MessagesId) ?? []))
+                attachmentsByMessage.GetValueOrDefault(message.MessagesId) ?? [],
+                request.UserId,
+                now,
+                message.ScheduleId.HasValue
+                    ? schedulesById.GetValueOrDefault(message.ScheduleId.Value)
+                    : null))
             .ToList();
+    }
+
+    private async Task<bool> CanAdminReadDisputeConversationAsync(
+        GetConversationMessagesQuery request,
+        CancellationToken cancellationToken)
+    {
+        if (!request.AdminDisputeId.HasValue)
+            return false;
+
+        var isAdmin = await _context.Set<User>()
+            .AsNoTracking()
+            .AnyAsync(user => user.UserId == request.UserId &&
+                              user.Role == (int)Domain.Enums.UserRole.Admin &&
+                              user.IsActive,
+                cancellationToken);
+        if (!isAdmin)
+            return false;
+
+        var disputeContractId = await _context.Set<Dispute>()
+            .AsNoTracking()
+            .Where(dispute => dispute.DisputesId == request.AdminDisputeId.Value)
+            .Select(dispute => (Guid?)dispute.ContractsId)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (!disputeContractId.HasValue)
+            return false;
+
+        return await _context.Set<Conversation>()
+            .AsNoTracking()
+            .AnyAsync(conversation => conversation.ConversationsId == request.ConversationId &&
+                                      (conversation.DisputesId == request.AdminDisputeId ||
+                                       (conversation.ContractsId == disputeContractId &&
+                                        conversation.ConversationType == (int)Domain.Enums.ConversationType.ContractWorkroom)),
+                cancellationToken);
     }
 
     private static ConversationMessageResponse ToMessageResponse(
         Message message,
-        IReadOnlyList<MessageAttachmentResponse> attachments)
+        IReadOnlyList<MessageAttachmentResponse> attachments,
+        Guid viewerUserId,
+        DateTime utcNow,
+        Schedule? currentSchedule)
     {
         var isDeleted = message.DeletedForEveryoneAt.HasValue;
 
@@ -99,7 +150,8 @@ public class GetConversationMessagesQueryHandler
             message.SentAt,
             isDeleted ? null : message.EditedAt,
             isDeleted,
-            isDeleted ? [] : attachments);
+            isDeleted ? [] : attachments,
+            isDeleted ? null : MessageHelpers.ParseScheduleMetadata(message, viewerUserId, utcNow, currentSchedule));
     }
 
     private static MessageAttachmentResponse ToAttachmentResponse(MessageAttachment attachment)

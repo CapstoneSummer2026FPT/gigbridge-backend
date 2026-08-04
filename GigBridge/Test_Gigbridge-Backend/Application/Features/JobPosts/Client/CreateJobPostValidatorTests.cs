@@ -1,11 +1,12 @@
 using Application.Features.JobPosts.Client.CreateJobPost.Commands;
 using Application.Features.JobPosts.Client.CreateJobPost.DTOs;
+using Infrastructure.Services.ContentModerationService;
 
 namespace Test_Gigbridge_Backend.Application.Features.JobPosts.Client;
 
 public class CreateJobPostValidatorTests
 {
-    private readonly CreateJobPostValidator _validator = new();
+    private readonly CreateJobPostValidator _validator = new(new ContentModerationService());
 
     [Fact]
     public void Validate_ReturnsNoErrorsForValidRequest()
@@ -72,6 +73,77 @@ public class CreateJobPostValidatorTests
         Assert.Contains(result.Errors, error => error.PropertyName == "Request.EndDate");
     }
 
+    [Fact]
+    public void Validate_ReturnsError_WhenTotalSkillsExceedTen()
+    {
+        var request = CreateValidRequest() with
+        {
+            SkillIds = new List<Guid> { Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid() },
+            CustomSkillNames = new List<string> { "Skill1", "Skill2", "Skill3", "Skill4", "Skill5" } // Total = 11
+        };
+        var command = new CreateJobPostCommand(request, Guid.NewGuid());
+
+        var result = _validator.Validate(command);
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, error => error.ErrorMessage.Contains("up to 10 skills"));
+    }
+
+    [Fact]
+    public void Validate_ReturnsNoErrors_WhenTotalSkillsEqualsTen()
+    {
+        var request = CreateValidRequest() with
+        {
+            SkillIds = new List<Guid> { Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid() },
+            CustomSkillNames = new List<string> { "Skill1", "Skill2", "Skill3", "Skill4", "Skill5" } // Total = 10
+        };
+        var command = new CreateJobPostCommand(request, Guid.NewGuid());
+
+        var result = _validator.Validate(command);
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public void Validate_ReturnsError_WhenContentModerationBlocksJobPost()
+    {
+        var request = CreateValidRequest() with
+        {
+            Title = "Bu\u00f4n ma tuy",
+            Description = "Tuyen nguoi van chuyen hang."
+        };
+        var command = new CreateJobPostCommand(request, Guid.NewGuid());
+
+        var result = _validator.Validate(command);
+
+        Assert.False(result.IsValid);
+        Assert.Contains(
+            result.Errors,
+            error =>
+                error.PropertyName == "JobPostContent" &&
+                error.ErrorMessage == "Job post appears to request or promote illegal drug-related work.");
+    }
+
+    [Fact]
+    public void Validate_ReturnsGamblingViolation_WhenGamblingContentIsBlocked()
+    {
+        var request = CreateValidRequest() with
+        {
+            Title = "ca do bong da",
+            Description = "Tuyen nhan vien truc ca."
+        };
+        var command = new CreateJobPostCommand(request, Guid.NewGuid());
+
+        var result = _validator.Validate(command);
+
+        Assert.False(result.IsValid);
+        Assert.Contains(
+            result.Errors,
+            error =>
+                error.PropertyName == "JobPostContent" &&
+                error.ErrorMessage == "Job post appears to contain gambling or betting-related work.");
+    }
+
     private static CreateJobPostRequest CreateValidRequest()
     {
         return new CreateJobPostRequest(
@@ -82,8 +154,6 @@ public class CreateJobPostValidatorTests
             BudgetMax: 1000m,
             Currency: "VND",
             EstimatedDuration: "2 weeks",
-            MaxHires: 1,
-            Location: "Remote",
             Visibility: 1,
             EndDate: DateTime.UtcNow.AddDays(7),
             SkillIds: new List<Guid> { Guid.NewGuid() },

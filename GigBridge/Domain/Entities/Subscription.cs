@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using Domain.Enums;
 
 namespace Domain.Entities;
 
@@ -14,7 +15,7 @@ public partial class Subscription
     /// <summary>
     /// Enum SubscriptionStatus: 0=Active, 1=Expired, 2=Cancelled
     /// </summary>
-    public int Status { get; set; }
+    public SubscriptionStatus Status { get; set; }
 
     public DateTime StartDate { get; set; }
 

@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <title>Temporary Fixed Price Contract</title>
+  <style>
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      color: #111827;
+      line-height: 1.5;
+      margin: 32px;
+    }
+
+    h1,
+    h2 {
+      margin: 0 0 12px;
+    }
+
+    section {
+      margin: 24px 0;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+    }
+
+    th,
+    td {
+      border: 1px solid #d1d5db;
+      padding: 10px;
+      text-align: left;
+    }
+
+    th {
+      background: #f3f4f6;
+    }
+
+    .muted {
+      color: #6b7280;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Temporary Fixed Price Service Agreement</h1>
+  <p class="muted">This temporary e-sign template is used while the final contract document is being implemented.</p>
+
+  <section>
+    <h2>{{Contract.Title}}</h2>
+    <p>{{Contract.Description}}</p>
+  </section>
+
+  <section>
+    <h2>Contract Summary</h2>
+    <table>
+      <tr>
+        <th>Total budget</th>
+        <td>{{Contract.TotalBudget}}</td>
+      </tr>
+      <tr>
+        <th>Start date</th>
+        <td>{{Contract.StartDate}}</td>
+      </tr>
+      <tr>
+        <th>End date</th>
+        <td>{{Contract.EndDate}}</td>
+      </tr>
+    </table>
+  </section>
+
+  <section>
+    <h2>Parties</h2>
+    <table>
+      <tr>
+        <th>Client</th>
+        <td>{{Client.Name}} - {{Client.Email}}</td>
+      </tr>
+      <tr>
+        <th>Freelancer</th>
+        <td>{{Freelancer.Name}} - {{Freelancer.Email}}</td>
+      </tr>
+    </table>
+  </section>
+
+  <section>
+    <h2>Milestones</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Title</th>
+          <th>Amount</th>
+          <th>Due date</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{MilestonesHtml}}
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <p>
+      By signing this temporary agreement, both parties confirm the negotiated fixed-price contract details,
+      milestone schedule, and budget shown above.
+    </p>
+  </section>
+</body>
+</html>

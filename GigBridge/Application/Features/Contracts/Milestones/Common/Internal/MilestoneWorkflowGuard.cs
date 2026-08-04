@@ -44,9 +44,22 @@ internal static class MilestoneWorkflowGuard
 
     public static void EnsureContractActive(Contract contract)
     {
+        if (contract.Status == (int)ContractStatus.Disputed)
+        {
+            throw new BadRequestException("Cannot perform this action while the contract is under dispute.");
+        }
+
         if (contract.Status != (int)ContractStatus.Active)
         {
             throw new BadRequestException("Milestones can only be managed after the contract is active.");
+        }
+    }
+
+    public static void EnsureNotDisputed(Contract contract)
+    {
+        if (contract.Status == (int)ContractStatus.Disputed)
+        {
+            throw new BadRequestException("Cannot perform this action while the contract is under dispute.");
         }
     }
 
@@ -138,16 +151,36 @@ internal static class MilestoneWorkflowGuard
                 a.FileName,
                 a.FileUrl,
                 a.FileSize,
+                a.SourceType,
+                a.MimeType,
                 a.UploadedByUserId,
                 a.CreatedAt)))
             : new System.Collections.Generic.List<MilestoneAttachmentResponse>();
+        var workItems = milestone.WorkItems != null
+            ? milestone.WorkItems.OrderBy(item => item.OrderIndex).Select(item => new ContractWorkItemResponse(
+                item.ContractWorkItemId,
+                item.MilestonesId,
+                item.Title,
+                item.Description,
+                item.Deliverables,
+                item.EstimatedDuration,
+                item.OrderIndex,
+                item.Status,
+                item.ProgressNote,
+                item.CompletedAt,
+                item.UpdatedAt)).ToList()
+            : [];
 
         return new ContractMilestoneResponse(
             milestone.MilestonesId,
             milestone.ContractsId,
             milestone.Title,
+            milestone.Description,
             milestone.Amount,
+            milestone.EstimatedDuration,
             milestone.DueDate,
+            milestone.Deliverables,
+            milestone.AcceptanceCriteria,
             milestone.Status,
             milestone.SortOrder,
             milestone.StartedAt,
@@ -156,6 +189,15 @@ internal static class MilestoneWorkflowGuard
             milestone.ReleasedAmount,
             milestone.LastReleasedAt,
             milestone.SubmissionDescription,
-            attachments);
+            attachments,
+            workItems);
+    }
+
+    public static IOrderedQueryable<Milestone> OrderMilestones(IQueryable<Milestone> milestones)
+    {
+        return milestones
+            .OrderBy(milestone => milestone.SortOrder ?? int.MaxValue)
+            .ThenBy(milestone => milestone.CreatedAt)
+            .ThenBy(milestone => milestone.MilestonesId);
     }
 }

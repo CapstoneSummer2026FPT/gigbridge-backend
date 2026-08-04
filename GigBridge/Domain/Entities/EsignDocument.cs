@@ -30,6 +30,16 @@ public partial class EsignDocument
 
     public string? ExportedPdfUrl { get; set; }
 
+    public string? ContractSnapshotJson { get; set; }
+
+    public byte[]? FinalizedDocumentContent { get; set; }
+
+    public string? FinalizedDocumentFileName { get; set; }
+
+    public string? FinalizedDocumentMimeType { get; set; }
+
+    public long? FinalizedDocumentSizeBytes { get; set; }
+
     public DateTime CreatedAt { get; set; }
 
     public DateTime? UpdatedAt { get; set; }

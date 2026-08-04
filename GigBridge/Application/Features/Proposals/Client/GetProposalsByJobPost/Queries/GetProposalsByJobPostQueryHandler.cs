@@ -1,3 +1,8 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Features.Proposals.Common;
@@ -42,16 +47,39 @@ public class GetProposalsByJobPostQueryHandler : IRequestHandler<GetProposalsByJ
             throw new ForbiddenAccessException("You do not have permission to view proposals for this job.");
         }
 
-        var proposals = await _context.Set<Proposal>()
-            .AsNoTracking()
-            .Include(proposal => proposal.JobPosts)
-            .Include(proposal => proposal.FreelancerProfiles)
-                .ThenInclude(freelancerProfile => freelancerProfile.User)
-            .Where(proposal => proposal.JobPostsId == request.JobPostsId && proposal.Status != 0)
-            .OrderByDescending(proposal => proposal.SubmittedAt)
-            .Skip((NormalizePageIndex(request.PageIndex) - 1) * NormalizePageSize(request.PageSize))
-            .Take(NormalizePageSize(request.PageSize))
-            .ToListAsync(cancellationToken);
+        List<Proposal> proposals;
+        try
+        {
+            proposals = await _context.Set<Proposal>()
+                .AsNoTracking()
+                .Include(proposal => proposal.JobPosts)
+                .Include(proposal => proposal.FreelancerProfiles)
+                    .ThenInclude(freelancerProfile => freelancerProfile.User)
+                .Include(proposal => proposal.ProposalWorkBreakdownItems)
+                .Include(proposal => proposal.ProposalMilestonePlans)
+                .Include(proposal => proposal.ProposalAiJudging)
+                .Where(proposal => proposal.JobPostsId == request.JobPostsId && proposal.Status != 0)
+                .OrderByDescending(proposal => proposal.SubmittedAt)
+                .Skip((NormalizePageIndex(request.PageIndex) - 1) * NormalizePageSize(request.PageSize))
+                .Take(NormalizePageSize(request.PageSize))
+                .ToListAsync(cancellationToken);
+        }
+        catch
+        {
+            // Resilient fallback in case ProposalAiJudgings table has not been migrated yet in database
+            proposals = await _context.Set<Proposal>()
+                .AsNoTracking()
+                .Include(proposal => proposal.JobPosts)
+                .Include(proposal => proposal.FreelancerProfiles)
+                    .ThenInclude(freelancerProfile => freelancerProfile.User)
+                .Include(proposal => proposal.ProposalWorkBreakdownItems)
+                .Include(proposal => proposal.ProposalMilestonePlans)
+                .Where(proposal => proposal.JobPostsId == request.JobPostsId && proposal.Status != 0)
+                .OrderByDescending(proposal => proposal.SubmittedAt)
+                .Skip((NormalizePageIndex(request.PageIndex) - 1) * NormalizePageSize(request.PageSize))
+                .Take(NormalizePageSize(request.PageSize))
+                .ToListAsync(cancellationToken);
+        }
 
         return ProposalProjection.ToDtos(proposals);
     }

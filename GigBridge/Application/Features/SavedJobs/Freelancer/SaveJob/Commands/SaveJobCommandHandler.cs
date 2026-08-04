@@ -3,16 +3,19 @@ using Application.Common.Interfaces;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Application.Features.MarketplaceAnalytics.Common.Services;
 
 namespace Application.Features.SavedJobs.Freelancer.SaveJob.Commands;
 
 public class SaveJobCommandHandler : IRequestHandler<SaveJobCommand, Guid>
 {
     private readonly IApplicationDbContext _context;
+    private readonly IMarketplaceAnalyticsRecorder _analytics;
 
-    public SaveJobCommandHandler(IApplicationDbContext context)
+    public SaveJobCommandHandler(IApplicationDbContext context, IMarketplaceAnalyticsRecorder analytics)
     {
         _context = context;
+        _analytics = analytics;
     }
 
     public async Task<Guid> Handle(SaveJobCommand request, CancellationToken cancellationToken)
@@ -51,6 +54,15 @@ public class SaveJobCommandHandler : IRequestHandler<SaveJobCommand, Guid>
         _context.Set<SavedJob>().Add(savedJob);
 
         await _context.SaveChangesAsync(cancellationToken);
+
+        try
+        {
+            await _analytics.RecordJobSaveAsync(request.UserId, request.JobPostId, savedJob.CreatedAt, cancellationToken);
+        }
+        catch
+        {
+            // Discovery analytics is deliberately best-effort and must not undo the save.
+        }
 
         return savedJob.SavedJobsId;
     }

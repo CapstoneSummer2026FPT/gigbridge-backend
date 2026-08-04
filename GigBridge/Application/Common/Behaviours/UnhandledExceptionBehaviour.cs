@@ -1,5 +1,7 @@
-﻿using MediatR;
+using MediatR;
 using Microsoft.Extensions.Logging;
+using Application.Common.Exceptions;
+
 namespace Application.Common.Behaviours;
 
 public class UnhandledExceptionBehaviour<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse> where TRequest : notnull
@@ -18,7 +20,21 @@ public class UnhandledExceptionBehaviour<TRequest, TResponse> : IPipelineBehavio
         catch (Exception ex)
         {
             var requestName = typeof(TRequest).Name;
-            _logger.LogError(ex, "GigBridge Request: Unhandled Exception for Request {Name} {@Request}", requestName, request);
+
+            if (ex is not ValidationException &&
+                ex is not ConflictException &&
+                ex is not BadRequestException &&
+                ex is not UnauthorizedAccessException &&
+                ex is not NotFoundException &&
+                ex is not ExternalServiceException &&
+                ex is not ForbiddenAccessException)
+            {
+                _logger.LogError(ex, "GigBridge Request: Unhandled Exception for Request {Name}", requestName);
+            }
+            else
+            {
+                _logger.LogWarning(ex, "GigBridge Request: Expected Application Exception for Request {Name}", requestName);
+            }
             throw;
         }
     }

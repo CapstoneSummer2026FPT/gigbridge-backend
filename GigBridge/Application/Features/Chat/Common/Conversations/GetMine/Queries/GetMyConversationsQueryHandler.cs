@@ -2,6 +2,7 @@ using Application.Common.Interfaces;
 using Application.Features.Chat.Common.Conversations.GetMine.DTOs;
 using Application.Features.Chat.Common.Messages.GetConversationMessages.DTOs;
 using Application.Features.Chat.Common.Messages.Send.DTOs;
+using Application.Features.JobPosts.Common;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -40,6 +41,8 @@ public class GetMyConversationsQueryHandler
                 conversation.DeletedAt == null)
             .Include(conversation => conversation.JobPosts)
                 .ThenInclude(jobPost => jobPost!.MajorCategory)
+                    .ThenInclude(majorCategory => majorCategory!.Category)
+            .Include(conversation => conversation.Proposals)
             .OrderByDescending(conversation => conversation.LastMessageAt ?? conversation.CreatedAt)
             .ToListAsync(cancellationToken);
 
@@ -129,7 +132,19 @@ public class GetMyConversationsQueryHandler
                     otherParticipant?.User?.FreelancerProfile?.Title,
                     latestOffer?.NegotiationOfferId,
                     latestOffer?.FinalPrice,
-                    latestOffer?.Status
+                    latestOffer?.Status,
+                    conversation.JobPosts?.BudgetMin,
+                    conversation.JobPosts?.BudgetMax,
+                    conversation.JobPosts?.Currency,
+                    conversation.JobPosts?.MajorCategory?.Category?.Name,
+                    conversation.Proposals?.ProposedBudget,
+                    conversation.Proposals?.ProposedDuration,
+                    conversation.JobPosts?.Status,
+                    conversation.JobPosts?.Visibility,
+                    conversation.JobPosts is not null &&
+                        JobPostNegotiationGuard.IsEligibleForNegotiation(
+                            conversation.JobPosts.Status,
+                            conversation.JobPosts.Visibility)
                 );
             })
             .ToList();

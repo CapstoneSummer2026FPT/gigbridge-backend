@@ -1,6 +1,9 @@
-﻿using Application.Common.Exceptions;
+using System;
+using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Application.Features.Contracts.Common.Internal;
+using Application.Features.JobPosts.Client.Common;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -12,13 +15,16 @@ public class UpdateStatusJobPostCommandHandler
 {
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
+    private readonly IContentModerationService _contentModerationService;
 
     public UpdateStatusJobPostCommandHandler(
         IApplicationDbContext context,
-        IDateTimeService dateTimeService)
+        IDateTimeService dateTimeService,
+        IContentModerationService contentModerationService)
     {
         _context = context;
         _dateTimeService = dateTimeService;
+        _contentModerationService = contentModerationService;
     }
 
     public async Task<bool> Handle(
@@ -36,6 +42,8 @@ public class UpdateStatusJobPostCommandHandler
         }
 
         var jobPost = await _context.Set<JobPost>()
+            .Include(item => item.JobPostMilestonePlans)
+                .ThenInclude(item => item.WorkItems)
             .FirstOrDefaultAsync(
                 jobPost =>
                     jobPost.JobPostsId == command.JobPostId &&
@@ -45,6 +53,29 @@ public class UpdateStatusJobPostCommandHandler
         if (jobPost is null)
         {
             throw new NotFoundException("Job post does not exist or you do not have permission to update it.");
+        }
+
+        if (jobPost.Visibility == 3)
+        {
+            throw new BadRequestException("This job post has been locked by an admin and cannot be updated.");
+        }
+
+        JobPostContentModerationGuard.EnsureAllowed(
+            _contentModerationService,
+            jobPost.Title,
+            jobPost.Description);
+
+        if (command.Request.Status == JobPostSetupPublishGuard.OpenStatus)
+        {
+            JobPostSetupPublishGuard.EnsureProjectRequestCanPublish(
+                jobPost,
+                DateOnly.FromDateTime(_dateTimeService.UtcNow));
+            if (jobPost.JobPostMilestonePlans.Count > 0)
+            {
+                var total = jobPost.JobPostMilestonePlans.Sum(item => item.Amount);
+                jobPost.BudgetMin = total;
+                jobPost.BudgetMax = total;
+            }
         }
 
         jobPost.Status = command.Request.Status;

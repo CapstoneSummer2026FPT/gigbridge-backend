@@ -12,6 +12,58 @@ namespace Test_Gigbridge_Backend.Application.Features.Admin.Users;
 public class GetAllUsersQueryHandlerTests
 {
     [Fact]
+    public async Task Handle_MarksClientsAndFreelancersWithRoleCompatiblePaidSubscriptionsAsPremium()
+    {
+        await using var context = CreateContext();
+        var premiumFreelancer = AddUser(context, "Premium Freelancer", UserRole.Freelancer);
+        var freeFreelancer = AddUser(context, "Free Freelancer", UserRole.Freelancer);
+        var premiumClient = AddUser(context, "Premium Client", UserRole.Client);
+        var wrongPlanClient = AddUser(context, "Wrong Plan Client", UserRole.Client);
+        var admin = AddUser(context, "Admin", UserRole.Admin);
+
+        var freelancerPlan = AddPlan(context, "Freelancer Premium", 150m, UserRole.Freelancer);
+        var clientPlan = AddPlan(context, "Client Premium", 150m, UserRole.Client);
+        var freePlan = AddPlan(context, "Free", 0m, UserRole.Freelancer);
+        AddSubscription(context, premiumFreelancer, freelancerPlan);
+        AddSubscription(context, freeFreelancer, freePlan);
+        AddSubscription(context, premiumClient, clientPlan);
+        AddSubscription(context, wrongPlanClient, freelancerPlan);
+        await context.SaveChangesAsync();
+
+        var handler = new GetAllUsersQueryHandler(context, CreateMapper());
+        var result = await handler.Handle(new GetAllUsersQuery(PageSize: 10), CancellationToken.None);
+
+        Assert.Equal(2, result.Items.Count(user => user.IsPremium));
+        Assert.True(result.Items.Single(user => user.UserId == premiumFreelancer.UserId).IsPremium);
+        Assert.True(result.Items.Single(user => user.UserId == premiumClient.UserId).IsPremium);
+        Assert.False(result.Items.Single(user => user.UserId == freeFreelancer.UserId).IsPremium);
+        Assert.False(result.Items.Single(user => user.UserId == wrongPlanClient.UserId).IsPremium);
+        Assert.False(result.Items.Single(user => user.UserId == admin.UserId).IsPremium);
+    }
+
+    [Fact]
+    public async Task Handle_PremiumFilterIncludesRoleCompatibleClientsAndFreelancers()
+    {
+        await using var context = CreateContext();
+        var premiumFreelancer = AddUser(context, "Premium Freelancer", UserRole.Freelancer);
+        var premiumClient = AddUser(context, "Premium Client", UserRole.Client);
+        var freeClient = AddUser(context, "Free Client", UserRole.Client);
+        var freelancerPlan = AddPlan(context, "Freelancer Premium", 150m, UserRole.Freelancer);
+        var clientPlan = AddPlan(context, "Client Premium", 150m, UserRole.Client);
+        AddSubscription(context, premiumFreelancer, freelancerPlan);
+        AddSubscription(context, premiumClient, clientPlan);
+        await context.SaveChangesAsync();
+
+        var handler = new GetAllUsersQueryHandler(context, CreateMapper());
+        var result = await handler.Handle(
+            new GetAllUsersQuery(PageSize: 10, Premium: true), CancellationToken.None);
+
+        Assert.Contains(result.Items, user => user.UserId == premiumFreelancer.UserId);
+        Assert.Contains(result.Items, user => user.UserId == premiumClient.UserId);
+        Assert.DoesNotContain(result.Items, user => user.UserId == freeClient.UserId);
+    }
+
+    [Fact]
     public async Task Handle_AddsOpenReportCountsForPendingAndReviewingUserReports()
     {
         await using var context = CreateContext();
@@ -140,6 +192,47 @@ public class GetAllUsersQueryHandlerTests
 
         context.Users.Add(user);
         return user;
+    }
+
+    private static SubscriptionPlan AddPlan(
+        GigbridgeDbContext context,
+        string name,
+        decimal price,
+        UserRole targetRole)
+    {
+        var plan = new SubscriptionPlan
+        {
+            SubscriptionPlansId = Guid.NewGuid(),
+            Name = name,
+            Price = price,
+            DurationInDays = 30,
+            TargetRole = (int)targetRole,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        context.SubscriptionPlans.Add(plan);
+        return plan;
+    }
+
+    private static void AddSubscription(
+        GigbridgeDbContext context,
+        User user,
+        SubscriptionPlan plan)
+    {
+        var now = DateTime.UtcNow;
+        context.Subscriptions.Add(new Subscription
+        {
+            SubscriptionsId = Guid.NewGuid(),
+            UserId = user.UserId,
+            User = user,
+            SubscriptionPlansId = plan.SubscriptionPlansId,
+            SubscriptionPlans = plan,
+            Status = SubscriptionStatus.Active,
+            StartDate = now.AddDays(-1),
+            EndDate = now.AddDays(29),
+            CreatedAt = now
+        });
     }
 
     private static void AddReport(GigbridgeDbContext context, Guid reporterId, Guid targetId, ReportStatus status)

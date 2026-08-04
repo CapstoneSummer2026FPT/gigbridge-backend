@@ -13,7 +13,11 @@ public partial class Review
 
     public Guid RevieweeId { get; set; }
 
-    public int Rating { get; set; }
+    /// <summary>
+    /// Overall rating 1.0–5.0 with one decimal place (computed from the three
+    /// criteria sub-ratings). Drives the piecewise Elo calculation.
+    /// </summary>
+    public decimal Rating { get; set; }
 
     public string? Comment { get; set; }
 
@@ -24,6 +28,14 @@ public partial class Review
     public int? TimelinessRating { get; set; }
 
     public bool? IsVisible { get; set; }
+
+    public int ModerationStatus { get; set; }
+
+    public Guid? ModeratedByAdminId { get; set; }
+
+    public DateTime? ModeratedAt { get; set; }
+
+    public string? ModerationNote { get; set; }
 
     public DateTime CreatedAt { get; set; }
 

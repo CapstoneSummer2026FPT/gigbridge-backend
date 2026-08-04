@@ -7,12 +7,21 @@ namespace Application.Features.JobPosts.Common;
 
 internal static class JobPostProjection
 {
-    public static List<JobPostSummaryDto> ToSummaryDtos(IEnumerable<JobPost> jobPosts)
+    public static List<JobPostSummaryDto> ToSummaryDtos(
+        IEnumerable<JobPost> jobPosts,
+        DateTime? utcNow = null,
+        IReadOnlySet<Guid>? aiInterviewJobIds = null)
     {
-        return jobPosts.Select(ToSummaryDto).ToList();
+        var effectiveNow = utcNow ?? DateTime.UtcNow;
+        return jobPosts
+            .Select(jobPost => ToSummaryDto(jobPost, effectiveNow, aiInterviewJobIds))
+            .ToList();
     }
 
-    private static JobPostSummaryDto ToSummaryDto(JobPost jobPost)
+    private static JobPostSummaryDto ToSummaryDto(
+        JobPost jobPost,
+        DateTime utcNow,
+        IReadOnlySet<Guid>? aiInterviewJobIds)
     {
         var officialSkills = jobPost.JobPostSkills
             .Where(jobPostSkill => jobPostSkill.Skills is not null)
@@ -31,12 +40,21 @@ internal static class JobPostProjection
             BudgetMin: jobPost.BudgetMin,
             BudgetMax: jobPost.BudgetMax,
             CreatedAt: jobPost.CreatedAt,
+            Status: jobPost.Status,
+            Visibility: jobPost.Visibility,
             EloPoints: jobPost.ClientProfiles?.User?.UserEloScore?.CurrentPoints ?? UserEloCalculator.DefaultPoints,
+            ClientProfilesId: jobPost.ClientProfilesId,
+            ClientFullName: jobPost.ClientProfiles?.User?.FullName
+                            ?? jobPost.ClientProfiles?.CompanyName,
             Skills: officialSkills,
             CustomSkillNames: jobPost.CustomSkillNames.ToList(),
             SkillNames: officialSkills
                 .Select(skill => skill.SkillName)
-                .ToList());
+                .ToList(),
+            IsFeatured: jobPost.IsFeatured && jobPost.FeaturedUntil > utcNow,
+            FeaturedUntil: jobPost.FeaturedUntil,
+            IsAiGenerated: jobPost.IsAigenerated == true,
+            HasAiInterview: aiInterviewJobIds?.Contains(jobPost.JobPostsId) == true);
     }
 
     private static string CreatePreview(string? description)

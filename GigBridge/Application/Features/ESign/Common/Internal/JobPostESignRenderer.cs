@@ -92,7 +92,6 @@ internal static class JobPostESignRenderer
             ["{{Job.Budget}}"] = FormatBudget(jobPost),
             ["{{Job.Currency}}"] = jobPost.Currency,
             ["{{Job.EstimatedDuration}}"] = jobPost.EstimatedDuration,
-            ["{{Job.MaxHires}}"] = jobPost.MaxHires?.ToString(CultureInfo.InvariantCulture),
             ["{{Job.Location}}"] = jobPost.Location,
             ["{{Job.EndDate}}"] = jobPost.EndDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
         };
@@ -119,7 +118,6 @@ internal static class JobPostESignRenderer
               <dl>
                 <dt>Budget</dt><dd>{{Job.Budget}}</dd>
                 <dt>Estimated duration</dt><dd>{{Job.EstimatedDuration}}</dd>
-                <dt>Max hires</dt><dd>{{Job.MaxHires}}</dd>
                 <dt>Location</dt><dd>{{Job.Location}}</dd>
                 <dt>End date</dt><dd>{{Job.EndDate}}</dd>
               </dl>

@@ -11,9 +11,38 @@ public partial class Dispute
 
     public Guid InitiatorId { get; set; }
 
+    /// <summary>
+    /// The other party in the dispute (the non-initiator).
+    /// </summary>
+    public Guid? RespondentId { get; set; }
+
     public Guid? MilestonesId { get; set; }
 
+    /// <summary>
+    /// The report that was escalated to create this dispute, if any.
+    /// </summary>
+    public Guid? RelatedReportId { get; set; }
+
+    /// <summary>
+    /// Optional short title for the dispute.
+    /// </summary>
+    public string? Title { get; set; }
+
+    /// <summary>
+    /// Optional longer description for the dispute.
+    /// </summary>
+    public string? Description { get; set; }
+
     public string Reason { get; set; } = null!;
+
+    public decimal? ClaimedAmount { get; set; }
+
+    public string? RequestedResolution { get; set; }
+
+    /// <summary>
+    /// Enum DisputeUrgency: 0=Normal, 1=High, 2=Critical
+    /// </summary>
+    public int Urgency { get; set; }
 
     /// <summary>
     /// Enum DisputeStatus: 0=Open, 1=UnderReview, 2=Resolved, 3=Closed
@@ -35,17 +64,39 @@ public partial class Dispute
 
     public DateTime? UpdatedAt { get; set; }
 
+    public DateTime? OpenedAt { get; set; }
+
+    /// <summary>
+    /// The administrator assigned to review this dispute.
+    /// </summary>
+    public Guid? AssignedAdminId { get; set; }
+
+    /// <summary>
+    /// When the administrator was assigned to this dispute.
+    /// </summary>
+    public DateTime? AssignedAt { get; set; }
+
     public virtual Contract Contracts { get; set; } = null!;
 
     public virtual ICollection<Conversation> Conversations { get; set; } = new List<Conversation>();
 
     public virtual ICollection<DisputeEvidence> DisputeEvidences { get; set; } = new List<DisputeEvidence>();
 
-    public virtual ICollection<DisputeMessage> DisputeMessages { get; set; } = new List<DisputeMessage>();
+    public virtual ICollection<DisputeMilestoneDecision> MilestoneDecisions { get; set; } = new List<DisputeMilestoneDecision>();
+
+    public virtual ICollection<DisputePenalty> Penalties { get; set; } = new List<DisputePenalty>();
+
+    public virtual ICollection<UserViolation> UserViolations { get; set; } = new List<UserViolation>();
 
     public virtual Milestone? Milestones { get; set; }
 
     public virtual User? ResolvedByAdmin { get; set; }
 
+    public virtual User? AssignedAdmin { get; set; }
+
     public virtual User Initiator { get; set; } = null!;
+
+    public virtual User? Respondent { get; set; }
+
+    public virtual ReportContract? RelatedReport { get; set; }
 }

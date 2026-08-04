@@ -1,76 +1,100 @@
 using Application.Common.Interfaces.IService;
 using Application.Features.Auth.Shared.DTOs;
 using Microsoft.Extensions.Configuration;
-using System.Net;
-using System.Net.Mail;
+using Resend;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Infrastructure.Services.Email;
 
 public class EmailService : IEmailService
 {
+    private readonly IResend _resend;
     private readonly IConfiguration _configuration;
 
-    public EmailService(IConfiguration configuration)
+    public EmailService(IResend resend, IConfiguration configuration)
     {
+        _resend = resend;
         _configuration = configuration;
     }
 
     public async Task SendEmailAsync(EmailRequest emailRequestDTO, CancellationToken cancellationToken = default)
-    {
-        var host = _configuration["Smtp:Host"] ?? "smtp.gmail.com";
-        var port = GetSmtpPort();
-        var userName = GetRequiredSetting("Smtp:User", "SMTP_USER");
-        var password = GetRequiredSetting("Smtp:Password", "SMTP_PASSWORD");
-        var from = _configuration["Smtp:From"] ?? userName;
+   {
+        var fromEmail = _configuration["Resend:From"] ?? "onboarding@resend.dev";
+        var fromName = _configuration["Resend:FromName"] ?? "GigBridge";
 
-        using var client = new SmtpClient(host, port)
-        {
-            Credentials = new NetworkCredential(userName, password),
-            EnableSsl = true
-        };
-
-        using var message = new MailMessage
-        {
-            From = new MailAddress(from),
-            Subject = emailRequestDTO.Subject,
-            Body = emailRequestDTO.Body,
-            IsBodyHtml = emailRequestDTO.IsHtml
-        };
-
+        var message = new EmailMessage();
+        
+        // Construct From: "FromName <fromEmail>" or just "fromEmail"
+        message.From = string.IsNullOrWhiteSpace(fromName) ? fromEmail : $"{fromName} <{fromEmail}>";
+        
         message.To.Add(emailRequestDTO.To);
-        AddAttachments(message, emailRequestDTO.Attachments);
+        message.Subject = emailRequestDTO.Subject;
 
-        await client.SendMailAsync(message, cancellationToken);
-    }
-
-    private int GetSmtpPort()
-    {
-        var configuredPort = _configuration["Smtp:Port"];
-        return int.TryParse(configuredPort, out var port) ? port : 587;
-    }
-
-    private string GetRequiredSetting(string configurationKey, string environmentVariable)
-    {
-        var value = _configuration[configurationKey] ?? Environment.GetEnvironmentVariable(environmentVariable);
-
-        if (string.IsNullOrWhiteSpace(value))
+        if (emailRequestDTO.IsHtml)
         {
-            throw new InvalidOperationException($"{configurationKey} is required to send email.");
+            message.HtmlBody = emailRequestDTO.Body;
+            if (!string.IsNullOrWhiteSpace(emailRequestDTO.TextBody))
+            {
+                message.TextBody = emailRequestDTO.TextBody;
+            }
+        }
+        else
+        {
+            message.TextBody = emailRequestDTO.Body;
         }
 
-        return value;
+        if (!string.IsNullOrWhiteSpace(emailRequestDTO.MessageId))
+        {
+            message.Headers ??= new Dictionary<string, string>();
+            message.Headers["Message-ID"] = emailRequestDTO.MessageId;
+        }
+
+        var attachments = await LoadAttachmentsAsync(emailRequestDTO.Attachments, cancellationToken);
+        if (emailRequestDTO.ByteAttachments is { Count: > 0 })
+        {
+            attachments ??= new List<EmailAttachment>();
+            attachments.AddRange(emailRequestDTO.ByteAttachments.Select(attachment => new EmailAttachment
+            {
+                Filename = attachment.FileName,
+                Content = attachment.Content,
+                ContentType = attachment.ContentType
+            }));
+        }
+        if (attachments != null)
+        {
+            message.Attachments ??= new List<EmailAttachment>();
+            message.Attachments.AddRange(attachments);
+        }
+
+        if (string.IsNullOrWhiteSpace(emailRequestDTO.IdempotencyKey))
+        {
+            await _resend.EmailSendAsync(message, cancellationToken);
+        }
+        else
+        {
+            await _resend.EmailSendAsync(emailRequestDTO.IdempotencyKey, message, cancellationToken);
+        }
     }
 
-    private static void AddAttachments(MailMessage message, IEnumerable<string>? attachments)
+    private static async Task<List<EmailAttachment>?> LoadAttachmentsAsync(IEnumerable<string>? attachments, CancellationToken cancellationToken)
     {
         if (attachments is null)
         {
-            return;
+            return null;
         }
 
+        var list = new List<EmailAttachment>();
         foreach (var filePath in attachments.Where(File.Exists))
         {
-            message.Attachments.Add(new Attachment(filePath));
+            var attachment = await EmailAttachment.FromAsync(filePath, cancellationToken);
+            list.Add(attachment);
         }
+
+        return list.Count > 0 ? list : null;
     }
 }

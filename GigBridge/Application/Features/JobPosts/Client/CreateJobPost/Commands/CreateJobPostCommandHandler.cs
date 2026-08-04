@@ -1,6 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Application.Features.JobPosts.Client.Common;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
@@ -12,15 +13,25 @@ public class CreateJobPostCommandHandler : IRequestHandler<CreateJobPostCommand,
 {
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
+    private readonly IContentModerationService _contentModerationService;
 
-    public CreateJobPostCommandHandler(IApplicationDbContext context, IDateTimeService dateTimeService)
+    public CreateJobPostCommandHandler(
+        IApplicationDbContext context,
+        IDateTimeService dateTimeService,
+        IContentModerationService contentModerationService)
     {
         _context = context;
         _dateTimeService = dateTimeService;
+        _contentModerationService = contentModerationService;
     }
 
     public async Task<Guid> Handle(CreateJobPostCommand command, CancellationToken cancellationToken)
     {
+        JobPostContentModerationGuard.EnsureAllowed(
+            _contentModerationService,
+            command.Request.Title,
+            command.Request.Description);
+
         var clientProfile = await _context.Set<ClientProfile>()
             .FirstOrDefaultAsync(profile => profile.UserId == command.UserId, cancellationToken);
 
@@ -29,10 +40,14 @@ public class CreateJobPostCommandHandler : IRequestHandler<CreateJobPostCommand,
             throw new NotFoundException("Client profile does not exist.");
         }
 
-        await ValidateMajorCategory(command.Request.MajorCategoryId, cancellationToken);
-        await ValidateSkillIds(command.Request.SkillIds, cancellationToken);
+        var normalizedSkills = await JobPostSkillNormalizer.NormalizeAsync(
+            _context,
+            command.Request.MajorCategoryId,
+            command.Request.SkillIds,
+            command.Request.CustomSkillNames,
+            cancellationToken);
 
-        var jobPost = CreateJobPost(command, clientProfile.ClientProfilesId);
+        var jobPost = CreateJobPost(command, clientProfile.ClientProfilesId, normalizedSkills);
 
         _context.Set<JobPost>().Add(jobPost);
         _context.Set<Contract>().Add(CreateDraftContract(jobPost));
@@ -42,53 +57,12 @@ public class CreateJobPostCommandHandler : IRequestHandler<CreateJobPostCommand,
         return jobPost.JobPostsId;
     }
 
-    private async Task ValidateMajorCategory(Guid? majorCategoryId, CancellationToken cancellationToken)
-    {
-        if (!majorCategoryId.HasValue)
-        {
-            return;
-        }
-
-        var majorCategoryExists = await _context.Set<MajorCategory>()
-            .AnyAsync(
-                majorCategory => majorCategory.MajorCategoriesId == majorCategoryId.Value,
-                cancellationToken);
-
-        if (!majorCategoryExists)
-        {
-            throw new NotFoundException("Major category does not exist.");
-        }
-    }
-
-    private async Task ValidateSkillIds(List<Guid>? skillIds, CancellationToken cancellationToken)
-    {
-        var distinctSkillIds = (skillIds ?? new List<Guid>())
-            .Distinct()
-            .ToList();
-
-        if (distinctSkillIds.Count == 0)
-        {
-            return;
-        }
-
-        var existingSkillCount = await _context.Set<Skill>()
-            .CountAsync(skill => distinctSkillIds.Contains(skill.SkillsId), cancellationToken);
-
-        if (existingSkillCount != distinctSkillIds.Count)
-        {
-            throw new NotFoundException("One or more skills do not exist.");
-        }
-    }
-
-    private JobPost CreateJobPost(CreateJobPostCommand command, Guid clientProfileId)
+    private JobPost CreateJobPost(
+        CreateJobPostCommand command,
+        Guid clientProfileId,
+        NormalizedJobPostSkills normalizedSkills)
     {
         var request = command.Request;
-
-        var customSkillNames = (request.CustomSkillNames ?? new List<string>())
-            .Where(skillName => !string.IsNullOrWhiteSpace(skillName))
-            .Select(skillName => skillName.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
 
         var jobPost = new JobPost
         {
@@ -104,18 +78,17 @@ public class CreateJobPostCommandHandler : IRequestHandler<CreateJobPostCommand,
             BudgetMax = request.BudgetMax,
             Currency = string.IsNullOrWhiteSpace(request.Currency) ? "USD" : request.Currency.Trim(),
             EstimatedDuration = request.EstimatedDuration,
-            MaxHires = request.MaxHires,
-            Location = request.Location,
+            Location = null,
             Visibility = request.Visibility ?? 0,
             EndDate = request.EndDate,
 
-            CustomSkillNames = customSkillNames,
+            CustomSkillNames = normalizedSkills.CustomSkillNames,
 
             Status = 0,
             CreatedAt = _dateTimeService.UtcNow
         };
 
-        foreach (var skillId in (request.SkillIds ?? new List<Guid>()).Distinct())
+        foreach (var skillId in normalizedSkills.SkillIds)
         {
             jobPost.JobPostSkills.Add(new JobPostSkill
             {

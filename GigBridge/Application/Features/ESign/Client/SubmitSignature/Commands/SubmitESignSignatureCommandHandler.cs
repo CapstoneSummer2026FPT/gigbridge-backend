@@ -109,8 +109,6 @@ public sealed class SubmitESignSignatureCommandHandler
         document.Status = (int)ESignDocumentStatus.FullySigned;
         document.FinalizedAt = now;
         document.UpdatedAt = now;
-        jobPost.Status = OpenJobPostStatus;
-        jobPost.UpdatedAt = now;
 
         await _context.SaveChangesAsync(cancellationToken);
 

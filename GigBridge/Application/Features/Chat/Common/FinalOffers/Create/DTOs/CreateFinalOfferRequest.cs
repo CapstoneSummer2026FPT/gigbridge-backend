@@ -1,3 +1,5 @@
+using Application.Features.Chat.Common.Negotiations.MilestonePlans.DTOs;
+
 namespace Application.Features.Chat.Common.FinalOffers.Create.DTOs;
 
 public record CreateFinalOfferRequest(
@@ -6,4 +8,5 @@ public record CreateFinalOfferRequest(
     string? ScopeSummary,
     DateOnly? StartDate,
     DateOnly? EndDate,
-    string? ClientNote);
+    string? ClientNote,
+    IReadOnlyCollection<NegotiationMilestoneDto>? Milestones = null);

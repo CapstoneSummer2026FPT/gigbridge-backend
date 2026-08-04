@@ -1,37 +1,52 @@
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
+using Application.Common.Interfaces.IService;
+using Application.Features.Contracts.Common.DTOs;
 using Domain.Entities;
 using Domain.Enums;
 using Microsoft.EntityFrameworkCore;
-using System.Net;
-using System.Security.Cryptography;
-using System.Text;
 
 namespace Application.Features.Contracts.Common.Internal;
 
 internal static class ContractEsignRenderer
 {
     public const string FixedPriceTemplateCode = "CONTRACT_FIXED_PRICE";
+    public const string PolicyVersion = "1.0-DATN";
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public static async Task<EsignDocument> EnsureDocumentAsync(
         IApplicationDbContext context,
+        IContractEsignDocumentGenerator documentGenerator,
         Contract contract,
         DateTime now,
         CancellationToken cancellationToken)
     {
         var existing = await context.Set<EsignDocument>()
-            .FirstOrDefaultAsync(document => document.ContractsId == contract.ContractsId, cancellationToken);
+            .Where(document =>
+                document.ContractsId == contract.ContractsId &&
+                document.Status != (int)ESignDocumentStatus.Voided &&
+                document.Status != (int)ESignDocumentStatus.Expired)
+            .OrderByDescending(document => document.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
 
-        if (existing is not null)
+        if (existing is not null &&
+            (!string.IsNullOrWhiteSpace(existing.ContractSnapshotJson) ||
+             existing.Status == (int)ESignDocumentStatus.FullySigned))
         {
             return existing;
         }
 
-        var template = await context.Set<EsignTemplate>()
-            .Where(template => template.TemplateCode == FixedPriceTemplateCode && template.IsActive)
-            .OrderByDescending(template => template.Version)
-            .ThenByDescending(template => template.CreatedAt)
-            .FirstOrDefaultAsync(cancellationToken);
+        var template = existing is null
+            ? await context.Set<EsignTemplate>()
+                .Where(item => item.TemplateCode == FixedPriceTemplateCode && item.IsActive)
+                .OrderByDescending(item => item.Version)
+                .ThenByDescending(item => item.CreatedAt)
+                .FirstOrDefaultAsync(cancellationToken)
+            : await context.Set<EsignTemplate>()
+                .FirstOrDefaultAsync(item => item.EsignTemplatesId == existing.EsignTemplatesId, cancellationToken);
 
         if (template is null)
         {
@@ -39,102 +54,204 @@ internal static class ContractEsignRenderer
         }
 
         var milestones = await context.Set<Milestone>()
+            .Include(milestone => milestone.WorkItems)
             .Where(milestone => milestone.ContractsId == contract.ContractsId)
             .OrderBy(milestone => milestone.SortOrder)
             .ThenBy(milestone => milestone.CreatedAt)
             .ToListAsync(cancellationToken);
 
         var clientProfile = await context.Set<ClientProfile>()
-            .FirstOrDefaultAsync(
-                profile => profile.ClientProfilesId == contract.ClientProfilesId,
-                cancellationToken);
-
-        var clientUser = clientProfile is null
-            ? null
-            : await context.Set<User>()
-                .FirstOrDefaultAsync(user => user.UserId == clientProfile.UserId, cancellationToken);
-
-        User? freelancerUser = null;
-        if (contract.FreelancerProfilesId.HasValue)
-        {
-            var freelancerProfile = await context.Set<FreelancerProfile>()
+            .FirstOrDefaultAsync(profile => profile.ClientProfilesId == contract.ClientProfilesId, cancellationToken);
+        var freelancerProfile = contract.FreelancerProfilesId.HasValue
+            ? await context.Set<FreelancerProfile>()
                 .FirstOrDefaultAsync(
                     profile => profile.FreelancerProfilesId == contract.FreelancerProfilesId.Value,
-                    cancellationToken);
+                    cancellationToken)
+            : null;
+        var clientUser = clientProfile is null
+            ? null
+            : await context.Set<User>().FirstOrDefaultAsync(item => item.UserId == clientProfile.UserId, cancellationToken);
+        var freelancerUser = freelancerProfile is null
+            ? null
+            : await context.Set<User>().FirstOrDefaultAsync(item => item.UserId == freelancerProfile.UserId, cancellationToken);
 
-            if (freelancerProfile is not null)
-            {
-                freelancerUser = await context.Set<User>()
-                    .FirstOrDefaultAsync(user => user.UserId == freelancerProfile.UserId, cancellationToken);
-            }
+        if (clientProfile is null || freelancerProfile is null || clientUser is null || freelancerUser is null)
+        {
+            throw new BadRequestException("Both contract participants must exist before creating an ESign document.");
         }
 
-        var renderedHtml = Render(template.HtmlContent, contract, milestones, clientUser, freelancerUser);
+        var proposal = contract.ProposalsId.HasValue
+            ? await context.Set<Proposal>().AsNoTracking()
+                .FirstOrDefaultAsync(item => item.ProposalsId == contract.ProposalsId.Value, cancellationToken)
+            : null;
+        var finalOffer = await context.Set<NegotiationOffer>().AsNoTracking()
+            .Where(item => item.ContractsId == contract.ContractsId)
+            .OrderByDescending(item => item.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var documentId = existing?.EsignDocumentsId ?? Guid.NewGuid();
+        var documentCode = existing?.DocumentCode ?? $"GB-{now:yyyyMMdd}-{Guid.NewGuid():N}"[..22].ToUpperInvariant();
+        var snapshot = BuildSnapshot(
+            documentId,
+            documentCode,
+            template.Version,
+            contract,
+            clientProfile,
+            clientUser,
+            freelancerProfile,
+            freelancerUser,
+            proposal,
+            finalOffer,
+            milestones,
+            existing?.CreatedAt ?? now,
+            existing?.DocumentHash);
+        var snapshotJson = JsonSerializer.Serialize(snapshot, JsonOptions);
+        var preview = documentGenerator.RenderPreview(snapshot);
+        var snapshotHash = Hash(snapshotJson);
+
+        if (existing is not null)
+        {
+            existing.ContractSnapshotJson = snapshotJson;
+            existing.RenderedHtmlContent = preview;
+            existing.DocumentHash = snapshotHash;
+            existing.UpdatedAt = now;
+            return existing;
+        }
+
         var document = new EsignDocument
         {
-            EsignDocumentsId = Guid.NewGuid(),
+            EsignDocumentsId = documentId,
             EsignTemplatesId = template.EsignTemplatesId,
             JobPostsId = contract.JobPostsId,
             ContractsId = contract.ContractsId,
-            DocumentCode = $"GB-{now:yyyyMMdd}-{Guid.NewGuid():N}"[..22].ToUpperInvariant(),
-            RenderedHtmlContent = renderedHtml,
+            DocumentCode = documentCode,
+            RenderedHtmlContent = preview,
+            ContractSnapshotJson = snapshotJson,
             Status = (int)ESignDocumentStatus.PendingSignatures,
-            DocumentHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(renderedHtml))).ToLowerInvariant(),
+            DocumentHash = snapshotHash,
             CreatedAt = now
         };
 
         context.Set<EsignDocument>().Add(document);
-
         return document;
     }
 
-    private static string Render(
-        string template,
-        Contract contract,
-        IReadOnlyList<Milestone> milestones,
-        User? clientUser,
-        User? freelancerUser)
+    public static ContractDocumentSnapshot GetSnapshot(EsignDocument document)
     {
-        var milestoneRows = string.Join(
-            string.Empty,
-            milestones.Select((milestone, index) =>
-            {
-                var dueDate = milestone.DueDate?.ToString("yyyy-MM-dd") ?? string.Empty;
-                return "<tr>" +
-                    $"<td>{index + 1}</td>" +
-                    $"<td>{Encode(milestone.Title)}</td>" +
-                    $"<td>{milestone.Amount:0.##} VND</td>" +
-                    $"<td>{Encode(dueDate)}</td>" +
-                    "</tr>";
-            }));
-
-        var replacements = new Dictionary<string, (string? Value, bool IsHtml)>
+        if (string.IsNullOrWhiteSpace(document.ContractSnapshotJson))
         {
-            ["{{Contract.Title}}"] = (contract.Title, false),
-            ["{{Contract.Description}}"] = (contract.Description, false),
-            ["{{Contract.TotalBudget}}"] = ($"{contract.TotalBudget:0.##} VND", false),
-            ["{{Contract.StartDate}}"] = (contract.StartDate?.ToString("yyyy-MM-dd"), false),
-            ["{{Contract.EndDate}}"] = (contract.EndDate?.ToString("yyyy-MM-dd"), false),
-            ["{{Client.Name}}"] = (clientUser?.FullName, false),
-            ["{{Client.Email}}"] = (clientUser?.Email, false),
-            ["{{Freelancer.Name}}"] = (freelancerUser?.FullName, false),
-            ["{{Freelancer.Email}}"] = (freelancerUser?.Email, false),
-            ["{{MilestonesHtml}}"] = (milestoneRows, true)
-        };
-
-        var rendered = template;
-        foreach (var replacement in replacements)
-        {
-            rendered = rendered.Replace(
-                replacement.Key,
-                replacement.Value.IsHtml ? replacement.Value.Value ?? string.Empty : Encode(replacement.Value.Value));
+            throw new BadRequestException("The ESign contract snapshot is missing.");
         }
 
-        return rendered;
+        return JsonSerializer.Deserialize<ContractDocumentSnapshot>(document.ContractSnapshotJson, JsonOptions)
+            ?? throw new BadRequestException("The ESign contract snapshot is invalid.");
     }
 
-    private static string Encode(string? value)
+    public static ContractSignatureSnapshot ToSignatureSnapshot(EsignSignature signature)
     {
-        return WebUtility.HtmlEncode(value ?? string.Empty);
+        if (!signature.SignedAt.HasValue || string.IsNullOrWhiteSpace(signature.SignatureImageUrl))
+        {
+            throw new BadRequestException("A completed ESign signature is missing required evidence.");
+        }
+
+        return new ContractSignatureSnapshot(
+            signature.UserId,
+            signature.SignerRole,
+            signature.SignatureImageUrl,
+            signature.SignatureWidth,
+            signature.SignatureHeight,
+            signature.SignedAt.Value,
+            signature.IpAddress,
+            signature.UserAgent,
+            signature.PolicyVersion,
+            signature.PolicyAcceptedAt);
     }
+
+    public static string ComputeFinalHash(
+        EsignDocument document,
+        ContractSignatureSnapshot clientSignature,
+        ContractSignatureSnapshot freelancerSignature) =>
+        Hash($"{JsonSerializer.Serialize(GetSnapshot(document), JsonOptions)}\n{JsonSerializer.Serialize(clientSignature, JsonOptions)}\n{JsonSerializer.Serialize(freelancerSignature, JsonOptions)}");
+
+    private static ContractDocumentSnapshot BuildSnapshot(
+        Guid documentId,
+        string documentCode,
+        int templateVersion,
+        Contract contract,
+        ClientProfile client,
+        User clientUser,
+        FreelancerProfile freelancer,
+        User freelancerUser,
+        Proposal? proposal,
+        NegotiationOffer? finalOffer,
+        IReadOnlyList<Milestone> milestones,
+        DateTime createdAt,
+        string? previousHash)
+    {
+        var scopeLines = milestones.SelectMany(milestone =>
+            new[] { milestone.Title }
+                .Concat(milestone.WorkItems.OrderBy(item => item.OrderIndex).Select(item => item.Title)));
+        var scope = string.Join("; ", scopeLines.Where(value => !string.IsNullOrWhiteSpace(value)));
+        if (!string.IsNullOrWhiteSpace(finalOffer?.ScopeSummary))
+        {
+            scope = string.IsNullOrWhiteSpace(scope) ? finalOffer.ScopeSummary : $"{finalOffer.ScopeSummary}; {scope}";
+        }
+
+        var milestoneSnapshots = milestones.Select((milestone, index) =>
+        {
+            var deliverables = new[] { milestone.Deliverables }
+                .Concat(milestone.WorkItems.OrderBy(item => item.OrderIndex).Select(item => item.Deliverables))
+                .Where(value => !string.IsNullOrWhiteSpace(value));
+            return new ContractMilestoneSnapshot(
+                index + 1,
+                milestone.Title,
+                milestone.Description,
+                string.Join("; ", deliverables),
+                milestone.AcceptanceCriteria,
+                index == 0 ? contract.StartDate : milestones[index - 1].DueDate,
+                milestone.DueDate,
+                null,
+                milestone.Amount);
+        }).ToList();
+
+        return new ContractDocumentSnapshot(
+            documentId,
+            contract.ContractsId,
+            contract.JobPostsId,
+            contract.ProposalsId,
+            finalOffer?.NegotiationOfferId,
+            documentCode,
+            Math.Max(1, contract.RevisionNumber),
+            templateVersion,
+            PolicyVersion,
+            createdAt,
+            contract.StartDate,
+            contract.EndDate,
+            contract.Title,
+            contract.Description,
+            scope,
+            proposal?.OutOfScope,
+            contract.TotalBudget,
+            new ContractPartySnapshot(
+                clientUser.UserId,
+                client.ClientProfilesId,
+                clientUser.FullName,
+                clientUser.Email,
+                clientUser.PhoneNumber,
+                client.Location,
+                Representative: clientUser.FullName,
+                RepresentativeTitle: client.CompanyName),
+            new ContractPartySnapshot(
+                freelancerUser.UserId,
+                freelancer.FreelancerProfilesId,
+                freelancerUser.FullName,
+                freelancerUser.Email,
+                freelancerUser.PhoneNumber,
+                freelancer.Location),
+            milestoneSnapshots,
+            previousHash);
+    }
+
+    private static string Hash(string value) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
 }

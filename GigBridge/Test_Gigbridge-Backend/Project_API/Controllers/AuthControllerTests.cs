@@ -15,8 +15,6 @@ using Application.Features.Auth.Register.DTOs;
 using Application.Features.Auth.ResetPassword.Commands;
 using Application.Features.Auth.ResetPassword.DTOs;
 using Application.Features.Auth.Shared.DTOs;
-using Application.Features.Auth.ValidateToken.Commands;
-using Application.Features.Auth.ValidateToken.DTOs;
 using Application.Features.Auth.SendOtp.Commands;
 using Application.Features.Auth.SendOtp.DTOs;
 using Application.Features.Auth.VerifyOtp.Commands;
@@ -26,9 +24,11 @@ using Application.Features.Auth.ChangePassword.DTOs;
 using MediatR;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
-using Project_API.Controllers;
+using Project_API.Controllers.Auth;
+using Project_API.Security;
 using Xunit;
 using Domain.Enums;
 
@@ -36,6 +36,26 @@ namespace Test_Gigbridge_Backend.Project_API.Controllers;
 
 public class AuthControllerTests
 {
+    [Theory]
+    [InlineData(nameof(AuthController.Register), AuthRateLimitPolicies.Account)]
+    [InlineData(nameof(AuthController.SendOtp), AuthRateLimitPolicies.OtpIssue)]
+    [InlineData(nameof(AuthController.VerifyOtp), AuthRateLimitPolicies.OtpVerify)]
+    [InlineData(nameof(AuthController.Login), AuthRateLimitPolicies.Login)]
+    [InlineData(nameof(AuthController.GoogleLogin), AuthRateLimitPolicies.Login)]
+    [InlineData(nameof(AuthController.Refresh), AuthRateLimitPolicies.Refresh)]
+    [InlineData(nameof(AuthController.SendPasswordEmailChanging), AuthRateLimitPolicies.OtpIssue)]
+    [InlineData(nameof(AuthController.PasswordChangingRequest), AuthRateLimitPolicies.OtpVerify)]
+    public void AnonymousAuthEndpoint_UsesExpectedRateLimitPolicy(
+        string actionName,
+        string expectedPolicy)
+    {
+        var action = typeof(AuthController).GetMethod(actionName);
+        var attribute = Assert.Single(
+            action!.GetCustomAttributes(typeof(EnableRateLimitingAttribute), inherit: true));
+
+        Assert.Equal(expectedPolicy, ((EnableRateLimitingAttribute)attribute).PolicyName);
+    }
+
     private (AuthController Controller, IMediator Mediator, DefaultHttpContext HttpContext) CreateController()
     {
         var mediator = Substitute.For<IMediator>();
@@ -86,6 +106,7 @@ public class AuthControllerTests
             Email = "test@test.com",
             Password = "Password123!",
             ConfirmPassword = "Password123!",
+            VerificationTicket = new string('a', 64),
             role = UserRole.Freelancer
         };
         var userDto = new UserDTO
@@ -119,6 +140,7 @@ public class AuthControllerTests
             Email = "test@test.com",
             Password = "Password123!",
             ConfirmPassword = "Password123!",
+            VerificationTicket = new string('a', 64),
             role = UserRole.Freelancer
         };
 
@@ -188,14 +210,20 @@ public class AuthControllerTests
         // Arrange
         var (controller, mediator, _) = CreateController();
         var request = new VerifyOtpRequest { Email = "test@test.com", Otp = "123456" };
+        var verification = new VerifyOtpResponse
+        {
+            VerificationTicket = new string('a', 64)
+        };
+        mediator.Send(Arg.Any<VerifyOtpCommand>()).Returns(verification);
 
         // Act
         var result = await controller.VerifyOtp(request);
 
         // Assert
         var okResult = Assert.IsType<OkObjectResult>(result);
-        var apiResponse = Assert.IsType<ApiResponse<object>>(okResult.Value);
+        var apiResponse = Assert.IsType<ApiResponse<VerifyOtpResponse>>(okResult.Value);
         Assert.True(apiResponse.Success);
+        Assert.Equal(verification.VerificationTicket, apiResponse.Data?.VerificationTicket);
         await mediator.Received(1).Send(Arg.Any<VerifyOtpCommand>());
     }
 
@@ -223,8 +251,7 @@ public class AuthControllerTests
         var loginResponse = new LoginResponse
         {
             User = new UserDTO { UserId = Guid.NewGuid(), Email = "test@test.com", Role = 1 },
-            Token = "jwt_token_here",
-            refreshToken = "refresh_token_here"
+            Token = "jwt_token_here"
         };
         var expiry = DateTime.UtcNow.AddDays(7);
 
@@ -459,55 +486,4 @@ public class AuthControllerTests
         await mediator.Received(1).Send(Arg.Any<ResetPasswordCommand>());
     }
 
-    [Fact]
-    public async Task ValidateResetToken_ReturnsBadRequest_WhenTokenIsEmpty()
-    {
-        // Arrange
-        var (controller, _, _) = CreateController();
-        var request = new ValidateResetTokenRequest { Token = "" };
-
-        // Act
-        var result = await controller.ValidateResetToken(request);
-
-        // Assert
-        var badRequestResult = Assert.IsType<BadRequestObjectResult>(result);
-        var apiResponse = Assert.IsType<ApiResponse<object>>(badRequestResult.Value);
-        Assert.False(apiResponse.Success);
-    }
-
-    [Fact]
-    public async Task ValidateResetToken_ReturnsBadRequest_WhenTokenIsExpired()
-    {
-        // Arrange
-        var (controller, mediator, _) = CreateController();
-        var request = new ValidateResetTokenRequest { Token = "expiredtoken" };
-        mediator.Send(Arg.Any<ValidateResetTokenCommand>()).Returns(true); // expired
-
-        // Act
-        var result = await controller.ValidateResetToken(request);
-
-        // Assert
-        var badRequestResult = Assert.IsType<BadRequestObjectResult>(result);
-        var apiResponse = Assert.IsType<ApiResponse<object>>(badRequestResult.Value);
-        Assert.False(apiResponse.Success);
-        Assert.Equal("TOKEN_EXPIRED", apiResponse.Message);
-    }
-
-    [Fact]
-    public async Task ValidateResetToken_ReturnsOk_WhenTokenIsValid()
-    {
-        // Arrange
-        var (controller, mediator, _) = CreateController();
-        var request = new ValidateResetTokenRequest { Token = "validtoken" };
-        mediator.Send(Arg.Any<ValidateResetTokenCommand>()).Returns(false); // not expired
-
-        // Act
-        var result = await controller.ValidateResetToken(request);
-
-        // Assert
-        var okResult = Assert.IsType<OkObjectResult>(result);
-        var apiResponse = Assert.IsType<ApiResponse<object>>(okResult.Value);
-        Assert.True(apiResponse.Success);
-        Assert.Equal("valid", apiResponse.Message);
-    }
 }

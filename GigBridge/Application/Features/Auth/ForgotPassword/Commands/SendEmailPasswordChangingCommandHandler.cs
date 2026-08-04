@@ -1,6 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Application.Features.Auth.Common;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -26,20 +27,50 @@ public class SendEmailPasswordChangingCommandHandler : IRequestHandler<SendEmail
 
     public async Task Handle(SendEmailPasswordChangingCommand request, CancellationToken cancellationToken)
     {
-        var email = request.Request.Email.Trim().ToLowerInvariant();
+        var email = EmailCanonicalizer.Canonicalize(request.Request.Email);
+        const OtpPurpose purpose = OtpPurpose.PasswordReset;
+
+        if (await _cacheService.GetAsync<bool>(
+                OtpSecurity.LockoutKey(purpose, email),
+                cancellationToken))
+        {
+            throw new BadRequestException("Too many failed verification attempts. Please try again later.");
+        }
+
+        if (await _cacheService.GetAsync<bool>(
+                OtpSecurity.CooldownKey(purpose, email),
+                cancellationToken))
+        {
+            throw new BadRequestException("Please wait before requesting another verification code.");
+        }
+
+        await _cacheService.SetAsync(
+            OtpSecurity.CooldownKey(purpose, email),
+            true,
+            OtpSecurity.ResendCooldown,
+            cancellationToken);
+
         var user = await _context.Set<User>()
-            .FirstOrDefaultAsync(u => u.Email.ToLower() == email, cancellationToken);
+            .FirstOrDefaultAsync(u => u.Email == email, cancellationToken);
 
         if (user is null)
         {
-            throw new NotFoundException("Email does not exist");
+            return;
         }
 
-        var cacheKey = $"otp:{email}";
+        var challengeKey = OtpSecurity.ChallengeKey(purpose, email);
         var otp = RandomNumberGenerator.GetInt32(100000, 1000000).ToString();
+        var challenge = new OtpChallengeState(
+            otp,
+            0,
+            DateTime.UtcNow.Add(OtpSecurity.ChallengeLifetime));
 
-        await _cacheService.RemoveAsync(cacheKey, cancellationToken);
-        await _cacheService.SetAsync(cacheKey, otp, TimeSpan.FromMinutes(1), cancellationToken);
+        await _cacheService.RemoveAsync(challengeKey, cancellationToken);
+        await _cacheService.SetAsync(
+            challengeKey,
+            challenge,
+            OtpSecurity.ChallengeLifetime,
+            cancellationToken);
         await _authEmailSender.SendForgotPasswordOtpEmailAsync(user.Email, otp, cancellationToken);
     }
 }

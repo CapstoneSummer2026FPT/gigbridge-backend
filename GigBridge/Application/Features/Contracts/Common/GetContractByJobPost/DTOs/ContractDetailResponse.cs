@@ -1,3 +1,5 @@
+using Application.Features.Contracts.ProductHandoffs.Common.DTOs;
+
 namespace Application.Features.Contracts.Common.GetContractByJobPost.DTOs;
 
 public class ContractDetailResponse
@@ -20,13 +22,33 @@ public class ContractDetailResponse
 
     public int Status { get; set; }
 
+    public int RevisionNumber { get; set; }
+
     public DateOnly? StartDate { get; set; }
 
     public DateOnly? EndDate { get; set; }
+
+    public DateTime? CompletedAt { get; set; }
 
     public DateTime CreatedAt { get; set; }
 
     public DateTime? UpdatedAt { get; set; }
 
+    public bool CanReview { get; set; }
+
+    public bool HasReviewedByCurrentUser { get; set; }
+
     public ContractEscrowResponse? Escrow { get; set; }
+
+    public string? JobTitle { get; set; }
+    public string? JobDescription { get; set; }
+    public string? ClientName { get; set; }
+    public string? ClientEmail { get; set; }
+    public string? FreelancerName { get; set; }
+    public string? FreelancerEmail { get; set; }
+    public Guid? ClientUserId { get; set; }
+    public Guid? FreelancerUserId { get; set; }
+    public Guid? ConversationId { get; set; }
+
+    public ContractProductHandoffResponse? CurrentProductHandoff { get; set; }
 }

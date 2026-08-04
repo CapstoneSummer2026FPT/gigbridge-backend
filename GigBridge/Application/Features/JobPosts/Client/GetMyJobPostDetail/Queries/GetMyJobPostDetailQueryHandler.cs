@@ -1,5 +1,6 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
+using Application.Features.JobPosts.Client.Common;
 using Application.Features.JobPosts.Client.GetMyJobPostDetail.DTOs;
 using Application.Features.JobPosts.Common.DTOs;
 using Domain.Entities;
@@ -66,7 +67,6 @@ public class GetMyJobPostDetailQueryHandler
                 BudgetMax = jobPost.BudgetMax,
                 Currency = jobPost.Currency,
                 EstimatedDuration = jobPost.EstimatedDuration,
-                MaxHires = jobPost.MaxHires,
                 Location = jobPost.Location,
                 Visibility = jobPost.Visibility,
                 Status = jobPost.Status,
@@ -89,7 +89,28 @@ public class GetMyJobPostDetailQueryHandler
                         attachment.FileName))
                     .ToList(),
 
-                ProposalCount = jobPost.Proposals.Count(proposal => proposal.Status != 0)
+                ProposalCount = jobPost.Proposals.Count(proposal => proposal.Status != 0),
+                MilestonePlans = jobPost.JobPostMilestonePlans.OrderBy(plan => plan.OrderIndex).Select(plan => new JobPostMilestonePlanDto
+                {
+                    Id = plan.JobPostMilestonePlanId,
+                    Title = plan.Title,
+                    Description = plan.Description,
+                    Amount = plan.Amount,
+                    EstimatedDuration = plan.EstimatedDuration,
+                    DueDate = plan.DueDate,
+                    Deliverables = plan.Deliverables,
+                    AcceptanceCriteria = plan.AcceptanceCriteria,
+                    OrderIndex = plan.OrderIndex,
+                    WorkItems = plan.WorkItems.OrderBy(item => item.OrderIndex).Select(item => new JobPostWorkItemDto
+                    {
+                        Id = item.JobPostWorkItemId,
+                        Title = item.Title,
+                        Description = item.Description,
+                        Deliverables = item.Deliverables,
+                        EstimatedDuration = item.EstimatedDuration,
+                        OrderIndex = item.OrderIndex
+                    }).ToList()
+                }).ToList()
             })
             .FirstOrDefaultAsync(cancellationToken);
 
@@ -97,6 +118,8 @@ public class GetMyJobPostDetailQueryHandler
         {
             throw new NotFoundException("Job post does not exist.");
         }
+
+        await JobPostSetupProgressBuilder.ApplyAsync(_context, jobPost, cancellationToken);
 
         return jobPost;
     }

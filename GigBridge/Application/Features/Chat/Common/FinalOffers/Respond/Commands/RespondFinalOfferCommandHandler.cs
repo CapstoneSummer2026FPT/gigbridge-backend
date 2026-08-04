@@ -1,36 +1,61 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Application.Features.Auth.Shared.DTOs;
 using Application.Features.Chat.Common.FinalOffers.Respond.DTOs;
+using Application.Features.Chat.Common.FinalOffers.Shared.Email;
 using Application.Features.Chat.Common.Messages.Send.DTOs;
+using Application.Features.JobPosts.Common;
+using Application.Features.Proposals.Common;
+using Application.Features.Premium.Client.SmartTalentMatching.Feedback;
+using Application.Features.Wallets.Common;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 
 namespace Application.Features.Chat.Common.FinalOffers.Respond.Commands;
 
-public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOfferCommand, bool>
+public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOfferCommand, RespondFinalOfferResponse>
 {
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
     private readonly IChatRealtimeNotifier _chatRealtimeNotifier;
+    private readonly INotificationService? _notificationService;
+    private readonly IEmailService? _emailService;
+    private readonly IJobAcceptanceEmailRenderer? _emailRenderer;
+    private readonly IConfiguration? _configuration;
+    private readonly ILogger<RespondFinalOfferCommandHandler>? _logger;
 
     public RespondFinalOfferCommandHandler(
         IApplicationDbContext context,
         IDateTimeService dateTimeService,
-        IChatRealtimeNotifier chatRealtimeNotifier)
+        IChatRealtimeNotifier chatRealtimeNotifier,
+        INotificationService? notificationService = null,
+        IEmailService? emailService = null,
+        IJobAcceptanceEmailRenderer? emailRenderer = null,
+        IConfiguration? configuration = null,
+        ILogger<RespondFinalOfferCommandHandler>? logger = null)
     {
         _context = context;
         _dateTimeService = dateTimeService;
         _chatRealtimeNotifier = chatRealtimeNotifier;
+        _notificationService = notificationService;
+        _emailService = emailService;
+        _emailRenderer = emailRenderer;
+        _configuration = configuration;
+        _logger = logger;
     }
 
-    public async Task<bool> Handle(
+    public async Task<RespondFinalOfferResponse> Handle(
         RespondFinalOfferCommand command,
         CancellationToken cancellationToken)
     {
         var offer = await _context.Set<NegotiationOffer>()
+            .Include(item => item.NegotiationOfferMilestones)
+                .ThenInclude(item => item.WorkItems)
             .FirstOrDefaultAsync(
                 offer => offer.NegotiationOfferId == command.Request.NegotiationOfferId,
                 cancellationToken);
@@ -38,6 +63,13 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
         if (offer is null)
         {
             throw new NotFoundException("Negotiation offer does not exist.");
+        }
+
+        if (offer.ProposalsId.HasValue)
+        {
+            var moderatedProposal = await _context.Set<Proposal>().AsNoTracking()
+                .FirstOrDefaultAsync(x => x.ProposalsId == offer.ProposalsId.Value, cancellationToken);
+            if (moderatedProposal is not null) ProposalModerationGuard.EnsureActive(moderatedProposal);
         }
 
         if (offer.Status != (int)NegotiationOfferStatus.PendingFreelancerConfirmation)
@@ -68,6 +100,11 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
             throw new ForbiddenAccessException("You are not the freelancer selected for this final offer.");
         }
 
+        await JobPostNegotiationGuard.EnsureEligibleForNegotiationAsync(
+            _context,
+            offer.JobPostsId,
+            cancellationToken);
+
         var conversation = await _context.Set<Conversation>()
             .FirstOrDefaultAsync(
                 conversation => conversation.ConversationsId == offer.ConversationsId,
@@ -79,23 +116,36 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
         }
 
         var now = _dateTimeService.UtcNow;
-        var eventName = command.Request.Response switch
+        string eventName;
+        RespondFinalOfferResponse response;
+
+        switch (command.Request.Response)
         {
-            FinalOfferResponse.Accept => await AcceptOffer(offer, conversation, now, cancellationToken),
-            FinalOfferResponse.RequestChange => ChangeOfferStatus(
-                offer,
-                conversation,
-                NegotiationOfferStatus.ChangeRequested,
-                "Final offer change requested.",
-                now),
-            FinalOfferResponse.Decline => ChangeOfferStatus(
-                offer,
-                conversation,
-                NegotiationOfferStatus.Rejected,
-                "Final offer declined.",
-                now),
-            _ => throw new BadRequestException("Unsupported final offer response.")
-        };
+            case FinalOfferResponse.Accept:
+                response = await AcceptOffer(offer, conversation, command.UserId, now, cancellationToken);
+                eventName = "ContractDraftUpdated";
+                break;
+            case FinalOfferResponse.RequestChange:
+                eventName = ChangeOfferStatus(
+                    offer,
+                    conversation,
+                    NegotiationOfferStatus.ChangeRequested,
+                    "Final offer change requested.",
+                    now);
+                response = new RespondFinalOfferResponse(null, null, "Final offer change requested.");
+                break;
+            case FinalOfferResponse.Decline:
+                eventName = ChangeOfferStatus(
+                    offer,
+                    conversation,
+                    NegotiationOfferStatus.Rejected,
+                    "Final offer declined.",
+                    now);
+                response = new RespondFinalOfferResponse(null, null, "Final offer declined.");
+                break;
+            default:
+                throw new BadRequestException("Unsupported final offer response.");
+        }
 
         IncrementUnreadCounts(conversation.ConversationsId, command.UserId);
 
@@ -145,11 +195,78 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
             await _chatRealtimeNotifier.SendUsersEventAsync(
                 participantUserIds,
                 eventName,
-                new { contractId = offer.ContractsId },
+                new
+                {
+                    conversationId = conversation.ConversationsId,
+                    contractId = response.ContractId
+                },
                 cancellationToken);
+
+            await SendJobAcceptanceUpdates(offer, command.UserId, cancellationToken);
         }
 
-        return true;
+        return response;
+    }
+
+    private async Task SendJobAcceptanceUpdates(
+        NegotiationOffer offer,
+        Guid freelancerUserId,
+        CancellationToken cancellationToken)
+    {
+        var jobTitle = await _context.Set<JobPost>()
+            .AsNoTracking()
+            .Where(job => job.JobPostsId == offer.JobPostsId)
+            .Select(job => job.Title)
+            .FirstOrDefaultAsync(cancellationToken) ?? "your GigBridge job";
+
+        if (_notificationService is not null)
+        {
+            try
+            {
+                await _notificationService.CreateNotificationAsync(
+                    freelancerUserId,
+                    NotificationType.ContractStarted,
+                    $"You were accepted for {jobTitle}",
+                    "Congratulations! Your application was accepted and your contract plan is ready for review.",
+                    offer.ContractsId,
+                    "Contract",
+                    cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger?.LogError(ex, "Failed to create job acceptance notification for freelancer {FreelancerUserId}", freelancerUserId);
+            }
+        }
+
+        if (_emailService is null || _emailRenderer is null) return;
+
+        var freelancer = await _context.Set<User>()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(user => user.UserId == freelancerUserId, cancellationToken);
+        if (freelancer is null || string.IsNullOrWhiteSpace(freelancer.Email)) return;
+
+        try
+        {
+            var frontendUrl = (_configuration?["FrontendBaseUrl"] ?? "http://localhost:5173").TrimEnd('/');
+            var email = _emailRenderer.Render(new JobAcceptanceEmailModel(
+                freelancer.FullName,
+                jobTitle,
+                $"{offer.FinalPrice:N0} VND",
+                $"{frontendUrl}/contracts/{offer.ContractsId}"));
+
+            await _emailService.SendEmailAsync(new EmailRequest
+            {
+                To = freelancer.Email,
+                Subject = email.Subject,
+                Body = email.HtmlBody,
+                TextBody = email.TextBody,
+                IsHtml = true
+            }, cancellationToken);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger?.LogError(ex, "Failed to send job acceptance email to freelancer {FreelancerUserId}", freelancerUserId);
+        }
     }
 
     private Task<List<ConversationParticipant>> GetActiveParticipants(
@@ -208,9 +325,10 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
             []);
     }
 
-    private async Task<string> AcceptOffer(
+    private async Task<RespondFinalOfferResponse> AcceptOffer(
         NegotiationOffer offer,
         Conversation conversation,
+        Guid freelancerUserId,
         DateTime now,
         CancellationToken cancellationToken)
     {
@@ -227,33 +345,104 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
             throw new ConflictException("A final offer has already been accepted for this job post.");
         }
 
-        var contract = await _context.Set<Contract>()
-            .FirstOrDefaultAsync(
-                contract => contract.ContractsId == offer.ContractsId,
-                cancellationToken);
+        var existingContract = await _context.Set<Contract>()
+            .AnyAsync(contract => contract.JobPostsId == offer.JobPostsId, cancellationToken);
+        if (existingContract) throw new ConflictException("A contract already exists for this job post.");
 
-        if (contract is null)
+        var jobPost = await _context.Set<JobPost>()
+            .FirstOrDefaultAsync(item => item.JobPostsId == offer.JobPostsId, cancellationToken)
+            ?? throw new NotFoundException("Job post does not exist.");
+
+        var contract = new Contract
         {
-            throw new NotFoundException("Contract draft does not exist.");
+            ContractsId = Guid.NewGuid(),
+            JobPostsId = offer.JobPostsId,
+            ClientProfilesId = offer.ClientProfilesId,
+            FreelancerProfilesId = offer.FreelancerProfilesId,
+            ProposalsId = offer.ProposalsId,
+            Title = jobPost.Title,
+            Description = offer.ScopeSummary ?? jobPost.Description,
+            TotalBudget = offer.FinalPrice,
+            StartDate = offer.StartDate,
+            EndDate = offer.EndDate,
+            Status = (int)ContractStatus.PendingContractConfirmation,
+            RevisionNumber = 1,
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+        _context.Set<Contract>().Add(contract);
+
+        if (offer.NegotiationOfferMilestones.Count == 0)
+        {
+            throw new BadRequestException("The final offer does not contain a milestone snapshot.");
         }
 
-        if (contract.Status != (int)ContractStatus.Draft &&
-            contract.Status != (int)ContractStatus.PendingFreelancerSelection &&
-            contract.Status != (int)ContractStatus.InNegotiation)
+        if (offer.NegotiationOfferMilestones.Sum(item => item.Amount) != offer.FinalPrice)
         {
-            throw new BadRequestException("The contract draft can no longer accept a final offer.");
+            throw new BadRequestException("The final offer milestone total does not match its final price.");
         }
+
+        foreach (var snapshot in offer.NegotiationOfferMilestones.OrderBy(item => item.OrderIndex))
+        {
+            var milestone = new Milestone
+            {
+                MilestonesId = Guid.NewGuid(),
+                ContractsId = contract.ContractsId,
+                Title = snapshot.Title,
+                Description = snapshot.Description,
+                Amount = snapshot.Amount,
+                EstimatedDuration = snapshot.EstimatedDuration,
+                DueDate = snapshot.DueDate,
+                Deliverables = snapshot.Deliverables,
+                AcceptanceCriteria = snapshot.AcceptanceCriteria,
+                Status = (int)MilestoneStatus.Pending,
+                SortOrder = snapshot.OrderIndex,
+                ReleasedAmount = 0m,
+                CreatedAt = now
+            };
+            milestone.WorkItems = snapshot.WorkItems.OrderBy(item => item.OrderIndex).Select((item, index) => new ContractWorkItem
+            {
+                ContractWorkItemId = Guid.NewGuid(),
+                MilestonesId = milestone.MilestonesId,
+                Title = item.Title,
+                Description = item.Description,
+                Deliverables = item.Deliverables,
+                EstimatedDuration = item.EstimatedDuration,
+                OrderIndex = index,
+                Status = (int)ContractWorkItemStatus.Todo,
+                CreatedAt = now
+            }).ToList();
+            _context.Set<Milestone>().Add(milestone);
+        }
+
+        // Charge the 1% freelancer service fee on job acceptance. This debits the
+        // freelancer's spendable balance and records the SERVICE-FEE-ACCEPT- wallet
+        // transaction so the deduction appears in the freelancer's transaction history.
+        // Charged here — before mutating the offer/conversation status — so an
+        // insufficient-balance rejection leaves the negotiation unchanged.
+        await ServiceFeeWorkflow.ChargeAsync(
+            _context,
+            freelancerUserId,
+            contract.ContractsId,
+            offer.FinalPrice,
+            $"{ServiceFeeWorkflow.AcceptJobFeePrefix}{contract.ContractsId:N}",
+            "1% freelancer service fee charged on job acceptance.",
+            now,
+            cancellationToken);
 
         offer.Status = (int)NegotiationOfferStatus.Accepted;
         offer.RespondedAt = now;
+        offer.ContractsId = contract.ContractsId;
+        conversation.ContractsId = contract.ContractsId;
 
-        contract.FreelancerProfilesId = offer.FreelancerProfilesId;
-        contract.ProposalsId = offer.ProposalsId;
-        contract.TotalBudget = offer.FinalPrice;
-        contract.StartDate = offer.StartDate;
-        contract.EndDate = offer.EndDate;
-        contract.Status = (int)ContractStatus.PendingContractDetails;
-        contract.UpdatedAt = now;
+        await TalentMatchFeedbackWriter.TryAddLatestAttributedAsync(
+            _context,
+            offer.JobPostsId,
+            offer.FreelancerProfilesId,
+            TalentMatchEventType.Hired,
+            contract.ContractsId,
+            now,
+            cancellationToken);
 
         if (offer.ProposalsId.HasValue)
         {
@@ -264,7 +453,7 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
 
             if (proposal is not null)
             {
-                proposal.Status = 2;
+                proposal.Status = 3;
                 proposal.UpdatedAt = now;
             }
         }
@@ -282,9 +471,23 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
             pendingOffer.RespondedAt = now;
         }
 
-        AddSystemMessage(conversation, "Final offer accepted. Contract draft is ready for details.", now);
+        // Decouple other conversations from the same JobPost by setting ContractsId to null
+        var otherConversations = await _context.Set<Conversation>()
+            .Where(c => c.JobPostsId == offer.JobPostsId && c.ConversationsId != conversation.ConversationsId)
+            .ToListAsync(cancellationToken);
 
-        return "ContractDraftUpdated";
+        foreach (var otherConv in otherConversations)
+        {
+            otherConv.ContractsId = null;
+            otherConv.UpdatedAt = now;
+        }
+
+        AddSystemMessage(conversation, "Final offer accepted. Contract plan is ready for freelancer review.", now);
+
+        return new RespondFinalOfferResponse(
+            contract.ContractsId,
+            contract.Status,
+            "Final offer accepted. Review the contract plan before signing.");
     }
 
     private string ChangeOfferStatus(

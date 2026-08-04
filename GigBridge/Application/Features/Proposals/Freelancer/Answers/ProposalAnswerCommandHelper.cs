@@ -1,5 +1,6 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
+using Application.Features.Proposals.Common;
 using Application.Features.Proposals.Common.DTOs;
 using Domain.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -44,6 +45,7 @@ internal static class ProposalAnswerCommandHelper
 
     public static void EnsureDraft(Proposal proposal)
     {
+        ProposalModerationGuard.EnsureActive(proposal);
         if (proposal.Status != 0)
         {
             throw new BadRequestException("Answers can only be modified while the proposal is draft.");

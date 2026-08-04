@@ -10,7 +10,9 @@ public class ReportDto
     public string ReportedEntityType { get; set; } = string.Empty;
     public ReportType Type { get; set; }
     public ReportStatus Status { get; set; }
+    public bool IsPremiumReporter { get; set; }
     public string Reason { get; set; } = string.Empty;
+    public string? Description { get; set; }
     public string? AdminNote { get; set; }
     public ReportUserSummaryDto? ResolvedByAdmin { get; set; }
     public ReportTargetSummaryDto? TargetSummary { get; set; }

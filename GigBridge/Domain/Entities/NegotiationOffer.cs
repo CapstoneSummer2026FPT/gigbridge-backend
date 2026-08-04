@@ -10,7 +10,7 @@ public partial class NegotiationOffer
 
     public Guid JobPostsId { get; set; }
 
-    public Guid ContractsId { get; set; }
+    public Guid? ContractsId { get; set; }
 
     public Guid? ProposalsId { get; set; }
 
@@ -41,7 +41,7 @@ public partial class NegotiationOffer
 
     public virtual ClientProfile ClientProfiles { get; set; } = null!;
 
-    public virtual Contract Contracts { get; set; } = null!;
+    public virtual Contract? Contracts { get; set; }
 
     public virtual Conversation Conversations { get; set; } = null!;
 
@@ -50,4 +50,6 @@ public partial class NegotiationOffer
     public virtual JobPost JobPosts { get; set; } = null!;
 
     public virtual Proposal? Proposals { get; set; }
+
+    public virtual ICollection<NegotiationOfferMilestone> NegotiationOfferMilestones { get; set; } = new List<NegotiationOfferMilestone>();
 }

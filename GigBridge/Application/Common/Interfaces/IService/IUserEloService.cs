@@ -8,5 +8,24 @@ public interface IUserEloService
 
     Task ApplyLoginActivityAsync(User user, CancellationToken cancellationToken);
 
-    Task ApplyReviewScoreAsync(Guid reviewId, Guid revieweeId, int rating, CancellationToken cancellationToken);
+    /// <summary>
+    /// Applies the single piecewise Elo delta earned by <paramref name="revieweeId"/>
+    /// once the contract is <see cref="Domain.Enums.ContractStatus.Completed"/> and a
+    /// valid final review (<paramref name="rating"/>, 1.0–5.0 one decimal place) exists.
+    /// Idempotent: at most one CompletedJobReview transaction per (reviewee, contract).
+    /// No-op when the contract is not yet Completed or the reviewee is ineligible.
+    /// </summary>
+    Task ApplyCompletedJobReviewAsync(
+        Guid reviewId,
+        Guid contractId,
+        Guid revieweeId,
+        decimal rating,
+        CancellationToken cancellationToken);
+
+    Task<int> ApplyReviewModerationAsync(
+        Guid reviewId,
+        Guid revieweeId,
+        Guid operationId,
+        bool hide,
+        CancellationToken cancellationToken);
 }

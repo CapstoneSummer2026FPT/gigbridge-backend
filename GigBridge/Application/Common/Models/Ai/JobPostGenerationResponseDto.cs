@@ -2,7 +2,7 @@ using System.Text.Json.Serialization;
 
 namespace Application.Common.Models.Ai;
 
-public class JobPostGenerationResponseDto
+public class JobPostDetailsGenerationResponseDto
 {
     [JsonPropertyName("title")]
     public string Title { get; set; } = null!;
@@ -24,4 +24,37 @@ public class JobPostGenerationResponseDto
 
     [JsonPropertyName("is_ai_generated")]
     public bool IsAiGenerated { get; set; }
+}
+
+public class JobPostHiringPlanGenerationResponseDto
+{
+    [JsonPropertyName("question_recruitment")]
+    public List<string> QuestionRecruitment { get; set; } = new();
+
+    [JsonPropertyName("milestones")]
+    public List<GeneratedMilestoneResponseDto> Milestones { get; set; } = new();
+}
+
+public class GeneratedMilestoneResponseDto
+{
+    [JsonPropertyName("title")]
+    public string Title { get; set; } = null!;
+
+    [JsonPropertyName("amount")]
+    public decimal Amount { get; set; }
+
+    [JsonPropertyName("estimated_duration")]
+    public string EstimatedDuration { get; set; } = null!;
+
+    [JsonPropertyName("due_date")]
+    public string DueDate { get; set; } = null!;
+
+    [JsonPropertyName("description")]
+    public string Description { get; set; } = null!;
+
+    [JsonPropertyName("deliverables")]
+    public string Deliverables { get; set; } = null!;
+
+    [JsonPropertyName("acceptance_criteria")]
+    public string AcceptanceCriteria { get; set; } = null!;
 }

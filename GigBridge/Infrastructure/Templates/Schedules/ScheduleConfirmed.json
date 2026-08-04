@@ -1,0 +1,12 @@
+{
+  "actor": {
+    "subject": "Schedule confirmed: {{TITLE}}", "badge": "Confirmed", "headline": "You confirmed the schedule",
+    "introduction": "The meeting is confirmed and all participants have been notified.",
+    "accent": "#047857", "badgeBackground": "#ecfdf5", "actorLabel": "Action by"
+  },
+  "recipient": {
+    "subject": "Schedule confirmed: {{TITLE}}", "badge": "Confirmed", "headline": "The schedule is confirmed",
+    "introduction": "{{ACTOR_NAME}} accepted the meeting time. It is now confirmed for all participants.",
+    "accent": "#047857", "badgeBackground": "#ecfdf5", "actorLabel": "Action by"
+  }
+}

@@ -3,6 +3,7 @@ using Application.Common.Interfaces;
 using Application.Features.JobPosts.Common.DTOs;
 using Application.Features.JobPosts.Public.GetJobPostDetail.DTOs;
 using Domain.Entities;
+using Domain.Enums;
 using Domain.Services;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -32,6 +33,8 @@ public class GetJobPostDetailQueryHandler : IRequestHandler<GetJobPostDetailQuer
             .Include(jobPost => jobPost.MajorCategory)
                 .ThenInclude(majorCategory => majorCategory!.Category)
             .Include(jobPost => jobPost.JobPostAttachments)
+            .Include(jobPost => jobPost.JobPostMilestonePlans)
+                .ThenInclude(plan => plan.WorkItems)
             .FirstOrDefaultAsync(jobPost =>
                 jobPost.JobPostsId == request.JobPostsId &&
                 jobPost.Status == 1 &&
@@ -43,9 +46,17 @@ public class GetJobPostDetailQueryHandler : IRequestHandler<GetJobPostDetailQuer
             throw new NotFoundException("Job post does not exist.");
         }
 
+        var hasAiInterview = await _context.Set<AiInterviewDefinition>()
+            .AsNoTracking()
+            .AnyAsync(definition => definition.JobPostId == jobPost.JobPostsId &&
+                definition.Status != AiInterviewDefinitionStatus.Closed,
+                cancellationToken);
+
         return new JobPostDetailDto(
             JobPostsId: jobPost.JobPostsId,
             ClientProfilesId: jobPost.ClientProfilesId,
+            ClientFullName: jobPost.ClientProfiles?.User?.FullName
+                            ?? jobPost.ClientProfiles?.CompanyName,
             Title: jobPost.Title,
             Description: jobPost.Description,
             MajorCategoryId: jobPost.MajorCategoryId,
@@ -57,8 +68,9 @@ public class GetJobPostDetailQueryHandler : IRequestHandler<GetJobPostDetailQuer
             BudgetMax: jobPost.BudgetMax,
             Currency: jobPost.Currency,
             EstimatedDuration: jobPost.EstimatedDuration,
-            MaxHires: jobPost.MaxHires,
             Location: jobPost.Location,
+            Status: jobPost.Status,
+            Visibility: jobPost.Visibility,
             EndDate: jobPost.EndDate,
             CreatedAt: jobPost.CreatedAt,
             EloPoints: jobPost.ClientProfiles?.User?.UserEloScore?.CurrentPoints ?? UserEloCalculator.DefaultPoints,
@@ -69,6 +81,8 @@ public class GetJobPostDetailQueryHandler : IRequestHandler<GetJobPostDetailQuer
             CustomSkillNames: jobPost.CustomSkillNames.ToList(),
             Attachments: jobPost.JobPostAttachments
                 .Select(attachment => new AttachmentDto(attachment.JobPostAttachmentsId, attachment.FileUrl, attachment.FileName))
-                .ToList());
+                .ToList(),
+            HasAiInterview: hasAiInterview,
+            MilestonePlans: Application.Features.JobPosts.Common.JobPostPlanProjection.ToDtos(jobPost.JobPostMilestonePlans));
     }
 }

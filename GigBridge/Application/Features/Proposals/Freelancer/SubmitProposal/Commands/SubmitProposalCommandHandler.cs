@@ -1,6 +1,9 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Application.Features.JobPosts.Common;
+using Application.Features.Proposals.Common;
+using Application.Features.Proposals.Common.DTOs;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -30,6 +33,8 @@ public class SubmitProposalCommandHandler : IRequestHandler<SubmitProposalComman
 
         var jobPost = await _context.Set<JobPost>()
             .AsNoTracking()
+            .Include(job => job.JobPostMilestonePlans)
+                .ThenInclude(milestone => milestone.WorkItems)
             .FirstOrDefaultAsync(job => job.JobPostsId == command.Request.JobPostsId, cancellationToken);
 
         if (jobPost is null)
@@ -40,17 +45,54 @@ public class SubmitProposalCommandHandler : IRequestHandler<SubmitProposalComman
         EnsureJobPostAcceptsProposals(jobPost);
         await EnsureProposalHasNotBeenSubmittedAsync(command, freelancerProfile.FreelancerProfilesId, cancellationToken);
 
+        var proposalId = Guid.NewGuid();
+        var milestonePlans = (command.Request.MilestonePlans ?? []).ToList();
+        if (milestonePlans.Count == 0 && jobPost.JobPostMilestonePlans.Count > 0)
+        {
+            milestonePlans = jobPost.JobPostMilestonePlans.OrderBy(item => item.OrderIndex).Select(item => new ProposalMilestonePlanDto
+            {
+                Title = item.Title, Description = item.Description, Amount = item.Amount,
+                EstimatedDuration = item.EstimatedDuration, Deliverables = item.Deliverables,
+                DueDate = item.DueDate, AcceptanceCriteria = item.AcceptanceCriteria, OrderIndex = item.OrderIndex,
+                WorkItems = item.WorkItems.OrderBy(workItem => workItem.OrderIndex).Select(workItem => new ProposalWorkBreakdownItemDto
+                {
+                    Title = workItem.Title, Description = workItem.Description, Deliverables = workItem.Deliverables,
+                    EstimatedDuration = workItem.EstimatedDuration, OrderIndex = workItem.OrderIndex,
+                    MilestoneOrderIndex = item.OrderIndex
+                }).ToList()
+            }).ToList();
+        }
         var proposal = new Proposal
         {
-            ProposalsId = Guid.NewGuid(),
+            ProposalsId = proposalId,
             JobPostsId = command.Request.JobPostsId,
             FreelancerProfilesId = freelancerProfile.FreelancerProfilesId,
             CoverLetter = command.Request.CoverLetter?.Trim(),
-            ProposedBudget = command.Request.ProposedBudget,
-            ProposedDuration = command.Request.ProposedDuration,
+            ProposedBudget = ProposalTotalsCalculator.ResolveBudget(command.Request.ProposedBudget, milestonePlans),
+            ProposedDuration = ProposalTotalsCalculator.ResolveDuration(command.Request.ProposedDuration, milestonePlans),
+            AnalysisSummary = ProposalPlanMapper.Clean(command.Request.AnalysisSummary),
+            SolutionApproach = ProposalPlanMapper.Clean(command.Request.SolutionApproach),
+            Deliverables = ProposalPlanMapper.Clean(command.Request.Deliverables),
+            Assumptions = ProposalPlanMapper.Clean(command.Request.Assumptions),
+            OutOfScope = ProposalPlanMapper.Clean(command.Request.OutOfScope),
             Status = 0,
-            SubmittedAt = _dateTimeService.UtcNow
+            SubmittedAt = null,
+            UpdatedAt = _dateTimeService.UtcNow
         };
+
+        proposal.ProposalMilestonePlans = milestonePlans
+            .Select((item, index) => ProposalPlanMapper.ToEntity(proposalId, item, index))
+            .ToList();
+        var milestoneIdsByOrder = proposal.ProposalMilestonePlans.ToDictionary(item => item.OrderIndex, item => item.ProposalMilestonePlansId);
+        proposal.ProposalWorkBreakdownItems = ProposalPlanMapper.ResolveWorkItems(command.Request.WorkBreakdownItems, milestonePlans)
+            .Select((item, index) => ProposalPlanMapper.ToEntity(
+                proposalId,
+                item,
+                index,
+                item.MilestoneOrderIndex.HasValue && milestoneIdsByOrder.TryGetValue(item.MilestoneOrderIndex.Value, out var milestoneId)
+                    ? milestoneId
+                    : null))
+            .ToList();
 
         _context.Set<Proposal>().Add(proposal);
         await _context.SaveChangesAsync(cancellationToken);
@@ -60,7 +102,12 @@ public class SubmitProposalCommandHandler : IRequestHandler<SubmitProposalComman
 
     private void EnsureJobPostAcceptsProposals(JobPost jobPost)
     {
-        if (jobPost.Status != 1)
+        if (jobPost.Visibility == JobPostNegotiationGuard.AdminLockedVisibility)
+        {
+            throw new BadRequestException("This job post has been locked by an admin and is not accepting proposals.");
+        }
+
+        if (jobPost.Status != JobPostNegotiationGuard.OpenStatus)
         {
             throw new BadRequestException("This job post is not accepting proposals.");
         }

@@ -1,10 +1,13 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces.IService;
+using Application.Features.Auth.Common;
+using Application.Features.Auth.VerifyOtp.DTOs;
 using MediatR;
+using System.Security.Cryptography;
 
 namespace Application.Features.Auth.VerifyOtp.Commands;
 
-public class VerifyOtpCommandHandler : IRequestHandler<VerifyOtpCommand, Unit>
+public class VerifyOtpCommandHandler : IRequestHandler<VerifyOtpCommand, VerifyOtpResponse>
 {
     private readonly ICacheService _cacheService;
 
@@ -13,20 +16,71 @@ public class VerifyOtpCommandHandler : IRequestHandler<VerifyOtpCommand, Unit>
         _cacheService = cacheService;
     }
 
-    public async Task<Unit> Handle(VerifyOtpCommand request, CancellationToken cancellationToken)
+    public async Task<VerifyOtpResponse> Handle(
+        VerifyOtpCommand request,
+        CancellationToken cancellationToken)
     {
-        var email = request.VerifyOtpRequest.Email.Trim().ToLowerInvariant();
-        var otpKey = $"otp:{email}";
-        var cachedOtp = await _cacheService.GetAsync<string>(otpKey, cancellationToken);
+        var email = EmailCanonicalizer.Canonicalize(request.VerifyOtpRequest.Email);
+        if (!OtpPurposeNames.TryParse(request.VerifyOtpRequest.Purpose, out var purpose))
+        {
+            throw new BadRequestException("Invalid verification purpose.");
+        }
 
-        if (string.IsNullOrEmpty(cachedOtp) || cachedOtp != request.VerifyOtpRequest.Otp)
+        var lockoutKey = OtpSecurity.LockoutKey(purpose, email);
+        if (await _cacheService.GetAsync<bool>(lockoutKey, cancellationToken))
+        {
+            throw new BadRequestException("Too many failed verification attempts. Please try again later.");
+        }
+
+        var challengeKey = OtpSecurity.ChallengeKey(purpose, email);
+        var challenge = await _cacheService.GetAndRemoveAsync<OtpChallengeState>(
+            challengeKey,
+            cancellationToken);
+
+        if (challenge is null || challenge.ExpiresAtUtc <= DateTime.UtcNow)
         {
             throw new BadRequestException("Invalid or expired OTP verification code.");
         }
 
-        await _cacheService.RemoveAsync(otpKey, cancellationToken);
-        await _cacheService.SetAsync($"verified_email:{email}", request.VerifyOtpRequest.Otp, TimeSpan.FromMinutes(5), cancellationToken);
+        if (!OtpSecurity.Matches(challenge.Otp, request.VerifyOtpRequest.Otp))
+        {
+            var failedAttempts = challenge.FailedAttempts + 1;
+            if (failedAttempts >= OtpSecurity.MaxFailedAttempts)
+            {
+                await _cacheService.SetAsync(
+                    lockoutKey,
+                    true,
+                    OtpSecurity.LockoutDuration,
+                    cancellationToken);
+            }
+            else
+            {
+                var remainingLifetime = challenge.ExpiresAtUtc - DateTime.UtcNow;
+                await _cacheService.SetAsync(
+                    challengeKey,
+                    challenge with { FailedAttempts = failedAttempts },
+                    remainingLifetime > TimeSpan.Zero ? remainingLifetime : TimeSpan.FromSeconds(1),
+                    cancellationToken);
+            }
 
-        return Unit.Value;
+            throw new BadRequestException("Invalid or expired OTP verification code.");
+        }
+
+        var verificationProof = purpose == OtpPurpose.Signup
+            ? Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant()
+            : request.VerifyOtpRequest.Otp;
+
+        await _cacheService.SetAsync(
+            OtpSecurity.VerifiedKey(purpose, email, verificationProof),
+            true,
+            OtpSecurity.ChallengeLifetime,
+            cancellationToken);
+
+        return new VerifyOtpResponse
+        {
+            VerificationTicket = purpose == OtpPurpose.Signup
+                ? verificationProof
+                : null
+        };
     }
 }

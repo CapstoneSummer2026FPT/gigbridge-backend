@@ -8,6 +8,7 @@ using Domain.Entities;
 using Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace Application.Features.Contracts.Signing.Common.Sign.Commands;
 
@@ -18,17 +19,21 @@ public sealed class SignContractCommandHandler :
     private readonly IDateTimeService _dateTimeService;
     private readonly IChatRealtimeNotifier _chatRealtimeNotifier;
     private readonly IMediaService _mediaService;
+    private readonly IContractEsignDocumentGenerator _documentGenerator;
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public SignContractCommandHandler(
         IApplicationDbContext context,
         IDateTimeService dateTimeService,
         IChatRealtimeNotifier chatRealtimeNotifier,
-        IMediaService mediaService)
+        IMediaService mediaService,
+        IContractEsignDocumentGenerator documentGenerator)
     {
         _context = context;
         _dateTimeService = dateTimeService;
         _chatRealtimeNotifier = chatRealtimeNotifier;
         _mediaService = mediaService;
+        _documentGenerator = documentGenerator;
     }
 
     public async Task<ContractWorkflowResponse> Handle(
@@ -48,9 +53,23 @@ public sealed class SignContractCommandHandler :
             throw new BadRequestException("Contract can only be signed after details are confirmed.");
         }
 
+        if (!command.Request.PolicyAccepted)
+        {
+            throw new BadRequestException(
+                $"You must accept GigBridge policy {ContractEsignRenderer.PolicyVersion} before signing.");
+        }
+
         var signerRole = await ResolveSignerRoleAsync(contract, command.UserId, cancellationToken);
         var now = _dateTimeService.UtcNow;
-        var document = await ContractEsignRenderer.EnsureDocumentAsync(_context, contract, now, cancellationToken);
+        var document = await ContractEsignRenderer.EnsureDocumentAsync(
+            _context, _documentGenerator, contract, now, cancellationToken);
+        var snapshot = ContractEsignRenderer.GetSnapshot(document);
+
+        if (!string.Equals(command.Request.PolicyVersion, snapshot.PolicyVersion, StringComparison.Ordinal))
+        {
+            throw new BadRequestException(
+                $"You must accept GigBridge policy {snapshot.PolicyVersion} before signing.");
+        }
 
         var existingSignature = await _context.Set<EsignSignature>()
             .FirstOrDefaultAsync(
@@ -90,27 +109,64 @@ public sealed class SignContractCommandHandler :
         existingSignature.SignedAt = now;
         existingSignature.IpAddress = command.IpAddress;
         existingSignature.UserAgent = command.UserAgent;
+        existingSignature.PolicyVersion = snapshot.PolicyVersion;
+        existingSignature.PolicyAcceptedAt = now;
 
-        var signedRoles = await _context.Set<EsignSignature>()
-            .Where(signature =>
-                signature.EsignDocumentsId == document.EsignDocumentsId &&
-                signature.Status == (int)ESignSignatureStatus.Signed)
-            .Select(signature => signature.SignerRole)
-            .ToListAsync(cancellationToken);
+        var readiness = await ContractEsignSignatureBridge.ApplyClientJobPostSignatureAndGetReadinessAsync(
+            _context,
+            contract,
+            document,
+            now,
+            cancellationToken,
+            signerRole);
 
-        if (!signedRoles.Contains((int)signerRole))
+        var isFullySigned = readiness.IsFullySigned;
+
+        Guid? escrowId = null;
+
+        if (isFullySigned)
         {
-            signedRoles.Add((int)signerRole);
-        }
+            var signed = await _context.Set<EsignSignature>()
+                .Where(signature =>
+                    signature.EsignDocumentsId == document.EsignDocumentsId &&
+                    signature.Status == (int)ESignSignatureStatus.Signed)
+                .ToListAsync(cancellationToken);
+            if (signed.All(signature => signature.UserId != existingSignature.UserId))
+            {
+                signed.Add(existingSignature);
+            }
 
-        if (signedRoles.Contains((int)ESignerRole.Client) &&
-            signedRoles.Contains((int)ESignerRole.Freelancer))
-        {
+            var clientSignature = ContractEsignRenderer.ToSignatureSnapshot(
+                signed.Single(signature => signature.SignerRole == (int)ESignerRole.Client));
+            var freelancerSignature = ContractEsignRenderer.ToSignatureSnapshot(
+                signed.Single(signature => signature.SignerRole == (int)ESignerRole.Freelancer));
+            var documentHash = ContractEsignRenderer.ComputeFinalHash(document, clientSignature, freelancerSignature);
+            var finalized = await _documentGenerator.GenerateFinalAsync(
+                snapshot,
+                clientSignature,
+                freelancerSignature,
+                documentHash,
+                cancellationToken);
+
+            document.ContractSnapshotJson ??= JsonSerializer.Serialize(snapshot, JsonOptions);
+            document.DocumentHash = documentHash;
+            document.FinalizedDocumentContent = finalized.Content;
+            document.FinalizedDocumentFileName = finalized.FileName;
+            document.FinalizedDocumentMimeType = finalized.MimeType;
+            document.FinalizedDocumentSizeBytes = finalized.Content.LongLength;
             document.Status = (int)ESignDocumentStatus.FullySigned;
             document.FinalizedAt = now;
             document.UpdatedAt = now;
-            contract.Status = (int)ContractStatus.PendingEscrow;
-            contract.UpdatedAt = now;
+
+            AddFinalContractEmail(snapshot, document.EsignDocumentsId, snapshot.Client, now);
+            AddFinalContractEmail(snapshot, document.EsignDocumentsId, snapshot.Freelancer, now);
+
+            var escrow = await ContractEscrowReadiness.EnsurePendingEscrowAsync(
+                _context,
+                contract,
+                now,
+                cancellationToken);
+            escrowId = escrow.ContractEscrowId;
 
             var conversations = await _context.Set<Conversation>()
                 .Where(conversation => conversation.ContractsId == contract.ContractsId)
@@ -118,15 +174,11 @@ public sealed class SignContractCommandHandler :
 
             foreach (var conversation in conversations)
             {
-                if (conversation.ConversationType == (int)ConversationType.JobNegotiation)
-                {
-                    conversation.ConversationType = (int)ConversationType.ContractWorkroom;
-                    ContractConversationEvents.AddSystemMessage(
-                        _context,
-                        conversation,
-                        "Contract fully signed. Workroom is ready while escrow awaits funding.",
-                        now);
-                }
+                ContractConversationEvents.AddSystemMessage(
+                    _context,
+                    conversation,
+                    "Contract fully signed. Waiting for client escrow funding.",
+                    now);
             }
         }
         else
@@ -137,18 +189,23 @@ public sealed class SignContractCommandHandler :
 
         await _context.SaveChangesAsync(cancellationToken);
 
-        if (contract.Status == (int)ContractStatus.PendingEscrow)
+        if (isFullySigned)
         {
-            var conversationIds = await _context.Set<Conversation>()
-                .Where(conversation => conversation.ContractsId == contract.ContractsId)
-                .Select(conversation => conversation.ConversationsId)
+            var participantUserIds = await _context.Set<ConversationParticipant>()
+                .AsNoTracking()
+                .Where(participant =>
+                    participant.Conversations.ContractsId == contract.ContractsId &&
+                    participant.LeftAt == null &&
+                    participant.DeletedAt == null)
+                .Select(participant => participant.UserId)
+                .Distinct()
                 .ToListAsync(cancellationToken);
 
-            foreach (var conversationId in conversationIds)
+            if (participantUserIds.Any())
             {
-                await _chatRealtimeNotifier.SendConversationEventAsync(
-                    conversationId,
-                    "ContractFullySigned",
+                await _chatRealtimeNotifier.SendUsersEventAsync(
+                    [.. participantUserIds],
+                    "ContractReadyForEscrowFunding",
                     new { contractId = contract.ContractsId },
                     cancellationToken);
             }
@@ -157,8 +214,35 @@ public sealed class SignContractCommandHandler :
         return new ContractWorkflowResponse(
             contract.ContractsId,
             contract.Status,
-            null,
+            escrowId,
             document.EsignDocumentsId);
+    }
+
+    private void AddFinalContractEmail(
+        ContractDocumentSnapshot snapshot,
+        Guid documentId,
+        ContractPartySnapshot recipient,
+        DateTime now)
+    {
+        var deliveryKey = $"esign:{documentId:D}:final:{recipient.UserId:D}";
+        var payload = new ContractEsignDeliveryPayload(
+            documentId,
+            recipient.Email,
+            recipient.FullName,
+            snapshot.ProjectTitle);
+        _context.Set<DeliveryOutbox>().Add(new DeliveryOutbox
+        {
+            DeliveryOutboxId = Guid.NewGuid(),
+            DeliveryKey = deliveryKey,
+            ScheduleId = null,
+            RecipientUserId = recipient.UserId,
+            EventSequence = snapshot.ContractVersion,
+            Channel = (int)DeliveryChannel.Email,
+            Payload = JsonSerializer.Serialize(payload, JsonOptions),
+            Status = (int)DeliveryOutboxStatus.Pending,
+            NextAttemptAt = now,
+            CreatedAt = now
+        });
     }
 
     private async Task<ESignerRole> ResolveSignerRoleAsync(

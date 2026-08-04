@@ -1,4 +1,5 @@
 using Application.Features.Chat.Common.Messages.GetConversationMessages.DTOs;
+using Application.Features.Chat.Common.Schedules;
 
 namespace Application.Features.Chat.Common.Messages.Send.DTOs;
 
@@ -14,4 +15,5 @@ public record MessageResponse(
     DateTime SentAt,
     DateTime? EditedAt,
     bool IsDeleted,
-    IReadOnlyList<MessageAttachmentResponse> Attachments);
+    IReadOnlyList<MessageAttachmentResponse> Attachments,
+    ScheduleEventResponse? Schedule = null);

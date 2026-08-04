@@ -77,8 +77,10 @@ public class JwtService : IJwtService
 
         var tokenValidationParameters = new TokenValidationParameters
         {
-            ValidateAudience = false,
-            ValidateIssuer = false,
+            ValidateAudience = true,
+            ValidAudience = jwtSettings["Audience"],
+            ValidateIssuer = true,
+            ValidIssuer = jwtSettings["Issuer"],
             ValidateIssuerSigningKey = true,
             IssuerSigningKey = new SymmetricSecurityKey(secretKey),
             ValidateLifetime = false // Ignore token expiration
@@ -90,7 +92,7 @@ public class JwtService : IJwtService
         if (securityToken is not JwtSecurityToken jwtSecurityToken ||
             !jwtSecurityToken.Header.Alg.Equals(SecurityAlgorithms.HmacSha256, StringComparison.InvariantCultureIgnoreCase))
         {
-            throw new SecurityTokenException("Invalid token");
+            throw new SecurityTokenException("Invalid access token");
         }
 
         return principal;

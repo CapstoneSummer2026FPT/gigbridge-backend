@@ -7,6 +7,7 @@ using Application.Features.Contracts.Milestones.Common.Internal;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.Contracts.Milestones.Freelancer.Submit.Commands;
 
@@ -53,56 +54,37 @@ public sealed class SubmitMilestoneCommandHandler :
             throw new BadRequestException("Only in-progress milestones can be submitted.");
         }
 
-        var now = _dateTimeService.UtcNow;
-
-        if (command.Files != null && command.Files.Count > 0)
+        var workItems = await _context.Set<ContractWorkItem>()
+            .Where(item => item.MilestonesId == milestone.MilestonesId)
+            .ToListAsync(cancellationToken);
+        if (workItems.Count == 0 || workItems.Any(item => item.Status != (int)ContractWorkItemStatus.Completed))
         {
-            if (string.IsNullOrWhiteSpace(command.Description))
-            {
-                throw new BadRequestException("Submission description cannot be empty.");
-            }
-
-            if (command.Description.Length > 5000)
-            {
-                throw new BadRequestException("Submission description exceeds 5000 characters.");
-            }
-
-            if (_mediaService == null)
-            {
-                throw new InvalidOperationException("MediaService is not configured for file uploads.");
-            }
-
-            foreach (var file in command.Files)
-            {
-                if (file.Length > 100 * 1024 * 1024)
-                {
-                    throw new BadRequestException($"File {file.FileName} exceeds the 100MB size limit.");
-                }
-
-                var fileUrl = await _mediaService.UploadFileAsync(
-                    file.Content,
-                    file.FileName,
-                    file.ContentType,
-                    "milestones",
-                    cancellationToken);
-
-                var attachment = new MilestoneAttachment
-                {
-                    MilestoneAttachmentsId = Guid.NewGuid(),
-                    MilestonesId = milestone.MilestonesId,
-                    FileName = file.FileName,
-                    FileUrl = fileUrl,
-                    FileSize = file.Length,
-                    UploadedByUserId = command.UserId,
-                    CreatedAt = now
-                };
-
-                _context.Set<MilestoneAttachment>().Add(attachment);
-            }
-
-            milestone.SubmissionDescription = command.Description;
+            throw new BadRequestException("All milestone work items must be completed before submitting deliverables.");
         }
 
+        var validatedFile = await ValidateRequestAsync(command, cancellationToken);
+
+        var now = _dateTimeService.UtcNow;
+        var existingAttachments = await _context.Set<MilestoneAttachment>()
+            .Where(attachment => attachment.MilestonesId == milestone.MilestonesId)
+            .ToListAsync(cancellationToken);
+
+        if (existingAttachments.Count > 0)
+        {
+            _context.Set<MilestoneAttachment>().RemoveRange(existingAttachments);
+            milestone.MilestoneAttachments.Clear();
+        }
+
+        var attachment = await CreateAttachmentAsync(
+            command,
+            validatedFile,
+            milestone.MilestonesId,
+            now,
+            cancellationToken);
+        _context.Set<MilestoneAttachment>().Add(attachment);
+        milestone.MilestoneAttachments.Add(attachment);
+
+        milestone.SubmissionDescription = NormalizeDescription(command.Description);
         milestone.Status = (int)MilestoneStatus.Submitted;
         milestone.SubmittedAt = now;
         milestone.UpdatedAt = now;
@@ -118,5 +100,64 @@ public sealed class SubmitMilestoneCommandHandler :
         await _context.SaveChangesAsync(cancellationToken);
 
         return MilestoneWorkflowGuard.ToResponse(milestone);
+    }
+
+    private static async Task<ValidatedMilestoneSubmissionFile> ValidateRequestAsync(
+        SubmitMilestoneCommand command,
+        CancellationToken cancellationToken)
+    {
+        if (command.File is null)
+        {
+            throw new BadRequestException("A milestone deliverable file is required.");
+        }
+
+        if (command.Description is not null && command.Description.Length > 5000)
+        {
+            throw new BadRequestException("Submission description exceeds 5000 characters.");
+        }
+
+        return await MilestoneSubmissionFilePolicy.ValidateAsync(
+            command.File,
+            cancellationToken);
+    }
+
+    private async Task<MilestoneAttachment> CreateAttachmentAsync(
+        SubmitMilestoneCommand command,
+        ValidatedMilestoneSubmissionFile file,
+        Guid milestoneId,
+        DateTime now,
+        CancellationToken cancellationToken)
+    {
+        if (_mediaService == null)
+        {
+            throw new InvalidOperationException("MediaService is not configured for file uploads.");
+        }
+
+        var fileUrl = await _mediaService.UploadFileAsync(
+            file.Content,
+            file.FileName,
+            file.ContentType,
+            "milestones",
+            cancellationToken);
+
+        return new MilestoneAttachment
+        {
+            MilestoneAttachmentsId = Guid.NewGuid(),
+            MilestonesId = milestoneId,
+            FileName = file.FileName.Trim(),
+            FileUrl = fileUrl,
+            FileSize = file.Length,
+            SourceType = (int)MilestoneSubmissionSourceType.File,
+            MimeType = string.IsNullOrWhiteSpace(file.ContentType)
+                ? null
+                : file.ContentType.Trim(),
+            UploadedByUserId = command.UserId,
+            CreatedAt = now
+        };
+    }
+
+    private static string? NormalizeDescription(string? description)
+    {
+        return string.IsNullOrWhiteSpace(description) ? null : description.Trim();
     }
 }

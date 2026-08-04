@@ -27,43 +27,7 @@ public sealed class StartMilestoneCommandHandler :
         StartMilestoneCommand command,
         CancellationToken cancellationToken)
     {
-        var contract = await MilestoneWorkflowGuard.GetContractAsync(
-            _context,
-            command.ContractId,
-            cancellationToken);
-        MilestoneWorkflowGuard.EnsureContractActive(contract);
-        await MilestoneWorkflowGuard.EnsureClientAsync(
-            _context,
-            contract,
-            command.UserId,
-            cancellationToken);
-
-        var milestone = await MilestoneWorkflowGuard.GetMilestoneAsync(
-            _context,
-            command.ContractId,
-            command.MilestoneId,
-            cancellationToken);
-
-        if (milestone.Status != (int)MilestoneStatus.Pending)
-        {
-            throw new BadRequestException("Only pending milestones can be started.");
-        }
-
-        var now = _dateTimeService.UtcNow;
-        milestone.Status = (int)MilestoneStatus.InProgress;
-        milestone.StartedAt = now;
-        milestone.UpdatedAt = now;
-        contract.UpdatedAt = now;
-
-        await ContractConversationEvents.AddSystemMessageAsync(
-            _context,
-            contract.ContractsId,
-            $"Milestone started: {milestone.Title}.",
-            now,
-            cancellationToken);
-
-        await _context.SaveChangesAsync(cancellationToken);
-
-        return MilestoneWorkflowGuard.ToResponse(milestone);
+        await Task.CompletedTask;
+        throw new BadRequestException("Manual milestone start is deprecated. Milestones start automatically after funding or approval, or through an approved early-start request.");
     }
 }

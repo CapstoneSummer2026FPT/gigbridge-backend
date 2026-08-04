@@ -1,15 +1,12 @@
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Application.Features.Auth.Common;
+using Application.Common.Services;
 using Application.Features.Auth.Shared.DTOs;
 using AutoMapper;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace Application.Features.Auth.Login.Commands
 {
@@ -40,18 +37,19 @@ namespace Application.Features.Auth.Login.Commands
 
         public async Task<(LoginResponse LoginData, string RefreshToken, DateTime RefreshTokenExpiry)> Handle(LoginWithRefreshCommand request, CancellationToken cancellationToken)
         {
+            var email = EmailCanonicalizer.Canonicalize(request.LoginRequest.Email);
             var user = await _context.Set<User>()
                 .Include(u => u.ClientProfile)
                 .Include(u => u.FreelancerProfile)
                 .Include(u => u.UserEloScore)
-                .FirstOrDefaultAsync(u => u.Email == request.LoginRequest.Email, cancellationToken);
+                .FirstOrDefaultAsync(u => u.Email == email, cancellationToken);
 
             if (user is null || string.IsNullOrEmpty(user.Password) || !_passwordHasher.VerifyPassword(request.LoginRequest.Password, user.Password))
             {
                 throw new UnauthorizedAccessException("Invalid email or password");
             }
 
-            EnsureUserCanLogin(user);
+            EnsureUserCanLogin(user, _dateTimeService.UtcNow);
 
             await _userEloService.ApplyLoginActivityAsync(user, cancellationToken);
             var refreshToken = RotateRefreshToken(user);
@@ -60,8 +58,7 @@ namespace Application.Features.Auth.Login.Commands
             return (new LoginResponse
             {
                 User = _mapper.Map<UserDTO>(user),
-                Token = _jwtService.GenerateToken(user),
-                refreshToken = refreshToken
+                Token = _jwtService.GenerateToken(user)
             }, refreshToken, user.RefreshTokenExpiry ?? DateTime.UtcNow);
         }
 
@@ -73,12 +70,9 @@ namespace Application.Features.Auth.Login.Commands
             return refreshToken;
         }
 
-        private static void EnsureUserCanLogin(User user)
+        private static void EnsureUserCanLogin(User user, DateTime now)
         {
-            if (!user.IsActive)
-            {
-                throw new UnauthorizedAccessException("Your account has been suspended by the administrator");
-            }
+            UserAccountEnforcement.EnsureCanAuthenticate(user, now);
 
             if (!user.IsEmailVerified)
             {

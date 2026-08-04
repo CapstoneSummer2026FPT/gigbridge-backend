@@ -1,4 +1,5 @@
 using FluentValidation;
+using Domain.Enums;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -29,9 +30,15 @@ namespace Application.Features.Auth.Register.Commands
                 .Equal(v => v.RegisterRequest.Password)
                 .WithMessage("Passwords do not match.");
 
+            RuleFor(v => v.RegisterRequest.VerificationTicket)
+                .NotEmpty().WithMessage("Verification ticket is required.")
+                .Matches(@"^[a-f0-9]{64}$")
+                .WithMessage("Verification ticket is invalid.");
+
             RuleFor(v => v.RegisterRequest.role)
                .NotNull().WithMessage("Role is required.")
-               .IsInEnum().WithMessage("Invalid role.");
+               .Must(role => role is UserRole.Client or UserRole.Freelancer)
+               .WithMessage("Only Client or Freelancer registration is allowed.");
         }
     }
 }

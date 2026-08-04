@@ -1,0 +1,12 @@
+{
+  "actor": {
+    "subject": "New time proposed: {{TITLE}}", "badge": "New time proposed", "headline": "Your counterproposal was sent",
+    "introduction": "The client can now review and respond to your proposed meeting time.",
+    "accent": "#b45309", "badgeBackground": "#fffbeb", "actorLabel": "Action by"
+  },
+  "recipient": {
+    "subject": "New time proposed: {{TITLE}}", "badge": "Action required", "headline": "A new meeting time was proposed",
+    "introduction": "{{ACTOR_NAME}} suggested a replacement time. Review it and accept or decline the proposal.",
+    "accent": "#b45309", "badgeBackground": "#fffbeb", "actorLabel": "Action by"
+  }
+}

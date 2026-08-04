@@ -1,3 +1,4 @@
+using Application.Features.JobPosts.Client.Common;
 using Application.Features.JobPosts.Common.DTOs;
 
 namespace Application.Features.JobPosts.Client.GetMyJobPostDetail.DTOs;
@@ -30,8 +31,6 @@ public sealed class GetMyJobPostDetailDto
 
     public string? EstimatedDuration { get; set; }
 
-    public int? MaxHires { get; set; }
-
     public string? Location { get; set; }
 
     public int? Visibility { get; set; }
@@ -51,4 +50,8 @@ public sealed class GetMyJobPostDetailDto
     public List<AttachmentDto> Attachments { get; set; } = new();
 
     public int ProposalCount { get; set; }
+
+    public List<JobPostMilestonePlanDto> MilestonePlans { get; set; } = new();
+
+    public JobPostSetupProgressDto? SetupProgress { get; set; }
 }

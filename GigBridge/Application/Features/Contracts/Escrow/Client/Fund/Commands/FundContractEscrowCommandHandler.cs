@@ -3,9 +3,10 @@ using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.Contracts.Escrow.Client.Fund.DTOs;
+using Application.Features.Wallets.Common;
 using Domain.Entities;
 using Domain.Enums;
-using Domain.Services.Payments;
+using Domain.Services;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -16,13 +17,19 @@ public sealed class FundContractEscrowCommandHandler :
 {
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
+    private readonly INotificationService _notificationService;
+    private readonly IChatRealtimeNotifier _chatRealtimeNotifier;
 
     public FundContractEscrowCommandHandler(
         IApplicationDbContext context,
-        IDateTimeService dateTimeService)
+        IDateTimeService dateTimeService,
+        INotificationService notificationService,
+        IChatRealtimeNotifier chatRealtimeNotifier)
     {
         _context = context;
         _dateTimeService = dateTimeService;
+        _notificationService = notificationService;
+        _chatRealtimeNotifier = chatRealtimeNotifier;
     }
 
     public async Task<FundContractEscrowResponse> Handle(
@@ -46,40 +53,70 @@ public sealed class FundContractEscrowCommandHandler :
                 contract.ContractsId,
                 fundedEscrow.ContractEscrowId,
                 fundedEscrow.RequiredAmount,
-                TokenWalletRules.ToTokensCeiling(fundedEscrow.RequiredAmount),
+                fundedEscrow.RequiredAmount,
                 contract.Status,
                 fundedEscrow.Status);
         }
 
-        if (contract.Status != (int)ContractStatus.PendingEscrow)
-        {
-            throw new BadRequestException("Contract escrow can only be funded after both parties sign.");
-        }
+        var now = _dateTimeService.UtcNow;
+        ContractEscrow escrow;
 
-        var fullySignedDocument = await _context.Set<EsignDocument>()
-            .AnyAsync(
-                document =>
-                    document.ContractsId == contract.ContractsId &&
-                    document.Status == (int)ESignDocumentStatus.FullySigned,
+        if (contract.Status == (int)ContractStatus.PendingSignature)
+        {
+            await ContractEsignSignatureBridge.EnsureFullySignedContractDocumentAsync(
+                _context,
+                contract,
+                now,
                 cancellationToken);
 
-        if (!fullySignedDocument)
+            escrow = await ContractEscrowReadiness.EnsurePendingEscrowAsync(
+                _context,
+                contract,
+                now,
+                cancellationToken);
+        }
+        else if (contract.Status == (int)ContractStatus.PendingEscrow)
+        {
+            await ContractEsignSignatureBridge.EnsureFullySignedContractDocumentAsync(
+                _context,
+                contract,
+                now,
+                cancellationToken);
+
+            escrow = await GetEscrowAsync(contract.ContractsId, cancellationToken);
+        }
+        else
         {
             throw new BadRequestException("Contract escrow can only be funded after both parties sign.");
         }
 
-        var escrow = await GetEscrowAsync(contract.ContractsId, cancellationToken);
         if (escrow.Status == (int)ContractEscrowStatus.Funded)
         {
             contract.Status = (int)ContractStatus.Active;
+            await StartFirstMilestoneAsync(contract.ContractsId, now, cancellationToken);
             await _context.SaveChangesAsync(cancellationToken);
             return new FundContractEscrowResponse(
                 contract.ContractsId,
                 escrow.ContractEscrowId,
                 escrow.RequiredAmount,
-                TokenWalletRules.ToTokensCeiling(escrow.RequiredAmount),
+                escrow.RequiredAmount,
                 contract.Status,
                 escrow.Status);
+        }
+
+        if (escrow.RequiredAmount != contract.TotalBudget)
+        {
+            throw new BadRequestException("Required escrow funding amount must match contract total budget.");
+        }
+
+        if (escrow.RequiredPercentage != 1.0m)
+        {
+            throw new BadRequestException("Required escrow percentage must be exactly 100%.");
+        }
+
+        if (escrow.FundedAmount > 0)
+        {
+            throw new BadRequestException("Escrow is already partially funded.");
         }
 
         var wallet = await _context.Set<UserWallet>()
@@ -90,18 +127,39 @@ public sealed class FundContractEscrowCommandHandler :
             throw new BadRequestException("Wallet balance is insufficient to fund escrow.");
         }
 
-        var requiredVnd = escrow.RequiredAmount - escrow.FundedAmount;
-        var requiredTokens = TokenWalletRules.ToTokensCeiling(requiredVnd);
-        if (wallet.AvailableTokens < requiredTokens)
+        var requiredAmount = escrow.RequiredAmount;
+        var fundingQuote = ContractEscrowFundingQuote.Calculate(requiredAmount);
+        var requiredTokens = fundingQuote.RequiredTokens;
+        if (!WalletSpendingService.CanSpend(
+            wallet.AvailableTokens,
+            wallet.WithdrawableTokens,
+            fundingQuote.TotalDebitTokens))
         {
-            throw new BadRequestException("Wallet balance is insufficient to fund escrow.");
+            throw new BadRequestException("Wallet balance is insufficient to fund escrow and pay the service fee.");
         }
 
-        var now = _dateTimeService.UtcNow;
-
-        wallet.AvailableTokens -= requiredTokens;
+        var walletBeforeFunding = WalletBalanceAudit.Snapshot(wallet);
+        var fundingUsage = WalletWorkflow.DebitAvailable(
+            wallet,
+            requiredTokens,
+            now,
+            "Wallet balance is insufficient to fund escrow.");
         wallet.HeldTokens += requiredTokens;
-        wallet.UpdatedAt = now;
+        var walletAfterHold = WalletBalanceAudit.Snapshot(wallet);
+
+        // Record which GigCoin pools funded the escrow so refunds can restore each pool.
+        escrow.DepositedTokens = fundingUsage.DepositedAmount;
+        escrow.EarnedTokens = fundingUsage.EarnedAmount;
+
+        await ServiceFeeWorkflow.ChargeAsync(
+            _context,
+            command.UserId,
+            contract.ContractsId,
+            requiredAmount,
+            $"{ServiceFeeWorkflow.ClientFundingFeePrefix}{contract.ContractsId:N}",
+            $"1% client service fee for funding contract: {contract.Title}.",
+            now,
+            cancellationToken);
 
         escrow.FundedAmount = escrow.RequiredAmount;
         escrow.Status = (int)ContractEscrowStatus.Funded;
@@ -109,7 +167,14 @@ public sealed class FundContractEscrowCommandHandler :
 
         contract.Status = (int)ContractStatus.Active;
         contract.UpdatedAt = now;
+        await StartFirstMilestoneAsync(contract.ContractsId, now, cancellationToken);
 
+        var holdBalanceSource = WalletBalanceAudit.ResolveSource(
+            fundingUsage.DepositedAmount,
+            fundingUsage.EarnedAmount);
+        var (holdDepositedAmount, holdEarnedAmount) = WalletBalanceAudit.ToSplitAmounts(
+            fundingUsage.DepositedAmount,
+            fundingUsage.EarnedAmount);
         _context.Set<WalletTransaction>().Add(new WalletTransaction
         {
             WalletTransactionsId = Guid.NewGuid(),
@@ -118,11 +183,20 @@ public sealed class FundContractEscrowCommandHandler :
             ContractsId = contract.ContractsId,
             ContractEscrowId = escrow.ContractEscrowId,
             TokenAmount = requiredTokens,
-            VndAmount = requiredVnd,
+            VndAmount = requiredAmount,
+            BalanceSource = (int)holdBalanceSource,
+            DepositedAmount = holdDepositedAmount,
+            EarnedAmount = holdEarnedAmount,
             Type = (int)WalletTransactionType.EscrowHold,
             Status = (int)WalletTransactionStatus.Succeeded,
             GatewayProvider = "InternalTokenWallet",
             GatewayTransactionCode = $"ESCROW-HOLD-{escrow.ContractEscrowId:N}",
+            Metadata = WalletBalanceAudit.EnrichMetadata(
+                null,
+                fundingUsage.DepositedAmount,
+                fundingUsage.EarnedAmount,
+                walletBeforeFunding,
+                walletAfterHold),
             CreatedAt = now,
             CompletedAt = now
         });
@@ -131,7 +205,7 @@ public sealed class FundContractEscrowCommandHandler :
         {
             EscrowTransactionId = Guid.NewGuid(),
             ContractEscrowId = escrow.ContractEscrowId,
-            Amount = requiredVnd,
+            Amount = requiredAmount,
             Type = (int)EscrowTransactionType.Deposit,
             Status = (int)EscrowTransactionStatus.Succeeded,
             PaymentGateway = "InternalTokenWallet",
@@ -141,14 +215,74 @@ public sealed class FundContractEscrowCommandHandler :
             CompletedAt = now
         });
 
+        // Transition conversation type from JobNegotiation to ContractWorkroom
+        var conversations = await _context.Set<Conversation>()
+            .Where(c => c.ContractsId == contract.ContractsId)
+            .ToListAsync(cancellationToken);
+
+        foreach (var conversation in conversations)
+        {
+            if (conversation.ConversationType == (int)ConversationType.JobNegotiation)
+            {
+                conversation.ConversationType = (int)ConversationType.ContractWorkroom;
+                conversation.UpdatedAt = now;
+            }
+        }
+
         await ContractConversationEvents.AddSystemMessageAsync(
             _context,
             contract.ContractsId,
-            "Escrow funded from wallet. Contract is now active.",
+            "Escrow funded. Contract is now active.",
             now,
             cancellationToken);
 
+        // Fetch UserIds to create persistent notifications
+        var clientProfile = await _context.Set<ClientProfile>()
+            .FirstOrDefaultAsync(cp => cp.ClientProfilesId == contract.ClientProfilesId, cancellationToken);
+        var freelancerProfile = await _context.Set<FreelancerProfile>()
+            .FirstOrDefaultAsync(fp => fp.FreelancerProfilesId == contract.FreelancerProfilesId, cancellationToken);
+
+        if (clientProfile == null)
+        {
+            throw new BadRequestException("Client profile not found.");
+        }
+        if (freelancerProfile == null)
+        {
+            throw new BadRequestException("Freelancer profile not found.");
+        }
+
+        var clientUserId = clientProfile.UserId;
+        var freelancerUserId = freelancerProfile.UserId;
+
+        await _notificationService.CreateNotificationAsync(
+            clientUserId,
+            NotificationType.ContractStarted,
+            "Contract Started",
+            $"Contract '{contract.Title}' is now active and the workspace is open.",
+            contract.ContractsId,
+            "Contract",
+            cancellationToken);
+
+        await _notificationService.CreateNotificationAsync(
+            freelancerUserId,
+            NotificationType.ContractStarted,
+            "Contract Started",
+            $"Contract '{contract.Title}' is now active and the workspace is open.",
+            contract.ContractsId,
+            "Contract",
+            cancellationToken);
+
         await _context.SaveChangesAsync(cancellationToken);
+
+        var activeConversation = conversations.FirstOrDefault(c => c.ConversationType == (int)ConversationType.ContractWorkroom);
+        if (activeConversation != null)
+        {
+            await _chatRealtimeNotifier.SendConversationEventAsync(
+                activeConversation.ConversationsId,
+                "WorkspaceOpened",
+                new { contractId = contract.ContractsId, conversationId = activeConversation.ConversationsId },
+                cancellationToken);
+        }
 
         return new FundContractEscrowResponse(
             contract.ContractsId,
@@ -165,5 +299,20 @@ public sealed class FundContractEscrowCommandHandler :
             .FirstOrDefaultAsync(escrow => escrow.ContractsId == contractId, cancellationToken);
 
         return escrow ?? throw new NotFoundException("Contract escrow does not exist.");
+    }
+
+    private async Task StartFirstMilestoneAsync(Guid contractId, DateTime now, CancellationToken cancellationToken)
+    {
+        var first = await _context.Set<Milestone>()
+            .Where(item => item.ContractsId == contractId)
+            .OrderBy(item => item.SortOrder ?? int.MaxValue)
+            .ThenBy(item => item.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (first is not null && first.Status == (int)MilestoneStatus.Pending)
+        {
+            first.Status = (int)MilestoneStatus.InProgress;
+            first.StartedAt = now;
+            first.UpdatedAt = now;
+        }
     }
 }

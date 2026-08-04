@@ -1,5 +1,6 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
+using Application.Features.JobPosts.Client.Common;
 using Application.Features.JobPosts.Client.GetMyJobPosts.DTOs;
 using Domain.Entities;
 using MediatR;
@@ -30,7 +31,7 @@ public class GetMyJobPostsQueryHandler : IRequestHandler<GetMyJobPostsQuery, IEn
         var pageIndex = NormalizePageIndex(request.PageIndex);
         var pageSize = NormalizePageSize(request.PageSize);
 
-        return await _context.Set<JobPost>()
+        var jobPosts = await _context.Set<JobPost>()
             .AsNoTracking()
             .Where(jobPost => jobPost.ClientProfilesId == clientProfile.ClientProfilesId)
             .OrderByDescending(jobPost => jobPost.CreatedAt)
@@ -74,13 +75,14 @@ public class GetMyJobPostsQueryHandler : IRequestHandler<GetMyJobPostsQuery, IEn
                 BudgetMax = jobPost.BudgetMax,
                 Currency = jobPost.Currency,
                 EstimatedDuration = jobPost.EstimatedDuration,
-                MaxHires = jobPost.MaxHires,
                 Location = jobPost.Location,
 
                 Status = jobPost.Status,
                 Visibility = jobPost.Visibility,
                 EndDate = jobPost.EndDate,
                 IsAigenerated = jobPost.IsAigenerated,
+                IsFeatured = jobPost.IsFeatured && jobPost.FeaturedUntil > DateTime.UtcNow,
+                FeaturedUntil = jobPost.FeaturedUntil,
 
                 CustomSkillNames = jobPost.CustomSkillNames.ToList(),
 
@@ -90,6 +92,10 @@ public class GetMyJobPostsQueryHandler : IRequestHandler<GetMyJobPostsQuery, IEn
                 ProposalCount = jobPost.Proposals.Count(proposal => proposal.Status != 0)
             })
             .ToListAsync(cancellationToken);
+
+        await JobPostSetupProgressBuilder.ApplyAsync(_context, jobPosts, cancellationToken);
+
+        return jobPosts;
     }
 
     private static int NormalizePageIndex(int pageIndex)

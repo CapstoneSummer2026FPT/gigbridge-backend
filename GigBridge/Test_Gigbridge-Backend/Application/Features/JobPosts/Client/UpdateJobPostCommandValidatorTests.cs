@@ -1,11 +1,12 @@
 using Application.Features.JobPosts.Client.UpdateJobPost.Commands;
 using Application.Features.JobPosts.Client.UpdateJobPost.DTOs;
+using Infrastructure.Services.ContentModerationService;
 
 namespace Test_Gigbridge_Backend.Application.Features.JobPosts.Client;
 
 public class UpdateJobPostCommandValidatorTests
 {
-    private readonly UpdateJobPostCommandValidator _validator = new();
+    private readonly UpdateJobPostCommandValidator _validator = new(new ContentModerationService());
 
     [Theory]
     [InlineData(0)]
@@ -52,6 +53,52 @@ public class UpdateJobPostCommandValidatorTests
         Assert.Contains(result.Errors, error => error.PropertyName == "Request");
     }
 
+    [Fact]
+    public void Validate_ReturnsError_WhenTotalSkillsExceedTen()
+    {
+        var request = CreateValidRequest() with
+        {
+            SkillIds = new List<Guid> { Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid() },
+            CustomSkillNames = new List<string> { "Skill1", "Skill2", "Skill3", "Skill4", "Skill5" } // Total = 11
+        };
+        var result = _validator.Validate(new UpdateJobPostCommand(Guid.NewGuid(), Guid.NewGuid(), request));
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, error => error.ErrorMessage.Contains("up to 10 skills"));
+    }
+
+    [Fact]
+    public void Validate_ReturnsNoErrors_WhenTotalSkillsEqualsTen()
+    {
+        var request = CreateValidRequest() with
+        {
+            SkillIds = new List<Guid> { Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid() },
+            CustomSkillNames = new List<string> { "Skill1", "Skill2", "Skill3", "Skill4", "Skill5" } // Total = 10
+        };
+        var result = _validator.Validate(new UpdateJobPostCommand(Guid.NewGuid(), Guid.NewGuid(), request));
+
+        Assert.True(result.IsValid);
+    }
+
+    [Fact]
+    public void Validate_ReturnsError_WhenContentModerationBlocksJobPost()
+    {
+        var request = CreateValidRequest() with
+        {
+            Title = "Security task",
+            Description = "Viet malware va ddos website doi thu."
+        };
+
+        var result = _validator.Validate(new UpdateJobPostCommand(Guid.NewGuid(), Guid.NewGuid(), request));
+
+        Assert.False(result.IsValid);
+        Assert.Contains(
+            result.Errors,
+            error =>
+                error.PropertyName == "JobPostContent" &&
+                error.ErrorMessage == "Job post appears to contain cybercrime, malware, hacking, or credential theft-related work.");
+    }
+
     private static UpdateJobPostRequest CreateValidRequest()
     {
         return new UpdateJobPostRequest(
@@ -62,8 +109,6 @@ public class UpdateJobPostCommandValidatorTests
             BudgetMax: 1000m,
             Currency: "VND",
             EstimatedDuration: "2 weeks",
-            MaxHires: 1,
-            Location: "Remote",
             Visibility: 1,
             EndDate: DateTime.UtcNow.AddDays(7),
             SkillIds: new List<Guid> { Guid.NewGuid() },

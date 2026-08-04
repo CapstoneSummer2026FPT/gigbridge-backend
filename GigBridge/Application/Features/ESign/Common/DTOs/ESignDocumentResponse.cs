@@ -12,6 +12,10 @@ public sealed record ESignDocumentResponse(
     DateTime? ExpiresAt,
     DateTime? FinalizedAt,
     string? ExportedPdfUrl,
+    int? CurrentUserSignerRole,
+    bool CanCurrentUserSign,
+    bool HasFinalArtifact,
+    string? FinalizedDocumentFileName,
     DateTime CreatedAt,
     DateTime? UpdatedAt,
     IReadOnlyList<ESignSignatureResponse> Signatures);
