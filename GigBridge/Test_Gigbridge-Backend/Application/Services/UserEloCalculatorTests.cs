@@ -52,4 +52,17 @@ public class UserEloCalculatorTests
 
         Assert.Equal(expectedDelta, bonus);
     }
+
+    [Theory]
+    [InlineData(1500, -750)]
+    [InlineData(1501, -750)]
+    [InlineData(99, -49)]
+    [InlineData(1, 0)]
+    [InlineData(0, 0)]
+    public void CalculateDisputeResolutionDelta_DeductsHalfRoundedHalfUp(int currentPoints, int expectedDelta)
+    {
+        var delta = UserEloCalculator.CalculateDisputeResolutionDelta(currentPoints);
+
+        Assert.Equal(expectedDelta, delta);
+    }
 }

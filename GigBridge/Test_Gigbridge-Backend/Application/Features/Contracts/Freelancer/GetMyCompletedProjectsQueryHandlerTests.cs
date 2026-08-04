@@ -439,18 +439,13 @@ public class GetMyCompletedProjectsQueryHandlerTests
             context.AddSet(clientUser, freelancerUser, otherFreelancerUser);
             context.AddSet(clientUser.UserEloScore);
             context.AddSet(clientProfile);
-            context.AddSet(freelancerProfile);
-            context.AddSet(otherFreelancerProfile);
+            context.AddSet(freelancerProfile, otherFreelancerProfile);
             context.AddSet(major);
             context.AddSet(category);
             context.AddSet(majorCategory);
             context.AddSet(skill);
-            context.AddSet(completedJobPost);
-            context.AddSet(completedContract);
-            context.AddSet(activeJobPost);
-            context.AddSet(activeContract);
-            context.AddSet(otherJobPost);
-            context.AddSet(otherContract);
+            context.AddSet(completedJobPost, activeJobPost, otherJobPost);
+            context.AddSet(completedContract, activeContract, otherContract);
             context.AddSet(new AiInterviewDefinition
             {
                 AiInterviewDefinitionsId = Guid.NewGuid(),

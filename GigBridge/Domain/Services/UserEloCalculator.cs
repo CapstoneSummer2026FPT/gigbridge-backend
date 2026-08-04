@@ -33,6 +33,17 @@ public static class UserEloCalculator
         };
     }
 
+    public static int CalculateDisputeResolutionDelta(int currentPoints)
+    {
+        if (currentPoints <= MinimumPoints)
+        {
+            return 0;
+        }
+
+        var halved = (int)Math.Round(currentPoints / 2m, MidpointRounding.AwayFromZero);
+        return halved - currentPoints;
+    }
+
     public static int CalculateInactivityPenalty(DateTime lastActivityAt, DateTime now)
     {
         if (now <= lastActivityAt)
