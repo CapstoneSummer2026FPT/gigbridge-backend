@@ -21,6 +21,8 @@ namespace Application.Common.Services;
 public sealed class DeliveryOutboxService : BackgroundService
 {
     internal static readonly TimeSpan DueDeliveryPollInterval = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan RealtimeMaxIdlePollInterval = TimeSpan.FromSeconds(15);
+    private static readonly TimeSpan EmailMaxIdlePollInterval = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan BackfillRetryInterval = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan[] RetryDelays =
         [TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(15), TimeSpan.FromHours(1), TimeSpan.FromHours(6)];
@@ -69,16 +71,20 @@ public sealed class DeliveryOutboxService : BackgroundService
         DeliveryChannel channel,
         CancellationToken stoppingToken)
     {
-        var interval = channel == DeliveryChannel.NotificationRealtime
+        var activeInterval = channel == DeliveryChannel.NotificationRealtime
             ? TimeSpan.FromMilliseconds(_options.RealtimePollMilliseconds)
             : TimeSpan.FromMilliseconds(_options.EmailPollMilliseconds);
-        using var timer = new PeriodicTimer(interval);
+        var maxIdleInterval = channel == DeliveryChannel.NotificationRealtime
+            ? RealtimeMaxIdlePollInterval
+            : EmailMaxIdlePollInterval;
+        var idleInterval = activeInterval;
 
         while (!stoppingToken.IsCancellationRequested)
         {
+            var processedWork = false;
             try
             {
-                await ProcessChannelBatch(channel, stoppingToken);
+                processedWork = await ProcessChannelBatch(channel, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -89,12 +95,14 @@ public sealed class DeliveryOutboxService : BackgroundService
                 _logger.LogError(ex, "Delivery outbox {Channel} batch failed.", channel);
             }
 
+            var delay = processedWork ? activeInterval : idleInterval;
+            idleInterval = processedWork
+                ? activeInterval
+                : NextIdleInterval(idleInterval, maxIdleInterval);
+
             try
             {
-                if (!await timer.WaitForNextTickAsync(stoppingToken))
-                {
-                    break;
-                }
+                await Task.Delay(delay, stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -103,7 +111,7 @@ public sealed class DeliveryOutboxService : BackgroundService
         }
     }
 
-    internal async Task ProcessChannelBatch(
+    internal async Task<bool> ProcessChannelBatch(
         DeliveryChannel channel,
         CancellationToken ct)
     {
@@ -122,7 +130,7 @@ public sealed class DeliveryOutboxService : BackgroundService
 
         if (leases.Count == 0)
         {
-            return;
+            return false;
         }
 
         var concurrency = channel == DeliveryChannel.NotificationRealtime
@@ -137,7 +145,11 @@ public sealed class DeliveryOutboxService : BackgroundService
             },
             async (lease, cancellationToken) =>
                 await ProcessLeasedDeliveryAsync(lease, cancellationToken));
+        return true;
     }
+
+    private static TimeSpan NextIdleInterval(TimeSpan current, TimeSpan maximum) =>
+        TimeSpan.FromTicks(Math.Min(current.Ticks * 2, maximum.Ticks));
 
     private async Task ProcessLeasedDeliveryAsync(
         DeliveryOutboxLease lease,
