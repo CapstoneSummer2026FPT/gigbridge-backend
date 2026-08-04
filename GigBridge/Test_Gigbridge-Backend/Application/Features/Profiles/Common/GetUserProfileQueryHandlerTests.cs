@@ -9,7 +9,7 @@ namespace Test_Gigbridge_Backend.Application.Features.Profiles.Common;
 public sealed class GetUserProfileQueryHandlerTests
 {
     [Fact]
-    public async Task Handle_ReturnsRequestedCommonUserFields()
+    public async Task Handle_ReturnsOnlyRequestedPublicUserFields()
     {
         var context = new InMemoryApplicationDbContext();
         var user = new User
@@ -31,10 +31,7 @@ public sealed class GetUserProfileQueryHandlerTests
 
         Assert.Equal(user.UserId, result.UserId);
         Assert.Equal(user.FullName, result.FullName);
-        Assert.Equal(user.Email, result.Email);
         Assert.Equal(user.Avatar, result.Avatar);
-        Assert.Equal(user.PhoneNumber, result.PhoneNumber);
-        Assert.Equal(user.PreferredLanguage, result.PreferredLanguage);
         Assert.Equal(user.Role, result.Role);
     }
 

@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Application.Features.Profiles.Common.GetUserProfile.Queries;
 
 public sealed class GetUserProfileQueryHandler
-    : IRequestHandler<GetUserProfileQuery, UserProfileDto>
+    : IRequestHandler<GetUserProfileQuery, PublicUserProfileDto>
 {
     private readonly IApplicationDbContext _context;
 
@@ -17,21 +17,18 @@ public sealed class GetUserProfileQueryHandler
         _context = context;
     }
 
-    public async Task<UserProfileDto> Handle(
+    public async Task<PublicUserProfileDto> Handle(
         GetUserProfileQuery request,
         CancellationToken cancellationToken)
     {
         var profile = await _context.Set<User>()
             .AsNoTracking()
             .Where(user => user.UserId == request.UserId)
-            .Select(user => new UserProfileDto
+            .Select(user => new PublicUserProfileDto
             {
                 UserId = user.UserId,
                 FullName = user.FullName,
-                Email = user.Email,
                 Avatar = user.Avatar,
-                PhoneNumber = user.PhoneNumber,
-                PreferredLanguage = user.PreferredLanguage,
                 Role = user.Role
             })
             .FirstOrDefaultAsync(cancellationToken);

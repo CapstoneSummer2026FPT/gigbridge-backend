@@ -25,7 +25,7 @@ public sealed class UserProfileController : BaseApiController
     public async Task<IActionResult> GetUserProfile(Guid userId)
     {
         var result = await Mediator.Send(new GetUserProfileQuery(userId));
-        return Ok(ApiResponse<UserProfileDto>.Ok(result, "Success"));
+        return Ok(ApiResponse<PublicUserProfileDto>.Ok(result, "Success"));
     }
 
     [HttpPut]

@@ -43,19 +43,13 @@ public sealed class UpdateUserProfileCommandHandler
         }
 
         var email = request.Dto.Email.Trim().ToLowerInvariant();
-        var emailBelongsToAnotherUser = await _context.Set<User>()
-            .AsNoTracking()
-            .AnyAsync(
-                candidate => candidate.UserId != currentUserId && candidate.Email == email,
-                cancellationToken);
-
-        if (emailBelongsToAnotherUser)
+        if (!string.Equals(user.Email, email, StringComparison.OrdinalIgnoreCase))
         {
-            throw new ConflictException("Email is already in use.");
+            throw new BadRequestException(
+                "Email cannot be changed through profile updates. Complete the secure email-change verification flow instead.");
         }
 
         user.FullName = request.Dto.FullName.Trim();
-        user.Email = email;
         user.Avatar = NormalizeOptional(request.Dto.Avatar);
         user.PhoneNumber = NormalizeOptional(request.Dto.PhoneNumber);
         user.PreferredLanguage = NormalizeOptional(request.Dto.PreferredLanguage)?.ToLowerInvariant();

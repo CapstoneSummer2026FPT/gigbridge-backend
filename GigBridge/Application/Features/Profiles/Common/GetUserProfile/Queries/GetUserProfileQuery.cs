@@ -3,4 +3,4 @@ using MediatR;
 
 namespace Application.Features.Profiles.Common.GetUserProfile.Queries;
 
-public sealed record GetUserProfileQuery(Guid UserId) : IRequest<UserProfileDto>;
+public sealed record GetUserProfileQuery(Guid UserId) : IRequest<PublicUserProfileDto>;

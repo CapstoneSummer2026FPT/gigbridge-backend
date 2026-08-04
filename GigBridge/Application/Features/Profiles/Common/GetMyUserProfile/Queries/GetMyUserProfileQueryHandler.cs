@@ -1,23 +1,25 @@
 using Application.Common.Exceptions;
+using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Features.Profiles.Common.DTOs;
-using Application.Features.Profiles.Common.GetUserProfile.Queries;
+using Domain.Entities;
 using MediatR;
+using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.Profiles.Common.GetMyUserProfile.Queries;
 
 public sealed class GetMyUserProfileQueryHandler
     : IRequestHandler<GetMyUserProfileQuery, UserProfileDto>
 {
+    private readonly IApplicationDbContext _context;
     private readonly ICurrentUserService _currentUserService;
-    private readonly IMediator _mediator;
 
     public GetMyUserProfileQueryHandler(
-        ICurrentUserService currentUserService,
-        IMediator mediator)
+        IApplicationDbContext context,
+        ICurrentUserService currentUserService)
     {
+        _context = context;
         _currentUserService = currentUserService;
-        _mediator = mediator;
     }
 
     public async Task<UserProfileDto> Handle(
@@ -29,6 +31,21 @@ public sealed class GetMyUserProfileQueryHandler
             throw new BadRequestException("User ID from token is invalid or missing.");
         }
 
-        return await _mediator.Send(new GetUserProfileQuery(currentUserId), cancellationToken);
+        var profile = await _context.Set<User>()
+            .AsNoTracking()
+            .Where(user => user.UserId == currentUserId)
+            .Select(user => new UserProfileDto
+            {
+                UserId = user.UserId,
+                FullName = user.FullName,
+                Email = user.Email,
+                Avatar = user.Avatar,
+                PhoneNumber = user.PhoneNumber,
+                PreferredLanguage = user.PreferredLanguage,
+                Role = user.Role
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return profile ?? throw new NotFoundException(nameof(User), currentUserId);
     }
 }
