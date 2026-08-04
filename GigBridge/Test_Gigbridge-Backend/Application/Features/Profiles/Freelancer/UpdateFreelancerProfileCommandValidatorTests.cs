@@ -60,6 +60,28 @@ public class UpdateFreelancerProfileCommandValidatorTests
         Assert.Contains(result.Errors, error => error.PropertyName == "Dto.CategoryIds");
     }
 
+    [Fact]
+    public void Validate_ReturnsErrorsForInvalidPortfolioContent()
+    {
+        var dto = CreateValidDto();
+        dto.PortfolioItems = new[]
+        {
+            new UpdatePortfolioItemDto
+            {
+                Title = "",
+                ProjectUrl = "javascript:alert('xss')",
+                ImageUrl = "not-a-url"
+            }
+        };
+
+        var result = _validator.Validate(new UpdateFreelancerProfileCommand(dto));
+
+        Assert.False(result.IsValid);
+        Assert.Contains(result.Errors, error => error.PropertyName.EndsWith(".Title"));
+        Assert.Contains(result.Errors, error => error.PropertyName.EndsWith(".ProjectUrl"));
+        Assert.Contains(result.Errors, error => error.PropertyName.EndsWith(".ImageUrl"));
+    }
+
     private static UpdateFreelancerProfileDto CreateValidDto()
     {
         return new UpdateFreelancerProfileDto

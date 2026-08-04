@@ -121,7 +121,11 @@ public class GetFreelancerProfileQueryHandler
             PortfolioItems = freelancerProfile.PortfolioItems.Select(pi => new PortfolioItemDto
             {
                 PortfolioItemId = pi.PortfolioItemsId,
-                ProjectUrl = pi.ProjectUrl
+                Title = pi.Title,
+                Description = pi.Description,
+                ProjectUrl = pi.ProjectUrl,
+                ImageUrl = pi.ImageUrl,
+                ProjectDate = pi.ProjectDate?.ToString("yyyy-MM-dd")
             }).ToList(),
 
             WorkExperiences = freelancerProfile.WorkExperiences.Select(we => new WorkExperienceDto
