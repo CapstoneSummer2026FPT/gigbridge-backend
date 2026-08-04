@@ -15,11 +15,6 @@ internal static class ServiceFeeWorkflow
     internal const string FreelancerReleaseFeePrefix = "SERVICE-FEE-RELEASE-";
     internal const decimal ServiceFeeRate = 0.01m;
 
-    public static decimal CalculateVnd(decimal amountVnd)
-    {
-        return decimal.Round(amountVnd * ServiceFeeRate, 2, MidpointRounding.AwayFromZero);
-    }
-
     public static async Task<decimal> ChargeAsync(
         IApplicationDbContext context,
         Guid userId,
@@ -30,12 +25,18 @@ internal static class ServiceFeeWorkflow
         DateTime now,
         CancellationToken cancellationToken)
     {
-        var serviceFeeVnd = CalculateVnd(jobAmount);
-        var serviceFeeTokens = TokenWalletRules.ToTokens(serviceFeeVnd);
-        if (serviceFeeTokens <= 0)
+        // Service fees are charged directly on the G-coin job amount (1%). The
+        // WalletTransaction.VndAmount field stores the G-coin fee number (a legacy
+        // field-name mislabel); the true VND value is derived for revenue events.
+        var serviceFeeTokens = decimal.Round(
+            jobAmount * ServiceFeeRate,
+            4,
+            MidpointRounding.AwayFromZero);
+        if (serviceFeeTokens <= 0m)
         {
             throw new BadRequestException("The job amount must be greater than zero to calculate the service fee.");
         }
+        var serviceFeeVnd = serviceFeeTokens;
 
         var existingTransaction = await context.Set<WalletTransaction>()
             .FirstOrDefaultAsync(
@@ -108,7 +109,7 @@ internal static class ServiceFeeWorkflow
             SourceEntityId = walletTransaction.WalletTransactionsId,
             SourceReference = idempotencyKey,
             GigCoinAmount = serviceFeeTokens,
-            VndEquivalent = serviceFeeVnd,
+            VndEquivalent = TokenWalletRules.ToVnd(serviceFeeTokens),
             VndPerGigCoin = TokenWalletRules.VndPerToken,
             OccurredAt = now,
             RecordedAt = now,

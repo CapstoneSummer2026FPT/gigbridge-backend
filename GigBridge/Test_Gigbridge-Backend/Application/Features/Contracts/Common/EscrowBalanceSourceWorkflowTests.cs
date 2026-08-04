@@ -45,7 +45,7 @@ public sealed class EscrowBalanceSourceWorkflowTests
 
         var result = ContractEscrowWalletWorkflow.Release(
             context, client, freelancer, escrow, contractId, milestoneId,
-            100_000m, "release-1", "InternalTokenWallet", "Milestone release", Now);
+            100m, "release-1", "InternalTokenWallet", "Milestone release", Now);
 
         Assert.Equal(100m, result.GrossTokens);
         Assert.Equal(1m, result.FeeTokens);
@@ -101,7 +101,7 @@ public sealed class EscrowBalanceSourceWorkflowTests
 
         var refundedTokens = ContractEscrowWalletWorkflow.Refund(
             context, client, escrow, contractId, null,
-            100_000m, "refund-1", "InternalTokenWallet", "Contract cancelled", Now);
+            100m, "refund-1", "InternalTokenWallet", "Contract cancelled", Now);
 
         Assert.Equal(100m, refundedTokens);
         Assert.Equal(0m, client.HeldTokens);
@@ -141,7 +141,7 @@ public sealed class EscrowBalanceSourceWorkflowTests
 
         var refundedTokens = ContractEscrowWalletWorkflow.Refund(
             context, client, escrow, contractId, null,
-            50_000m, "refund-partial", "InternalTokenWallet", "Partial refund", Now);
+            50m, "refund-partial", "InternalTokenWallet", "Partial refund", Now);
 
         Assert.Equal(50m, refundedTokens);
         Assert.Equal(50m, client.HeldTokens);
@@ -180,7 +180,7 @@ public sealed class EscrowBalanceSourceWorkflowTests
 
         var refundedTokens = ContractEscrowWalletWorkflow.Refund(
             context, client, escrow, contractId, null,
-            50_000m, "refund-legacy", "InternalTokenWallet", "Legacy refund", Now);
+            50m, "refund-legacy", "InternalTokenWallet", "Legacy refund", Now);
 
         Assert.Equal(50m, refundedTokens);
         Assert.Equal(50m, client.HeldTokens);
@@ -217,7 +217,7 @@ public sealed class EscrowBalanceSourceWorkflowTests
         Assert.Throws<BadRequestException>(() =>
             ContractEscrowWalletWorkflow.Release(
                 context, client, freelancer, escrow, escrow.ContractsId, null,
-                60_000m, "release-overdraw", "InternalTokenWallet", "Invalid release", Now));
+                60m, "release-overdraw", "InternalTokenWallet", "Invalid release", Now));
 
         Assert.Equal(100m, client.HeldTokens);
         Assert.Equal(0m, freelancer.WithdrawableTokens);
@@ -255,13 +255,13 @@ public sealed class EscrowBalanceSourceWorkflowTests
 
         ContractEscrowWalletWorkflow.Release(
             context, client, freelancer, escrow, contractId, null,
-            100_000m, "release-dup", "InternalTokenWallet", "First release", Now);
+            100m, "release-dup", "InternalTokenWallet", "First release", Now);
         Assert.Equal(99m, freelancer.WithdrawableTokens);
 
         Assert.Throws<BadRequestException>(() =>
             ContractEscrowWalletWorkflow.Release(
                 context, client, freelancer, escrow, contractId, null,
-                100_000m, "release-dup-2", "InternalTokenWallet", "Duplicate release", Now));
+                100m, "release-dup-2", "InternalTokenWallet", "Duplicate release", Now));
 
         Assert.Equal(99m, freelancer.WithdrawableTokens);
         Assert.Equal(0m, client.HeldTokens);
@@ -291,13 +291,13 @@ public sealed class EscrowBalanceSourceWorkflowTests
 
         ContractEscrowWalletWorkflow.Refund(
             context, client, escrow, contractId, null,
-            100_000m, "refund-dup", "InternalTokenWallet", "First refund", Now);
+            100m, "refund-dup", "InternalTokenWallet", "First refund", Now);
         Assert.Equal(100m, client.AvailableTokens);
 
         Assert.Throws<BadRequestException>(() =>
             ContractEscrowWalletWorkflow.Refund(
                 context, client, escrow, contractId, null,
-                100_000m, "refund-dup-2", "InternalTokenWallet", "Duplicate refund", Now));
+                100m, "refund-dup-2", "InternalTokenWallet", "Duplicate refund", Now));
 
         Assert.Equal(100m, client.AvailableTokens);
         Assert.Equal(0m, client.WithdrawableTokens);
@@ -332,10 +332,10 @@ public sealed class EscrowBalanceSourceWorkflowTests
             EarnedTokens = 25m
         };
 
-        // Release 40 tokens (40,000 VND).
+        // Release 40 tokens.
         var result = ContractEscrowWalletWorkflow.Release(
             context, client, freelancer, escrow, contractId, null,
-            40_000m, "release-mixed", "InternalTokenWallet", "Milestone release", Now);
+            40m, "release-mixed", "InternalTokenWallet", "Milestone release", Now);
 
         Assert.Equal(40m, result.GrossTokens);
         // 30 deposited + 10 earned leave the client's held escrow proportionally.
@@ -380,7 +380,7 @@ public sealed class EscrowBalanceSourceWorkflowTests
 
         var debit = ContractEscrowWalletWorkflow.Penalty(
             context, client, escrow, contractId, milestoneId, Guid.NewGuid(),
-            50_000m, "penalty-1", "Financial misconduct", Now);
+            50m, "penalty-1", "Financial misconduct", Now);
 
         Assert.Equal(50m, client.HeldTokens);
         Assert.Equal(5m, client.AvailableTokens);

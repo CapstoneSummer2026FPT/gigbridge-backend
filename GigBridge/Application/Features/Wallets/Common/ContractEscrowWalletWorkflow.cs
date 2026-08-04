@@ -27,9 +27,13 @@ internal static class ContractEscrowWalletWorkflow
             return default;
         }
 
-        var grossTokens = TokenWalletRules.ToTokens(amountVnd);
-        var feeVnd = chargeFreelancerFee ? ServiceFeeWorkflow.CalculateVnd(amountVnd) : 0m;
-        var feeTokens = TokenWalletRules.ToTokens(feeVnd);
+        // Contract/escrow amounts are G-coin: the gross transfer and its 1% fee are
+        // expressed directly in G-coin tokens (no VND -> token division).
+        var grossTokens = amountVnd;
+        var feeTokens = chargeFreelancerFee
+            ? decimal.Round(amountVnd * ServiceFeeWorkflow.ServiceFeeRate, 4, MidpointRounding.AwayFromZero)
+            : 0m;
+        var feeVnd = feeTokens;
         var netTokens = grossTokens - feeTokens;
 
         if (clientWallet.HeldTokens < grossTokens)
@@ -120,7 +124,7 @@ internal static class ContractEscrowWalletWorkflow
                 SourceEntityId = feeTransaction.WalletTransactionsId,
                 SourceReference = feeCode,
                 GigCoinAmount = feeTokens,
-                VndEquivalent = feeVnd,
+                VndEquivalent = TokenWalletRules.ToVnd(feeTokens),
                 VndPerGigCoin = TokenWalletRules.VndPerToken,
                 OccurredAt = now,
                 RecordedAt = now,
@@ -148,7 +152,8 @@ internal static class ContractEscrowWalletWorkflow
             return 0m;
         }
 
-        var tokens = TokenWalletRules.ToTokens(amountVnd);
+        // Contract/escrow amounts are G-coin: the refund restores the G-coin amount directly.
+        var tokens = amountVnd;
         if (clientWallet.HeldTokens < tokens)
         {
             throw new BadRequestException("Client held wallet balance is insufficient for this refund.");
@@ -206,7 +211,9 @@ internal static class ContractEscrowWalletWorkflow
         if (amountVnd <= 0m)
             throw new BadRequestException("Penalty amount must be greater than zero.");
 
-        var tokens = TokenWalletRules.ToTokens(amountVnd);
+        // Contract/escrow amounts are G-coin: the penalty debits the G-coin amount directly
+        // from the client's held escrow and is retained by the platform (no wallet credit).
+        var tokens = amountVnd;
         if (clientWallet.HeldTokens < tokens)
             throw new BadRequestException("Client held wallet balance is insufficient for this penalty.");
 

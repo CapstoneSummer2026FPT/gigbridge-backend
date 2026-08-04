@@ -36,7 +36,7 @@ public sealed class DisputeFinancialWorkflowTests
 
         var clientDebit = ContractEscrowWalletWorkflow.Penalty(
             context, client, escrow, contractId, milestoneId, disputeId,
-            25_000m, code, "Confirmed financial misconduct", DateTime.UtcNow);
+            25m, code, "Confirmed financial misconduct", DateTime.UtcNow);
 
         Assert.Equal(55m, client.HeldTokens);
         var transaction = Assert.Single(transactions.Entities);
@@ -68,7 +68,7 @@ public sealed class DisputeFinancialWorkflowTests
 
         Assert.Throws<BadRequestException>(() => ContractEscrowWalletWorkflow.Penalty(
             context, client, new ContractEscrow(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
-            10_000m, "penalty", "reason", DateTime.UtcNow));
+            10m, "penalty", "reason", DateTime.UtcNow));
 
         Assert.Equal(5m, client.HeldTokens);
         Assert.Empty(transactions.Entities);

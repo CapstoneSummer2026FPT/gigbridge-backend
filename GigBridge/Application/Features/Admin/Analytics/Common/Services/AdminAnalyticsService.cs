@@ -7,6 +7,7 @@ using Application.Features.Admin.Analytics.Common.DTOs;
 using Application.Features.Admin.Analytics.Common.Interfaces;
 using Domain.Entities;
 using Domain.Enums;
+using Domain.Services.Payments;
 using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.Admin.Analytics.Common.Services;
@@ -38,12 +39,14 @@ public sealed class AdminAnalyticsService : IAdminAnalyticsService
                         (x.CompletedAt ?? x.CreatedAt) < range.CurrentToUtc)
             .Select(x => new { x.Amount, At = x.CompletedAt ?? x.CreatedAt })
             .ToListAsync(cancellationToken);
-        var comparisonGmv = await _context.Set<EscrowTransaction>().AsNoTracking()
-            .Where(x => x.Type == (int)EscrowTransactionType.ReleaseToFreelancer &&
-                        x.Status == (int)EscrowTransactionStatus.Succeeded &&
-                        (x.CompletedAt ?? x.CreatedAt) >= range.ComparisonFromUtc &&
-                        (x.CompletedAt ?? x.CreatedAt) < range.ComparisonToUtc)
-            .SumAsync(x => (decimal?)x.Amount, cancellationToken) ?? 0m;
+        // EscrowTransaction.Amount is G-coin; GMV and the take-rate KPI are reported in VND.
+        var comparisonGmv = TokenWalletRules.ToVnd(
+            await _context.Set<EscrowTransaction>().AsNoTracking()
+                .Where(x => x.Type == (int)EscrowTransactionType.ReleaseToFreelancer &&
+                            x.Status == (int)EscrowTransactionStatus.Succeeded &&
+                            (x.CompletedAt ?? x.CreatedAt) >= range.ComparisonFromUtc &&
+                            (x.CompletedAt ?? x.CreatedAt) < range.ComparisonToUtc)
+                .SumAsync(x => (decimal?)x.Amount, cancellationToken) ?? 0m);
         var topUps = await _context.Set<WalletTransaction>().AsNoTracking()
             .Where(x => x.Type == (int)WalletTransactionType.TopUp && x.Status == (int)WalletTransactionStatus.Succeeded &&
                         (x.CompletedAt ?? x.CreatedAt) >= range.CurrentFromUtc && (x.CompletedAt ?? x.CreatedAt) < range.CurrentToUtc)
@@ -57,7 +60,7 @@ public sealed class AdminAnalyticsService : IAdminAnalyticsService
 
         var revenue = current.Sum(x => x.VndEquivalent);
         var previousRevenue = comparison.Sum(x => x.VndEquivalent);
-        var gmv = releases.Sum(x => x.Amount);
+        var gmv = TokenWalletRules.ToVnd(releases.Sum(x => x.Amount));
         var contractFees = current.Where(x => x.Source is PlatformRevenueSource.ContractFundingFee or PlatformRevenueSource.ContractReleaseFee)
             .Sum(x => x.VndEquivalent);
         var previousContractFees = comparison.Where(x => x.Source is PlatformRevenueSource.ContractFundingFee or PlatformRevenueSource.ContractReleaseFee)
@@ -84,7 +87,7 @@ public sealed class AdminAnalyticsService : IAdminAnalyticsService
             .Select(x => new AnalyticsSeriesPoint(x.Key.Bucket, x.Key.Source.ToString(), x.Sum(y => y.VndEquivalent)))
             .OrderBy(x => x.Bucket).ThenBy(x => x.Series).ToList();
         var gmvSeries = releases.GroupBy(x => AdminAnalyticsRangeResolver.Bucket(x.At, range))
-            .Select(x => new AnalyticsSeriesPoint(x.Key, "MarketplaceGMV", x.Sum(y => y.Amount))).OrderBy(x => x.Bucket).ToList();
+            .Select(x => new AnalyticsSeriesPoint(x.Key, "MarketplaceGMV", TokenWalletRules.ToVnd(x.Sum(y => y.Amount)))).OrderBy(x => x.Bucket).ToList();
         var cashSeries = topUps.GroupBy(x => AdminAnalyticsRangeResolver.Bucket(x.At, range))
                 .Select(x => new AnalyticsSeriesPoint(x.Key, "TopUpInflow", x.Sum(y => y.VndAmount)))
             .Concat(withdrawals.GroupBy(x => AdminAnalyticsRangeResolver.Bucket(x.At, range))

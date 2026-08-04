@@ -7,7 +7,6 @@ using Application.Features.Wallets.Common;
 using Domain.Entities;
 using Domain.Enums;
 using Domain.Services;
-using Domain.Services.Payments;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -54,7 +53,7 @@ public sealed class FundContractEscrowCommandHandler :
                 contract.ContractsId,
                 fundedEscrow.ContractEscrowId,
                 fundedEscrow.RequiredAmount,
-                TokenWalletRules.ToTokens(fundedEscrow.RequiredAmount),
+                fundedEscrow.RequiredAmount,
                 contract.Status,
                 fundedEscrow.Status);
         }
@@ -100,7 +99,7 @@ public sealed class FundContractEscrowCommandHandler :
                 contract.ContractsId,
                 escrow.ContractEscrowId,
                 escrow.RequiredAmount,
-                TokenWalletRules.ToTokens(escrow.RequiredAmount),
+                escrow.RequiredAmount,
                 contract.Status,
                 escrow.Status);
         }
