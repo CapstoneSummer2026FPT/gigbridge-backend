@@ -6,6 +6,7 @@ using Application.Features.Chat.Common.FinalOffers.Create.DTOs;
 using Application.Features.Chat.Common.FinalOffers.Respond.Commands;
 using Application.Features.Chat.Common.FinalOffers.Respond.DTOs;
 using Application.Features.Chat.Common.FinalOffers.Shared.Email;
+using Application.Features.Chat.Common.Messages.Send.DTOs;
 using Application.Features.Chat.Common.Negotiations.MilestonePlans.Commands;
 using Application.Features.Chat.Common.Negotiations.StartFromProposal.Commands;
 using Application.Features.Chat.Common.Negotiations.MilestonePlans.DTOs;
@@ -48,10 +49,11 @@ public class NegotiationFlowCommandHandlerTests
     {
         var fixture = new NegotiationFixture();
         fixture.AddConversationWithParticipants();
+        var realtimeNotifier = Substitute.For<IChatRealtimeNotifier>();
         var handler = new CreateFinalOfferCommandHandler(
             fixture.Context,
             new FixedDateTimeService(fixture.Now),
-            new NoopChatRealtimeNotifier());
+            realtimeNotifier);
 
         var offerId = await handler.Handle(
             new CreateFinalOfferCommand(
@@ -75,6 +77,33 @@ public class NegotiationFlowCommandHandlerTests
         Assert.Equal((int)MessageType.FinalOffer, message.MessageType);
         Assert.Equal(fixture.ClientUserId, message.SenderUserId);
         Assert.Contains(offerId.ToString(), message.Metadata);
+
+        await realtimeNotifier.Received(1).SendUsersEventAsync(
+            Arg.Is<IReadOnlyCollection<Guid>>(userIds =>
+                userIds.Count == 2 &&
+                userIds.Contains(fixture.ClientUserId) &&
+                userIds.Contains(fixture.FreelancerUserId)),
+            "ReceiveMessage",
+            Arg.Is<object>(payload => IsExpectedFinalOfferMessage(
+                payload,
+                message.MessagesId,
+                fixture.ConversationId)),
+            Arg.Any<CancellationToken>());
+
+        await realtimeNotifier.Received(1).SendUsersEventAsync(
+            Arg.Is<IReadOnlyCollection<Guid>>(userIds =>
+                userIds.Count == 2 &&
+                userIds.Contains(fixture.ClientUserId) &&
+                userIds.Contains(fixture.FreelancerUserId)),
+            "FinalOfferCreated",
+            Arg.Is<object>(payload =>
+                Equals(
+                    GetPropertyValue(payload, "conversationId"),
+                    fixture.ConversationId) &&
+                Equals(
+                    GetPropertyValue(payload, "offerId"),
+                    offerId)),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -233,10 +262,11 @@ public class NegotiationFlowCommandHandlerTests
         var configuration = Substitute.For<IConfiguration>();
         configuration["FrontendBaseUrl"].Returns("https://gigbridge.test");
 
+        var realtimeNotifier = Substitute.For<IChatRealtimeNotifier>();
         var handler = new RespondFinalOfferCommandHandler(
             fixture.Context,
             new FixedDateTimeService(fixture.Now),
-            new NoopChatRealtimeNotifier(),
+            realtimeNotifier,
             notifications,
             emailService,
             emailRenderer,
@@ -263,6 +293,16 @@ public class NegotiationFlowCommandHandlerTests
         Assert.Equal(contract.ContractsId, result.ContractId);
         Assert.Equal((int)ContractStatus.PendingContractConfirmation, result.ContractStatus);
         Assert.Empty(fixture.Escrows.Entities);
+        var workflowCall = realtimeNotifier.ReceivedCalls().Single(call =>
+            Equals(call.GetArguments()[1], "ContractDraftUpdated"));
+        var workflowPayload = workflowCall.GetArguments()[2]
+            ?? throw new InvalidOperationException("ContractDraftUpdated payload was null.");
+        Assert.Equal(
+            fixture.ConversationId,
+            workflowPayload.GetType().GetProperty("conversationId")?.GetValue(workflowPayload));
+        Assert.Equal(
+            contract.ContractsId,
+            workflowPayload.GetType().GetProperty("contractId")?.GetValue(workflowPayload));
         await notifications.Received(1).CreateNotificationAsync(
             fixture.FreelancerUserId,
             NotificationType.ContractStarted,
@@ -277,6 +317,44 @@ public class NegotiationFlowCommandHandlerTests
                 email.Subject == "Accepted" &&
                 email.IsHtml),
             Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RespondFinalOffer_AcceptChargesOnePercentFreelancerServiceFee()
+    {
+        var fixture = new NegotiationFixture();
+        fixture.AddConversationWithParticipants();
+        fixture.AddOfferWithSnapshot(1500m, 600m, 900m);
+
+        var handler = new RespondFinalOfferCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopChatRealtimeNotifier());
+
+        var result = await handler.Handle(
+            new RespondFinalOfferCommand(
+                fixture.FreelancerUserId,
+                new RespondFinalOfferRequest(
+                    fixture.OfferId,
+                    FinalOfferResponse.Accept,
+                    null)),
+            CancellationToken.None);
+
+        Assert.NotNull(result.ContractId);
+
+        // 1% of 1500 = 15 deducted from the freelancer's spendable balance.
+        var freelancerWallet = fixture.Context.Set<UserWallet>()
+            .Single(wallet => wallet.UserId == fixture.FreelancerUserId);
+        Assert.Equal(85m, freelancerWallet.AvailableTokens);
+
+        // The deduction is recorded as a SERVICE-FEE-ACCEPT- wallet transaction so it
+        // shows up in the freelancer's transaction history.
+        var feeTransaction = fixture.Context.Set<WalletTransaction>()
+            .Single(transaction =>
+                transaction.IdempotencyKey.StartsWith("SERVICE-FEE-ACCEPT-", StringComparison.Ordinal));
+        Assert.Equal(15m, feeTransaction.TokenAmount);
+        Assert.Equal(freelancerWallet.UserId, feeTransaction.UserId);
+        Assert.Equal(result.ContractId, feeTransaction.ContractsId);
     }
 
     [Fact]
@@ -338,6 +416,22 @@ public class NegotiationFlowCommandHandlerTests
         Assert.All(fixture.Milestones.Entities, milestone => Assert.False(string.IsNullOrWhiteSpace(milestone.AcceptanceCriteria)));
         Assert.Equal(2, fixture.Milestones.Entities.Sum(milestone => milestone.WorkItems.Count));
         Assert.Empty(fixture.Escrows.Entities);
+    }
+
+    private static object? GetPropertyValue(object instance, string propertyName)
+    {
+        return instance.GetType().GetProperty(propertyName)?.GetValue(instance);
+    }
+
+    private static bool IsExpectedFinalOfferMessage(
+        object payload,
+        Guid messageId,
+        Guid conversationId)
+    {
+        return payload is MessageResponse response &&
+               response.MessageId == messageId &&
+               response.ConversationId == conversationId &&
+               response.MessageType == (int)MessageType.FinalOffer;
     }
 
     private sealed class NegotiationFixture

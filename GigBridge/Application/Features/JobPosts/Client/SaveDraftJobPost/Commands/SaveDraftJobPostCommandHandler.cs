@@ -131,10 +131,6 @@ public sealed class SaveDraftJobPostCommandHandler
                 .ToList();
             _context.Set<JobPostMilestonePlan>().Add(milestone);
         }
-
-        var total = requests.Sum(item => item.Amount);
-        jobPost.BudgetMin = total > 0 ? total : null;
-        jobPost.BudgetMax = total > 0 ? total : null;
     }
 
     private static string? Clean(string? value) =>
@@ -160,9 +156,7 @@ public sealed class SaveDraftJobPostCommandHandler
         jobPost.EstimatedDuration = string.IsNullOrWhiteSpace(request.EstimatedDuration)
             ? null
             : request.EstimatedDuration.Trim();
-        jobPost.Location = string.IsNullOrWhiteSpace(request.Location)
-            ? null
-            : request.Location.Trim();
+        jobPost.Location = null;
         jobPost.Visibility = request.Visibility ?? PublicVisibility;
         jobPost.EndDate = request.EndDate;
         jobPost.IsAigenerated = request.IsAigenerated;

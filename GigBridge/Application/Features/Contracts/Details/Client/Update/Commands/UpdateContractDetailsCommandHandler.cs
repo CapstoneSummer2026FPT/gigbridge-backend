@@ -91,16 +91,58 @@ public sealed class UpdateContractDetailsCommandHandler :
 
         ContractDetailsValidator.ValidateMilestoneDraft(newMilestones);
         ContractDetailsValidator.ValidateMilestoneTotalDoesNotExceedBudget(contract, newMilestones);
+        ValidateUniqueIdentifiers(newMilestones);
 
         var existingMilestones = await _context.Set<Milestone>()
+            .Include(milestone => milestone.WorkItems)
             .Where(milestone => milestone.ContractsId == contract.ContractsId)
             .ToListAsync(cancellationToken);
 
-        _context.Set<Milestone>().RemoveRange(existingMilestones);
-        foreach (var milestone in newMilestones)
+        var existingMilestonesById = existingMilestones
+            .ToDictionary(milestone => milestone.MilestonesId);
+        var existingWorkItems = existingMilestones
+            .SelectMany(milestone => milestone.WorkItems)
+            .ToList();
+        var existingWorkItemsById = existingWorkItems
+            .ToDictionary(workItem => workItem.ContractWorkItemId);
+        var retainedMilestoneIds = new HashSet<Guid>();
+        var retainedWorkItemIds = new HashSet<Guid>();
+
+        foreach (var milestoneDraft in newMilestones)
         {
-            _context.Set<Milestone>().Add(milestone);
+            retainedMilestoneIds.Add(milestoneDraft.MilestonesId);
+
+            Milestone milestone;
+            if (existingMilestonesById.TryGetValue(milestoneDraft.MilestonesId, out var existingMilestone))
+            {
+                milestone = existingMilestone;
+                ApplyMilestoneDraft(milestone, milestoneDraft, now);
+            }
+            else
+            {
+                milestone = CreateMilestone(milestoneDraft, contract.ContractsId, now);
+                _context.Set<Milestone>().Add(milestone);
+            }
+
+            foreach (var workItemDraft in milestoneDraft.WorkItems)
+            {
+                retainedWorkItemIds.Add(workItemDraft.ContractWorkItemId);
+
+                if (existingWorkItemsById.TryGetValue(workItemDraft.ContractWorkItemId, out var existingWorkItem))
+                {
+                    ApplyWorkItemDraft(existingWorkItem, workItemDraft, milestone, now);
+                    continue;
+                }
+
+                var workItem = CreateWorkItem(workItemDraft, milestone, now);
+                _context.Set<ContractWorkItem>().Add(workItem);
+            }
         }
+
+        _context.Set<ContractWorkItem>().RemoveRange(
+            existingWorkItems.Where(workItem => !retainedWorkItemIds.Contains(workItem.ContractWorkItemId)));
+        _context.Set<Milestone>().RemoveRange(
+            existingMilestones.Where(milestone => !retainedMilestoneIds.Contains(milestone.MilestonesId)));
 
         await _context.SaveChangesAsync(cancellationToken);
 
@@ -121,6 +163,91 @@ public sealed class UpdateContractDetailsCommandHandler :
         }
 
         return new ContractWorkflowResponse(contract.ContractsId, contract.Status, null, null);
+    }
+
+    private static void ValidateUniqueIdentifiers(IReadOnlyCollection<Milestone> milestones)
+    {
+        if (milestones.Select(milestone => milestone.MilestonesId).Distinct().Count() != milestones.Count)
+        {
+            throw new BadRequestException("Milestone IDs must be unique.");
+        }
+
+        var workItemIds = milestones
+            .SelectMany(milestone => milestone.WorkItems)
+            .Select(workItem => workItem.ContractWorkItemId)
+            .ToList();
+        if (workItemIds.Distinct().Count() != workItemIds.Count)
+        {
+            throw new BadRequestException("Work item IDs must be unique.");
+        }
+    }
+
+    private static Milestone CreateMilestone(Milestone draft, Guid contractId, DateTime now)
+    {
+        return new Milestone
+        {
+            MilestonesId = draft.MilestonesId,
+            ContractsId = contractId,
+            Title = draft.Title,
+            Description = draft.Description,
+            Amount = draft.Amount,
+            EstimatedDuration = draft.EstimatedDuration,
+            DueDate = draft.DueDate,
+            Deliverables = draft.Deliverables,
+            AcceptanceCriteria = draft.AcceptanceCriteria,
+            SortOrder = draft.SortOrder,
+            Status = (int)MilestoneStatus.Pending,
+            CreatedAt = now
+        };
+    }
+
+    private static void ApplyMilestoneDraft(Milestone milestone, Milestone draft, DateTime now)
+    {
+        milestone.Title = draft.Title;
+        milestone.Description = draft.Description;
+        milestone.Amount = draft.Amount;
+        milestone.EstimatedDuration = draft.EstimatedDuration;
+        milestone.DueDate = draft.DueDate;
+        milestone.Deliverables = draft.Deliverables;
+        milestone.AcceptanceCriteria = draft.AcceptanceCriteria;
+        milestone.SortOrder = draft.SortOrder;
+        milestone.UpdatedAt = now;
+    }
+
+    private static ContractWorkItem CreateWorkItem(
+        ContractWorkItem draft,
+        Milestone milestone,
+        DateTime now)
+    {
+        return new ContractWorkItem
+        {
+            ContractWorkItemId = draft.ContractWorkItemId,
+            MilestonesId = milestone.MilestonesId,
+            Milestone = milestone,
+            Title = draft.Title,
+            Description = draft.Description,
+            Deliverables = draft.Deliverables,
+            EstimatedDuration = draft.EstimatedDuration,
+            OrderIndex = draft.OrderIndex,
+            Status = (int)ContractWorkItemStatus.Todo,
+            CreatedAt = now
+        };
+    }
+
+    private static void ApplyWorkItemDraft(
+        ContractWorkItem workItem,
+        ContractWorkItem draft,
+        Milestone milestone,
+        DateTime now)
+    {
+        workItem.MilestonesId = milestone.MilestonesId;
+        workItem.Milestone = milestone;
+        workItem.Title = draft.Title;
+        workItem.Description = draft.Description;
+        workItem.Deliverables = draft.Deliverables;
+        workItem.EstimatedDuration = draft.EstimatedDuration;
+        workItem.OrderIndex = draft.OrderIndex;
+        workItem.UpdatedAt = now;
     }
 
     private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();

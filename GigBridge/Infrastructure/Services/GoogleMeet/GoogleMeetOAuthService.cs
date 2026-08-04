@@ -13,7 +13,7 @@ using Microsoft.Extensions.Options;
 
 namespace Infrastructure.Services.GoogleMeet;
 
-public class GoogleMeetOAuthService : IGoogleMeetOAuthService
+internal sealed class GoogleMeetOAuthService : IGoogleMeetOAuthService
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -24,6 +24,7 @@ public class GoogleMeetOAuthService : IGoogleMeetOAuthService
     private readonly IDataProtector _protector;
     private readonly HttpClient _httpClient;
     private readonly GoogleMeetOptions _options;
+    private readonly GoogleMeetIdTokenValidator _idTokenValidator;
     private readonly ILogger<GoogleMeetOAuthService> _logger;
 
     public GoogleMeetOAuthService(
@@ -31,12 +32,14 @@ public class GoogleMeetOAuthService : IGoogleMeetOAuthService
         IDataProtectionProvider dataProtection,
         IHttpClientFactory httpClientFactory,
         IOptions<GoogleMeetOptions> options,
+        GoogleMeetIdTokenValidator idTokenValidator,
         ILogger<GoogleMeetOAuthService> logger)
     {
         _context = context;
         _protector = dataProtection.CreateProtector("GoogleMeetOAuth");
         _httpClient = httpClientFactory.CreateClient("GoogleMeetOAuth");
         _options = options.Value;
+        _idTokenValidator = idTokenValidator;
         _logger = logger;
     }
 
@@ -150,7 +153,7 @@ public class GoogleMeetOAuthService : IGoogleMeetOAuthService
 
             if (!tokenResponse.IsSuccessStatusCode)
             {
-                _logger.LogWarning("Google token exchange failed: {Status} - {Body}", tokenResponse.StatusCode, responseBody);
+                _logger.LogWarning("Google token exchange failed with status {Status}", tokenResponse.StatusCode);
                 await _context.SaveChangesAsync(cancellationToken);
                 return "token_exchange_failed";
             }
@@ -162,7 +165,7 @@ public class GoogleMeetOAuthService : IGoogleMeetOAuthService
                 return "missing_refresh_token";
             }
 
-            var idToken = await VerifyAndDecodeIdToken(tokenData.IdToken);
+            var idToken = await _idTokenValidator.ValidateAsync(tokenData.IdToken, oauthState.NonceHash);
             if (idToken is null)
             {
                 await _context.SaveChangesAsync(cancellationToken);
@@ -193,8 +196,8 @@ public class GoogleMeetOAuthService : IGoogleMeetOAuthService
             {
                 GoogleMeetConnectionId = Guid.NewGuid(),
                 UserId = userId,
-                GoogleSubject = idToken.Sub,
-                GoogleEmail = idToken.Email ?? string.Empty,
+                GoogleSubject = idToken.Subject,
+                GoogleEmail = idToken.Email,
                 GrantedScopes = scopes,
                 EncryptedRefreshToken = encryptedRefreshToken,
                 Status = GoogleMeetConnectionStatus.Active,
@@ -226,6 +229,18 @@ public class GoogleMeetOAuthService : IGoogleMeetOAuthService
 
         if (connection is null)
             return new GoogleMeetConnectionStatusResponse(false, null, null, false);
+
+        if (connection.Status == GoogleMeetConnectionStatus.Active)
+        {
+            try
+            {
+                _ = UnprotectString(connection.EncryptedRefreshToken);
+            }
+            catch (Exception ex) when (ex is CryptographicException or FormatException)
+            {
+                await MarkReconnectRequiredAsync(connection, userId, ex, cancellationToken);
+            }
+        }
 
         return new GoogleMeetConnectionStatusResponse(
             connection.Status == GoogleMeetConnectionStatus.Active,
@@ -277,10 +292,19 @@ public class GoogleMeetOAuthService : IGoogleMeetOAuthService
         if (connection is null || connection.Status != GoogleMeetConnectionStatus.Active)
             return null;
 
+        string refreshToken;
         try
         {
-            var refreshToken = UnprotectString(connection.EncryptedRefreshToken);
+            refreshToken = UnprotectString(connection.EncryptedRefreshToken);
+        }
+        catch (Exception ex) when (ex is CryptographicException or FormatException)
+        {
+            await MarkReconnectRequiredAsync(connection, userId, ex, cancellationToken);
+            return null;
+        }
 
+        try
+        {
             var tokenResponse = await _httpClient.PostAsync(
                 _options.TokenEndpoint,
                 new FormUrlEncodedContent(new Dictionary<string, string>
@@ -342,58 +366,21 @@ public class GoogleMeetOAuthService : IGoogleMeetOAuthService
         return Encoding.UTF8.GetString(_protector.Unprotect(Convert.FromBase64String(protectedText)));
     }
 
-    private async Task<GoogleIdTokenPayload?> VerifyAndDecodeIdToken(string? idToken)
+    private async Task MarkReconnectRequiredAsync(
+        GoogleMeetConnection connection,
+        Guid userId,
+        Exception exception,
+        CancellationToken cancellationToken)
     {
-        if (string.IsNullOrEmpty(idToken))
-            return null;
+        connection.Status = GoogleMeetConnectionStatus.ReconnectRequired;
+        connection.LastFailureCode = "data_protection_key_missing";
+        connection.Version++;
+        await _context.SaveChangesAsync(cancellationToken);
 
-        try
-        {
-            var parts = idToken.Split('.');
-            if (parts.Length != 3)
-                return null;
-
-            var payloadJson = Encoding.UTF8.GetString(Base64UrlDecode(parts[1]));
-            var payload = JsonSerializer.Deserialize<GoogleIdTokenPayload>(payloadJson, JsonOptions);
-
-            if (payload is null)
-                return null;
-
-            // Validate issuer
-            if (payload.Iss != "https://accounts.google.com" && payload.Iss != "accounts.google.com")
-                return null;
-
-            // Validate audience
-            if (payload.Aud != _options.ClientId)
-                return null;
-
-            // Validate expiry
-            if (payload.Exp < DateTimeOffset.UtcNow.ToUnixTimeSeconds())
-                return null;
-
-            if (string.IsNullOrEmpty(payload.Email))
-                return null;
-
-            return payload;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "ID token verification failed");
-            return null;
-        }
-    }
-
-    private static byte[] Base64UrlDecode(string input)
-    {
-        var padded = input;
-        switch (input.Length % 4)
-        {
-            case 0: break;
-            case 2: padded = input + "=="; break;
-            case 3: padded = input + "="; break;
-            default: break;
-        }
-        return Convert.FromBase64String(padded.Replace('-', '+').Replace('_', '/'));
+        _logger.LogWarning(
+            exception,
+            "Stored Google Meet token could not be decrypted for user {UserId}; reconnection is required",
+            userId);
     }
 
     private record GoogleTokenExchangeResponse(
@@ -405,14 +392,4 @@ public class GoogleMeetOAuthService : IGoogleMeetOAuthService
         string? TokenType);
 
     private record GoogleTokenErrorResponse(string? Error, string? ErrorDescription);
-
-    private record GoogleIdTokenPayload(
-        string? Iss,
-        string? Sub,
-        string? Aud,
-        long Exp,
-        long Iat,
-        string? Nonce,
-        string? Email,
-        string? Name);
 }

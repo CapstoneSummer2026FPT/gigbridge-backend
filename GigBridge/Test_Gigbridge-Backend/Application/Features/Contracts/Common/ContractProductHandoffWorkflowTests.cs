@@ -3,7 +3,6 @@ using Application.Common.Interfaces.IService;
 using Application.Features.Contracts.ProductHandoffs.Acknowledge.Commands;
 using Application.Features.Contracts.ProductHandoffs.Common.DTOs;
 using Application.Features.Contracts.ProductHandoffs.Download.Queries;
-using Application.Features.Contracts.ProductHandoffs.GetCurrent.Queries;
 using Application.Features.Contracts.ProductHandoffs.GetList.Queries;
 using Application.Features.Contracts.ProductHandoffs.Submit.Commands;
 using Domain.Entities;
@@ -251,7 +250,7 @@ public class ContractProductHandoffWorkflowTests
     }
 
     [Fact]
-    public async Task Queries_ReturnHistoryCurrentAndDownloadForParticipantsOnly()
+    public async Task Queries_ReturnHistoryAndDownloadForParticipantsOnly()
     {
         var fixture = new ContractProductHandoffFixture();
         var submitHandler = fixture.CreateSubmitHandler();
@@ -273,14 +272,10 @@ public class ContractProductHandoffWorkflowTests
             CancellationToken.None);
 
         var listHandler = new GetContractProductHandoffsQueryHandler(fixture.Context);
-        var currentHandler = new GetCurrentContractProductHandoffQueryHandler(fixture.Context);
         var downloadHandler = new GetContractProductHandoffDownloadQueryHandler(fixture.Context);
 
         var list = await listHandler.Handle(
             new GetContractProductHandoffsQuery(fixture.ContractId, fixture.FreelancerUserId),
-            CancellationToken.None);
-        var current = await currentHandler.Handle(
-            new GetCurrentContractProductHandoffQuery(fixture.ContractId, fixture.ClientUserId),
             CancellationToken.None);
         var download = await downloadHandler.Handle(
             new GetContractProductHandoffDownloadQuery(
@@ -290,7 +285,6 @@ public class ContractProductHandoffWorkflowTests
             CancellationToken.None);
 
         Assert.Equal([second.ContractProductHandoffId, first.ContractProductHandoffId], list.Select(x => x.ContractProductHandoffId));
-        Assert.Equal(second.ContractProductHandoffId, current?.ContractProductHandoffId);
         Assert.Equal("https://example.com/v2", download.Url);
         await Assert.ThrowsAsync<ForbiddenAccessException>(() =>
             listHandler.Handle(

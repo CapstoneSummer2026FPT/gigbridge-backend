@@ -10,6 +10,11 @@ public class AdminUserDto
     public int Role { get; init; }
     public bool IsEmailVerified { get; init; }
     public bool IsActive { get; init; }
+    public int AccountStatus { get; init; }
+    public bool IsFlagged { get; init; }
+    public int ViolationCount { get; init; }
+    public DateTime? BannedAt { get; init; }
+    public string? BanReason { get; init; }
     public DateTime? SuspendedUntil { get; init; }
     public DateTime? SuspendedAt { get; init; }
     public string? SuspensionReason { get; init; }

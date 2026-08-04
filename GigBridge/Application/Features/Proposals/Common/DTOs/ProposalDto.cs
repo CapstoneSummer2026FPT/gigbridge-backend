@@ -10,10 +10,13 @@ public class ProposalDto
     public string JobTitle { get; set; } = string.Empty;
     public Guid FreelancerProfilesId { get; set; }
     public string FreelancerName { get; set; } = string.Empty;
+    public Guid? FreelancerUserId { get; set; }
     public string CoverLetter { get; set; } = string.Empty;
     public decimal ProposedBudget { get; set; }
     public string ProposedDuration { get; set; } = string.Empty;
     public int Status { get; set; }
+    public int ModerationStatus { get; set; }
+    public string? InvalidationReason { get; set; }
     public DateTime SubmittedAt { get; set; }
     public DateTime? ReviewedAt { get; set; }
     public string AnalysisSummaryPreview { get; set; } = string.Empty;

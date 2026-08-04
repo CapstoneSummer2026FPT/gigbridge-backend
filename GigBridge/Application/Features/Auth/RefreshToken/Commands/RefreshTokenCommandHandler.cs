@@ -1,5 +1,6 @@
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Application.Common.Services;
 using Application.Features.Auth.Shared.DTOs;
 using AutoMapper;
 using Domain.Entities;
@@ -70,15 +71,7 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, (
             throw new UnauthorizedAccessException("User not found");
         }
 
-        if (!user.IsActive)
-        {
-            throw new UnauthorizedAccessException("Your account has been suspended by the administrator");
-        }
-
-        if (user.SuspendedUntil.HasValue && user.SuspendedUntil.Value > _dateTimeService.UtcNow)
-        {
-            throw new UnauthorizedAccessException($"Your account is suspended until {user.SuspendedUntil.Value:O}");
-        }
+        UserAccountEnforcement.EnsureCanAuthenticate(user, _dateTimeService.UtcNow);
 
         return user;
     }

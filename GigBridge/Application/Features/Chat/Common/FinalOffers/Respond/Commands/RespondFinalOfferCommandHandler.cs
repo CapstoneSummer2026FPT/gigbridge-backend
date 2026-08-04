@@ -6,7 +6,9 @@ using Application.Features.Chat.Common.FinalOffers.Respond.DTOs;
 using Application.Features.Chat.Common.FinalOffers.Shared.Email;
 using Application.Features.Chat.Common.Messages.Send.DTOs;
 using Application.Features.JobPosts.Common;
+using Application.Features.Proposals.Common;
 using Application.Features.Premium.Client.SmartTalentMatching.Feedback;
+using Application.Features.Wallets.Common;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
@@ -63,6 +65,13 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
             throw new NotFoundException("Negotiation offer does not exist.");
         }
 
+        if (offer.ProposalsId.HasValue)
+        {
+            var moderatedProposal = await _context.Set<Proposal>().AsNoTracking()
+                .FirstOrDefaultAsync(x => x.ProposalsId == offer.ProposalsId.Value, cancellationToken);
+            if (moderatedProposal is not null) ProposalModerationGuard.EnsureActive(moderatedProposal);
+        }
+
         if (offer.Status != (int)NegotiationOfferStatus.PendingFreelancerConfirmation)
         {
             throw new BadRequestException("Only pending final offers can be responded to.");
@@ -113,7 +122,7 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
         switch (command.Request.Response)
         {
             case FinalOfferResponse.Accept:
-                response = await AcceptOffer(offer, conversation, now, cancellationToken);
+                response = await AcceptOffer(offer, conversation, command.UserId, now, cancellationToken);
                 eventName = "ContractDraftUpdated";
                 break;
             case FinalOfferResponse.RequestChange:
@@ -186,7 +195,11 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
             await _chatRealtimeNotifier.SendUsersEventAsync(
                 participantUserIds,
                 eventName,
-                new { contractId = response.ContractId },
+                new
+                {
+                    conversationId = conversation.ConversationsId,
+                    contractId = response.ContractId
+                },
                 cancellationToken);
 
             await SendJobAcceptanceUpdates(offer, command.UserId, cancellationToken);
@@ -315,6 +328,7 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
     private async Task<RespondFinalOfferResponse> AcceptOffer(
         NegotiationOffer offer,
         Conversation conversation,
+        Guid freelancerUserId,
         DateTime now,
         CancellationToken cancellationToken)
     {
@@ -400,6 +414,21 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
             }).ToList();
             _context.Set<Milestone>().Add(milestone);
         }
+
+        // Charge the 1% freelancer service fee on job acceptance. This debits the
+        // freelancer's spendable balance and records the SERVICE-FEE-ACCEPT- wallet
+        // transaction so the deduction appears in the freelancer's transaction history.
+        // Charged here — before mutating the offer/conversation status — so an
+        // insufficient-balance rejection leaves the negotiation unchanged.
+        await ServiceFeeWorkflow.ChargeAsync(
+            _context,
+            freelancerUserId,
+            contract.ContractsId,
+            offer.FinalPrice,
+            $"{ServiceFeeWorkflow.AcceptJobFeePrefix}{contract.ContractsId:N}",
+            "1% freelancer service fee charged on job acceptance.",
+            now,
+            cancellationToken);
 
         offer.Status = (int)NegotiationOfferStatus.Accepted;
         offer.RespondedAt = now;

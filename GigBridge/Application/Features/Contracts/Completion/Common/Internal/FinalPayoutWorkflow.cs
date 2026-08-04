@@ -57,13 +57,13 @@ internal static class FinalPayoutWorkflow
                 context,
                 clientWallet,
                 freelancerWallet,
+                escrow,
                 contract.ContractsId,
-                escrow.ContractEscrowId,
                 item.Milestone.MilestonesId,
                 item.Amount,
                 code,
                 "InternalTokenWallet",
-                "Final 20% retention released to freelancer.",
+                "Remaining escrow balance released to freelancer.",
                 now);
             releasedTokens += transfer.GrossTokens;
             item.Milestone.ReleasedAmount = item.Milestone.Amount;
@@ -79,7 +79,7 @@ internal static class FinalPayoutWorkflow
                 Status = (int)EscrowTransactionStatus.Succeeded,
                 PaymentGateway = "InternalTokenWallet",
                 GatewayTransactionCode = code,
-                Note = "Final 20% retention released to freelancer.",
+                Note = "Remaining escrow balance released to freelancer.",
                 CreatedAt = now,
                 CompletedAt = now
             });

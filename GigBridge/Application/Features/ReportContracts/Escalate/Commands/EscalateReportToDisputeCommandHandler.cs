@@ -1,9 +1,11 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Application.Common.Services;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.Disputes.Common.DTOs;
 using Application.Features.Disputes.Common.Internal;
+using Application.Features.ReportContracts.Common.Internal;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
@@ -21,6 +23,7 @@ public sealed class EscalateReportToDisputeCommandHandler :
     private readonly INotificationService _notificationService;
     private readonly IChatRealtimeNotifier _chatRealtimeNotifier;
     private readonly ILogger<EscalateReportToDisputeCommandHandler> _logger;
+    private readonly IAdminAuditService? _audit;
 
     public EscalateReportToDisputeCommandHandler(
         IApplicationDbContext context,
@@ -28,7 +31,8 @@ public sealed class EscalateReportToDisputeCommandHandler :
         IMediaService mediaService,
         INotificationService notificationService,
         IChatRealtimeNotifier chatRealtimeNotifier,
-        ILogger<EscalateReportToDisputeCommandHandler> logger)
+        ILogger<EscalateReportToDisputeCommandHandler> logger,
+        IAdminAuditService? audit = null)
     {
         _context = context;
         _dateTimeService = dateTimeService;
@@ -36,22 +40,22 @@ public sealed class EscalateReportToDisputeCommandHandler :
         _notificationService = notificationService;
         _chatRealtimeNotifier = chatRealtimeNotifier;
         _logger = logger;
+        _audit = audit;
     }
 
     public async Task<DisputeResponse> Handle(
         EscalateReportToDisputeCommand command,
         CancellationToken cancellationToken)
     {
-        // Load contract
+        await using var transaction = await _context.BeginTransactionAsync(cancellationToken);
+        await transaction.AcquireTransactionLockAsync(ReportContractLock.ForReport(command.ReportId), cancellationToken);
+        await transaction.AcquireTransactionLockAsync(ContractEscrowLock.ForContract(command.ContractId), cancellationToken);
+
+        // Reload all mutable state after acquiring both shared locks.
         var contract = await _context.Set<Contract>()
             .FirstOrDefaultAsync(c => c.ContractsId == command.ContractId, cancellationToken)
             ?? throw new NotFoundException("Contract does not exist.");
 
-        // Validate user is a participant
-        var participants = await DisputeAccess.EnsureParticipantAsync(
-            _context, contract, command.UserId, cancellationToken);
-
-        // Load the report
         var report = await _context.Set<ReportContract>()
             .FirstOrDefaultAsync(r => r.ReportContractId == command.ReportId, cancellationToken)
             ?? throw new NotFoundException("Report does not exist.");
@@ -61,14 +65,31 @@ public sealed class EscalateReportToDisputeCommandHandler :
             throw new BadRequestException("The report does not belong to this contract.");
         }
 
+        var isAdminEscalation = command.AdminActorId.HasValue;
+        if (isAdminEscalation)
+        {
+            var validAdmin = command.AdminActorId == command.UserId && await _context.Set<User>().AsNoTracking().AnyAsync(
+                x => x.UserId == command.AdminActorId && x.Role == (int)UserRole.Admin && x.IsActive && x.AccountStatus == (int)AccountStatus.Active,
+                cancellationToken);
+            if (!validAdmin) throw new ForbiddenAccessException("An active administrator account is required.");
+            if (string.IsNullOrWhiteSpace(command.AdminReason)) throw new BadRequestException("An escalation reason is required.");
+            if (report.AdminReviewStatus is (int)ContractReportAdminStatus.Closed or (int)ContractReportAdminStatus.Dismissed or (int)ContractReportAdminStatus.Escalated or (int)ContractReportAdminStatus.LinkedToDispute)
+                throw new ConflictException("This Contract Report is already finalized.");
+            if (report.Status == (int)ContractReportStatus.Resolved)
+                throw new ConflictException("A Contract Report resolved by its participants cannot be escalated.");
+        }
+
+        var initiatorId = report.ReporterId;
+        var participants = await DisputeAccess.EnsureParticipantAsync(_context, contract, initiatorId, cancellationToken);
+
         // Only the reporter can escalate
-        if (report.ReporterId != command.UserId)
+        if (!isAdminEscalation && report.ReporterId != command.UserId)
         {
             throw new ForbiddenAccessException("Only the reporter can escalate the report to a dispute.");
         }
 
         // Report must be waiting for confirmation
-        if (report.Status != (int)ContractReportStatus.WaitingReporterConfirmation)
+        if (!isAdminEscalation && report.Status != (int)ContractReportStatus.WaitingReporterConfirmation)
         {
             throw new BadRequestException("Only reports with a declined resolution can be escalated.");
         }
@@ -103,12 +124,12 @@ public sealed class EscalateReportToDisputeCommandHandler :
         var disputeId = Guid.NewGuid();
         var initiatorName = await _context.Set<User>()
             .AsNoTracking()
-            .Where(u => u.UserId == command.UserId)
+            .Where(u => u.UserId == initiatorId)
             .Select(u => u.FullName)
             .FirstOrDefaultAsync(cancellationToken);
 
         // Determine respondent: use report's respondent if set, otherwise the other party
-        var resolvedRespondentId = report.RespondentId ?? participants.GetOtherParty(command.UserId);
+        var resolvedRespondentId = report.RespondentId ?? participants.GetOtherParty(initiatorId);
 
         var reportAttachments = await _context.Set<ReportContractAttachment>()
             .AsNoTracking()
@@ -139,20 +160,18 @@ public sealed class EscalateReportToDisputeCommandHandler :
                     _mediaService,
                     file,
                     disputeId,
-                    command.UserId,
+                    initiatorId,
                     now,
                     cancellationToken));
             }
         }
-
-        await using var transaction = await _context.BeginTransactionAsync(cancellationToken);
 
         // Create the dispute
         var dispute = new Dispute
         {
             DisputesId = disputeId,
             ContractsId = command.ContractId,
-            InitiatorId = command.UserId,
+            InitiatorId = initiatorId,
             RespondentId = resolvedRespondentId,
             MilestonesId = report.MilestoneId,
             RelatedReportId = command.ReportId,
@@ -179,6 +198,14 @@ public sealed class EscalateReportToDisputeCommandHandler :
         // Mark report as escalated
         report.Status = (int)ContractReportStatus.Escalated;
         report.IsEscalatedToDispute = true;
+        report.UpdatedAt = now;
+        if (isAdminEscalation)
+        {
+            report.AdminReviewStatus = (int)ContractReportAdminStatus.Escalated;
+            report.AdminResolutionNote = command.AdminReason!.Trim();
+            report.AssignedAdminId ??= command.AdminActorId;
+            report.AssignedAt ??= now;
+        }
 
         // Lock the contract
         contract.Status = (int)ContractStatus.Disputed;
@@ -191,7 +218,7 @@ public sealed class EscalateReportToDisputeCommandHandler :
             Title = $"Dispute: {contract.Title}",
             ContractsId = command.ContractId,
             DisputesId = dispute.DisputesId,
-            CreatedByUserId = command.UserId,
+            CreatedByUserId = initiatorId,
             Status = (int)ConversationStatus.Active,
             CreatedAt = now,
             UpdatedAt = now
@@ -238,6 +265,11 @@ public sealed class EscalateReportToDisputeCommandHandler :
             "A dispute has been opened.",
             now);
 
+        if (isAdminEscalation)
+            _audit?.Add(command.AdminActorId!.Value, AdminAuditActions.ContractReportEscalated, nameof(ReportContract), report.ReportContractId,
+                new { status = (int)ContractReportStatus.WaitingReporterConfirmation, adminReviewStatus = (int)ContractReportAdminStatus.UnderReview },
+                new { report.Status, report.AdminReviewStatus, disputeId = dispute.DisputesId, report.ContractId, report.ReporterId, report.RespondentId, reason = command.AdminReason });
+
         await _context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
@@ -261,7 +293,7 @@ public sealed class EscalateReportToDisputeCommandHandler :
         }
 
         // Notify the other party
-        var otherPartyId = participants.GetOtherParty(command.UserId);
+        var otherPartyId = participants.GetOtherParty(initiatorId);
         if (otherPartyId.HasValue)
         {
             try
@@ -287,7 +319,7 @@ public sealed class EscalateReportToDisputeCommandHandler :
         return BuildDisputeResponse(
             dispute,
             initiatorName,
-            participants.GetRole(command.UserId),
+            participants.GetRole(initiatorId),
             resolvedRespondentId.HasValue ? participants.GetRole(resolvedRespondentId.Value) : null,
             null,
             report.IssueType,

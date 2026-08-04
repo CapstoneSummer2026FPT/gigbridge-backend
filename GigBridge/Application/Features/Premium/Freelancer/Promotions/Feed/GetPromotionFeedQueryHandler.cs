@@ -18,7 +18,9 @@ public sealed class GetPromotionFeedQueryHandler(IApplicationDbContext context, 
         var now = clock.UtcNow;
         return await context.Set<FreelancerProfilePromotion>().AsNoTracking()
             .Where(x => x.Status == PromotionStatus.Active && x.StartTime <= now && x.EndTime > now)
-            .OrderByDescending(x => x.BoostWeight).ThenBy(x => x.ImpressionCount)
+            .OrderBy(x => x.QueuePosition <= 0 ? int.MaxValue : x.QueuePosition)
+            .ThenByDescending(x => x.BoostWeight)
+            .ThenBy(x => x.CreatedAt)
             .Take(limit).Select(x => new PublicPromotionCardDto(x.FreelancerProfilePromotionsId,
                 x.FreelancerProfile.UserId, x.PhotoUrl, x.DisplayName, x.Quote,
                 x.ShowQuote, x.JobTitle, x.ShowJobTitle)).ToListAsync(ct);

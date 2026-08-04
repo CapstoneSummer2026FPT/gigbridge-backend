@@ -211,8 +211,19 @@ public class CreateFinalOfferCommandHandler : IRequestHandler<CreateFinalOfferCo
 
         await _chatRealtimeNotifier.SendUsersEventAsync(
             participantUserIds,
+            "ReceiveMessage",
+            messageResponse,
+            cancellationToken);
+
+        await _chatRealtimeNotifier.SendUsersEventAsync(
+            participantUserIds,
             "FinalOfferCreated",
-            new { offerId = offer.NegotiationOfferId, messageId = message.MessagesId },
+            new
+            {
+                conversationId = conversation.ConversationsId,
+                offerId = offer.NegotiationOfferId,
+                messageId = message.MessagesId
+            },
             cancellationToken);
 
         await SendConversationUpdatedEvents(

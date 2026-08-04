@@ -148,24 +148,15 @@ public class GetContractByIdQueryHandler : IRequestHandler<GetContractByIdQuery,
             UpdatedAt = contract.UpdatedAt,
             CanReview = reviewState.CanReview,
             HasReviewedByCurrentUser = reviewState.HasReviewedByCurrentUser,
-            Escrow = escrow is null ? null : new ContractEscrowResponse
-            {
-                ContractEscrowId = escrow.ContractEscrowId,
-                RequiredAmount = escrow.RequiredAmount,
-                FundedAmount = escrow.FundedAmount,
-                ReleasedAmount = escrow.ReleasedAmount,
-                RequiredPercentage = escrow.RequiredPercentage,
-                Currency = escrow.Currency,
-                Status = escrow.Status,
-                CreatedAt = escrow.CreatedAt,
-                FundedAt = escrow.FundedAt
-            },
+            Escrow = escrow is null ? null : ContractEscrowResponseMapper.ToResponse(escrow),
             JobTitle = jobPost?.Title,
             JobDescription = jobPost?.Description,
             ClientName = clientUser?.FullName ?? "Client",
             ClientEmail = clientUser?.Email,
             FreelancerName = freelancerUser?.FullName,
             FreelancerEmail = freelancerUser?.Email,
+            ClientUserId = clientUser?.UserId,
+            FreelancerUserId = freelancerUser?.UserId,
             ConversationId = conversationId,
             CurrentProductHandoff = currentProductHandoff is null
                 ? null

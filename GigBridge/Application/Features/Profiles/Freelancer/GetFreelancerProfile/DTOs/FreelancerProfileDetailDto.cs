@@ -34,26 +34,4 @@ public class FreelancerProfileDetailDto
     public List<FreelancerSkillDto> Skills { get; set; } = new();
     public List<PortfolioItemDto> PortfolioItems { get; set; } = new();
     public List<WorkExperienceDto> WorkExperiences { get; set; } = new();
-    public int CheatingViolationCount { get; set; }
-    public List<CheatingPenaltyLogDto> CheatingPenaltyLogs { get; set; } = new();
-}
-
-public class CheatingPenaltyLogDto
-{
-    public Guid ViolationId { get; set; }
-    public Guid ProposalId { get; set; }
-    public Guid JobPostId { get; set; }
-    public string JobTitle { get; set; } = string.Empty;
-    public int ViolationNumber { get; set; }
-    public int TotalEventCount { get; set; }
-    public int CopyCount { get; set; }
-    public int PasteCount { get; set; }
-    public int TabSwitchCount { get; set; }
-    public int ScreenshotAttemptCount { get; set; }
-    public int FocusLossCount { get; set; }
-    public int FullscreenExitCount { get; set; }
-    public int Action { get; set; }
-    public int EloDelta { get; set; }
-    public DateTime? SuspendedUntil { get; set; }
-    public DateTime CreatedAt { get; set; }
 }

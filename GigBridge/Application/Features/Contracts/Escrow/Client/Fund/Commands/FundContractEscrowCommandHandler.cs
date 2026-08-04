@@ -6,7 +6,7 @@ using Application.Features.Contracts.Escrow.Client.Fund.DTOs;
 using Application.Features.Wallets.Common;
 using Domain.Entities;
 using Domain.Enums;
-using Domain.Services.Payments;
+using Domain.Services;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -53,7 +53,7 @@ public sealed class FundContractEscrowCommandHandler :
                 contract.ContractsId,
                 fundedEscrow.ContractEscrowId,
                 fundedEscrow.RequiredAmount,
-                TokenWalletRules.ToTokens(fundedEscrow.RequiredAmount),
+                fundedEscrow.RequiredAmount,
                 contract.Status,
                 fundedEscrow.Status);
         }
@@ -99,7 +99,7 @@ public sealed class FundContractEscrowCommandHandler :
                 contract.ContractsId,
                 escrow.ContractEscrowId,
                 escrow.RequiredAmount,
-                TokenWalletRules.ToTokens(escrow.RequiredAmount),
+                escrow.RequiredAmount,
                 contract.Status,
                 escrow.Status);
         }
@@ -128,9 +128,29 @@ public sealed class FundContractEscrowCommandHandler :
         }
 
         var requiredAmount = escrow.RequiredAmount;
-        var requiredTokens = TokenWalletRules.ToTokens(requiredAmount);
-        WalletWorkflow.DebitAvailable(wallet, requiredTokens, now, "Wallet balance is insufficient to fund escrow.");
+        var fundingQuote = ContractEscrowFundingQuote.Calculate(requiredAmount);
+        var requiredTokens = fundingQuote.RequiredTokens;
+        if (!WalletSpendingService.CanSpend(
+            wallet.AvailableTokens,
+            wallet.WithdrawableTokens,
+            fundingQuote.TotalDebitTokens))
+        {
+            throw new BadRequestException("Wallet balance is insufficient to fund escrow and pay the service fee.");
+        }
+
+        var walletBeforeFunding = WalletBalanceAudit.Snapshot(wallet);
+        var fundingUsage = WalletWorkflow.DebitAvailable(
+            wallet,
+            requiredTokens,
+            now,
+            "Wallet balance is insufficient to fund escrow.");
         wallet.HeldTokens += requiredTokens;
+        var walletAfterHold = WalletBalanceAudit.Snapshot(wallet);
+
+        // Record which GigCoin pools funded the escrow so refunds can restore each pool.
+        escrow.DepositedTokens = fundingUsage.DepositedAmount;
+        escrow.EarnedTokens = fundingUsage.EarnedAmount;
+
         await ServiceFeeWorkflow.ChargeAsync(
             _context,
             command.UserId,
@@ -149,6 +169,12 @@ public sealed class FundContractEscrowCommandHandler :
         contract.UpdatedAt = now;
         await StartFirstMilestoneAsync(contract.ContractsId, now, cancellationToken);
 
+        var holdBalanceSource = WalletBalanceAudit.ResolveSource(
+            fundingUsage.DepositedAmount,
+            fundingUsage.EarnedAmount);
+        var (holdDepositedAmount, holdEarnedAmount) = WalletBalanceAudit.ToSplitAmounts(
+            fundingUsage.DepositedAmount,
+            fundingUsage.EarnedAmount);
         _context.Set<WalletTransaction>().Add(new WalletTransaction
         {
             WalletTransactionsId = Guid.NewGuid(),
@@ -158,10 +184,19 @@ public sealed class FundContractEscrowCommandHandler :
             ContractEscrowId = escrow.ContractEscrowId,
             TokenAmount = requiredTokens,
             VndAmount = requiredAmount,
+            BalanceSource = (int)holdBalanceSource,
+            DepositedAmount = holdDepositedAmount,
+            EarnedAmount = holdEarnedAmount,
             Type = (int)WalletTransactionType.EscrowHold,
             Status = (int)WalletTransactionStatus.Succeeded,
             GatewayProvider = "InternalTokenWallet",
             GatewayTransactionCode = $"ESCROW-HOLD-{escrow.ContractEscrowId:N}",
+            Metadata = WalletBalanceAudit.EnrichMetadata(
+                null,
+                fundingUsage.DepositedAmount,
+                fundingUsage.EarnedAmount,
+                walletBeforeFunding,
+                walletAfterHold),
             CreatedAt = now,
             CompletedAt = now
         });

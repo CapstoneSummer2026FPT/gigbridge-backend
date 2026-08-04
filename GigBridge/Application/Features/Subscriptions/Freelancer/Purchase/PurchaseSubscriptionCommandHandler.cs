@@ -2,6 +2,7 @@ using System.Text.Json;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Application.Features.Subscriptions.Common;
 using Application.Features.Subscriptions.Freelancer.DTOs;
 using Domain.Entities;
 using Domain.Enums;
@@ -19,6 +20,10 @@ public sealed class PurchaseSubscriptionCommandHandler(
     public async Task<SubscriptionDto> Handle(
         PurchaseSubscriptionCommand command, CancellationToken cancellationToken)
     {
+        await using var transaction = await context.BeginTransactionAsync(cancellationToken);
+        await transaction.AcquireTransactionLockAsync(
+            PremiumSubscriptionPolicy.PurchaseLockKey(command.UserId), cancellationToken);
+
         var existingWalletTransaction = await context.Set<WalletTransaction>().AsNoTracking()
             .FirstOrDefaultAsync(item => item.UserId == command.UserId &&
                 item.IdempotencyKey == command.Request.IdempotencyKey, cancellationToken);
@@ -37,7 +42,8 @@ public sealed class PurchaseSubscriptionCommandHandler(
 
         var plan = await context.Set<SubscriptionPlan>()
             .FirstOrDefaultAsync(item => item.SubscriptionPlansId == command.Request.PlanId &&
-                item.IsActive == true && item.TargetRole == (int)UserRole.Freelancer,
+                item.IsActive == true && item.Price > 0 &&
+                (item.TargetRole == null || item.TargetRole == (int)UserRole.Freelancer),
                 cancellationToken);
         if (plan is null && command.Request.PlanId == PremiumPlanDefaults.YearlyPromotionPlanId)
         {
@@ -82,7 +88,6 @@ public sealed class PurchaseSubscriptionCommandHandler(
             ? TokenWalletRules.ToTokensCeiling(plan.Price)
             : plan.Price;
 
-        await using var transaction = await context.BeginTransactionAsync(cancellationToken);
         var walletTransaction = await ledger.DebitAsync(
             command.UserId, gigCoinPrice, WalletTransactionType.SubscriptionPurchase,
             command.Request.IdempotencyKey,
@@ -90,13 +95,19 @@ public sealed class PurchaseSubscriptionCommandHandler(
             cancellationToken);
 
         var now = clock.UtcNow;
-        var active = await context.Set<Subscription>()
+        var compatible = context.Set<Subscription>()
             .Where(item => item.UserId == command.UserId &&
                            item.Status == SubscriptionStatus.Active &&
-                           item.EndDate > now && item.SubscriptionPlans.Price > 0)
-            .OrderByDescending(item => item.EndDate)
-            .FirstOrDefaultAsync(cancellationToken);
-        var startsAt = active?.EndDate ?? now;
+                           item.EndDate > now)
+            .CompatibleWithRole(UserRole.Freelancer);
+        var hasCurrentEntitlement = await compatible
+            .AnyAsync(item => item.StartDate <= now, cancellationToken);
+        var latestCompatibleEnd = hasCurrentEntitlement
+            ? await compatible.OrderByDescending(item => item.EndDate)
+                .Select(item => (DateTime?)item.EndDate)
+                .FirstOrDefaultAsync(cancellationToken)
+            : null;
+        var startsAt = latestCompatibleEnd ?? now;
         var subscription = new Subscription
         {
             SubscriptionsId = Guid.NewGuid(),

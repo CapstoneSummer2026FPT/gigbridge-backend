@@ -78,6 +78,10 @@ public sealed class ConfirmResolutionCommandHandler :
             report.Status = (int)Domain.Enums.ContractReportStatus.Resolved;
             report.ResolvedBy = command.UserId;
             report.ResolvedAt = now;
+            report.UpdatedAt = now;
+            report.AdminReviewStatus = (int)ContractReportAdminStatus.Closed;
+            report.AdminResolutionAction = (int)ContractReportAdminResolutionAction.ResolvedByParties;
+            report.AdminResolutionNote = "Resolution accepted by the reporter.";
 
             var reporter = await _context.Set<User>()
                 .AsNoTracking()
@@ -134,6 +138,7 @@ public sealed class ConfirmResolutionCommandHandler :
             // Future: Assign Admin.
             // Future: Lock Contract.
 
+            report.UpdatedAt = now;
             await _context.SaveChangesAsync(cancellationToken);
         }
 
@@ -172,7 +177,7 @@ public sealed class ConfirmResolutionCommandHandler :
             .OrderBy(a => a.UploadedAt)
             .Select(a => new ReportContractAttachmentResponse(
                 a.ReportContractAttachmentId,
-                a.FileUrl,
+                string.Empty,
                 a.FileName,
                 a.ContentType,
                 a.FileSize,

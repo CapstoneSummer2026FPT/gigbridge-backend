@@ -78,7 +78,7 @@ public class CreateJobPostCommandHandler : IRequestHandler<CreateJobPostCommand,
             BudgetMax = request.BudgetMax,
             Currency = string.IsNullOrWhiteSpace(request.Currency) ? "USD" : request.Currency.Trim(),
             EstimatedDuration = request.EstimatedDuration,
-            Location = request.Location,
+            Location = null,
             Visibility = request.Visibility ?? 0,
             EndDate = request.EndDate,
 

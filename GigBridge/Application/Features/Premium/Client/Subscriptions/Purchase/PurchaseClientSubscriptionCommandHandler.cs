@@ -3,6 +3,7 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Features.Premium.Client.Subscriptions.DTOs;
+using Application.Features.Subscriptions.Common;
 using Application.Features.Subscriptions.Freelancer.DTOs;
 using Domain.Entities;
 using Domain.Enums;
@@ -20,6 +21,10 @@ public sealed class PurchaseClientSubscriptionCommandHandler(
     public async Task<SubscriptionDto> Handle(
         PurchaseClientSubscriptionCommand command, CancellationToken cancellationToken)
     {
+        await using var transaction = await context.BeginTransactionAsync(cancellationToken);
+        await transaction.AcquireTransactionLockAsync(
+            PremiumSubscriptionPolicy.PurchaseLockKey(command.UserId), cancellationToken);
+
         var walletEntry = await context.Set<WalletTransaction>().AsNoTracking()
             .FirstOrDefaultAsync(item => item.UserId == command.UserId &&
                 item.IdempotencyKey == command.Request.IdempotencyKey, cancellationToken);
@@ -72,17 +77,22 @@ public sealed class PurchaseClientSubscriptionCommandHandler(
         if (!isGigCoin && !isVnd) throw new BadRequestException("This plan uses an unsupported purchase currency.");
         var priceInTokens = isVnd ? TokenWalletRules.ToTokensCeiling(plan.Price) : plan.Price;
 
-        await using var transaction = await context.BeginTransactionAsync(cancellationToken);
         var walletTransaction = await ledger.DebitAsync(command.UserId, priceInTokens,
             WalletTransactionType.SubscriptionPurchase, command.Request.IdempotencyKey,
             JsonSerializer.Serialize(new { planId = plan.SubscriptionPlansId, priceInTokens }), cancellationToken);
         var now = clock.UtcNow;
-        var activeEnd = await context.Set<Subscription>().AsNoTracking()
+        var compatible = context.Set<Subscription>().AsNoTracking()
             .Where(item => item.UserId == command.UserId && item.Status == SubscriptionStatus.Active &&
-                item.EndDate > now && item.SubscriptionPlans.Price > 0)
-            .OrderByDescending(item => item.EndDate).Select(item => (DateTime?)item.EndDate)
-            .FirstOrDefaultAsync(cancellationToken);
-        var startsAt = activeEnd ?? now;
+                item.EndDate > now)
+            .CompatibleWithRole(UserRole.Client);
+        var hasCurrentEntitlement = await compatible
+            .AnyAsync(item => item.StartDate <= now, cancellationToken);
+        var latestCompatibleEnd = hasCurrentEntitlement
+            ? await compatible.OrderByDescending(item => item.EndDate)
+                .Select(item => (DateTime?)item.EndDate)
+                .FirstOrDefaultAsync(cancellationToken)
+            : null;
+        var startsAt = latestCompatibleEnd ?? now;
         var subscription = new Subscription
         {
             SubscriptionsId = Guid.NewGuid(), UserId = command.UserId,

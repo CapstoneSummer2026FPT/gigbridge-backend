@@ -179,7 +179,10 @@ public sealed class CreateJobInvitationCommandHandler
         }
         catch (Exception exception)
         {
-            _logger.LogWarning(exception, "Failed to send job invitation email to freelancer {Email}.", freelancerUser.Email);
+            _logger.LogWarning(
+                exception,
+                "Failed to send job invitation email to freelancer user {UserId}.",
+                freelancerUser.UserId);
         }
     }
 

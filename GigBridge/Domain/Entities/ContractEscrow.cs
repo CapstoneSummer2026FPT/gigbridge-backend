@@ -20,6 +20,19 @@ public partial class ContractEscrow
     public decimal ReleasedAmount { get; set; }
 
     /// <summary>
+    /// Token portion of the held escrow funded from the client's deposited balance
+    /// (non-withdrawable). Tracks how a refund must be restored across the client's
+    /// two independent GigCoin pools. Maintained on fund / release / refund / penalty.
+    /// </summary>
+    public decimal DepositedTokens { get; set; }
+
+    /// <summary>
+    /// Token portion of the held escrow funded from the client's earned balance
+    /// (withdrawable). See <see cref="DepositedTokens"/>.
+    /// </summary>
+    public decimal EarnedTokens { get; set; }
+
+    /// <summary>
     /// Enum ContractEscrowStatus: 0=PendingFunding, 1=PartiallyFunded, 2=Funded, 3=PartiallyReleased, 4=Released, 5=Refunded, 6=Cancelled, 7=Disputed
     /// </summary>
     public int Status { get; set; }

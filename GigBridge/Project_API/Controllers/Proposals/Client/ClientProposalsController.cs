@@ -1,6 +1,6 @@
 using Application.Common.Models;
 using Application.Common.Models.Ai;
-using Application.Features.Proposals.Client.EvaluateProposalVetting;
+using Application.Features.Proposals.Client.EvaluateProposalAnswers;
 using Application.Features.Proposals.Client.GetProposalJudgingList;
 using Application.Features.Proposals.Client.GetProposalsByJobPost.Queries;
 using Application.Features.Proposals.Client.JudgeAllProposals;
@@ -81,7 +81,7 @@ public class ClientProposalsController : BaseApiController
         return Ok(ApiResponse<BatchJudgeResultDto>.Ok(result, "Success"));
     }
 
-    [HttpPost("{proposalId}/ai-interview-judging")]
+    [HttpPost("{proposalId}/answer-evaluation")]
     public async Task<IActionResult> EvaluateVettingAnswers(Guid proposalId, [FromQuery] bool onlyIfCached = false)
     {
         if (!TryGetCurrentUserId(out var userId))
@@ -89,7 +89,7 @@ public class ClientProposalsController : BaseApiController
             return InvalidTokenResponse();
         }
 
-        var command = new EvaluateProposalVettingCommand
+        var command = new EvaluateProposalAnswersCommand
         {
             ProposalId = proposalId,
             UserId = userId,

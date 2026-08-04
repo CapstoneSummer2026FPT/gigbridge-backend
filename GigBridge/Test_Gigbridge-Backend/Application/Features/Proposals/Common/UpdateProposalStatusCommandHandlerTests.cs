@@ -2,10 +2,11 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces.IService;
 using Application.Features.Proposals.Common.UpdateProposalStatus.Commands;
 using Application.Features.Proposals.Common.UpdateProposalStatus.Commands.DTOs;
-using Application.Features.Proposals.Freelancer.Cheating.DTOs;
 using Domain.Entities;
 using Domain.Enums;
+using Microsoft.EntityFrameworkCore;
 using Test_Gigbridge_Backend.TestSupport;
+
 
 namespace Test_Gigbridge_Backend.Application.Features.Proposals.Common;
 
@@ -145,7 +146,7 @@ public class UpdateProposalStatusCommandHandlerTests
     }
 
     [Fact]
-    public async Task Handle_SubmitDraftWithNewCheatingViolation_NotifiesFreelancerAfterSaving()
+    public async Task Handle_SubmitDraft_DoesNotApplyRetiredIntegrityPenalty()
     {
         var now = new DateTime(2026, 6, 10, 10, 0, 0, DateTimeKind.Utc);
         var context = new InMemoryApplicationDbContext();
@@ -153,7 +154,6 @@ public class UpdateProposalStatusCommandHandlerTests
         var freelancerProfileId = Guid.NewGuid();
         var jobPostId = Guid.NewGuid();
         var proposalId = Guid.NewGuid();
-        var violationId = Guid.NewGuid();
 
         var jobPost = new JobPost
         {
@@ -205,22 +205,9 @@ public class UpdateProposalStatusCommandHandlerTests
         context.AddSet(jobPost);
         context.AddSet(proposal);
         context.AddSet<ClientProfile>();
-
-        var cheatingPenalty = new CheatingPenaltyResultDto(
-            true,
-            true,
-            violationId,
-            3,
-            -50,
-            (int)CheatingViolationAction.TemporarySuspension,
-            now.AddDays(7),
-            "Anti-cheat suspension applied: violation 3. Your account is suspended for 7 days. 50 Elo points deducted.");
-        var notificationService = new SpyNotificationService(context);
-        var handler = new UpdateProposalStatusCommandHandler(
-            context,
-            new FixedDateTimeService(now),
-            new StubProposalCheatingService(cheatingPenalty),
-            notificationService: notificationService);
+        context.AddSet<UserEloPointTransaction>();
+        context.AddSet<Notification>();
+        var handler = new UpdateProposalStatusCommandHandler(context, new FixedDateTimeService(now));
 
         var result = await handler.Handle(
             new UpdateProposalStatusCommand(
@@ -231,12 +218,8 @@ public class UpdateProposalStatusCommandHandlerTests
 
         Assert.True(result.Success);
         Assert.Equal(1, proposal.Status);
-        Assert.Single(notificationService.Notifications);
-        Assert.Equal(1, notificationService.Notifications[0].SaveChangesCountAtCreation);
-        Assert.Equal("Anti-cheat suspension applied", notificationService.Notifications[0].Title);
-        Assert.Contains("violation 3", notificationService.Notifications[0].Content);
-        Assert.Contains("suspended for 7 days", notificationService.Notifications[0].Content);
-        Assert.Equal(violationId, notificationService.Notifications[0].ReferenceId);
+        Assert.Empty(context.Set<UserEloPointTransaction>());
+        Assert.Empty(context.Set<Notification>());
     }
 
     [Fact]
@@ -273,6 +256,29 @@ public class UpdateProposalStatusCommandHandlerTests
         Assert.Equal(1, proposal.Status);
         Assert.Equal(500m, proposal.ProposedBudget);
         Assert.Equal(400m, proposal.ProposalMilestonePlans.Single().Amount);
+    }
+
+    [Fact]
+    public async Task Handle_SubmitDraftWithGeneratedWorkItem_PassesSubmissionGuard()
+    {
+        var (handler, proposal, userId) = CreateDraftSubmissionHandler();
+        var milestone = proposal.ProposalMilestonePlans.Single();
+        var workItem = proposal.ProposalWorkBreakdownItems.Single();
+        workItem.Title = milestone.Title;
+        workItem.Description = milestone.Deliverables;
+        workItem.Deliverables = milestone.Deliverables;
+        workItem.EstimatedDuration = milestone.EstimatedDuration;
+
+        var result = await handler.Handle(
+            new UpdateProposalStatusCommand(
+                proposal.ProposalsId,
+                userId,
+                new UpdateProposalStatusRequest { Status = 1 }),
+            CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Equal(1, proposal.Status);
+        Assert.Equal(milestone.ProposalMilestonePlansId, workItem.ProposalMilestonePlansId);
     }
 
     [Fact]
@@ -456,35 +462,6 @@ public class UpdateProposalStatusCommandHandlerTests
         public DateTime UtcNow { get; }
     }
 
-    private sealed class StubProposalCheatingService : IProposalCheatingService
-    {
-        private readonly CheatingPenaltyResultDto? _penaltyResult;
-
-        public StubProposalCheatingService(CheatingPenaltyResultDto? penaltyResult)
-        {
-            _penaltyResult = penaltyResult;
-        }
-
-        public Task<CheatingEventLogResponse> LogEventAsync(
-            Guid proposalId,
-            Guid freelancerUserId,
-            LogProposalCheatingEventRequest request,
-            string? ipAddress,
-            string? userAgent,
-            CancellationToken cancellationToken)
-        {
-            throw new NotSupportedException();
-        }
-
-        public Task<CheatingPenaltyResultDto?> ApplySubmissionPenaltyIfNeededAsync(
-            Proposal proposal,
-            Guid freelancerUserId,
-            CancellationToken cancellationToken)
-        {
-            return Task.FromResult(_penaltyResult);
-        }
-    }
-
     private sealed class SpyNotificationService : INotificationService
     {
         private readonly InMemoryApplicationDbContext _context;
@@ -534,6 +511,8 @@ public class UpdateProposalStatusCommandHandlerTests
         }
     }
 
+    
+
     private sealed record NotificationCall(
         Guid UserId,
         NotificationType Type,
@@ -543,3 +522,4 @@ public class UpdateProposalStatusCommandHandlerTests
         string? ReferenceType,
         int SaveChangesCountAtCreation);
 }
+

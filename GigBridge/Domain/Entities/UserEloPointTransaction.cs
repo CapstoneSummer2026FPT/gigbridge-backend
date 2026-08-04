@@ -24,6 +24,15 @@ public partial class UserEloPointTransaction
 
     public string? Metadata { get; set; }
 
+    /// <summary>Completed job whose review drove this Elo change (Reason = CompletedJobReview).</summary>
+    public Guid? ContractId { get; set; }
+
+    /// <summary>Review that drove this Elo change (Reason = CompletedJobReview).</summary>
+    public Guid? ReviewId { get; set; }
+
+    /// <summary>Final review rating (1.0–5.0, one decimal place) for completed-job review changes.</summary>
+    public decimal? Rating { get; set; }
+
     public DateTime CreatedAt { get; set; }
 
     public virtual User User { get; set; } = null!;

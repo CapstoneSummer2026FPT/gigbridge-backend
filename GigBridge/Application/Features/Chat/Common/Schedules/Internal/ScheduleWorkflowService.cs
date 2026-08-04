@@ -7,6 +7,7 @@ using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Features.Chat.Common.Messages.GetConversationMessages.DTOs;
 using Application.Features.Chat.Common.Messages.Send.DTOs;
+using Application.Features.Notifications.Common.DTOs;
 using Domain.Entities;
 using Domain.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -17,6 +18,7 @@ namespace Application.Features.Chat.Common.Schedules;
 public sealed class ScheduleWorkflowService
 {
     private const int MaxEdits = 2;
+    private const int MaxRescheduleRequests = 3;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private static readonly Regex Whitespace = new(@"\s+", RegexOptions.Compiled);
     private readonly IApplicationDbContext _context;
@@ -24,6 +26,7 @@ public sealed class ScheduleWorkflowService
     private readonly IChatRealtimeNotifier _chat;
     private readonly IGoogleMeetOAuthService _meetOAuth;
     private readonly IScheduleEmailRenderer _emailRenderer;
+    private readonly INotificationSender? _notificationSender;
     private readonly string _frontendBaseUrl;
 
     public ScheduleWorkflowService(
@@ -32,13 +35,15 @@ public sealed class ScheduleWorkflowService
         IChatRealtimeNotifier chat,
         IGoogleMeetOAuthService meetOAuth,
         IScheduleEmailRenderer emailRenderer,
-        IConfiguration? configuration = null)
+        IConfiguration? configuration = null,
+        INotificationSender? notificationSender = null)
     {
         _context = context;
         _clock = clock;
         _chat = chat;
         _meetOAuth = meetOAuth;
         _emailRenderer = emailRenderer;
+        _notificationSender = notificationSender;
         _frontendBaseUrl = (configuration?["FrontendBaseUrl"] ?? "http://localhost:5173").TrimEnd('/');
     }
 
@@ -128,7 +133,8 @@ public sealed class ScheduleWorkflowService
         }
 
         _context.Set<Schedule>().Add(schedule);
-        return await PersistEvent(schedule, conversation, participants, actor, ScheduleEventType.Created, null, now, ct);
+        return await PersistEvent(schedule, conversation, participants, actor, ScheduleEventType.Created, null,
+            now, ct, sendEmail: command.Request.SendEmailNotification);
     }
 
     public async Task<ScheduleMutationResult> Handle(UpdateScheduleCommand command, CancellationToken ct)
@@ -137,6 +143,9 @@ public sealed class ScheduleWorkflowService
         var schedule = await LoadSchedule(command.ScheduleId, ct);
         var participants = await ActiveParticipants(schedule.ConversationId, ct);
         EnsureParticipant(participants, command.UserId);
+        if (command.UserId != schedule.CreatedByUserId)
+            throw new ForbiddenAccessException(
+                "Freelancers must request a schedule date change for the client to approve.");
         if (schedule.Conversation.Status != (int)ConversationStatus.Active)
             throw new BadRequestException("Schedules in a closed or archived conversation cannot be edited.");
         EnsureMutable(schedule, command.UserId, now, isEdit: true);
@@ -171,6 +180,8 @@ public sealed class ScheduleWorkflowService
         var reason = NormalizeDetails(command.Request.Reason);
         if (string.IsNullOrWhiteSpace(reason)) throw new BadRequestException("A cancellation reason is required.");
         if (reason.Length > 1000) throw new BadRequestException("Cancellation reason cannot exceed 1000 characters.");
+        if (schedule.AgreementStatus == ScheduleAgreementStatus.AwaitingClientReschedule)
+            ClearProposedTime(schedule);
 
         // Cancel any pending provisioning jobs
         var pendingJobs = await _context.Set<GoogleMeetProvisioningJob>()
@@ -200,9 +211,13 @@ public sealed class ScheduleWorkflowService
         if (schedule.AgreementStatus == ScheduleAgreementStatus.AwaitingFreelancer)
             EnsureRole(participants, command.UserId, ParticipantRole.Freelancer,
                 "Only the freelancer can accept the client's schedule.");
-        else if (schedule.AgreementStatus == ScheduleAgreementStatus.AwaitingClient)
+        else if (schedule.AgreementStatus is ScheduleAgreementStatus.AwaitingClient or
+                 ScheduleAgreementStatus.AwaitingClientReschedule)
+        {
             EnsureRole(participants, command.UserId, ParticipantRole.Client,
                 "Only the client can accept the counterproposal.");
+            ApplyAcceptedProposal(schedule, now);
+        }
         else
             throw new BadRequestException("This schedule is not awaiting your acceptance.");
 
@@ -221,6 +236,8 @@ public sealed class ScheduleWorkflowService
         var participants = await ActiveParticipants(schedule.ConversationId, ct);
         EnsureParticipant(participants, command.UserId);
         EnsureActiveAndVersion(schedule, command.Request.ExpectedVersion, now);
+        var persistedEventType = ScheduleEventType.Rejected;
+        string? persistedReason = null;
 
         if (schedule.AgreementStatus == ScheduleAgreementStatus.AwaitingFreelancer)
         {
@@ -228,13 +245,39 @@ public sealed class ScheduleWorkflowService
                 "Only the freelancer can reject the client's schedule.");
             schedule.AgreementStatus = ScheduleAgreementStatus.FreelancerRejectedAwaitingCounterproposal;
         }
-        else if (schedule.AgreementStatus == ScheduleAgreementStatus.AwaitingClient)
+        else if (schedule.AgreementStatus is ScheduleAgreementStatus.AwaitingClient or
+                 ScheduleAgreementStatus.AwaitingClientReschedule)
         {
             EnsureRole(participants, command.UserId, ParticipantRole.Client,
                 "Only the client can reject the counterproposal.");
-            schedule.AgreementStatus = ScheduleAgreementStatus.ClientRejected;
-            schedule.Status = ScheduleStatus.Rejected;
-            await CancelPendingMeetingJobs(schedule.ScheduleId, ct);
+            var isRescheduleRequest =
+                schedule.AgreementStatus == ScheduleAgreementStatus.AwaitingClientReschedule;
+            ClearProposedTime(schedule);
+            if (isRescheduleRequest)
+            {
+                schedule.RescheduleRejectionCount++;
+                if (schedule.RescheduleRejectionCount >= MaxRescheduleRequests)
+                {
+                    persistedReason =
+                        "Automatically cancelled after the client rejected three freelancer reschedule requests.";
+                    schedule.AgreementStatus = ScheduleAgreementStatus.RescheduleRejected;
+                    schedule.Status = ScheduleStatus.Cancelled;
+                    schedule.CancellationReason = persistedReason;
+                    schedule.CancelledAt = now;
+                    persistedEventType = ScheduleEventType.Cancelled;
+                    await CancelPendingMeetingJobs(schedule.ScheduleId, ct);
+                }
+                else
+                {
+                    schedule.AgreementStatus = ScheduleAgreementStatus.RescheduleRejected;
+                }
+            }
+            else
+            {
+                schedule.AgreementStatus = ScheduleAgreementStatus.ClientRejected;
+                schedule.Status = ScheduleStatus.Rejected;
+                await CancelPendingMeetingJobs(schedule.ScheduleId, ct);
+            }
         }
         else
             throw new BadRequestException("This schedule is not awaiting your response.");
@@ -243,7 +286,7 @@ public sealed class ScheduleWorkflowService
         schedule.UpdatedAt = now;
         var actor = participants.Single(x => x.UserId == command.UserId).User;
         return await PersistEvent(schedule, schedule.Conversation, participants, actor,
-            ScheduleEventType.Rejected, null, now, ct);
+            persistedEventType, persistedReason, now, ct);
     }
 
     public async Task<ScheduleMutationResult> Handle(CreateCounterProposalCommand command, CancellationToken ct)
@@ -255,12 +298,19 @@ public sealed class ScheduleWorkflowService
             "Only the freelancer can propose a replacement time.");
         if (schedule.Status != ScheduleStatus.Scheduled)
             throw new BadRequestException("The schedule is no longer active.");
+        if (now >= schedule.ScheduledAtUtc)
+            throw new BadRequestException("The scheduled time has passed.");
         if (schedule.Version != command.Request.ExpectedVersion)
             throw new ConflictException("The schedule changed. Refresh it before responding.");
-        if (schedule.AgreementStatus != ScheduleAgreementStatus.FreelancerRejectedAwaitingCounterproposal)
-            throw new BadRequestException("The schedule is not awaiting a counterproposal.");
+        if (schedule.AgreementStatus is not (ScheduleAgreementStatus.FreelancerRejectedAwaitingCounterproposal or
+            ScheduleAgreementStatus.Accepted or ScheduleAgreementStatus.RescheduleRejected))
+            throw new BadRequestException("This schedule cannot receive a reschedule request right now.");
+        if (schedule.RescheduleRequestCount >= MaxRescheduleRequests)
+            throw new BadRequestException("The freelancer has used all three reschedule requests.");
 
-        ApplyCounterProposal(schedule, command.Request, now, isEdit: false);
+        var isRescheduleRequest = schedule.AgreementStatus is
+            ScheduleAgreementStatus.Accepted or ScheduleAgreementStatus.RescheduleRejected;
+        ApplyCounterProposal(schedule, command.Request, now, isEdit: false, isRescheduleRequest);
         var actor = participants.Single(x => x.UserId == command.UserId).User;
         return await PersistEvent(schedule, schedule.Conversation, participants, actor,
             ScheduleEventType.CounterProposed, null, now, ct);
@@ -274,13 +324,15 @@ public sealed class ScheduleWorkflowService
         EnsureRole(participants, command.UserId, ParticipantRole.Freelancer,
             "Only the freelancer can edit the counterproposal.");
         EnsureActiveAndVersion(schedule, command.Request.ExpectedVersion, now);
-        if (schedule.AgreementStatus != ScheduleAgreementStatus.AwaitingClient ||
+        if (schedule.AgreementStatus is not (ScheduleAgreementStatus.AwaitingClient or
+            ScheduleAgreementStatus.AwaitingClientReschedule) ||
             schedule.CounterProposalCreatedAtUtc is null)
             throw new BadRequestException("There is no editable counterproposal.");
         if (now >= CounterProposalEditExpiry(schedule))
             throw new BadRequestException("The counterproposal edit window has closed.");
 
-        ApplyCounterProposal(schedule, command.Request, now, isEdit: true);
+        ApplyCounterProposal(schedule, command.Request, now, isEdit: true,
+            schedule.AgreementStatus == ScheduleAgreementStatus.AwaitingClientReschedule);
         var actor = participants.Single(x => x.UserId == command.UserId).User;
         return await PersistEvent(schedule, schedule.Conversation, participants, actor,
             ScheduleEventType.Edited, null, now, ct);
@@ -399,15 +451,17 @@ public sealed class ScheduleWorkflowService
 
     private async Task<ScheduleMutationResult> PersistEvent(Schedule schedule, Conversation conversation,
         List<ConversationParticipant> participants, User actor, ScheduleEventType eventType, string? reason,
-        DateTime now, CancellationToken ct)
+        DateTime now, CancellationToken ct, bool sendEmail = true)
     {
+        var realtimeNotifications = new List<(Guid UserId, Notification Notification)>();
         var messageContent = eventType switch
         {
             ScheduleEventType.Created => $"Scheduled: {schedule.Title}",
             ScheduleEventType.Edited => $"Schedule updated: {schedule.Title}",
             ScheduleEventType.Cancelled => $"Schedule cancelled: {schedule.Title}",
             ScheduleEventType.Accepted => $"Schedule accepted: {schedule.Title}",
-            ScheduleEventType.Rejected => schedule.AgreementStatus == ScheduleAgreementStatus.ClientRejected
+            ScheduleEventType.Rejected => schedule.AgreementStatus is
+                ScheduleAgreementStatus.ClientRejected or ScheduleAgreementStatus.RescheduleRejected
                 ? $"Counterproposal rejected: {schedule.Title}"
                 : $"Schedule rejected: {schedule.Title}",
             _ => $"New schedule time proposed: {schedule.Title}"
@@ -439,7 +493,15 @@ public sealed class ScheduleWorkflowService
         message.Content = messageContent;
         message.ScheduleEventType = eventType;
         message.ScheduleEventSequence = schedule.Version;
-        if (eventType != ScheduleEventType.Created) message.EditedAt = now;
+        if (eventType != ScheduleEventType.Created)
+        {
+            // The card represents the latest schedule event, so move it to the
+            // event's chronological position instead of leaving it at the
+            // original creation position near the top of the conversation.
+            message.SentAt = now;
+            message.EditedAt = now;
+            message.SenderUserId = actor.UserId;
+        }
 
         var eventDto = ToEvent(schedule, message.MessagesId, eventType, actor, reason);
         message.Metadata = JsonSerializer.Serialize(eventDto, JsonOptions);
@@ -462,7 +524,7 @@ public sealed class ScheduleWorkflowService
             var self = participant.UserId == actor.UserId;
             var title = NotificationTitle(eventType, schedule.AgreementStatus, self,
                 actor.UserId == schedule.CreatedByUserId);
-            var content = $"{actor.FullName}: {schedule.Title} — {FormatVietnamTime(schedule.ScheduledAtUtc)}";
+            var content = $"{actor.FullName}: {schedule.Title} — {FormatVietnamTime(EventTime(schedule))}";
             var notification = existing ?? new Notification { NotificationsId = Guid.NewGuid(), UserId = participant.UserId };
             if (existing is null) _context.Set<Notification>().Add(notification);
             if ((notification.Revision ?? 0) < schedule.Version)
@@ -479,8 +541,9 @@ public sealed class ScheduleWorkflowService
                 notification.CreatedAt = now;
             }
 
-            AddOutbox(schedule, participant.UserId, notification.NotificationsId, eventType, actor,
-                participant.User, metadata, now, snapshot.ScheduleMessageId);
+            realtimeNotifications.Add((participant.UserId, notification));
+            AddEmailOutbox(schedule, participant.UserId, notification.NotificationsId, eventType, actor,
+                participant.User, metadata, now, snapshot.ScheduleMessageId, sendEmail);
         }
 
         await SyncMeetingStartDeliveries(schedule, participants, eventDto, now, ct);
@@ -488,6 +551,15 @@ public sealed class ScheduleWorkflowService
         try { await _context.SaveChangesAsync(ct); }
         catch (DbUpdateConcurrencyException ex) { throw new ConflictException("The schedule was changed by the other participant.", ex); }
         catch (DbUpdateException ex) { throw new ConflictException("A concurrent schedule event was already persisted. Refresh and retry.", ex); }
+
+        if (_notificationSender is not null)
+        {
+            await Task.WhenAll(realtimeNotifications.Select(item =>
+                _notificationSender.SendToUserAsync(
+                    item.UserId,
+                    ToNotificationDto(item.Notification),
+                    ct)));
+        }
 
         // Send realtime events
         MessageResponse? actorMessageResponse = null;
@@ -530,30 +602,52 @@ public sealed class ScheduleWorkflowService
             actorMessageResponse ?? throw new InvalidOperationException("The schedule actor is not an active participant."));
     }
 
-    private void AddOutbox(Schedule schedule, Guid recipientId, Guid notificationId, ScheduleEventType type,
-        User actor, User recipient, string metadata, DateTime now, Guid scheduleMessageId)
+    private void AddEmailOutbox(Schedule schedule, Guid recipientId, Guid notificationId, ScheduleEventType type,
+        User actor, User recipient, string metadata, DateTime now, Guid scheduleMessageId, bool sendEmail)
     {
+        if (!sendEmail)
+        {
+            return;
+        }
+
         var email = _emailRenderer.Render(ResolveNotificationType(type, schedule.AgreementStatus),
             new ScheduleEmailModel(recipient.FullName, actor.FullName, recipient.UserId == actor.UserId,
-                schedule.Title, FormatVietnamTime(schedule.ScheduledAtUtc), schedule.Details,
+                schedule.Title, FormatVietnamTime(EventTime(schedule)), schedule.Details,
                 schedule.CancellationReason, BuildScheduleUrl(schedule.ConversationId, scheduleMessageId)));
         var payload = JsonSerializer.Serialize(new ScheduleDeliveryPayload(notificationId, recipientId, recipient.Email,
             email.Subject, email.HtmlBody, metadata, TextBody: email.TextBody), JsonOptions);
-        foreach (var channel in new[] { DeliveryChannel.NotificationRealtime, DeliveryChannel.Email })
-            _context.Set<DeliveryOutbox>().Add(new DeliveryOutbox
-            {
-                DeliveryOutboxId = Guid.NewGuid(),
-                DeliveryKey = $"schedule:{schedule.ScheduleId}:{schedule.Version}:{recipientId}:{(int)channel}",
-                ScheduleId = schedule.ScheduleId,
-                RecipientUserId = recipientId,
-                EventSequence = schedule.Version,
-                Channel = (int)channel,
-                Payload = payload,
-                Status = (int)DeliveryOutboxStatus.Pending,
-                NextAttemptAt = now,
-                CreatedAt = now
-            });
+        _context.Set<DeliveryOutbox>().Add(new DeliveryOutbox
+        {
+            DeliveryOutboxId = Guid.NewGuid(),
+            DeliveryKey = $"schedule:{schedule.ScheduleId}:{schedule.Version}:{recipientId}:{(int)DeliveryChannel.Email}",
+            ScheduleId = schedule.ScheduleId,
+            RecipientUserId = recipientId,
+            EventSequence = schedule.Version,
+            Channel = (int)DeliveryChannel.Email,
+            Payload = payload,
+            Status = (int)DeliveryOutboxStatus.Pending,
+            NextAttemptAt = now,
+            CreatedAt = now
+        });
     }
+
+    private static NotificationDto ToNotificationDto(Notification notification) => new()
+    {
+        Id = notification.NotificationsId,
+        Source = "Personal",
+        NotificationId = notification.NotificationsId,
+        ReadTargetId = notification.NotificationsId,
+        Type = (NotificationType)notification.Type,
+        Title = notification.Title,
+        Content = notification.Content,
+        ReferenceId = notification.ReferenceId,
+        ReferenceType = notification.ReferenceType,
+        Metadata = notification.Metadata,
+        Revision = notification.Revision,
+        IsRead = notification.IsRead ?? false,
+        ReadAt = notification.ReadAt,
+        CreatedAt = notification.CreatedAt
+    };
 
     private async Task SyncMeetingStartDeliveries(Schedule schedule,
         List<ConversationParticipant> participants, ScheduleEventResponse eventDto, DateTime now,
@@ -563,7 +657,9 @@ public sealed class ScheduleWorkflowService
             .Where(x => x.ScheduleId == schedule.ScheduleId && x.DeliveryKey.Contains(":start:"))
             .ToListAsync(ct);
         var shouldDeliver = schedule.Status == ScheduleStatus.Scheduled &&
-            schedule.AgreementStatus == ScheduleAgreementStatus.Accepted && schedule.ScheduledAtUtc > now;
+            schedule.AgreementStatus is (ScheduleAgreementStatus.Accepted or
+                ScheduleAgreementStatus.AwaitingClientReschedule or ScheduleAgreementStatus.RescheduleRejected) &&
+            schedule.ScheduledAtUtc > now;
 
         if (!shouldDeliver)
         {
@@ -571,6 +667,7 @@ public sealed class ScheduleWorkflowService
                          (int)DeliveryOutboxStatus.Processing))
             {
                 job.Status = (int)DeliveryOutboxStatus.Cancelled;
+                job.ClaimToken = null;
                 job.LastError = "Schedule is no longer awaiting its start time.";
             }
             return;
@@ -616,6 +713,7 @@ public sealed class ScheduleWorkflowService
                     job.EventSequence = schedule.Version;
                     job.Payload = payload;
                     job.Status = (int)DeliveryOutboxStatus.Pending;
+                    job.ClaimToken = null;
                     job.AttemptCount = 0;
                     job.NextAttemptAt = schedule.ScheduledAtUtc;
                     job.LastError = null;
@@ -638,12 +736,14 @@ public sealed class ScheduleWorkflowService
         ScheduleEventType type, ScheduleAgreementStatus agreement) => type switch
     {
         ScheduleEventType.Created => ScheduleNotificationType.ProposalCreated,
-        ScheduleEventType.Edited when agreement == ScheduleAgreementStatus.AwaitingClient => ScheduleNotificationType.CounterProposalUpdated,
+        ScheduleEventType.Edited when agreement is ScheduleAgreementStatus.AwaitingClient or
+            ScheduleAgreementStatus.AwaitingClientReschedule => ScheduleNotificationType.CounterProposalUpdated,
         ScheduleEventType.Edited => ScheduleNotificationType.ScheduleUpdated,
         ScheduleEventType.Cancelled => ScheduleNotificationType.ScheduleCancelled,
         ScheduleEventType.Accepted => ScheduleNotificationType.ScheduleConfirmed,
         ScheduleEventType.CounterProposed => ScheduleNotificationType.CounterProposalCreated,
-        ScheduleEventType.Rejected when agreement == ScheduleAgreementStatus.ClientRejected => ScheduleNotificationType.CounterProposalDeclined,
+        ScheduleEventType.Rejected when agreement is ScheduleAgreementStatus.ClientRejected or
+            ScheduleAgreementStatus.RescheduleRejected => ScheduleNotificationType.CounterProposalDeclined,
         ScheduleEventType.Rejected => ScheduleNotificationType.ScheduleDeclined,
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, null)
     };
@@ -664,6 +764,7 @@ public sealed class ScheduleWorkflowService
         (false, ScheduleEventType.Accepted, _, true) => "Client accepted the proposed schedule",
         (false, ScheduleEventType.Accepted, _, false) => "Freelancer accepted the schedule",
         (false, ScheduleEventType.Rejected, ScheduleAgreementStatus.ClientRejected, _) => "Client rejected the proposed schedule",
+        (false, ScheduleEventType.Rejected, ScheduleAgreementStatus.RescheduleRejected, _) => "Client rejected the schedule change",
         (true, ScheduleEventType.CounterProposed, _, _) => "Your new schedule time was sent",
         (true, ScheduleEventType.Accepted, _, _) => "You accepted the schedule",
         (true, ScheduleEventType.Rejected, _, _) => "You rejected the schedule",
@@ -705,27 +806,64 @@ public sealed class ScheduleWorkflowService
     {
         if (schedule.Status != ScheduleStatus.Scheduled)
             throw new BadRequestException("The schedule is no longer active.");
-        if (now >= schedule.ScheduledAtUtc)
-            throw new BadRequestException("The scheduled time has passed.");
+        if (now >= ResponseDeadline(schedule))
+            throw new BadRequestException("The schedule response deadline has passed.");
         if (schedule.Version != expectedVersion)
             throw new ConflictException("The schedule changed. Refresh it before responding.");
     }
 
     private static void ApplyCounterProposal(Schedule schedule, CounterProposalRequest request,
-        DateTime now, bool isEdit)
+        DateTime now, bool isEdit, bool isRescheduleRequest)
     {
         var startsAt = NormalizeInstant(request.ScheduledAt);
         if (startsAt <= now) throw new BadRequestException("The proposed time must be in the future.");
-        if (isEdit && startsAt == schedule.ScheduledAtUtc && request.TimeZoneId == schedule.TimeZoneId)
+        if (isEdit && startsAt == schedule.ProposedScheduledAtUtc &&
+            request.TimeZoneId == schedule.ProposedTimeZoneId)
             throw new BadRequestException("The update does not change the proposed time.");
 
-        schedule.ScheduledAtUtc = startsAt;
-        schedule.TimeZoneId = request.TimeZoneId;
-        schedule.AgreementStatus = ScheduleAgreementStatus.AwaitingClient;
-        if (!isEdit) schedule.CounterProposalCreatedAtUtc = now;
+        schedule.ProposedScheduledAtUtc = startsAt;
+        schedule.ProposedTimeZoneId = request.TimeZoneId;
+        schedule.AgreementStatus = isRescheduleRequest
+            ? ScheduleAgreementStatus.AwaitingClientReschedule
+            : ScheduleAgreementStatus.AwaitingClient;
+        if (!isEdit)
+        {
+            schedule.CounterProposalCreatedAtUtc = now;
+            if (isRescheduleRequest) schedule.RescheduleRequestCount++;
+        }
         schedule.Version++;
         schedule.UpdatedAt = now;
     }
+
+    private static void ApplyAcceptedProposal(Schedule schedule, DateTime now)
+    {
+        if (schedule.ProposedScheduledAtUtc is null)
+            throw new BadRequestException("The proposed schedule time is missing.");
+        if (schedule.ProposedScheduledAtUtc.Value <= now)
+            throw new BadRequestException("The proposed schedule time has passed.");
+
+        schedule.ScheduledAtUtc = schedule.ProposedScheduledAtUtc.Value;
+        if (!string.IsNullOrWhiteSpace(schedule.ProposedTimeZoneId))
+            schedule.TimeZoneId = schedule.ProposedTimeZoneId;
+        ClearProposedTime(schedule);
+    }
+
+    private static void ClearProposedTime(Schedule schedule)
+    {
+        schedule.ProposedScheduledAtUtc = null;
+        schedule.ProposedTimeZoneId = null;
+        schedule.CounterProposalCreatedAtUtc = null;
+    }
+
+    private static DateTime EventTime(Schedule schedule) =>
+        schedule.ProposedScheduledAtUtc ?? schedule.ScheduledAtUtc;
+
+    private static DateTime ResponseDeadline(Schedule schedule) =>
+        schedule.AgreementStatus is (ScheduleAgreementStatus.AwaitingClient or
+            ScheduleAgreementStatus.AwaitingClientReschedule) &&
+        schedule.ProposedScheduledAtUtc is not null
+            ? Utc(schedule.ProposedScheduledAtUtc.Value)
+            : Utc(schedule.ScheduledAtUtc);
 
     private async Task CancelPendingMeetingJobs(Guid scheduleId, CancellationToken ct)
     {
@@ -739,7 +877,8 @@ public sealed class ScheduleWorkflowService
     {
         if (s.Status != ScheduleStatus.Scheduled) throw new BadRequestException("The schedule is no longer active.");
         if (s.AgreementStatus is ScheduleAgreementStatus.FreelancerRejectedAwaitingCounterproposal or
-            ScheduleAgreementStatus.AwaitingClient or ScheduleAgreementStatus.ClientRejected)
+                ScheduleAgreementStatus.AwaitingClient or ScheduleAgreementStatus.ClientRejected ||
+            (isEdit && s.AgreementStatus == ScheduleAgreementStatus.AwaitingClientReschedule))
             throw new BadRequestException("Use the counterproposal actions for this schedule.");
         if (s.AgreementStatus == ScheduleAgreementStatus.AwaitingFreelancer && userId != s.CreatedByUserId)
             throw new ForbiddenAccessException("Only the client can change a schedule awaiting freelancer response.");
@@ -763,6 +902,8 @@ public sealed class ScheduleWorkflowService
             CanEdit(s, userId, now), CanCancel(s, userId, now),
             (int)s.AgreementStatus, s.CounterProposalCreatedAtUtc,
             s.CounterProposalCreatedAtUtc is null ? null : CounterProposalEditExpiry(s),
+            s.ProposedScheduledAtUtc, s.ProposedTimeZoneId,
+            s.RescheduleRequestCount, Math.Max(0, MaxRescheduleRequests - s.RescheduleRequestCount),
             CanAccept(s, userId, now), CanReject(s, userId, now), CanProposeTime(s, userId, now),
             CanEditCounterProposal(s, userId, now),
             ToMeetingResponse(s, userId, now));
@@ -782,7 +923,7 @@ public sealed class ScheduleWorkflowService
             : null;
 
         return new ScheduleEventResponse(
-            3, s.ScheduleId, s.ConversationId, messageId, (int)type,
+            4, s.ScheduleId, s.ConversationId, messageId, (int)type,
             s.Version, (int)s.Status, s.Title, s.Details, s.ScheduledAtUtc, s.TimeZoneId,
             actor.UserId, actor.FullName, s.CreatedByUserId,
             s.EditCount, Math.Max(0, MaxEdits - s.EditCount), s.Version,
@@ -790,7 +931,8 @@ public sealed class ScheduleWorkflowService
             (int)s.AgreementStatus, s.CounterProposalCreatedAtUtc,
             s.CounterProposalCreatedAtUtc is null ? null : CounterProposalEditExpiry(s),
             false, false, false, false,
-            meeting);
+            meeting, s.ProposedScheduledAtUtc, s.ProposedTimeZoneId,
+            s.RescheduleRequestCount, Math.Max(0, MaxRescheduleRequests - s.RescheduleRequestCount));
     }
 
     private static ScheduleEventResponse PersonalizeEvent(
@@ -818,6 +960,11 @@ public sealed class ScheduleWorkflowService
             CounterProposalCreatedAtUtc = schedule.CounterProposalCreatedAtUtc,
             CounterProposalEditExpiresAtUtc = schedule.CounterProposalCreatedAtUtc is null
                 ? null : CounterProposalEditExpiry(schedule),
+            ProposedScheduledAtUtc = schedule.ProposedScheduledAtUtc,
+            ProposedTimeZoneId = schedule.ProposedTimeZoneId,
+            RescheduleRequestCount = schedule.RescheduleRequestCount,
+            RemainingRescheduleRequests =
+                Math.Max(0, MaxRescheduleRequests - schedule.RescheduleRequestCount),
             CanAccept = CanAccept(schedule, viewerUserId, now),
             CanReject = CanReject(schedule, viewerUserId, now),
             CanProposeTime = CanProposeTime(schedule, viewerUserId, now),
@@ -848,7 +995,9 @@ public sealed class ScheduleWorkflowService
 
     private static bool CanEdit(Schedule s, Guid user, DateTime now) =>
         s.Status == ScheduleStatus.Scheduled && s.EditCount < MaxEdits &&
-        s.AgreementStatus is ScheduleAgreementStatus.Accepted or ScheduleAgreementStatus.AwaitingFreelancer &&
+        user == s.CreatedByUserId &&
+        s.AgreementStatus is (ScheduleAgreementStatus.Accepted or ScheduleAgreementStatus.RescheduleRejected or
+            ScheduleAgreementStatus.AwaitingFreelancer) &&
         (s.AgreementStatus != ScheduleAgreementStatus.AwaitingFreelancer || user == s.CreatedByUserId) &&
         s.Conversation.Status == (int)ConversationStatus.Active && now < s.ScheduledAtUtc &&
         (now < CutoffUtc(s.ScheduledAtUtc) ||
@@ -856,30 +1005,45 @@ public sealed class ScheduleWorkflowService
 
     private static bool CanCancel(Schedule s, Guid user, DateTime now) =>
         s.Status == ScheduleStatus.Scheduled && now < s.ScheduledAtUtc &&
-        s.AgreementStatus is ScheduleAgreementStatus.Accepted or ScheduleAgreementStatus.AwaitingFreelancer &&
+        s.AgreementStatus is (ScheduleAgreementStatus.Accepted or ScheduleAgreementStatus.RescheduleRejected or
+            ScheduleAgreementStatus.AwaitingClientReschedule or ScheduleAgreementStatus.AwaitingFreelancer) &&
         (s.AgreementStatus != ScheduleAgreementStatus.AwaitingFreelancer || user == s.CreatedByUserId) &&
         (now < CutoffUtc(s.ScheduledAtUtc) ||
          !WasCreatedMoreThan24HoursBeforeStart(s) && user == s.CreatedByUserId && now < GraceExpiry(s));
 
     private static bool CanAccept(Schedule s, Guid user, DateTime now) =>
-        s.Status == ScheduleStatus.Scheduled && now < s.ScheduledAtUtc &&
+        s.Status == ScheduleStatus.Scheduled && now < ResponseDeadline(s) &&
         (s.AgreementStatus == ScheduleAgreementStatus.AwaitingFreelancer && user != s.CreatedByUserId ||
-         s.AgreementStatus == ScheduleAgreementStatus.AwaitingClient && user == s.CreatedByUserId);
+         s.AgreementStatus is (ScheduleAgreementStatus.AwaitingClient or
+             ScheduleAgreementStatus.AwaitingClientReschedule) && user == s.CreatedByUserId &&
+             s.ProposedScheduledAtUtc is not null && now < s.ProposedScheduledAtUtc.Value);
 
-    private static bool CanReject(Schedule s, Guid user, DateTime now) => CanAccept(s, user, now);
+    private static bool CanReject(Schedule s, Guid user, DateTime now) =>
+        s.Status == ScheduleStatus.Scheduled && now < ResponseDeadline(s) &&
+        (s.AgreementStatus == ScheduleAgreementStatus.AwaitingFreelancer && user != s.CreatedByUserId ||
+         s.AgreementStatus is (ScheduleAgreementStatus.AwaitingClient or
+             ScheduleAgreementStatus.AwaitingClientReschedule) && user == s.CreatedByUserId);
 
     private static bool CanProposeTime(Schedule s, Guid user, DateTime now) =>
         s.Status == ScheduleStatus.Scheduled &&
-        s.AgreementStatus == ScheduleAgreementStatus.FreelancerRejectedAwaitingCounterproposal &&
+        s.RescheduleRequestCount < MaxRescheduleRequests && now < s.ScheduledAtUtc &&
+        s.AgreementStatus is (ScheduleAgreementStatus.FreelancerRejectedAwaitingCounterproposal or
+            ScheduleAgreementStatus.Accepted or ScheduleAgreementStatus.RescheduleRejected) &&
         user != s.CreatedByUserId;
 
     private static bool CanEditCounterProposal(Schedule s, Guid user, DateTime now) =>
-        s.Status == ScheduleStatus.Scheduled && s.AgreementStatus == ScheduleAgreementStatus.AwaitingClient &&
+        s.Status == ScheduleStatus.Scheduled &&
+        s.AgreementStatus is (ScheduleAgreementStatus.AwaitingClient or
+            ScheduleAgreementStatus.AwaitingClientReschedule) &&
         user != s.CreatedByUserId && s.CounterProposalCreatedAtUtc is not null &&
         now < CounterProposalEditExpiry(s);
 
     private static DateTime CounterProposalEditExpiry(Schedule s) =>
-        new[] { Utc(s.CounterProposalCreatedAtUtc!.Value).AddHours(24), Utc(s.ScheduledAtUtc) }.Min();
+        new[]
+        {
+            Utc(s.CounterProposalCreatedAtUtc!.Value).AddHours(24),
+            Utc(s.ProposedScheduledAtUtc ?? s.ScheduledAtUtc)
+        }.Min();
 
     private static DateTime GraceExpiry(Schedule s) =>
         new[] { s.CreatedAt.AddMinutes(10), s.ScheduledAtUtc }.Min();

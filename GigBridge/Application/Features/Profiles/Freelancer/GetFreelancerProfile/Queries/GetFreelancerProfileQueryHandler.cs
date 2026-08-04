@@ -21,16 +21,13 @@ public class GetFreelancerProfileQueryHandler
     : IRequestHandler<GetFreelancerProfileQuery, FreelancerProfileDetailDto>
 {
     private readonly IApplicationDbContext _context;
-    private readonly ICurrentUserService _currentUserService;
     private readonly IPremiumAccessService _premiumAccessService;
 
     public GetFreelancerProfileQueryHandler(
         IApplicationDbContext context,
-        ICurrentUserService currentUserService,
         IPremiumAccessService premiumAccessService)
     {
         _context = context;
-        _currentUserService = currentUserService;
         _premiumAccessService = premiumAccessService;
     }
 
@@ -60,7 +57,9 @@ public class GetFreelancerProfileQueryHandler
         // Get average review rating
         var avgRating = await _context.Set<Review>()
             .AsNoTracking()
-            .Where(r => r.RevieweeId == request.UserId)
+            .Where(r =>
+                r.RevieweeId == request.UserId &&
+                r.ModerationStatus == (int)ReviewModerationStatus.Active)
             .AverageAsync(r => (double?)r.Rating, cancellationToken) ?? 0.0;
 
         var premium = await _premiumAccessService.GetPremiumBenefitsAsync(request.UserId, cancellationToken);
@@ -122,7 +121,11 @@ public class GetFreelancerProfileQueryHandler
             PortfolioItems = freelancerProfile.PortfolioItems.Select(pi => new PortfolioItemDto
             {
                 PortfolioItemId = pi.PortfolioItemsId,
-                ProjectUrl = pi.ProjectUrl
+                Title = pi.Title,
+                Description = pi.Description,
+                ProjectUrl = pi.ProjectUrl,
+                ImageUrl = pi.ImageUrl,
+                ProjectDate = pi.ProjectDate?.ToString("yyyy-MM-dd")
             }).ToList(),
 
             WorkExperiences = freelancerProfile.WorkExperiences.Select(we => new WorkExperienceDto
@@ -136,49 +139,6 @@ public class GetFreelancerProfileQueryHandler
             }).ToList()
         };
 
-        if (CanViewCheatingPenaltyLogs(request.UserId))
-        {
-            var penaltyLogs = await _context.Set<FreelancerCheatingViolation>()
-                .AsNoTracking()
-                .Include(violation => violation.Proposals)
-                    .ThenInclude(proposal => proposal.JobPosts)
-                .Where(violation => violation.FreelancerUserId == request.UserId)
-                .OrderByDescending(violation => violation.CreatedAt)
-                .Select(violation => new CheatingPenaltyLogDto
-                {
-                    ViolationId = violation.FreelancerCheatingViolationsId,
-                    ProposalId = violation.ProposalsId,
-                    JobPostId = violation.Proposals.JobPostsId,
-                    JobTitle = violation.Proposals.JobPosts.Title,
-                    ViolationNumber = violation.ViolationNumber,
-                    TotalEventCount = violation.TotalEventCount,
-                    CopyCount = violation.CopyCount,
-                    PasteCount = violation.PasteCount,
-                    TabSwitchCount = violation.TabSwitchCount,
-                    ScreenshotAttemptCount = violation.ScreenshotAttemptCount,
-                    FocusLossCount = violation.FocusLossCount,
-                    FullscreenExitCount = violation.FullscreenExitCount,
-                    Action = violation.Action,
-                    EloDelta = violation.EloDelta,
-                    SuspendedUntil = violation.SuspendedUntil,
-                    CreatedAt = violation.CreatedAt
-                })
-                .ToListAsync(cancellationToken);
-
-            detailDto.CheatingPenaltyLogs = penaltyLogs;
-            detailDto.CheatingViolationCount = penaltyLogs.Count;
-        }
-
         return detailDto;
-    }
-
-    private bool CanViewCheatingPenaltyLogs(Guid profileUserId)
-    {
-        var isOwner = Guid.TryParse(_currentUserService.UserId, out var currentUserId) &&
-                      currentUserId == profileUserId;
-        var isAdmin = string.Equals(_currentUserService.Role, nameof(UserRole.Admin), StringComparison.OrdinalIgnoreCase) ||
-                      _currentUserService.Role == ((int)UserRole.Admin).ToString();
-
-        return isOwner || isAdmin;
     }
 }

@@ -3,11 +3,14 @@ using Application.Common.Interfaces.IService;
 using Application.Features.Chat.Common.Messages;
 using Application.Features.Chat.Common.Messages.Send.DTOs;
 using Application.Features.Chat.Common.Schedules;
+using Application.Features.Notifications.Common.DTOs;
 using Domain.Entities;
 using Domain.Enums;
 using Infrastructure.Persistence;
 using Infrastructure.Services.Email;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
+using NSubstitute;
 using Test_Gigbridge_Backend.TestSupport;
 
 namespace Test_Gigbridge_Backend.Application.Features.Chat;
@@ -57,6 +60,8 @@ public class ScheduleWorkflowTests
         Assert.False(MessageHelpers.ParseScheduleMetadata(persistedMessage, fixture.FreelancerId, now)!.CanEdit);
 
         var emailJobs = await db.DeliveryOutboxes.Where(x => x.Channel == (int)DeliveryChannel.Email).ToListAsync();
+        Assert.Equal(2, emailJobs.Count);
+        Assert.Equal(emailJobs.Count, await db.DeliveryOutboxes.CountAsync());
         var json = new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web);
         var clientEmail = System.Text.Json.JsonSerializer.Deserialize<ScheduleDeliveryPayload>(
             emailJobs.Single(x => x.RecipientUserId == fixture.ClientId).Payload, json)!;
@@ -69,6 +74,34 @@ public class ScheduleWorkflowTests
         Assert.Contains($"/messages?conversationId={fixture.ConversationId:D}&amp;messageId={persistedMessage.MessagesId:D}",
             freelancerEmail.HtmlBody);
         Assert.Contains("View schedule:", freelancerEmail.TextBody);
+    }
+
+    [Fact]
+    public async Task Create_WithEmailDisabled_SendsRealtimeDirectlyWithoutOutboxRows()
+    {
+        var now = new DateTime(2026, 6, 21, 6, 0, 0, DateTimeKind.Utc);
+        await using var db = CreateContext();
+        var fixture = Seed(db, now);
+        var notificationSender = Substitute.For<INotificationSender>();
+        var handler = new ScheduleWorkflowService(db, new FixedClock(now),
+            new NoopChatRealtimeNotifier(), new NoopGoogleMeetOAuthService(), EmailRenderer,
+            notificationSender: notificationSender);
+
+        await handler.Handle(new CreateScheduleCommand(fixture.ClientId,
+            new CreateScheduleRequest(fixture.ConversationId, "Review", null,
+                new DateTimeOffset(now.AddDays(3)), SendEmailNotification: false)), default);
+
+        var deliveries = await db.DeliveryOutboxes.ToListAsync();
+        Assert.Empty(deliveries);
+        Assert.Equal(2, await db.Notifications.CountAsync());
+        await notificationSender.Received(1).SendToUserAsync(
+            fixture.ClientId,
+            Arg.Any<NotificationDto>(),
+            Arg.Any<CancellationToken>());
+        await notificationSender.Received(1).SendToUserAsync(
+            fixture.FreelancerId,
+            Arg.Any<NotificationDto>(),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -102,7 +135,7 @@ public class ScheduleWorkflowTests
 
         var accepted = await handler.Handle(new AcceptScheduleCommand(fixture.FreelancerId,
             created.Schedule.ScheduleId, new ScheduleVersionRequest(created.Schedule.Version)), default);
-        await Assert.ThrowsAsync<BadRequestException>(() => handler.Handle(new UpdateScheduleCommand(fixture.FreelancerId,
+        await Assert.ThrowsAsync<BadRequestException>(() => handler.Handle(new UpdateScheduleCommand(fixture.ClientId,
             created.Schedule.ScheduleId, new UpdateScheduleRequest(" Review   call ", "Line one\nLine two", starts, accepted.Schedule.Version)), default));
         Assert.Equal(0, (await db.Schedules.SingleAsync()).EditCount);
     }
@@ -144,7 +177,7 @@ public class ScheduleWorkflowTests
     }
 
     [Fact]
-    public async Task SharedQuota_RejectsThirdEdit()
+    public async Task ClientEditQuota_RejectsThirdEdit()
     {
         var now = new DateTime(2026, 6, 21, 6, 0, 0, DateTimeKind.Utc);
         await using var db = CreateContext();
@@ -156,7 +189,7 @@ public class ScheduleWorkflowTests
             created.Schedule.ScheduleId, new ScheduleVersionRequest(created.Schedule.Version)), default);
         var one = await handler.Handle(new UpdateScheduleCommand(fixture.ClientId, created.Schedule.ScheduleId,
             new UpdateScheduleRequest("Review one", null, new DateTimeOffset(now.AddDays(3)), accepted.Schedule.Version)), default);
-        var two = await handler.Handle(new UpdateScheduleCommand(fixture.FreelancerId, created.Schedule.ScheduleId,
+        var two = await handler.Handle(new UpdateScheduleCommand(fixture.ClientId, created.Schedule.ScheduleId,
             new UpdateScheduleRequest("Review two", null, new DateTimeOffset(now.AddDays(3)), one.Schedule.Version)), default);
         await Assert.ThrowsAsync<BadRequestException>(() => handler.Handle(new UpdateScheduleCommand(fixture.ClientId,
             created.Schedule.ScheduleId, new UpdateScheduleRequest("Review three", null, new DateTimeOffset(now.AddDays(3)), two.Schedule.Version)), default));
@@ -315,19 +348,42 @@ public class ScheduleWorkflowTests
             new CreateScheduleRequest(fixture.ConversationId, "Review", null, new DateTimeOffset(now.AddDays(3)))), default);
         var accepted = await handler.Handle(new AcceptScheduleCommand(fixture.FreelancerId,
             created.Schedule.ScheduleId, new ScheduleVersionRequest(created.Schedule.Version)), default);
+        var startDeliveries = await db.DeliveryOutboxes
+            .Where(x => x.ScheduleId == created.Schedule.ScheduleId && x.DeliveryKey.Contains(":start:"))
+            .ToListAsync();
+        foreach (var delivery in startDeliveries)
+        {
+            delivery.Status = (int)DeliveryOutboxStatus.Processing;
+            delivery.ClaimToken = Guid.NewGuid();
+        }
+        await db.SaveChangesAsync();
+
         var newStart = now.AddDays(4);
         var edited = await handler.Handle(new UpdateScheduleCommand(fixture.ClientId, created.Schedule.ScheduleId,
             new UpdateScheduleRequest("Review", null, new DateTimeOffset(newStart), accepted.Schedule.Version)), default);
 
-        var startDeliveries = await db.DeliveryOutboxes
-            .Where(x => x.ScheduleId == created.Schedule.ScheduleId && x.DeliveryKey.Contains(":start:"))
-            .ToListAsync();
         Assert.Equal(4, startDeliveries.Count);
-        Assert.All(startDeliveries, x => Assert.Equal(newStart, x.NextAttemptAt));
+        Assert.All(startDeliveries, delivery =>
+        {
+            Assert.Equal((int)DeliveryOutboxStatus.Pending, delivery.Status);
+            Assert.Equal(newStart, delivery.NextAttemptAt);
+            Assert.Null(delivery.ClaimToken);
+        });
+
+        foreach (var delivery in startDeliveries)
+        {
+            delivery.Status = (int)DeliveryOutboxStatus.Processing;
+            delivery.ClaimToken = Guid.NewGuid();
+        }
+        await db.SaveChangesAsync();
 
         await handler.Handle(new CancelScheduleCommand(fixture.ClientId, created.Schedule.ScheduleId,
             new CancelScheduleRequest("No longer needed", edited.Schedule.Version)), default);
-        Assert.All(startDeliveries, x => Assert.Equal((int)DeliveryOutboxStatus.Cancelled, x.Status));
+        Assert.All(startDeliveries, delivery =>
+        {
+            Assert.Equal((int)DeliveryOutboxStatus.Cancelled, delivery.Status);
+            Assert.Null(delivery.ClaimToken);
+        });
     }
 
     [Fact]
@@ -404,6 +460,268 @@ public class ScheduleWorkflowTests
     }
 
     [Fact]
+    public async Task AcceptedSchedule_FreelancerCanRequestThreeDateChanges_ClientCanRejectOrAccept()
+    {
+        var now = new DateTime(2026, 6, 21, 6, 0, 0, DateTimeKind.Utc);
+        await using var db = CreateContext();
+        var fixture = Seed(db, now);
+        var handler = new ScheduleWorkflowService(db, new FixedClock(now),
+            new NoopChatRealtimeNotifier(), new NoopGoogleMeetOAuthService(), EmailRenderer);
+
+        var created = await handler.Handle(new CreateScheduleCommand(fixture.ClientId,
+            new CreateScheduleRequest(fixture.ConversationId, "Review", null,
+                new DateTimeOffset(now.AddDays(3)))), default);
+        var accepted = await handler.Handle(new AcceptScheduleCommand(fixture.FreelancerId,
+            created.Schedule.ScheduleId, new ScheduleVersionRequest(created.Schedule.Version)), default);
+        var originalTime = accepted.Schedule.ScheduledAtUtc;
+        await Assert.ThrowsAsync<ForbiddenAccessException>(() => handler.Handle(
+            new UpdateScheduleCommand(fixture.FreelancerId, created.Schedule.ScheduleId,
+                new UpdateScheduleRequest("Direct edit", null, new DateTimeOffset(now.AddDays(4)),
+                    accepted.Schedule.Version)), default));
+
+        var rescheduleEventTime = now.AddMinutes(1);
+        handler = new ScheduleWorkflowService(db, new FixedClock(rescheduleEventTime),
+            new NoopChatRealtimeNotifier(), new NoopGoogleMeetOAuthService(), EmailRenderer);
+        var version = accepted.Schedule.Version;
+        for (var requestNumber = 1; requestNumber <= 2; requestNumber++)
+        {
+            var requestedTime = now.AddDays(3 + requestNumber);
+            var requested = await handler.Handle(new CreateCounterProposalCommand(fixture.FreelancerId,
+                created.Schedule.ScheduleId,
+                new CounterProposalRequest(new DateTimeOffset(requestedTime), version)), default);
+
+            Assert.Equal((int)ScheduleAgreementStatus.AwaitingClientReschedule,
+                requested.Schedule.AgreementStatus);
+            Assert.Equal(originalTime, requested.Schedule.ScheduledAtUtc);
+            Assert.Equal(requestedTime, requested.Schedule.ProposedScheduledAtUtc);
+            Assert.Equal(requestNumber, requested.Schedule.RescheduleRequestCount);
+            Assert.Equal(3 - requestNumber, requested.Schedule.RemainingRescheduleRequests);
+            if (requestNumber == 1)
+            {
+                var movedCard = await db.Messages.SingleAsync(
+                    message => message.ScheduleId == created.Schedule.ScheduleId);
+                Assert.Equal(rescheduleEventTime, movedCard.SentAt);
+                Assert.Equal(fixture.FreelancerId, movedCard.SenderUserId);
+            }
+
+            var rejected = await handler.Handle(new RejectScheduleCommand(fixture.ClientId,
+                created.Schedule.ScheduleId, new ScheduleVersionRequest(requested.Schedule.Version)), default);
+            Assert.Equal((int)ScheduleAgreementStatus.RescheduleRejected, rejected.Schedule.AgreementStatus);
+            Assert.Equal(ScheduleStatus.Scheduled, (ScheduleStatus)rejected.Schedule.Status);
+            Assert.Equal(originalTime, rejected.Schedule.ScheduledAtUtc);
+            Assert.Null(rejected.Schedule.ProposedScheduledAtUtc);
+            version = rejected.Schedule.Version;
+        }
+
+        var finalRequestedTime = now.AddDays(7);
+        var finalRequest = await handler.Handle(new CreateCounterProposalCommand(fixture.FreelancerId,
+            created.Schedule.ScheduleId,
+            new CounterProposalRequest(new DateTimeOffset(finalRequestedTime), version)), default);
+        var finalAccepted = await handler.Handle(new AcceptScheduleCommand(fixture.ClientId,
+            created.Schedule.ScheduleId, new ScheduleVersionRequest(finalRequest.Schedule.Version)), default);
+
+        Assert.Equal((int)ScheduleAgreementStatus.Accepted, finalAccepted.Schedule.AgreementStatus);
+        Assert.Equal(finalRequestedTime, finalAccepted.Schedule.ScheduledAtUtc);
+        Assert.Null(finalAccepted.Schedule.ProposedScheduledAtUtc);
+        Assert.Equal(3, finalAccepted.Schedule.RescheduleRequestCount);
+        Assert.Equal(0, finalAccepted.Schedule.RemainingRescheduleRequests);
+
+        var freelancerView = await handler.Handle(new GetScheduleQuery(
+            fixture.FreelancerId, created.Schedule.ScheduleId), default);
+        Assert.False(freelancerView.CanProposeTime);
+        await Assert.ThrowsAsync<BadRequestException>(() => handler.Handle(
+            new CreateCounterProposalCommand(fixture.FreelancerId, created.Schedule.ScheduleId,
+                new CounterProposalRequest(new DateTimeOffset(now.AddDays(8)),
+                    finalAccepted.Schedule.Version)), default));
+    }
+
+    [Fact]
+    public async Task FutureCounterProposal_RemainsActionableAfterOriginalTimePasses()
+    {
+        var now = new DateTime(2026, 6, 21, 6, 0, 0, DateTimeKind.Utc);
+        await using var db = CreateContext();
+        var fixture = Seed(db, now);
+        var handler = new ScheduleWorkflowService(db, new FixedClock(now),
+            new NoopChatRealtimeNotifier(), new NoopGoogleMeetOAuthService(), EmailRenderer);
+
+        var created = await handler.Handle(new CreateScheduleCommand(fixture.ClientId,
+            new CreateScheduleRequest(fixture.ConversationId, "Review", null,
+                new DateTimeOffset(now.AddHours(1)))), default);
+        var accepted = await handler.Handle(new AcceptScheduleCommand(fixture.FreelancerId,
+            created.Schedule.ScheduleId, new ScheduleVersionRequest(created.Schedule.Version)), default);
+        var requested = await handler.Handle(new CreateCounterProposalCommand(fixture.FreelancerId,
+            created.Schedule.ScheduleId,
+            new CounterProposalRequest(new DateTimeOffset(now.AddHours(4)),
+                accepted.Schedule.Version)), default);
+
+        var responseTime = now.AddHours(2);
+        handler = new ScheduleWorkflowService(db, new FixedClock(responseTime),
+            new NoopChatRealtimeNotifier(), new NoopGoogleMeetOAuthService(), EmailRenderer);
+
+        var clientView = await handler.Handle(new GetScheduleQuery(
+            fixture.ClientId, created.Schedule.ScheduleId), default);
+        var freelancerView = await handler.Handle(new GetScheduleQuery(
+            fixture.FreelancerId, created.Schedule.ScheduleId), default);
+        Assert.True(clientView.CanAccept);
+        Assert.True(clientView.CanReject);
+        Assert.True(freelancerView.CanEditCounterProposal);
+
+        var scheduleMessage = await db.Messages.SingleAsync(
+            message => message.ScheduleId == created.Schedule.ScheduleId);
+        Assert.True(MessageHelpers.ParseScheduleMetadata(
+            scheduleMessage, fixture.ClientId, responseTime)!.CanAccept);
+        Assert.True(MessageHelpers.ParseScheduleMetadata(
+            scheduleMessage, fixture.ClientId, responseTime)!.CanReject);
+        Assert.True(MessageHelpers.ParseScheduleMetadata(
+            scheduleMessage, fixture.FreelancerId, responseTime)!.CanEditCounterProposal);
+
+        var edited = await handler.Handle(new UpdateCounterProposalCommand(
+            fixture.FreelancerId, created.Schedule.ScheduleId,
+            new CounterProposalRequest(new DateTimeOffset(now.AddHours(5)),
+                requested.Schedule.Version)), default);
+        var finalAccepted = await handler.Handle(new AcceptScheduleCommand(
+            fixture.ClientId, created.Schedule.ScheduleId,
+            new ScheduleVersionRequest(edited.Schedule.Version)), default);
+
+        Assert.Equal(now.AddHours(5), finalAccepted.Schedule.ScheduledAtUtc);
+        Assert.Equal((int)ScheduleAgreementStatus.Accepted,
+            finalAccepted.Schedule.AgreementStatus);
+    }
+
+    [Fact]
+    public async Task AcceptedSchedule_FreelancerCanCancelWhileDateChangeIsAwaitingClient()
+    {
+        var now = new DateTime(2026, 6, 21, 6, 0, 0, DateTimeKind.Utc);
+        await using var db = CreateContext();
+        var fixture = Seed(db, now);
+        var handler = new ScheduleWorkflowService(db, new FixedClock(now),
+            new NoopChatRealtimeNotifier(), new NoopGoogleMeetOAuthService(), EmailRenderer);
+
+        var created = await handler.Handle(new CreateScheduleCommand(fixture.ClientId,
+            new CreateScheduleRequest(fixture.ConversationId, "Review", null,
+                new DateTimeOffset(now.AddDays(3)))), default);
+        var accepted = await handler.Handle(new AcceptScheduleCommand(fixture.FreelancerId,
+            created.Schedule.ScheduleId, new ScheduleVersionRequest(created.Schedule.Version)), default);
+        var requested = await handler.Handle(new CreateCounterProposalCommand(fixture.FreelancerId,
+            created.Schedule.ScheduleId,
+            new CounterProposalRequest(new DateTimeOffset(now.AddDays(4)),
+                accepted.Schedule.Version)), default);
+
+        var freelancerView = await handler.Handle(new GetScheduleQuery(
+            fixture.FreelancerId, created.Schedule.ScheduleId), default);
+        Assert.True(freelancerView.CanCancel);
+
+        const string reason = "I am no longer available";
+        var cancelled = await handler.Handle(new CancelScheduleCommand(fixture.FreelancerId,
+            created.Schedule.ScheduleId,
+            new CancelScheduleRequest(reason, requested.Schedule.Version)), default);
+
+        Assert.Equal((int)ScheduleStatus.Cancelled, cancelled.Schedule.Status);
+        Assert.Equal(fixture.FreelancerId, cancelled.Schedule.CancelledByUserId);
+        Assert.Equal(reason, cancelled.Schedule.CancellationReason);
+        Assert.Null(cancelled.Schedule.ProposedScheduledAtUtc);
+        Assert.Equal((int)ScheduleEventType.Cancelled,
+            cancelled.Message.Schedule!.EventType);
+    }
+
+    [Fact]
+    public async Task ThirdRejectedFreelancerDateChange_AutomaticallyCancelsMeeting()
+    {
+        var now = new DateTime(2026, 6, 21, 6, 0, 0, DateTimeKind.Utc);
+        await using var db = CreateContext();
+        var fixture = Seed(db, now);
+        var handler = new ScheduleWorkflowService(db, new FixedClock(now),
+            new NoopChatRealtimeNotifier(), new NoopGoogleMeetOAuthService(), EmailRenderer);
+
+        var created = await handler.Handle(new CreateScheduleCommand(fixture.ClientId,
+            new CreateScheduleRequest(fixture.ConversationId, "Review", null,
+                new DateTimeOffset(now.AddDays(3)))), default);
+        var accepted = await handler.Handle(new AcceptScheduleCommand(fixture.FreelancerId,
+            created.Schedule.ScheduleId, new ScheduleVersionRequest(created.Schedule.Version)), default);
+
+        var version = accepted.Schedule.Version;
+        ScheduleMutationResult? rejected = null;
+        for (var requestNumber = 1; requestNumber <= 3; requestNumber++)
+        {
+            var requested = await handler.Handle(new CreateCounterProposalCommand(fixture.FreelancerId,
+                created.Schedule.ScheduleId,
+                new CounterProposalRequest(new DateTimeOffset(now.AddDays(3 + requestNumber)),
+                    version)), default);
+            rejected = await handler.Handle(new RejectScheduleCommand(fixture.ClientId,
+                created.Schedule.ScheduleId,
+                new ScheduleVersionRequest(requested.Schedule.Version)), default);
+            version = rejected.Schedule.Version;
+
+            if (requestNumber < 3)
+                Assert.Equal((int)ScheduleStatus.Scheduled, rejected.Schedule.Status);
+        }
+
+        Assert.NotNull(rejected);
+        Assert.Equal((int)ScheduleStatus.Cancelled, rejected.Schedule.Status);
+        Assert.Equal((int)ScheduleAgreementStatus.RescheduleRejected,
+            rejected.Schedule.AgreementStatus);
+        Assert.Equal(3, rejected.Schedule.RescheduleRequestCount);
+        Assert.Equal(0, rejected.Schedule.RemainingRescheduleRequests);
+        Assert.Null(rejected.Schedule.CancelledByUserId);
+        Assert.Null(rejected.Schedule.ProposedScheduledAtUtc);
+        Assert.Equal(
+            "Automatically cancelled after the client rejected three freelancer reschedule requests.",
+            rejected.Schedule.CancellationReason);
+        Assert.Equal((int)ScheduleEventType.Cancelled,
+            rejected.Message.Schedule!.EventType);
+
+        var ongoing = await handler.Handle(new GetOngoingScheduleQuery(
+            fixture.FreelancerId, fixture.ConversationId), default);
+        Assert.False(ongoing.HasOngoingSchedule);
+        Assert.Null(ongoing.ScheduleId);
+    }
+
+    [Fact]
+    public async Task ThirdDateChangeWithOnlyTwoRejections_DoesNotCancelMeeting()
+    {
+        var now = new DateTime(2026, 6, 21, 6, 0, 0, DateTimeKind.Utc);
+        await using var db = CreateContext();
+        var fixture = Seed(db, now);
+        var handler = new ScheduleWorkflowService(db, new FixedClock(now),
+            new NoopChatRealtimeNotifier(), new NoopGoogleMeetOAuthService(), EmailRenderer);
+
+        var created = await handler.Handle(new CreateScheduleCommand(fixture.ClientId,
+            new CreateScheduleRequest(fixture.ConversationId, "Review", null,
+                new DateTimeOffset(now.AddDays(3)))), default);
+        var accepted = await handler.Handle(new AcceptScheduleCommand(fixture.FreelancerId,
+            created.Schedule.ScheduleId, new ScheduleVersionRequest(created.Schedule.Version)), default);
+
+        var firstRequest = await handler.Handle(new CreateCounterProposalCommand(fixture.FreelancerId,
+            created.Schedule.ScheduleId,
+            new CounterProposalRequest(new DateTimeOffset(now.AddDays(4)),
+                accepted.Schedule.Version)), default);
+        var firstAccepted = await handler.Handle(new AcceptScheduleCommand(fixture.ClientId,
+            created.Schedule.ScheduleId,
+            new ScheduleVersionRequest(firstRequest.Schedule.Version)), default);
+
+        var version = firstAccepted.Schedule.Version;
+        ScheduleMutationResult? lastRejection = null;
+        for (var requestNumber = 2; requestNumber <= 3; requestNumber++)
+        {
+            var requested = await handler.Handle(new CreateCounterProposalCommand(fixture.FreelancerId,
+                created.Schedule.ScheduleId,
+                new CounterProposalRequest(new DateTimeOffset(now.AddDays(3 + requestNumber)),
+                    version)), default);
+            lastRejection = await handler.Handle(new RejectScheduleCommand(fixture.ClientId,
+                created.Schedule.ScheduleId,
+                new ScheduleVersionRequest(requested.Schedule.Version)), default);
+            version = lastRejection.Schedule.Version;
+        }
+
+        Assert.NotNull(lastRejection);
+        Assert.Equal((int)ScheduleStatus.Scheduled, lastRejection.Schedule.Status);
+        Assert.Equal((int)ScheduleAgreementStatus.RescheduleRejected,
+            lastRejection.Schedule.AgreementStatus);
+        Assert.Equal(3, lastRejection.Schedule.RescheduleRequestCount);
+        Assert.Null(lastRejection.Schedule.CancellationReason);
+    }
+
+    [Fact]
     public void Model_HasUniqueScheduledScheduleIndexPerConversation()
     {
         using var db = CreateContext();
@@ -415,6 +733,63 @@ public class ScheduleWorkflowTests
         Assert.Equal("\"Status\" = 0", index.GetFilter());
         Assert.Collection(index.Properties,
             property => Assert.Equal(nameof(Schedule.ConversationId), property.Name));
+    }
+
+    [Fact]
+    public void Model_HasPartialActiveDeliveryIndexAlignedWithClaimOrdering()
+    {
+        using var db = CreateContext();
+
+        var entity = db.Model.FindEntityType(typeof(DeliveryOutbox))!;
+        var index = entity.GetIndexes()
+            .Single(x => x.Name == "IX_DeliveryOutboxes_Active_Channel_Status_Due_Id");
+
+        Assert.Equal("\"Status\" IN (0, 1)", index.GetFilter());
+        Assert.Collection(index.Properties,
+            property => Assert.Equal(nameof(DeliveryOutbox.Channel), property.Name),
+            property => Assert.Equal(nameof(DeliveryOutbox.Status), property.Name),
+            property => Assert.Equal(nameof(DeliveryOutbox.NextAttemptAt), property.Name),
+            property => Assert.Equal(nameof(DeliveryOutbox.DeliveryOutboxId), property.Name));
+        Assert.True(entity.FindProperty(nameof(DeliveryOutbox.ClaimToken))!.IsConcurrencyToken);
+    }
+
+    [Fact]
+    public async Task ClaimToken_PreventsAStaleScheduleWriteFromOverwritingAWorkerClaim()
+    {
+        var root = new InMemoryDatabaseRoot();
+        var databaseName = Guid.NewGuid().ToString();
+        var options = new DbContextOptionsBuilder<GigbridgeDbContext>()
+            .UseInMemoryDatabase(databaseName, root)
+            .Options;
+        var deliveryId = Guid.NewGuid();
+        await using (var seed = new GigbridgeDbContext(options))
+        {
+            seed.DeliveryOutboxes.Add(new DeliveryOutbox
+            {
+                DeliveryOutboxId = deliveryId,
+                DeliveryKey = $"test:{deliveryId}",
+                RecipientUserId = Guid.NewGuid(),
+                Payload = "{}",
+                Status = (int)DeliveryOutboxStatus.Pending,
+                NextAttemptAt = DateTime.UtcNow,
+                CreatedAt = DateTime.UtcNow
+            });
+            await seed.SaveChangesAsync();
+        }
+
+        await using var scheduleContext = new GigbridgeDbContext(options);
+        var staleDelivery = await scheduleContext.DeliveryOutboxes.SingleAsync();
+        await using (var workerContext = new GigbridgeDbContext(options))
+        {
+            var claimedDelivery = await workerContext.DeliveryOutboxes.SingleAsync();
+            claimedDelivery.Status = (int)DeliveryOutboxStatus.Processing;
+            claimedDelivery.ClaimToken = Guid.NewGuid();
+            await workerContext.SaveChangesAsync();
+        }
+
+        staleDelivery.Status = (int)DeliveryOutboxStatus.Cancelled;
+        await Assert.ThrowsAsync<DbUpdateConcurrencyException>(
+            () => scheduleContext.SaveChangesAsync());
     }
 
     private static GigbridgeDbContext CreateContext() => new(new DbContextOptionsBuilder<GigbridgeDbContext>()

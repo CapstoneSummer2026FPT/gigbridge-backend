@@ -20,6 +20,8 @@ public partial class Report
 
     public string Reason { get; set; } = null!;
 
+    public string? Description { get; set; }
+
     /// <summary>
     /// Enum ReportStatus: 0=Pending, 1=Reviewing, 2=Resolved, 3=Dismissed
     /// </summary>
@@ -27,16 +29,15 @@ public partial class Report
 
     public string? AdminNote { get; set; }
 
+    public int? ResolutionAction { get; set; }
+
+    public Guid? AssignedAdminId { get; set; }
+
+    public DateTime? AssignedAt { get; set; }
+
     public Guid? ResolvedByAdminId { get; set; }
 
     public DateTime? ResolvedAt { get; set; }
-
-    /// <summary>
-    /// v1.2: Admin đính kèm bản hợp đồng lao động e-sign PDF cho tranh chấp thanh toán
-    /// </summary>
-    public string? AdminAttachmentUrl { get; set; }
-
-    public string? AdminAttachmentFileName { get; set; }
 
     public DateTime CreatedAt { get; set; }
 
@@ -44,5 +45,11 @@ public partial class Report
 
     public virtual User? ResolvedByAdmin { get; set; }
 
+    public virtual User? AssignedAdmin { get; set; }
+
     public virtual User Reporter { get; set; } = null!;
+
+    public virtual ICollection<ReportEvidence> ReportEvidences { get; set; } = new List<ReportEvidence>();
+
+    public virtual ICollection<UserViolation> UserViolations { get; set; } = new List<UserViolation>();
 }

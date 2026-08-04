@@ -161,7 +161,7 @@ public sealed class CreateWithdrawalCommandHandler :
 
                 var wallet = await _context.Set<UserWallet>().AsNoTracking()
                     .FirstOrDefaultAsync(item => item.UserId == command.UserId, cancellationToken);
-                if (wallet is null || wallet.AvailableTokens < tokenAmount || wallet.WithdrawableTokens < tokenAmount)
+                if (wallet is null || wallet.WithdrawableTokens < tokenAmount)
                 {
                     throw new BadRequestException("Withdrawable project earnings are insufficient for withdrawal.");
                 }
@@ -203,6 +203,8 @@ public sealed class CreateWithdrawalCommandHandler :
                     UserId = command.UserId,
                     TokenAmount = tokenAmount,
                     VndAmount = vndAmount,
+                    BalanceSource = (int)WalletBalanceSource.Earned,
+                    EarnedAmount = tokenAmount,
                     Type = (int)WalletTransactionType.WithdrawalLock,
                     Status = (int)WalletTransactionStatus.Succeeded,
                     IdempotencyKey = $"withdrawal:{withdrawalId:D}:lock",
@@ -210,7 +212,7 @@ public sealed class CreateWithdrawalCommandHandler :
                     GatewayOrderCode = providerOrderCode,
                     GatewayTransactionCode = $"WITHDRAWAL-LOCK-{withdrawalId:N}",
                     Metadata = withdrawalId.ToString("D"),
-                    Note = "Locked wallet balance for payout withdrawal.",
+                    Note = "Locked earned wallet balance for payout withdrawal.",
                     CreatedAt = now,
                     CompletedAt = now
                 });
@@ -265,11 +267,9 @@ public sealed class CreateWithdrawalCommandHandler :
         {
             return await _context.Set<UserWallet>()
                 .Where(wallet => wallet.UserWalletsId == snapshot.UserWalletsId &&
-                    wallet.Version == snapshot.Version && wallet.AvailableTokens >= tokenAmount &&
-                    wallet.WithdrawableTokens >= tokenAmount)
+                    wallet.Version == snapshot.Version && wallet.WithdrawableTokens >= tokenAmount)
                 .ExecuteUpdateAsync(
                     setters => setters
-                        .SetProperty(wallet => wallet.AvailableTokens, wallet => wallet.AvailableTokens - tokenAmount)
                         .SetProperty(wallet => wallet.WithdrawableTokens, wallet => wallet.WithdrawableTokens - tokenAmount)
                         .SetProperty(wallet => wallet.PendingWithdrawalTokens, wallet => wallet.PendingWithdrawalTokens + tokenAmount)
                         .SetProperty(wallet => wallet.Version, wallet => wallet.Version + 1)
@@ -281,12 +281,11 @@ public sealed class CreateWithdrawalCommandHandler :
             var wallet = await _context.Set<UserWallet>()
                 .FirstOrDefaultAsync(item => item.UserWalletsId == snapshot.UserWalletsId, cancellationToken);
             if (wallet is null || wallet.Version != snapshot.Version ||
-                wallet.AvailableTokens < tokenAmount || wallet.WithdrawableTokens < tokenAmount)
+                wallet.WithdrawableTokens < tokenAmount)
             {
                 return false;
             }
 
-            wallet.AvailableTokens -= tokenAmount;
             wallet.WithdrawableTokens -= tokenAmount;
             wallet.PendingWithdrawalTokens += tokenAmount;
             wallet.Version++;

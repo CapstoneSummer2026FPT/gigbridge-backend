@@ -2,6 +2,7 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Features.Premium.Common;
+using Application.Features.Subscriptions.Common;
 using Domain.Entities;
 using Domain.Enums;
 using Microsoft.EntityFrameworkCore;
@@ -50,7 +51,7 @@ public sealed class PremiumAccessService : IPremiumAccessService
             : $"premium:access:client:{userId:N}";
         var cached = await _cache.GetAsync<PremiumBenefitsDto>(key, cancellationToken);
         if (cached is not null &&
-            (!cached.IsPremium || cached.PremiumUntil > _clock.UtcNow))
+            cached.IsPremium && cached.PremiumUntil > _clock.UtcNow)
             return cached;
         if (cached is not null)
             await _cache.RemoveAsync(key, cancellationToken);
@@ -67,15 +68,8 @@ public sealed class PremiumAccessService : IPremiumAccessService
         var now = _clock.UtcNow;
         var subscription = await _context.Set<Subscription>()
             .AsNoTracking()
-            .Where(item =>
-                item.UserId == userId &&
-                item.Status == SubscriptionStatus.Active &&
-                item.StartDate <= now &&
-                item.EndDate > now &&
-                item.SubscriptionPlans.IsActive == true &&
-                item.SubscriptionPlans.Price > 0 &&
-                (item.SubscriptionPlans.TargetRole == null ||
-                 item.SubscriptionPlans.TargetRole == (int)targetRole))
+            .Where(item => item.UserId == userId)
+            .EffectiveAt(targetRole, now)
             .OrderByDescending(item => item.EndDate)
             .Select(item => new { item.EndDate, item.SubscriptionPlans.Name })
             .FirstOrDefaultAsync(cancellationToken);
@@ -88,7 +82,8 @@ public sealed class PremiumAccessService : IPremiumAccessService
             isPremium ? subscription!.EndDate : null,
             isPremium ? subscription!.Name : null);
 
-        await _cache.SetAsync(key, result, CacheDuration, cancellationToken);
+        if (result.IsPremium)
+            await _cache.SetAsync(key, result, CacheDuration, cancellationToken);
         return result;
     }
 

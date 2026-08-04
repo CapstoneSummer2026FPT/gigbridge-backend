@@ -38,6 +38,19 @@ public partial class Proposal
 
     public bool? IsAigenerated { get; set; }
 
+    /// <summary>Independent Admin moderation state. Proposal lifecycle in Status is never overwritten by moderation.</summary>
+    public int ModerationStatus { get; set; }
+
+    public Guid? InvalidatedByAdminId { get; set; }
+
+    public DateTime? InvalidatedAt { get; set; }
+
+    public string? InvalidationReason { get; set; }
+
+    public virtual User? InvalidatedByAdmin { get; set; }
+
+    public virtual ICollection<ProposalAdminNote> AdminNotes { get; set; } = new List<ProposalAdminNote>();
+
     public virtual Contract? Contract { get; set; }
 
     public virtual ICollection<Conversation> Conversations { get; set; } = new List<Conversation>();
@@ -47,8 +60,6 @@ public partial class Proposal
     public virtual JobPost JobPosts { get; set; } = null!;
 
     public virtual ICollection<NegotiationOffer> NegotiationOffers { get; set; } = new List<NegotiationOffer>();
-
-    public virtual ICollection<ProposalAttachment> ProposalAttachments { get; set; } = new List<ProposalAttachment>();
 
     public virtual ICollection<ProposalAnswer> ProposalAnswers { get; set; } = new List<ProposalAnswer>();
 

@@ -21,7 +21,25 @@ public partial class WalletTransaction
     public decimal VndAmount { get; set; }
 
     /// <summary>
-    /// Enum WalletTransactionType: 0=AdminCredit, 1=TopUp, 2=EscrowHold, 3=EscrowRelease, 4=EscrowRefund, 5=Adjustment
+    /// Enum WalletBalanceSource: 0=Deposited, 1=Earned, 2=HeldDeposited, 3=HeldEarned, 4=PendingWithdrawal, 5=Combined
+    /// Which GigCoin pool funded/absorbed this transaction.
+    /// </summary>
+    public int BalanceSource { get; set; }
+
+    /// <summary>
+    /// Token portion attributed to the deposited balance. Null when the transaction
+    /// did not touch deposited funds.
+    /// </summary>
+    public decimal? DepositedAmount { get; set; }
+
+    /// <summary>
+    /// Token portion attributed to the earned balance. Null when the transaction did
+    /// not touch earned funds.
+    /// </summary>
+    public decimal? EarnedAmount { get; set; }
+
+    /// <summary>
+    /// Enum WalletTransactionType: 0=AdminCredit, 1=TopUp, 2=EscrowHold, 3=EscrowRelease, 4=EscrowRefund, 5=Adjustment, 12=DisputePenalty
     /// </summary>
     public int Type { get; set; }
 

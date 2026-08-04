@@ -25,19 +25,25 @@ public sealed class ToggleJobPostLockCommandHandler :
         ToggleJobPostLockCommand request,
         CancellationToken cancellationToken)
     {
-        var admin = await _context.Set<User>()
-            .FirstOrDefaultAsync(user => user.UserId == request.AdminUserId, cancellationToken);
-
-        if (admin is null || admin.Role != (int)UserRole.Admin)
-        {
-            throw new ForbiddenAccessException("Only admins can lock or unlock job posts.");
-        }
-
         var jobPost = await _context.Set<JobPost>()
-            .FirstOrDefaultAsync(jp => jp.JobPostsId == request.JobPostId, cancellationToken);
+            .Where(jp => jp.JobPostsId == request.JobPostId)
+            .Where(_ => _context.Set<User>().Any(user =>
+                user.UserId == request.AdminUserId && user.Role == (int)UserRole.Admin))
+            .FirstOrDefaultAsync(cancellationToken);
 
         if (jobPost is null)
         {
+            var isAdmin = await _context.Set<User>()
+                .AsNoTracking()
+                .AnyAsync(user =>
+                    user.UserId == request.AdminUserId && user.Role == (int)UserRole.Admin,
+                    cancellationToken);
+
+            if (!isAdmin)
+            {
+                throw new ForbiddenAccessException("Only admins can lock or unlock job posts.");
+            }
+
             throw new NotFoundException("Job post does not exist.");
         }
 

@@ -28,11 +28,11 @@ public class AiServiceClient : IAiServiceClient
         _httpClient.DefaultRequestHeaders.Add("X-API-Key", _options.ApiKey);
     }
 
-    public async Task<JobPostGenerationResponseDto> GenerateJobDescriptionAsync(
+    public async Task<JobPostDetailsGenerationResponseDto> GenerateJobDescriptionDetailsAsync(
         JobPostGenerationRequestDto request,
         CancellationToken cancellationToken = default)
     {
-        var response = await _httpClient.PostAsJsonAsync("api/ai/job-posts/generate", request, cancellationToken);
+        var response = await _httpClient.PostAsJsonAsync("api/ai/job-posts/generate/details", request, cancellationToken);
         
         if (!response.IsSuccessStatusCode)
         {
@@ -55,25 +55,59 @@ public class AiServiceClient : IAiServiceClient
             }
             catch
             {
-                // Fallback to default EnsureSuccessStatusCode behavior if parsing fails
             }
-
             response.EnsureSuccessStatusCode();
         }
 
-        // take response from Ai server then prase it to json 
-        // if not success throw HttpRequestException
-        
-        var apiResponse = await response.Content.ReadFromJsonAsync<ApiResponse<JobPostGenerationResponseDto>>(
+        var apiResponse = await response.Content.ReadFromJsonAsync<ApiResponse<JobPostDetailsGenerationResponseDto>>(
             cancellationToken: cancellationToken);
 
         if (apiResponse == null || !apiResponse.Success || apiResponse.Data == null)
         {
-            var errorMessage = apiResponse?.Message ?? "Failed to generate job description from AI service.";
-            if (apiResponse?.Errors != null)
+            var errorMessage = apiResponse?.Message ?? "Failed to generate job description details from AI service.";
+            throw new HttpRequestException(errorMessage);
+        }
+
+        return apiResponse.Data;
+    }
+
+    public async Task<JobPostHiringPlanGenerationResponseDto> GenerateJobHiringPlanAsync(
+        JobPostHiringPlanGenerationRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        var response = await _httpClient.PostAsJsonAsync("api/ai/job-posts/generate/hiring-plan", request, cancellationToken);
+        
+        if (!response.IsSuccessStatusCode)
+        {
+            try
             {
-                errorMessage += " Errors: " + apiResponse.Errors.ToString();
+                var errorResponse = await response.Content.ReadFromJsonAsync<ApiResponse<object>>(
+                    cancellationToken: cancellationToken);
+                if (errorResponse != null && !string.IsNullOrWhiteSpace(errorResponse.Message))
+                {
+                    if (response.StatusCode == System.Net.HttpStatusCode.BadRequest)
+                    {
+                        throw new BadRequestException(errorResponse.Message);
+                    }
+                    throw new HttpRequestException(errorResponse.Message);
+                }
             }
+            catch (BadRequestException)
+            {
+                throw;
+            }
+            catch
+            {
+            }
+            response.EnsureSuccessStatusCode();
+        }
+
+        var apiResponse = await response.Content.ReadFromJsonAsync<ApiResponse<JobPostHiringPlanGenerationResponseDto>>(
+            cancellationToken: cancellationToken);
+
+        if (apiResponse == null || !apiResponse.Success || apiResponse.Data == null)
+        {
+            var errorMessage = apiResponse?.Message ?? "Failed to generate hiring plan from AI service.";
             throw new HttpRequestException(errorMessage);
         }
 

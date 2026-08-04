@@ -3,7 +3,6 @@ using Application.Common.Models;
 using Application.Features.Contracts.ProductHandoffs.Acknowledge.Commands;
 using Application.Features.Contracts.ProductHandoffs.Common.DTOs;
 using Application.Features.Contracts.ProductHandoffs.Download.Queries;
-using Application.Features.Contracts.ProductHandoffs.GetCurrent.Queries;
 using Application.Features.Contracts.ProductHandoffs.GetList.Queries;
 using Application.Features.Contracts.ProductHandoffs.Submit.Commands;
 using Microsoft.AspNetCore.Authorization;
@@ -29,19 +28,6 @@ public sealed class ContractProductHandoffsController : BaseApiController
         var result = await Mediator.Send(new GetContractProductHandoffsQuery(contractId, userId));
 
         return Ok(ApiResponse<IReadOnlyList<ContractProductHandoffResponse>>.Ok(result, "Success"));
-    }
-
-    [HttpGet("current")]
-    public async Task<IActionResult> GetCurrent(Guid contractId)
-    {
-        if (!TryGetCurrentUserId(out var userId))
-        {
-            return InvalidTokenResponse();
-        }
-
-        var result = await Mediator.Send(new GetCurrentContractProductHandoffQuery(contractId, userId));
-
-        return Ok(ApiResponse<ContractProductHandoffResponse?>.Ok(result, "Success"));
     }
 
     [HttpPost]

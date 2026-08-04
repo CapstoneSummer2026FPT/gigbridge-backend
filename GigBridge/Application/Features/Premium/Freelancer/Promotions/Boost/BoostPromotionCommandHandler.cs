@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.Premium.Freelancer.Promotions.Boost;
 public sealed class BoostPromotionCommandHandler(IApplicationDbContext context, IPremiumAccessService premium,
-    IWalletLedgerService ledger, ICacheService cache) : IRequestHandler<BoostPromotionCommand, PromotionDto>
+    IWalletLedgerService ledger, ICacheService cache, IDateTimeService clock) : IRequestHandler<BoostPromotionCommand, PromotionDto>
 {
     public async Task<PromotionDto> Handle(BoostPromotionCommand command, CancellationToken ct)
     {
@@ -35,6 +35,8 @@ public sealed class BoostPromotionCommandHandler(IApplicationDbContext context, 
             return PromotionDto.FromEntity(promotion);
         }
         await using var transaction = await context.BeginTransactionAsync(ct);
+        await transaction.AcquireTransactionLockAsync(
+            PromotionPolicy.QueueTransactionLockKey, ct);
         await ledger.DebitAsync(command.UserId, amount, WalletTransactionType.PromotionPurchase,
             command.Request.IdempotencyKey, metadata, ct);
         var targetIncrement = decimal.ToInt32(amount * policy.TargetClicksPerCoin);
@@ -47,6 +49,7 @@ public sealed class BoostPromotionCommandHandler(IApplicationDbContext context, 
                 .SetProperty(x => x.BoostWeight, x => x.BoostWeight + amount * policy.BoostWeightPerCoin)
                 .SetProperty(x => x.TargetClickCount, x => x.TargetClickCount + targetIncrement), ct);
         if (affected != 1) throw new ConflictException("The promotion changed concurrently. Retry with the same idempotency key.");
+        await PromotionPolicy.RecalculateQueuePositionsAsync(context, clock.UtcNow, ct);
         await transaction.CommitAsync(ct);
         await cache.RemoveAsync(PromotionPolicy.UserCacheKey(command.UserId), ct);
         await cache.RemoveAsync(PromotionPolicy.FeedCacheKey, ct);

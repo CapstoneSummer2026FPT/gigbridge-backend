@@ -14,8 +14,6 @@ namespace Application.Features.Contracts.Milestones.Freelancer.Submit.Commands;
 public sealed class SubmitMilestoneCommandHandler :
     IRequestHandler<SubmitMilestoneCommand, ContractMilestoneResponse>
 {
-    private const long MaxFileSizeBytes = 100 * 1024 * 1024;
-
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
     private readonly IMediaService? _mediaService;
@@ -64,7 +62,7 @@ public sealed class SubmitMilestoneCommandHandler :
             throw new BadRequestException("All milestone work items must be completed before submitting deliverables.");
         }
 
-        ValidateRequest(command);
+        var validatedFile = await ValidateRequestAsync(command, cancellationToken);
 
         var now = _dateTimeService.UtcNow;
         var existingAttachments = await _context.Set<MilestoneAttachment>()
@@ -77,7 +75,12 @@ public sealed class SubmitMilestoneCommandHandler :
             milestone.MilestoneAttachments.Clear();
         }
 
-        var attachment = await CreateAttachmentAsync(command, milestone.MilestonesId, now, cancellationToken);
+        var attachment = await CreateAttachmentAsync(
+            command,
+            validatedFile,
+            milestone.MilestonesId,
+            now,
+            cancellationToken);
         _context.Set<MilestoneAttachment>().Add(attachment);
         milestone.MilestoneAttachments.Add(attachment);
 
@@ -99,13 +102,10 @@ public sealed class SubmitMilestoneCommandHandler :
         return MilestoneWorkflowGuard.ToResponse(milestone);
     }
 
-    private static void ValidateRequest(SubmitMilestoneCommand command)
+    private static async Task<ValidatedMilestoneSubmissionFile> ValidateRequestAsync(
+        SubmitMilestoneCommand command,
+        CancellationToken cancellationToken)
     {
-        if (!string.IsNullOrWhiteSpace(command.ExternalUrl))
-        {
-            throw new BadRequestException("External deliverable URLs are not accepted. Upload the deliverable to the platform.");
-        }
-
         if (command.File is null)
         {
             throw new BadRequestException("A milestone deliverable file is required.");
@@ -116,24 +116,18 @@ public sealed class SubmitMilestoneCommandHandler :
             throw new BadRequestException("Submission description exceeds 5000 characters.");
         }
 
-        if (command.File.Length <= 0 || command.File.Length > MaxFileSizeBytes)
-        {
-            throw new BadRequestException("Milestone file size is invalid.");
-        }
-
-        if (string.IsNullOrWhiteSpace(command.File.FileName))
-        {
-            throw new BadRequestException("Milestone file name is required.");
-        }
+        return await MilestoneSubmissionFilePolicy.ValidateAsync(
+            command.File,
+            cancellationToken);
     }
 
     private async Task<MilestoneAttachment> CreateAttachmentAsync(
         SubmitMilestoneCommand command,
+        ValidatedMilestoneSubmissionFile file,
         Guid milestoneId,
         DateTime now,
         CancellationToken cancellationToken)
     {
-        var file = command.File ?? throw new BadRequestException("A milestone deliverable file is required.");
         if (_mediaService == null)
         {
             throw new InvalidOperationException("MediaService is not configured for file uploads.");

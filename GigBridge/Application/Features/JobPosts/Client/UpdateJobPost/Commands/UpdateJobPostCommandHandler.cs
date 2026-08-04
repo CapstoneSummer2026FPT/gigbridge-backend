@@ -1,8 +1,10 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Application.Common.Models.Ai;
 using Application.Features.JobPosts.Client.Common;
 using Domain.Entities;
+using Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -13,15 +15,26 @@ public class UpdateJobPostCommandHandler : IRequestHandler<UpdateJobPostCommand,
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
     private readonly IContentModerationService _contentModerationService;
+    private readonly IAiServiceClient? _aiServiceClient;
 
     public UpdateJobPostCommandHandler(
         IApplicationDbContext context,
         IDateTimeService dateTimeService,
         IContentModerationService contentModerationService)
+        : this(context, dateTimeService, contentModerationService, null)
+    {
+    }
+
+    public UpdateJobPostCommandHandler(
+        IApplicationDbContext context,
+        IDateTimeService dateTimeService,
+        IContentModerationService contentModerationService,
+        IAiServiceClient? aiServiceClient)
     {
         _context = context;
         _dateTimeService = dateTimeService;
         _contentModerationService = contentModerationService;
+        _aiServiceClient = aiServiceClient;
     }
 
     public async Task<bool> Handle(UpdateJobPostCommand command, CancellationToken cancellationToken)
@@ -70,6 +83,42 @@ public class UpdateJobPostCommandHandler : IRequestHandler<UpdateJobPostCommand,
 
         await UpdateJobPostSkills(jobPost, normalizedSkills.SkillIds, cancellationToken);
 
+        var activeDefinition = await _context.Set<AiInterviewDefinition>()
+            .FirstOrDefaultAsync(
+                x => x.JobPostId == jobPost.JobPostsId &&
+                     x.Status == AiInterviewDefinitionStatus.Active,
+                cancellationToken);
+
+        if (activeDefinition != null && _aiServiceClient != null)
+        {
+            var systemSkillNames = await _context.Set<Skill>()
+                .AsNoTracking()
+                .Where(s => normalizedSkills.SkillIds.Contains(s.SkillsId))
+                .Select(s => s.Name)
+                .ToListAsync(cancellationToken);
+
+            var skills = systemSkillNames.Concat(normalizedSkills.CustomSkillNames)
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            var registered = await _aiServiceClient.CreateInterviewDefinitionAsync(
+                new AiInterviewDefinitionRequestDto
+                {
+                    JobId = jobPost.JobPostsId.ToString(),
+                    JobTitle = jobPost.Title,
+                    JobDescription = jobPost.Description,
+                    JobSkills = skills,
+                    Mode = activeDefinition.Mode,
+                    Language = activeDefinition.Language,
+                    QuestionCount = activeDefinition.QuestionCount
+                },
+                cancellationToken);
+
+            activeDefinition.ExternalReference = registered.DefinitionReference;
+            activeDefinition.UpdatedAt = _dateTimeService.UtcNow;
+        }
+
         await _context.SaveChangesAsync(cancellationToken);
 
         return true;
@@ -94,7 +143,7 @@ public class UpdateJobPostCommandHandler : IRequestHandler<UpdateJobPostCommand,
             : request.Currency.Trim();
 
         jobPost.EstimatedDuration = request.EstimatedDuration;
-        jobPost.Location = request.Location;
+        jobPost.Location = null;
         jobPost.Visibility = request.Visibility!.Value;
         jobPost.EndDate = request.EndDate;
 

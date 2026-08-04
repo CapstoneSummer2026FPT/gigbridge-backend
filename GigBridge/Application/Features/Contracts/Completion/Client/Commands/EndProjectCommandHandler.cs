@@ -17,19 +17,25 @@ public sealed class EndProjectCommandHandler : IRequestHandler<EndProjectCommand
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
     private readonly IChatRealtimeNotifier _chatRealtimeNotifier;
+    private readonly INotificationService _notificationService;
 
     public EndProjectCommandHandler(
         IApplicationDbContext context,
         IDateTimeService dateTimeService,
-        IChatRealtimeNotifier chatRealtimeNotifier)
+        IChatRealtimeNotifier chatRealtimeNotifier,
+        INotificationService notificationService)
     {
         _context = context;
         _dateTimeService = dateTimeService;
         _chatRealtimeNotifier = chatRealtimeNotifier;
+        _notificationService = notificationService;
     }
 
     public async Task<EndProjectResponse> Handle(EndProjectCommand command, CancellationToken cancellationToken)
     {
+        await using var transaction = await _context.BeginTransactionAsync(cancellationToken);
+        await transaction.AcquireTransactionLockAsync(
+            ContractEscrowLock.ForContract(command.ContractId), cancellationToken);
         var contract = await _context.Set<Contract>()
             .FirstOrDefaultAsync(item => item.ContractsId == command.ContractId, cancellationToken)
             ?? throw new NotFoundException("Contract does not exist.");
@@ -106,6 +112,7 @@ public sealed class EndProjectCommandHandler : IRequestHandler<EndProjectCommand
             now,
             cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         var payload = new
         {
@@ -126,6 +133,15 @@ public sealed class EndProjectCommandHandler : IRequestHandler<EndProjectCommand
             new[] { clientProfile.UserId, freelancerProfile.UserId },
             "ContractCompleted",
             payload,
+            cancellationToken);
+
+        await _notificationService.CreateNotificationAsync(
+            freelancerProfile.UserId,
+            NotificationType.ReviewRequested,
+            "Project completed - share your review",
+            $"Review your experience working with the client on {contract.Title}.",
+            contract.ContractsId,
+            nameof(Contract),
             cancellationToken);
 
         return new EndProjectResponse(

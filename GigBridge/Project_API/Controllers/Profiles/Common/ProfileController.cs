@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Application.Common.Models;
-using Application.Features.Profiles.Common.MarkSetupComplete.Commands;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Project_API.Controllers.Common;
@@ -13,15 +12,6 @@ namespace Project_API.Controllers.Profiles.Common;
 [Route("api/profile")]
 public class ProfileController : BaseApiController
 {
-    [HttpPut("setup-complete")]
-    public async Task<IActionResult> MarkSetupComplete()
-    {
-        var command = new MarkSetupCompleteCommand();
-        await Mediator.Send(command);
-
-        return Ok(ApiResponse<object?>.Ok(null, "Setup marked as complete"));
-    }
-
     [HttpGet("company-sizes")]
     public IActionResult GetCompanySizes()
     {

@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text.Json;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Application.Common.Services;
 using Application.Common.Models;
 using Domain.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -28,6 +29,16 @@ public class AccountStatusMiddleware
             return;
         }
 
+        // SignalR negotiation only selects a transport. The authenticated
+        // transport request immediately following it performs the account
+        // status check, so querying the database here would duplicate that
+        // remote lookup on every hub connection.
+        if (IsSignalRNegotiateRequest(context.Request))
+        {
+            await _next(context);
+            return;
+        }
+
         var userIdValue = context.User.FindFirstValue(ClaimTypes.NameIdentifier) ??
                           context.User.FindFirstValue("sub");
 
@@ -38,28 +49,39 @@ public class AccountStatusMiddleware
         }
 
         var user = await dbContext.Set<User>()
-            .AsNoTracking()
             .Where(existingUser => existingUser.UserId == userId)
-            .Select(existingUser => new
-            {
-                existingUser.IsActive,
-                existingUser.SuspendedUntil
-            })
             .FirstOrDefaultAsync(context.RequestAborted);
 
-        if (user is null || !user.IsActive)
+        if (user is null)
         {
-            await WriteUnauthorizedAsync(context, "Your account has been suspended by the administrator");
+            await WriteUnauthorizedAsync(context, "Account does not exist.");
             return;
         }
 
-        if (user.SuspendedUntil.HasValue && user.SuspendedUntil.Value > dateTimeService.UtcNow)
+        if (UserAccountEnforcement.NormalizeExpiredSuspension(user, dateTimeService.UtcNow))
+            await dbContext.SaveChangesAsync(context.RequestAborted);
+
+        if (!user.IsActive || user.AccountStatus == (int)Domain.Enums.AccountStatus.Banned)
+        {
+            await WriteUnauthorizedAsync(context, "Your account has been permanently banned.");
+            return;
+        }
+
+        if (user.AccountStatus == (int)Domain.Enums.AccountStatus.Suspended &&
+            user.SuspendedUntil.HasValue && user.SuspendedUntil.Value > dateTimeService.UtcNow)
         {
             await WriteUnauthorizedAsync(context, $"Your account is suspended until {user.SuspendedUntil.Value:O}");
             return;
         }
 
         await _next(context);
+    }
+
+    private static bool IsSignalRNegotiateRequest(HttpRequest request)
+    {
+        return HttpMethods.IsPost(request.Method) &&
+               request.Path.StartsWithSegments("/hubs") &&
+               request.Path.Value?.EndsWith("/negotiate", StringComparison.OrdinalIgnoreCase) == true;
     }
 
     private static Task WriteUnauthorizedAsync(HttpContext context, string message)

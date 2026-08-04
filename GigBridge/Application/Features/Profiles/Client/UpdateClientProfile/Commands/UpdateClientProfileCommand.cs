@@ -1,4 +1,4 @@
-using Application.Features.Profiles.ClientProfile.CreateClientProfile.DTOs;
+using Application.Features.Profiles.ClientProfile.Common.DTOs;
 using Application.Features.Profiles.ClientProfile.UpdateClientProfile.DTOs;
 using MediatR;
 

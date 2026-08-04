@@ -105,6 +105,51 @@ public class SaveDraftJobPostCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_WithEmptyMilestonePlan_PreservesExpectedBudget()
+    {
+        var now = new DateTime(2026, 6, 15, 10, 0, 0, DateTimeKind.Utc);
+        var context = new InMemoryApplicationDbContext();
+        var userId = Guid.NewGuid();
+        var clientProfileId = Guid.NewGuid();
+        var jobPostId = Guid.NewGuid();
+
+        context.AddSet(new ClientProfile { ClientProfilesId = clientProfileId, UserId = userId });
+        var jobPost = new JobPost
+        {
+            JobPostsId = jobPostId,
+            ClientProfilesId = clientProfileId,
+            Title = "Untitled Job Post",
+            Description = string.Empty,
+            Status = 0,
+            Visibility = 0,
+            CreatedAt = now
+        };
+        context.AddSet(jobPost);
+        context.AddSet<JobPostSkill>();
+        context.AddSet<JobPostQuestion>();
+        context.AddSet<JobPostMilestonePlan>();
+
+        var request = CreateValidRequest(now) with
+        {
+            BudgetMin = 1000m,
+            BudgetMax = 1000m,
+            MilestonePlans = []
+        };
+
+        var handler = new SaveDraftJobPostCommandHandler(
+            context,
+            new FixedDateTimeService(now),
+            new ContentModerationService());
+
+        await handler.Handle(
+            new SaveDraftJobPostCommand(jobPostId, userId, request),
+            CancellationToken.None);
+
+        Assert.Equal(1000m, jobPost.BudgetMin);
+        Assert.Equal(1000m, jobPost.BudgetMax);
+    }
+
+    [Fact]
     public async Task Handle_WhenContractExists_DoesNotUpdateContractOrCreateDuplicate()
     {
         var now = new DateTime(2026, 6, 15, 10, 0, 0, DateTimeKind.Utc);
@@ -192,7 +237,6 @@ public class SaveDraftJobPostCommandHandlerTests
             BudgetMax: 200m,
             Currency: "VND",
             EstimatedDuration: "1 week",
-            Location: "Remote",
             Visibility: 2,
             EndDate: now.AddDays(7),
             IsAigenerated: false,
@@ -228,7 +272,6 @@ public class SaveDraftJobPostCommandHandlerTests
             BudgetMax: 200m,
             Currency: "VND",
             EstimatedDuration: "1 week",
-            Location: "Remote",
             Visibility: 2,
             EndDate: now.AddDays(7),
             IsAigenerated: false,

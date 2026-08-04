@@ -34,8 +34,7 @@ public sealed class HardDeleteProposalCommandHandler :
         }
 
         var proposal = await _context.Set<Proposal>()
-            .Include(p => p.ProposalAnswers)
-            .Include(p => p.ProposalAttachments)
+            .AsNoTracking()
             .FirstOrDefaultAsync(p => p.ProposalsId == request.ProposalId, cancellationToken);
 
         if (proposal is null)
@@ -43,69 +42,7 @@ public sealed class HardDeleteProposalCommandHandler :
             throw new NotFoundException("Proposal does not exist.");
         }
 
-        // Clean up related entities
-        _context.Set<ProposalAnswer>().RemoveRange(proposal.ProposalAnswers);
-        _context.Set<ProposalAttachment>().RemoveRange(proposal.ProposalAttachments);
-
-        // Null out nullable foreign keys in other entities pointing to this proposal
-        var contracts = await _context.Set<Contract>()
-            .Where(c => c.ProposalsId == request.ProposalId)
-            .ToListAsync(cancellationToken);
-        foreach (var c in contracts)
-        {
-            c.ProposalsId = null;
-        }
-
-        var conversations = await _context.Set<Conversation>()
-            .Where(c => c.ProposalsId == request.ProposalId)
-            .ToListAsync(cancellationToken);
-        foreach (var c in conversations)
-        {
-            c.ProposalsId = null;
-        }
-
-        var invitations = await _context.Set<JobInvitation>()
-            .Where(ji => ji.ProposalsId == request.ProposalId)
-            .ToListAsync(cancellationToken);
-        foreach (var ji in invitations)
-        {
-            ji.ProposalsId = null;
-        }
-
-        var offers = await _context.Set<NegotiationOffer>()
-            .Where(no => no.ProposalsId == request.ProposalId)
-            .ToListAsync(cancellationToken);
-        foreach (var no in offers)
-        {
-            no.ProposalsId = null;
-        }
-
-        var cheatingEvents = await _context.Set<ProposalCheatingEvent>()
-            .Where(e => e.ProposalsId == request.ProposalId)
-            .ToListAsync(cancellationToken);
-        _context.Set<ProposalCheatingEvent>().RemoveRange(cheatingEvents);
-
-
-        // Remove from other dependencies if any (like timers or interview sessions)
-        var timer = await _context.Set<ProposalQuestionTimer>()
-            .FirstOrDefaultAsync(t => t.ProposalsId == request.ProposalId, cancellationToken);
-        if (timer is not null)
-        {
-            _context.Set<ProposalQuestionTimer>().Remove(timer);
-        }
-
-        var session = await _context.Set<ProposalInterviewReviewSession>()
-            .FirstOrDefaultAsync(s => s.ProposalsId == request.ProposalId, cancellationToken);
-        if (session is not null)
-        {
-            _context.Set<ProposalInterviewReviewSession>().Remove(session);
-        }
-
-        _context.Set<Proposal>().Remove(proposal);
-
-        await _context.SaveChangesAsync(cancellationToken);
-
-
-        return true;
+        throw new ConflictException(
+            "Proposal hard deletion is disabled to preserve authored content and business history. Use Admin invalidation instead.");
     }
 }

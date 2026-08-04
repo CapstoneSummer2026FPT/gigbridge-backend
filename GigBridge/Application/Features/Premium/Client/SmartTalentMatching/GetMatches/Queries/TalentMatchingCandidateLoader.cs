@@ -151,7 +151,9 @@ public static class TalentMatchingCandidateLoader
         if (filters?.MinimumRating is { } minimumRating)
         {
             eligibleQuery = eligibleQuery.Where(profile => context.Set<Review>()
-                .Where(review => review.RevieweeId == profile.UserId && review.IsVisible != false)
+                .Where(review =>
+                    review.RevieweeId == profile.UserId &&
+                    review.ModerationStatus == (int)ReviewModerationStatus.Active)
                 .Average(review => (double?)review.Rating) >= minimumRating);
         }
 
@@ -221,9 +223,11 @@ public static class TalentMatchingCandidateLoader
             ? new Dictionary<Guid, ReviewAggregate>()
             : await context.Set<Review>()
                 .AsNoTracking()
-                .Where(review => userIds.Contains(review.RevieweeId) && review.IsVisible != false)
+                .Where(review =>
+                    userIds.Contains(review.RevieweeId) &&
+                    review.ModerationStatus == (int)ReviewModerationStatus.Active)
                 .GroupBy(review => review.RevieweeId)
-                .Select(group => new ReviewAggregate(group.Key, group.Average(review => review.Rating), group.Count()))
+                .Select(group => new ReviewAggregate(group.Key, group.Average(review => (double?)review.Rating) ?? 0, group.Count()))
                 .ToDictionaryAsync(item => item.UserId, cancellationToken);
 
         var candidates = profiles.Select(profile =>

@@ -1,0 +1,20 @@
+using Application.Features.Auth.Common;
+using FluentValidation;
+
+namespace Application.Features.Auth.SendOtp.Commands;
+
+public sealed class SendOtpCommandValidator : AbstractValidator<SendOtpCommand>
+{
+    public SendOtpCommandValidator()
+    {
+        RuleFor(command => command.SendOtpRequest.Email)
+            .NotEmpty().WithMessage("Email is required.")
+            .EmailAddress().WithMessage("Email must be a valid email address.");
+
+        RuleFor(command => command.SendOtpRequest.Purpose)
+            .Must(value =>
+                OtpPurposeNames.TryParse(value, out var purpose)
+                && purpose == OtpPurpose.Signup)
+            .WithMessage("Purpose must be 'signup'.");
+    }
+}

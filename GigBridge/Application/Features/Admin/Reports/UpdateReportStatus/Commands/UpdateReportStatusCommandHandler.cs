@@ -5,6 +5,7 @@ using Domain.Entities;
 using Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Application.Features.Admin.Reports.AccountReports;
 
 namespace Application.Features.Admin.Reports.UpdateReportStatus.Commands;
 
@@ -12,11 +13,13 @@ public class UpdateReportStatusCommandHandler : IRequestHandler<UpdateReportStat
 {
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
+    private readonly IMediator? _mediator;
 
-    public UpdateReportStatusCommandHandler(IApplicationDbContext context, IDateTimeService dateTimeService)
+    public UpdateReportStatusCommandHandler(IApplicationDbContext context, IDateTimeService dateTimeService, IMediator? mediator = null)
     {
         _context = context;
         _dateTimeService = dateTimeService;
+        _mediator = mediator;
     }
 
     public async Task Handle(UpdateReportStatusCommand command, CancellationToken cancellationToken)
@@ -27,6 +30,13 @@ public class UpdateReportStatusCommandHandler : IRequestHandler<UpdateReportStat
         if (report is null)
         {
             throw new NotFoundException("Report does not exist.");
+        }
+
+        if (report.ReportedEntityType == ReportedEntityTypes.User && _mediator is not null)
+        {
+            await _mediator.Send(new UpdateAccountReportStatusCommand(command.AdminId, command.ReportId,
+                new AccountReportStatusRequest(command.Request.Status, command.Request.AdminNote)), cancellationToken);
+            return;
         }
 
         if (command.Request.Status == ReportStatus.Reviewing &&

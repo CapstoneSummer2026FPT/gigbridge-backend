@@ -13,6 +13,8 @@ using Application.Features.Contracts.Signing.Common.Sign.DTOs;
 using Application.Features.Contracts.Details.Freelancer.RequestChange.DTOs;
 using Domain.Entities;
 using Domain.Enums;
+using Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 using Test_Gigbridge_Backend.TestSupport;
 
 namespace Test_Gigbridge_Backend.Application.Features.Contracts.Common;
@@ -43,6 +45,102 @@ public class ContractWorkflowTests
 
         Assert.Contains("cannot exceed contract total budget", exception.Message);
         Assert.Empty(fixture.Milestones.Entities);
+    }
+
+    [Fact]
+    public async Task UpdateContractDetails_ReusesPersistedMilestoneAndWorkItemIds()
+    {
+        var options = new DbContextOptionsBuilder<GigbridgeDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        await using var context = new GigbridgeDbContext(options);
+        var createdAt = new DateTime(2026, 7, 30, 12, 0, 0, DateTimeKind.Utc);
+        var now = createdAt.AddDays(1);
+        var clientUserId = Guid.NewGuid();
+        var clientProfileId = Guid.NewGuid();
+        var contractId = Guid.NewGuid();
+        var milestoneId = Guid.NewGuid();
+        var workItemId = Guid.NewGuid();
+
+        context.Set<ClientProfile>().Add(new ClientProfile
+        {
+            ClientProfilesId = clientProfileId,
+            UserId = clientUserId
+        });
+        context.Set<Contract>().Add(new Contract
+        {
+            ContractsId = contractId,
+            ClientProfilesId = clientProfileId,
+            Title = "Editable contract",
+            TotalBudget = 100m,
+            Status = (int)ContractStatus.PendingContractDetails,
+            RevisionNumber = 0,
+            CreatedAt = createdAt
+        });
+        context.Set<Milestone>().Add(new Milestone
+        {
+            MilestonesId = milestoneId,
+            ContractsId = contractId,
+            Title = "Original milestone",
+            Amount = 100m,
+            SortOrder = 0,
+            Status = (int)MilestoneStatus.Pending,
+            CreatedAt = createdAt
+        });
+        context.Set<ContractWorkItem>().Add(new ContractWorkItem
+        {
+            ContractWorkItemId = workItemId,
+            MilestonesId = milestoneId,
+            Title = "Original work item",
+            Description = "Original description",
+            OrderIndex = 0,
+            Status = (int)ContractWorkItemStatus.Todo,
+            CreatedAt = createdAt
+        });
+        await context.SaveChangesAsync();
+        context.ChangeTracker.Clear();
+
+        var handler = new UpdateContractDetailsCommandHandler(
+            context,
+            new FixedDateTimeService(now),
+            new NoopChatRealtimeNotifier());
+        var request = new UpdateContractDetailsRequest(
+        [
+            new ContractMilestoneRequest(
+                milestoneId,
+                "Updated milestone",
+                100m,
+                DateOnly.FromDateTime(now.AddDays(7)),
+                0,
+                WorkItems:
+                [
+                    new ContractWorkItemRequest(
+                        workItemId,
+                        "Updated work item",
+                        "Updated description",
+                        "Updated deliverable",
+                        "1 week",
+                        0)
+                ])
+        ]);
+
+        await handler.Handle(
+            new UpdateContractDetailsCommand(contractId, clientUserId, request),
+            CancellationToken.None);
+        context.ChangeTracker.Clear();
+
+        var persistedMilestone = await context.Set<Milestone>()
+            .Include(milestone => milestone.WorkItems)
+            .SingleAsync(milestone => milestone.ContractsId == contractId);
+        var persistedWorkItem = Assert.Single(persistedMilestone.WorkItems);
+        Assert.Equal(milestoneId, persistedMilestone.MilestonesId);
+        Assert.Equal("Updated milestone", persistedMilestone.Title);
+        Assert.Equal(createdAt, persistedMilestone.CreatedAt);
+        Assert.Equal(workItemId, persistedWorkItem.ContractWorkItemId);
+        Assert.Equal("Updated work item", persistedWorkItem.Title);
+        Assert.Equal("Updated description", persistedWorkItem.Description);
+        Assert.Equal(createdAt, persistedWorkItem.CreatedAt);
+        Assert.Equal(1, (await context.Set<Contract>().SingleAsync()).RevisionNumber);
     }
     
     [Fact]
@@ -115,7 +213,7 @@ public class ContractWorkflowTests
         {
             UserWalletsId = fixture.WalletId,
             UserId = fixture.ClientUserId,
-            AvailableTokens = 999m,
+            AvailableTokens = 1_009_999.9999m,
             HeldTokens = 0m,
             CreatedAt = fixture.Now
         });
@@ -125,28 +223,209 @@ public class ContractWorkflowTests
                 new FundContractEscrowCommand(fixture.ContractId, fixture.ClientUserId),
                 CancellationToken.None));
 
-        fixture.Wallets.Entities[0].AvailableTokens = 1_010m;
+        fixture.Wallets.Entities[0].AvailableTokens = 1_010_000m;
 
         var result = await handler.Handle(
             new FundContractEscrowCommand(fixture.ContractId, fixture.ClientUserId),
             CancellationToken.None);
 
         Assert.Equal(1_000_000m, result.RequiredAmountVnd);
-        Assert.Equal(1_000m, result.HeldTokens);
+        Assert.Equal(1_000_000m, result.HeldTokens);
         Assert.Equal(0m, fixture.Wallets.Entities[0].AvailableTokens);
-        Assert.Equal(1_000m, fixture.Wallets.Entities[0].HeldTokens);
+        Assert.Equal(1_000_000m, fixture.Wallets.Entities[0].HeldTokens);
         Assert.Equal((int)ContractEscrowStatus.Funded, fixture.Escrows.Entities[0].Status);
         Assert.Equal((int)ContractStatus.Active, fixture.Contract.Status);
         Assert.Single(fixture.EsignDocuments.Entities);
         var fee = Assert.Single(fixture.WalletTransactions.Entities.Where(transaction =>
             transaction.Type == (int)WalletTransactionType.Adjustment));
-        Assert.Equal(10m, fee.TokenAmount);
+        Assert.Equal(10_000m, fee.TokenAmount);
         Assert.Equal(10_000m, fee.VndAmount);
         var hold = Assert.Single(fixture.WalletTransactions.Entities.Where(transaction =>
             transaction.Type == (int)WalletTransactionType.EscrowHold));
-        Assert.Equal(1_000m, hold.TokenAmount);
+        Assert.Equal(1_000_000m, hold.TokenAmount);
         Assert.Equal(1_000_000m, hold.VndAmount);
         Assert.Single(fixture.EscrowTransactions.Entities);
+    }
+
+    [Fact]
+    public async Task FundEscrow_DepositedFirstSpendingMixesBothPoolsIntoEscrowComposition()
+    {
+        var fixture = new ContractWorkflowFixture();
+        fixture.MoveToFullySignedPendingEscrow();
+        fixture.Contract.TotalBudget = 1_000_000m;
+        fixture.Escrows.Entities[0].RequiredAmount = 1_000_000m;
+        fixture.Wallets.Add(new UserWallet
+        {
+            UserWalletsId = fixture.WalletId,
+            UserId = fixture.ClientUserId,
+            AvailableTokens = 600_000m,
+            WithdrawableTokens = 410_000m,
+            HeldTokens = 0m,
+            CreatedAt = fixture.Now
+        });
+
+        var handler = new FundContractEscrowCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopNotificationService(),
+            new NoopChatRealtimeNotifier());
+
+        var result = await handler.Handle(
+            new FundContractEscrowCommand(fixture.ContractId, fixture.ClientUserId),
+            CancellationToken.None);
+
+        Assert.Equal((int)ContractStatus.Active, result.ContractStatus);
+
+        // 1,000,000-token hold: 600,000 deposited + 400,000 earned (deposited spent first).
+        var escrow = fixture.Escrows.Entities[0];
+        Assert.Equal(600_000m, escrow.DepositedTokens);
+        Assert.Equal(400_000m, escrow.EarnedTokens);
+
+        // The 10,000-token service fee is charged after the hold from the remaining 10,000 earned.
+        var wallet = fixture.Wallets.Entities[0];
+        Assert.Equal(0m, wallet.AvailableTokens);
+        Assert.Equal(0m, wallet.WithdrawableTokens);
+        Assert.Equal(1_000_000m, wallet.HeldTokens);
+
+        var hold = Assert.Single(fixture.WalletTransactions.Entities.Where(transaction =>
+            transaction.Type == (int)WalletTransactionType.EscrowHold));
+        Assert.Equal((int)WalletBalanceSource.Combined, hold.BalanceSource);
+        Assert.Equal(600_000m, hold.DepositedAmount);
+        Assert.Equal(400_000m, hold.EarnedAmount);
+        Assert.Equal(1_000_000m, hold.TokenAmount);
+
+        var fee = Assert.Single(fixture.WalletTransactions.Entities.Where(transaction =>
+            transaction.Type == (int)WalletTransactionType.Adjustment));
+        Assert.Equal(10_000m, fee.TokenAmount);
+        Assert.Equal((int)WalletBalanceSource.Earned, fee.BalanceSource);
+        Assert.Null(fee.DepositedAmount);
+        Assert.Equal(10_000m, fee.EarnedAmount);
+    }
+
+    [Fact]
+    public async Task FundEscrow_ExactGCoinMath_Funding200Debits202AndHolds200()
+    {
+        var fixture = new ContractWorkflowFixture();
+        fixture.MoveToFullySignedPendingEscrow();
+        fixture.Contract.TotalBudget = 200m;
+        fixture.Escrows.Entities[0].RequiredAmount = 200m;
+        fixture.Wallets.Add(new UserWallet
+        {
+            UserWalletsId = fixture.WalletId,
+            UserId = fixture.ClientUserId,
+            AvailableTokens = 202m,
+            WithdrawableTokens = 0m,
+            HeldTokens = 0m,
+            CreatedAt = fixture.Now
+        });
+
+        var handler = new FundContractEscrowCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopNotificationService(),
+            new NoopChatRealtimeNotifier());
+
+        var result = await handler.Handle(
+            new FundContractEscrowCommand(fixture.ContractId, fixture.ClientUserId),
+            CancellationToken.None);
+
+        // Funding 200 G-coin: -202 available (200 hold + 2 fee), +200 held. No ÷1000.
+        var wallet = fixture.Wallets.Entities[0];
+        Assert.Equal(0m, wallet.AvailableTokens);
+        Assert.Equal(200m, wallet.HeldTokens);
+        Assert.Equal(200m, result.HeldTokens);
+        Assert.Equal((int)ContractEscrowStatus.Funded, fixture.Escrows.Entities[0].Status);
+        Assert.Equal(200m, fixture.Escrows.Entities[0].FundedAmount);
+
+        var hold = Assert.Single(fixture.WalletTransactions.Entities.Where(transaction =>
+            transaction.Type == (int)WalletTransactionType.EscrowHold));
+        Assert.Equal(200m, hold.TokenAmount);
+        Assert.Equal(200m, hold.VndAmount);
+        Assert.Equal($"ESCROW-HOLD-{fixture.Escrows.Entities[0].ContractEscrowId:N}", hold.GatewayTransactionCode);
+
+        var fee = Assert.Single(fixture.WalletTransactions.Entities.Where(transaction =>
+            transaction.Type == (int)WalletTransactionType.Adjustment));
+        Assert.Equal(2m, fee.TokenAmount);
+        Assert.Equal($"SERVICE-FEE-FUND-{fixture.ContractId:N}", fee.GatewayTransactionCode);
+
+        Assert.Single(fixture.EscrowTransactions.Entities);
+    }
+
+    [Fact]
+    public async Task FundEscrow_DuplicateRequestDoesNotDoubleDebit()
+    {
+        var fixture = new ContractWorkflowFixture();
+        fixture.MoveToFullySignedPendingEscrow();
+        fixture.Contract.TotalBudget = 200m;
+        fixture.Escrows.Entities[0].RequiredAmount = 200m;
+        fixture.Wallets.Add(new UserWallet
+        {
+            UserWalletsId = fixture.WalletId,
+            UserId = fixture.ClientUserId,
+            AvailableTokens = 202m,
+            HeldTokens = 0m,
+            CreatedAt = fixture.Now
+        });
+
+        var handler = new FundContractEscrowCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopNotificationService(),
+            new NoopChatRealtimeNotifier());
+
+        var first = await handler.Handle(
+            new FundContractEscrowCommand(fixture.ContractId, fixture.ClientUserId),
+            CancellationToken.None);
+        Assert.Equal((int)ContractStatus.Active, first.ContractStatus);
+
+        var walletTransactionsAfterFirst = fixture.WalletTransactions.Entities.Count;
+        var escrowTransactionsAfterFirst = fixture.EscrowTransactions.Entities.Count;
+
+        var second = await handler.Handle(
+            new FundContractEscrowCommand(fixture.ContractId, fixture.ClientUserId),
+            CancellationToken.None);
+
+        Assert.Equal((int)ContractStatus.Active, second.ContractStatus);
+        Assert.Equal(0m, fixture.Wallets.Entities[0].AvailableTokens);
+        Assert.Equal(200m, fixture.Wallets.Entities[0].HeldTokens);
+        Assert.Equal(walletTransactionsAfterFirst, fixture.WalletTransactions.Entities.Count);
+        Assert.Equal(escrowTransactionsAfterFirst, fixture.EscrowTransactions.Entities.Count);
+    }
+
+    [Fact]
+    public async Task FundEscrow_RejectsWhenCombinedDepositedAndEarnedIsInsufficient()
+    {
+        var fixture = new ContractWorkflowFixture();
+        fixture.MoveToFullySignedPendingEscrow();
+        fixture.Contract.TotalBudget = 1_000_000m;
+        fixture.Escrows.Entities[0].RequiredAmount = 1_000_000m;
+        fixture.Wallets.Add(new UserWallet
+        {
+            UserWalletsId = fixture.WalletId,
+            UserId = fixture.ClientUserId,
+            AvailableTokens = 600_000m,
+            WithdrawableTokens = 400_000m,
+            HeldTokens = 0m,
+            CreatedAt = fixture.Now
+        });
+
+        var handler = new FundContractEscrowCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopNotificationService(),
+            new NoopChatRealtimeNotifier());
+
+        // 600,000 deposited + 400,000 earned = 1,000,000, but the 10,000-token fee pushes it over.
+        await Assert.ThrowsAsync<BadRequestException>(() =>
+            handler.Handle(
+                new FundContractEscrowCommand(fixture.ContractId, fixture.ClientUserId),
+                CancellationToken.None));
+
+        var wallet = fixture.Wallets.Entities[0];
+        Assert.Equal(600_000m, wallet.AvailableTokens);
+        Assert.Equal(400_000m, wallet.WithdrawableTokens);
+        Assert.Equal(0m, wallet.HeldTokens);
+        Assert.Empty(fixture.WalletTransactions.Entities);
     }
 
     [Fact]
@@ -159,7 +438,7 @@ public class ContractWorkflowTests
         {
             UserWalletsId = fixture.WalletId,
             UserId = fixture.ClientUserId,
-            AvailableTokens = 1.01m,
+            AvailableTokens = 1_010m,
             HeldTokens = 0m,
             CreatedAt = fixture.Now
         });
@@ -177,9 +456,9 @@ public class ContractWorkflowTests
         Assert.Equal((int)ContractStatus.Active, result.ContractStatus);
         Assert.Equal((int)ContractStatus.Active, fixture.Contract.Status);
         Assert.Equal(1_000m, result.RequiredAmountVnd);
-        Assert.Equal(1m, result.HeldTokens);
+        Assert.Equal(1_000m, result.HeldTokens);
         Assert.Equal(0m, fixture.Wallets.Entities[0].AvailableTokens);
-        Assert.Equal(1m, fixture.Wallets.Entities[0].HeldTokens);
+        Assert.Equal(1_000m, fixture.Wallets.Entities[0].HeldTokens);
         Assert.Equal((int)ContractEscrowStatus.Funded, fixture.Escrows.Entities[0].Status);
         Assert.Equal(fixture.Contract.TotalBudget, fixture.Escrows.Entities[0].RequiredAmount);
         Assert.Equal((int)ESignDocumentStatus.FullySigned, fixture.EsignDocuments.Entities[0].Status);
@@ -350,6 +629,74 @@ public class ContractWorkflowTests
             Assert.Equal((int)DeliveryChannel.Email, delivery.Channel);
             Assert.Equal((int)DeliveryOutboxStatus.Pending, delivery.Status);
         });
+    }
+
+    [Fact]
+    public async Task EnsurePendingEscrow_LoadsPersistedWorkItemsBeforeValidation()
+    {
+        var options = new DbContextOptionsBuilder<GigbridgeDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+        await using var context = new GigbridgeDbContext(options);
+        var now = new DateTime(2026, 7, 28, 12, 0, 0, DateTimeKind.Utc);
+        var contractId = Guid.NewGuid();
+        var jobPostId = Guid.NewGuid();
+        var milestoneId = Guid.NewGuid();
+
+        context.Set<JobPost>().Add(new JobPost
+        {
+            JobPostsId = jobPostId,
+            ClientProfilesId = Guid.NewGuid(),
+            Title = "Persisted work item contract",
+            Description = "Regression test for signing from separate requests.",
+            Status = 1,
+            CreatedAt = now
+        });
+        context.Set<Contract>().Add(new Contract
+        {
+            ContractsId = contractId,
+            JobPostsId = jobPostId,
+            ClientProfilesId = Guid.NewGuid(),
+            Title = "Fixed contract",
+            TotalBudget = 100m,
+            Status = (int)ContractStatus.PendingSignature,
+            CreatedAt = now
+        });
+        context.Set<Milestone>().Add(new Milestone
+        {
+            MilestonesId = milestoneId,
+            ContractsId = contractId,
+            Title = "Implementation",
+            Amount = 100m,
+            SortOrder = 0,
+            Status = (int)MilestoneStatus.Pending,
+            CreatedAt = now
+        });
+        context.Set<ContractWorkItem>().Add(new ContractWorkItem
+        {
+            ContractWorkItemId = Guid.NewGuid(),
+            MilestonesId = milestoneId,
+            Title = "Build feature",
+            Description = "Build and verify the agreed feature.",
+            OrderIndex = 0,
+            Status = (int)ContractWorkItemStatus.Todo,
+            CreatedAt = now
+        });
+        await context.SaveChangesAsync();
+        context.ChangeTracker.Clear();
+
+        var persistedContract = await context.Set<Contract>()
+            .SingleAsync(contract => contract.ContractsId == contractId);
+
+        var escrow = await ContractEscrowReadiness.EnsurePendingEscrowAsync(
+            context,
+            persistedContract,
+            now.AddMinutes(1),
+            CancellationToken.None);
+
+        Assert.Equal(contractId, escrow.ContractsId);
+        Assert.Equal(100m, escrow.RequiredAmount);
+        Assert.Equal((int)ContractStatus.PendingEscrow, persistedContract.Status);
     }
 
     [Fact]

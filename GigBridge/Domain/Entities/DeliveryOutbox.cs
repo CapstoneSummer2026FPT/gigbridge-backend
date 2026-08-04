@@ -12,6 +12,7 @@ public class DeliveryOutbox
     public int Status { get; set; }
     public int AttemptCount { get; set; }
     public DateTime NextAttemptAt { get; set; }
+    public Guid? ClaimToken { get; set; }
     public string? LastError { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? DeliveredAt { get; set; }

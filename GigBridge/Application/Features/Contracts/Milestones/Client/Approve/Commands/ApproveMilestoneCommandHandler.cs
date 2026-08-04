@@ -62,8 +62,6 @@ public sealed class ApproveMilestoneCommandHandler :
         milestone.UpdatedAt = now;
         contract.UpdatedAt = now;
 
-        await MilestoneApprovalWorkflow.ReleaseAsync(_context, contract, milestone, now, cancellationToken);
-
         var milestones = await MilestoneWorkflowGuard.OrderMilestones(
                 _context.Set<Milestone>().Where(item => item.ContractsId == contract.ContractsId))
             .ToListAsync(cancellationToken);

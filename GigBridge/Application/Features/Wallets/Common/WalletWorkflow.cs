@@ -1,6 +1,7 @@
 using Application.Common.Interfaces;
 using Application.Common.Exceptions;
 using Domain.Entities;
+using Domain.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.Wallets.Common;
@@ -36,29 +37,42 @@ public static class WalletWorkflow
         return wallet;
     }
 
+    /// <summary>
+    /// Credits the earned (withdrawable) GigCoin pool only. Job earnings, escrow
+    /// releases and approved-milestone payouts are always classified as earned and
+    /// never touch the deposited (non-withdrawable) pool.
+    /// </summary>
     public static void CreditWithdrawable(UserWallet wallet, decimal tokenAmount, DateTime now)
     {
-        wallet.AvailableTokens += tokenAmount;
         wallet.WithdrawableTokens += tokenAmount;
         wallet.UpdatedAt = now;
     }
 
-    public static void DebitAvailable(UserWallet wallet, decimal tokenAmount, DateTime now, string errorMessage)
+    /// <summary>
+    /// Spends from the combined GigCoin balance using the deposited-first rule:
+    /// the deposited balance is consumed first, then the earned balance. Rejects the
+    /// operation when the combined balances are insufficient. Returns the exact
+    /// deposited/earned split so callers can record the transaction balance source.
+    /// </summary>
+    public static BalanceUsage DebitAvailable(
+        UserWallet wallet,
+        decimal tokenAmount,
+        DateTime now,
+        string errorMessage)
     {
-        if (wallet.AvailableTokens < tokenAmount)
+        if (!WalletSpendingService.CanSpend(wallet.AvailableTokens, wallet.WithdrawableTokens, tokenAmount))
         {
             throw new BadRequestException(errorMessage);
         }
 
-        var nonWithdrawableTokens = Math.Max(0m, wallet.AvailableTokens - wallet.WithdrawableTokens);
-        var withdrawableDebit = Math.Max(0m, tokenAmount - nonWithdrawableTokens);
-        if (wallet.WithdrawableTokens < withdrawableDebit)
-        {
-            throw new BadRequestException(errorMessage);
-        }
+        var usage = WalletSpendingService.CalculateBalanceUsage(
+            wallet.AvailableTokens,
+            wallet.WithdrawableTokens,
+            tokenAmount)!.Value;
 
-        wallet.AvailableTokens -= tokenAmount;
-        wallet.WithdrawableTokens -= withdrawableDebit;
+        wallet.AvailableTokens -= usage.DepositedAmount;
+        wallet.WithdrawableTokens -= usage.EarnedAmount;
         wallet.UpdatedAt = now;
+        return usage;
     }
 }

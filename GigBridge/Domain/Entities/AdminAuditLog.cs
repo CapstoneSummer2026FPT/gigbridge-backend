@@ -19,7 +19,7 @@ public partial class AdminAuditLog
 
     public string? NewValues { get; set; }
 
-    public string? IpAddress { get; set; }
+    public Guid CorrelationId { get; set; }
 
     public string? UserAgent { get; set; }
 

@@ -14,6 +14,7 @@ internal static class ReviewProjection
             ReviewId = review.ReviewsId,
             ContractId = review.ContractsId,
             JobPostId = review.Contracts.JobPostsId,
+            ProjectTitle = review.Contracts.Title,
             ReviewerId = review.ReviewerId,
             ReviewerName = isVisible ? review.Reviewer.FullName : "Anonymous User",
             RevieweeId = review.RevieweeId,

@@ -66,6 +66,8 @@ public sealed class CreateWalletTopUpCommandHandler :
             UserId = command.UserId,
             TokenAmount = command.Request.TokenAmount,
             VndAmount = TokenWalletRules.ToVnd(command.Request.TokenAmount),
+            BalanceSource = (int)WalletBalanceSource.Deposited,
+            DepositedAmount = command.Request.TokenAmount,
             Type = (int)WalletTransactionType.TopUp,
             Status = (int)WalletTransactionStatus.Pending,
             IdempotencyKey = command.Request.IdempotencyKey,

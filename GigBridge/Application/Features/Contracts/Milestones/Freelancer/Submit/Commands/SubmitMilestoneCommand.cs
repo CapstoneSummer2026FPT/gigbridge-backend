@@ -16,11 +16,10 @@ public sealed record SubmitMilestoneCommand(
     Guid MilestoneId,
     Guid UserId,
     string? Description = null,
-    SubmitMilestoneFile? File = null,
-    string? ExternalUrl = null) : IRequest<ContractMilestoneResponse>
+    SubmitMilestoneFile? File = null) : IRequest<ContractMilestoneResponse>
 {
     public SubmitMilestoneCommand(Guid contractId, Guid milestoneId, Guid userId)
-        : this(contractId, milestoneId, userId, null, null, null)
+        : this(contractId, milestoneId, userId, null, null)
     {
     }
 }

@@ -37,6 +37,10 @@ internal sealed class InMemoryApplicationDbContext : IApplicationDbContext
 
     public int TransactionCommitCount { get; private set; }
 
+    public int TransactionLockCount { get; private set; }
+
+    public long? LastTransactionLockKey { get; private set; }
+
     public Action<int>? OnSaveChanges { get; set; }
 
     public Exception? SaveChangesException { get; set; }
@@ -45,7 +49,13 @@ internal sealed class InMemoryApplicationDbContext : IApplicationDbContext
     {
         TransactionBeginCount++;
         return Task.FromResult<IApplicationDbContextTransaction>(
-            new NoopApplicationDbContextTransaction(() => TransactionCommitCount++));
+            new NoopApplicationDbContextTransaction(
+                () => TransactionCommitCount++,
+                lockKey =>
+                {
+                    TransactionLockCount++;
+                    LastTransactionLockKey = lockKey;
+                }));
     }
 
     public Task<int> SaveChangesAsync(CancellationToken cancellationToken)
@@ -64,10 +74,22 @@ internal sealed class InMemoryApplicationDbContext : IApplicationDbContext
 internal sealed class NoopApplicationDbContextTransaction : IApplicationDbContextTransaction
 {
     private readonly Action? _onCommit;
+    private readonly Action<long>? _onAcquireLock;
 
-    public NoopApplicationDbContextTransaction(Action? onCommit = null)
+    public NoopApplicationDbContextTransaction(
+        Action? onCommit = null,
+        Action<long>? onAcquireLock = null)
     {
         _onCommit = onCommit;
+        _onAcquireLock = onAcquireLock;
+    }
+
+    public Task AcquireTransactionLockAsync(
+        long lockKey,
+        CancellationToken cancellationToken)
+    {
+        _onAcquireLock?.Invoke(lockKey);
+        return Task.CompletedTask;
     }
 
     public Task CommitAsync(CancellationToken cancellationToken)

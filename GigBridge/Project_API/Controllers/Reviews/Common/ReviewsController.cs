@@ -3,6 +3,7 @@ using Application.Features.Reviews.Common.CreateReview.Commands;
 using Application.Features.Reviews.Common.DTOs;
 using Application.Features.Reviews.Common.GetReviewsByUser.Queries;
 using Application.Features.Reviews.Common.GetReviewStats.Queries;
+using Application.Features.Reviews.Common.GetMyReviews.Queries;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -13,6 +14,21 @@ namespace Project_API.Controllers.Reviews.Common;
 [Authorize]
 public class ReviewsController : BaseApiController
 {
+    [HttpGet("my")]
+    public async Task<IActionResult> GetMyReviews(
+        [FromQuery] string direction = "received",
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 10)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return InvalidTokenResponse();
+        }
+
+        var result = await Mediator.Send(new GetMyReviewsQuery(userId, direction, page, pageSize));
+        return Ok(ApiResponse<MyReviewsResponse>.Ok(result, "Reviews retrieved successfully"));
+    }
+
     [HttpPost]
     public async Task<IActionResult> CreateReview([FromBody] CreateReviewRequest request)
     {

@@ -43,6 +43,10 @@ public sealed class WithdrawMilestoneCommandHandler :
             command.UserId,
             cancellationToken);
 
+        await using var transaction = await _context.BeginTransactionAsync(cancellationToken);
+        await transaction.AcquireTransactionLockAsync(
+            ContractEscrowLock.ForContract(command.ContractId), cancellationToken);
+
         var milestone = await MilestoneWorkflowGuard.GetMilestoneAsync(
             _context,
             command.ContractId,
@@ -54,44 +58,31 @@ public sealed class WithdrawMilestoneCommandHandler :
             throw new BadRequestException("Only approved milestones can be withdrawn.");
         }
 
-        var milestones = await _context.Set<Milestone>()
-            .Where(milestone => milestone.ContractsId == contract.ContractsId)
-            .ToListAsync(cancellationToken);
-
         var releaseCapVnd = decimal.Round(
             milestone.Amount * NormalFreelancerReleasePercentage,
             2,
             MidpointRounding.AwayFromZero);
         var releasableVnd = releaseCapVnd - milestone.ReleasedAmount;
-        var escrow = await _context.Set<ContractEscrow>()
-            .FirstOrDefaultAsync(
-                escrow => escrow.ContractsId == contract.ContractsId,
-                cancellationToken);
-
-        if (escrow is null)
+        if (releasableVnd <= 0m)
         {
-            throw new NotFoundException("Contract escrow does not exist.");
+            throw new ConflictException("This milestone has no remaining withdrawable amount.");
         }
 
-        if (releasableVnd <= 0)
-        {
-            return new WithdrawMilestoneResponse(
-                contract.ContractsId,
-                milestone.MilestonesId,
-                escrow.ContractEscrowId,
-                0m,
-                0m,
-                milestone.ReleasedAmount,
-                escrow.ReleasedAmount,
-                escrow.Status);
-        }
-
+        var milestones = await _context.Set<Milestone>()
+            .Where(item => item.ContractsId == contract.ContractsId)
+            .ToListAsync(cancellationToken);
         var requiredApprovedCount = (int)Math.Ceiling(milestones.Count * 0.5m);
-        var approvedCount = milestones.Count(milestone => milestone.Status == (int)MilestoneStatus.Approved);
+        var approvedCount = milestones.Count(item => item.Status == (int)MilestoneStatus.Approved);
         if (approvedCount < requiredApprovedCount)
         {
             throw new BadRequestException("At least 50% of contract milestones must be approved before withdrawal.");
         }
+
+        var escrow = await _context.Set<ContractEscrow>()
+            .FirstOrDefaultAsync(
+                item => item.ContractsId == contract.ContractsId,
+                cancellationToken)
+            ?? throw new NotFoundException("Contract escrow does not exist.");
 
         if (escrow.Status != (int)ContractEscrowStatus.Funded &&
             escrow.Status != (int)ContractEscrowStatus.PartiallyReleased)
@@ -108,56 +99,44 @@ public sealed class WithdrawMilestoneCommandHandler :
             .Where(profile => profile.ClientProfilesId == contract.ClientProfilesId)
             .Select(profile => profile.UserId)
             .FirstOrDefaultAsync(cancellationToken);
-
         if (clientUserId == Guid.Empty)
         {
             throw new NotFoundException("Contract client profile does not exist.");
         }
 
         var clientWallet = await _context.Set<UserWallet>()
-            .FirstOrDefaultAsync(wallet => wallet.UserId == clientUserId, cancellationToken);
-
-        if (clientWallet is null)
+            .FirstOrDefaultAsync(wallet => wallet.UserId == clientUserId, cancellationToken)
+            ?? throw new BadRequestException("Client escrow wallet does not exist.");
+        // Contract/escrow amounts are G-coin: the release amount is already in tokens.
+        var grossTokens = releasableVnd;
+        if (clientWallet.HeldTokens < grossTokens)
         {
-            throw new BadRequestException("Client escrow wallet does not exist.");
+            throw new BadRequestException("Client held wallet balance is insufficient for this withdrawal.");
         }
-
-        var freelancerWallet = await _context.Set<UserWallet>()
-            .FirstOrDefaultAsync(wallet => wallet.UserId == command.UserId, cancellationToken);
 
         var now = _dateTimeService.UtcNow;
-        if (freelancerWallet is null)
-        {
-            freelancerWallet = new UserWallet
-            {
-                UserWalletsId = Guid.NewGuid(),
-                UserId = command.UserId,
-                AvailableTokens = 0m,
-                WithdrawableTokens = 0m,
-                HeldTokens = 0m,
-                CreatedAt = now
-            };
-            _context.Set<UserWallet>().Add(freelancerWallet);
-        }
-
+        var freelancerWallet = await WalletWorkflow.GetOrCreateWalletAsync(
+            _context,
+            command.UserId,
+            now,
+            cancellationToken);
         var transactionCode = $"ESCROW-RELEASE-{escrow.ContractEscrowId:N}-{milestone.MilestonesId:N}";
         var transfer = ContractEscrowWalletWorkflow.Release(
             _context,
             clientWallet,
             freelancerWallet,
+            escrow,
             contract.ContractsId,
-            escrow.ContractEscrowId,
             milestone.MilestonesId,
             releasableVnd,
             transactionCode,
             "InternalTokenWallet",
-            "Released from escrow to freelancer wallet.",
+            "Released early from escrow to freelancer wallet.",
             now);
 
         milestone.ReleasedAmount += releasableVnd;
         milestone.LastReleasedAt = now;
         milestone.UpdatedAt = now;
-
         escrow.ReleasedAmount += releasableVnd;
         escrow.Status = escrow.ReleasedAmount >= escrow.FundedAmount
             ? (int)ContractEscrowStatus.Released
@@ -177,7 +156,7 @@ public sealed class WithdrawMilestoneCommandHandler :
             Status = (int)EscrowTransactionStatus.Succeeded,
             PaymentGateway = "InternalTokenWallet",
             GatewayTransactionCode = transactionCode,
-            Note = "Normal freelancer milestone withdrawal at 80% cap.",
+            Note = "Normal freelancer early milestone withdrawal at 80% cap.",
             CreatedAt = now,
             CompletedAt = now
         });
@@ -185,11 +164,12 @@ public sealed class WithdrawMilestoneCommandHandler :
         await ContractConversationEvents.AddSystemMessageAsync(
             _context,
             contract.ContractsId,
-            $"Milestone withdrawal released: {milestone.Title}.",
+            $"Milestone early withdrawal released: {milestone.Title}.",
             now,
             cancellationToken);
 
         await _context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         return new WithdrawMilestoneResponse(
             contract.ContractsId,
@@ -201,5 +181,4 @@ public sealed class WithdrawMilestoneCommandHandler :
             escrow.ReleasedAmount,
             escrow.Status);
     }
-
 }

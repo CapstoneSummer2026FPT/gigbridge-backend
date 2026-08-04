@@ -1,27 +1,27 @@
+using System.Text.Json.Serialization;
 using Application.Features.JobPosts.Common.DTOs;
 
 namespace Application.Features.JobPosts.Client.SaveDraftJobPost.DTOs;
 
 public sealed record SaveDraftJobPostRequest(
-    string? Title,
-    string? Description,
-    Guid? MajorCategoryId,
-    decimal? BudgetMin,
-    decimal? BudgetMax,
-    string? Currency,
-    string? EstimatedDuration,
-    string? Location,
-    int? Visibility,
-    DateTime? EndDate,
-    bool? IsAigenerated,
-    List<Guid>? SkillIds,
-    List<string>? CustomSkillNames,
-    List<SaveDraftJobPostQuestionRequest>? Questions,
-    List<JobPostMilestonePlanDto>? MilestonePlans = null
+    [property: JsonPropertyName("title")] string? Title,
+    [property: JsonPropertyName("description")] string? Description,
+    [property: JsonPropertyName("majorCategoryId")] Guid? MajorCategoryId,
+    [property: JsonPropertyName("budgetMin")] decimal? BudgetMin,
+    [property: JsonPropertyName("budgetMax")] decimal? BudgetMax,
+    [property: JsonPropertyName("currency")] string? Currency,
+    [property: JsonPropertyName("estimatedDuration")] string? EstimatedDuration,
+    [property: JsonPropertyName("visibility")] int? Visibility,
+    [property: JsonPropertyName("endDate")] DateTime? EndDate,
+    [property: JsonPropertyName("isAigenerated")] bool? IsAigenerated,
+    [property: JsonPropertyName("skillIds")] List<Guid>? SkillIds,
+    [property: JsonPropertyName("customSkillNames")] List<string>? CustomSkillNames,
+    [property: JsonPropertyName("questions")] List<SaveDraftJobPostQuestionRequest>? Questions,
+    [property: JsonPropertyName("milestonePlans")] List<JobPostMilestonePlanDto>? MilestonePlans = null
 );
 
 public sealed record SaveDraftJobPostQuestionRequest(
-    string? QuestionText,
-    int OrderIndex,
-    bool IsRequired
+    [property: JsonPropertyName("questionText")] string? QuestionText,
+    [property: JsonPropertyName("orderIndex")] int OrderIndex,
+    [property: JsonPropertyName("isRequired")] bool IsRequired
 );

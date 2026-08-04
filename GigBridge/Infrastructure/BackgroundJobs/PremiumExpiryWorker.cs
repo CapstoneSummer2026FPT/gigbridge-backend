@@ -4,6 +4,7 @@ using Domain.Services.Payments;
 using Domain.Entities;
 using Domain.Enums;
 using Application.Features.Premium.Freelancer.Promotions.Common;
+using Application.Features.Subscriptions.Common;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -90,6 +91,9 @@ public sealed class PremiumExpiryWorker : BackgroundService
         var notifications = scope.ServiceProvider.GetRequiredService<INotificationService>();
         var now = DateTime.UtcNow;
 
+        await using var transaction = await context.BeginTransactionAsync(cancellationToken);
+        await transaction.AcquireTransactionLockAsync(
+            PromotionPolicy.QueueTransactionLockKey, cancellationToken);
         var expired = await context.Set<FreelancerProfilePromotion>()
             .Include(item => item.FreelancerProfile)
             .Where(item => item.Status == PromotionStatus.Active && item.EndTime <= now)
@@ -125,6 +129,9 @@ public sealed class PremiumExpiryWorker : BackgroundService
         if (expired.Count == 0)
             return;
         await context.SaveChangesAsync(cancellationToken);
+        await PromotionPolicy.RecalculateQueuePositionsAsync(
+            context, now, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         foreach (var active in expired)
         {
@@ -164,9 +171,8 @@ public sealed class PremiumExpiryWorker : BackgroundService
             .Include(item => item.User)
             .Where(item => item.Status == SubscriptionStatus.Active &&
                            item.AutoRenew == true &&
-                           item.EndDate <= now &&
-                           item.SubscriptionPlans.IsActive == true &&
-                           item.SubscriptionPlans.Price > 0)
+                           item.EndDate <= now)
+            .CompatibleWithUserRole()
             .ToListAsync(cancellationToken);
 
         foreach (var subscription in due)
@@ -174,15 +180,50 @@ public sealed class PremiumExpiryWorker : BackgroundService
             try
             {
                 await using var transaction = await context.BeginTransactionAsync(cancellationToken);
-                var isLegacyVnd = string.Equals(subscription.SubscriptionPlans.Currency, "VND", StringComparison.OrdinalIgnoreCase);
+                await transaction.AcquireTransactionLockAsync(
+                    PremiumSubscriptionPolicy.PurchaseLockKey(subscription.UserId),
+                    cancellationToken);
+
+                // The candidate list is read before taking the per-user lock. Reload after
+                // the lock so a concurrent purchase or renewal cannot result in a second debit.
+                var candidate = await context.Set<Subscription>().AsNoTracking()
+                    .Include(item => item.SubscriptionPlans)
+                    .Include(item => item.User)
+                    .Where(item => item.SubscriptionsId == subscription.SubscriptionsId &&
+                                   item.Status == SubscriptionStatus.Active &&
+                                   item.AutoRenew == true &&
+                                   item.EndDate <= now)
+                    .CompatibleWithUserRole()
+                    .FirstOrDefaultAsync(cancellationToken);
+                if (candidate is null)
+                    continue;
+
+                var userRole = (UserRole)candidate.User.Role;
+                var hasReplacement = await context.Set<Subscription>().AsNoTracking()
+                    .Where(item => item.UserId == candidate.UserId &&
+                                   item.SubscriptionsId != candidate.SubscriptionsId &&
+                                   item.Status == SubscriptionStatus.Active &&
+                                   item.EndDate > now)
+                    .CompatibleWithRole(userRole)
+                    .AnyAsync(cancellationToken);
+                if (hasReplacement)
+                {
+                    subscription.AutoRenew = false;
+                    subscription.UpdatedAt = now;
+                    await context.SaveChangesAsync(cancellationToken);
+                    await transaction.CommitAsync(cancellationToken);
+                    continue;
+                }
+
+                var isLegacyVnd = string.Equals(candidate.SubscriptionPlans.Currency, "VND", StringComparison.OrdinalIgnoreCase);
                 var tokenPrice = isLegacyVnd
-                    ? TokenWalletRules.ToTokensCeiling(subscription.SubscriptionPlans.Price)
-                    : subscription.SubscriptionPlans.Price;
-                var idempotencyKey = $"premium-auto-renew:{subscription.SubscriptionsId:N}:{subscription.EndDate:O}";
+                    ? TokenWalletRules.ToTokensCeiling(candidate.SubscriptionPlans.Price)
+                    : candidate.SubscriptionPlans.Price;
+                var idempotencyKey = $"premium-auto-renew:{candidate.SubscriptionsId:N}:{candidate.EndDate:O}";
                 var walletTransaction = await ledger.DebitAsync(
-                    subscription.UserId, tokenPrice, WalletTransactionType.SubscriptionPurchase,
+                    candidate.UserId, tokenPrice, WalletTransactionType.SubscriptionPurchase,
                     idempotencyKey,
-                    JsonSerializer.Serialize(new { subscriptionId = subscription.SubscriptionsId, autoRenew = true }),
+                    JsonSerializer.Serialize(new { subscriptionId = candidate.SubscriptionsId, autoRenew = true }),
                     cancellationToken);
 
                 subscription.AutoRenew = false;
@@ -191,12 +232,12 @@ public sealed class PremiumExpiryWorker : BackgroundService
                 var renewed = new Subscription
                 {
                     SubscriptionsId = Guid.NewGuid(),
-                    UserId = subscription.UserId,
-                    SubscriptionPlansId = subscription.SubscriptionPlansId,
-                    SubscriptionPlans = subscription.SubscriptionPlans,
+                    UserId = candidate.UserId,
+                    SubscriptionPlansId = candidate.SubscriptionPlansId,
+                    SubscriptionPlans = candidate.SubscriptionPlans,
                     Status = SubscriptionStatus.Active,
                     StartDate = startsAt,
-                    EndDate = startsAt.AddDays(subscription.SubscriptionPlans.DurationInDays),
+                    EndDate = startsAt.AddDays(candidate.SubscriptionPlans.DurationInDays),
                     AutoRenew = true,
                     PaymentReference = walletTransaction.WalletTransactionsId.ToString(),
                     CreatedAt = now

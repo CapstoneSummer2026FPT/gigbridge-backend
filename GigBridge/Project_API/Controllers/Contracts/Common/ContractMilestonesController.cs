@@ -7,6 +7,7 @@ using Application.Features.Contracts.Milestones.Client.Start.Commands;
 using Application.Features.Contracts.Milestones.Client.RespondEarlyStart.Commands;
 using Application.Features.Contracts.Milestones.Client.RespondEarlyStart.DTOs;
 using Application.Features.Contracts.Milestones.Common.DTOs;
+using Application.Features.Contracts.Milestones.Common.Get.Queries;
 using Application.Features.Contracts.Milestones.Common.List.Queries;
 using Application.Features.Contracts.Milestones.Common.EarlyStartRequests.Queries;
 using Application.Features.Contracts.Milestones.Freelancer.RequestUnlock.Commands;
@@ -25,7 +26,9 @@ namespace Project_API.Controllers.Contracts.Common;
 [Authorize]
 public sealed class ContractMilestonesController : BaseApiController
 {
-    private const long MaxRequestSizeBytes = 100 * 1024 * 1024;
+    // The command handler enforces a 100 MB file limit. This allowance only covers
+    // multipart headers and the optional description around that file.
+    private const long MaxRequestSizeBytes = (100 * 1024 * 1024) + (64 * 1024);
 
     [HttpGet]
     public async Task<IActionResult> GetMilestones(Guid contractId)
@@ -38,6 +41,34 @@ public sealed class ContractMilestonesController : BaseApiController
         var result = await Mediator.Send(new GetContractMilestonesQuery(contractId, userId));
 
         return Ok(ApiResponse<IReadOnlyList<ContractMilestoneResponse>>.Ok(result, "Success"));
+    }
+
+    [HttpGet("{milestoneId:guid}")]
+    public async Task<IActionResult> GetMilestone(Guid contractId, Guid milestoneId)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return InvalidTokenResponse();
+        }
+
+        var result = await Mediator.Send(new GetMilestoneByIdQuery(milestoneId, userId, contractId));
+
+        return Ok(ApiResponse<ContractMilestoneResponse>.Ok(result, "Success"));
+    }
+
+    [HttpGet("{milestoneId:guid}/attachments")]
+    public async Task<IActionResult> GetAttachments(Guid contractId, Guid milestoneId)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return InvalidTokenResponse();
+        }
+
+        var milestone = await Mediator.Send(new GetMilestoneByIdQuery(milestoneId, userId, contractId));
+
+        return Ok(ApiResponse<IReadOnlyList<MilestoneAttachmentResponse>>.Ok(
+            milestone.Attachments,
+            "Success"));
     }
 
     [HttpPost("{milestoneId:guid}/start")]
@@ -106,7 +137,7 @@ public sealed class ContractMilestonesController : BaseApiController
         }
 
         var result = await Mediator.Send(
-            new SubmitMilestoneCommand(contractId, milestoneId, userId, description, commandFile, null));
+            new SubmitMilestoneCommand(contractId, milestoneId, userId, description, commandFile));
 
         return Ok(ApiResponse<ContractMilestoneResponse>.Ok(result, "Milestone submitted"));
     }
@@ -175,6 +206,14 @@ public sealed class ContractMilestonesController : BaseApiController
     [Authorize(Roles = "Freelancer")]
     public async Task<IActionResult> Withdraw(Guid contractId, Guid milestoneId)
     {
-        throw new BadRequestException("Milestone withdrawal is deprecated. Approved milestones are released automatically.");
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return InvalidTokenResponse();
+        }
+
+        var result = await Mediator.Send(new WithdrawMilestoneCommand(contractId, milestoneId, userId));
+
+        return Ok(ApiResponse<WithdrawMilestoneResponse>.Ok(result, "Milestone early withdrawal released"));
     }
+
 }

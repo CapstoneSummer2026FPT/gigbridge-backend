@@ -7,6 +7,10 @@ using Domain.Entities;
 using Domain.Enums;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.InMemory;
+using NSubstitute;
+using Test_Gigbridge_Backend.TestSupport;
 
 namespace Test_Gigbridge_Backend.Application.Features.Reviews;
 
@@ -18,7 +22,8 @@ public class CreateReviewCommandHandlerTests
         await using var context = CreateContext();
         var now = new DateTime(2026, 6, 12, 9, 0, 0, DateTimeKind.Utc);
         var seed = await SeedContractAsync(context, ContractStatus.Completed, now);
-        var handler = CreateHandler(context, now);
+        var notifications = Substitute.For<INotificationService>();
+        var handler = CreateHandler(context, now, notifications);
 
         var response = await handler.Handle(
             new CreateReviewCommand(
@@ -26,31 +31,33 @@ public class CreateReviewCommandHandlerTests
                 new CreateReviewRequest
                 {
                     ContractId = seed.ContractId,
-                    Rating = 5,
+                    Rating = 1,
                     Comment = " Strong delivery. ",
                     CommunicationRating = 4,
                     QualityRating = 5,
                     TimelinessRating = 5,
-                    IsAnonymous = true
+                    IsAnonymous = false
                 }),
             CancellationToken.None);
 
         Assert.Equal(seed.ContractId, response.ContractId);
         Assert.Equal(seed.FreelancerUserId, response.RevieweeId);
-        Assert.Equal(5, response.Rating);
+        Assert.Equal(4.7m, response.Rating);
+        Assert.Equal("Completed contract", response.ProjectTitle);
         Assert.Equal("Strong delivery.", response.Comment);
-        Assert.False(response.IsVisible);
-        Assert.Equal("Anonymous User", response.ReviewerName);
+        Assert.True(response.IsVisible);
+        Assert.Equal("Client User", response.ReviewerName);
 
         var review = await context.Reviews.SingleAsync();
         Assert.Equal(seed.ClientUserId, review.ReviewerId);
         Assert.Equal(seed.FreelancerUserId, review.RevieweeId);
+        Assert.Equal(4.7m, review.Rating);
         Assert.Equal(4, review.CommunicationRating);
         Assert.Equal(5, review.QualityRating);
         Assert.Equal(5, review.TimelinessRating);
 
         var score = await context.UserEloScores.SingleAsync(score => score.UserId == seed.FreelancerUserId);
-        Assert.Equal(170, score.CurrentPoints);
+        Assert.Equal(144, score.CurrentPoints);
 
         var transactions = await context.UserEloPointTransactions
             .Where(transaction => transaction.UserId == seed.FreelancerUserId)
@@ -58,19 +65,77 @@ public class CreateReviewCommandHandlerTests
             .ThenBy(transaction => transaction.Reason)
             .ToListAsync();
 
-        Assert.Equal(3, transactions.Count);
+        Assert.Equal(2, transactions.Count);
         Assert.Contains(transactions, transaction =>
             transaction.Reason == (int)UserEloPointReason.InitialGrant &&
             transaction.PointsDelta == 100 &&
             transaction.PointsAfter == 100);
         Assert.Contains(transactions, transaction =>
-            transaction.Reason == (int)UserEloPointReason.JobCompletion &&
-            transaction.PointsDelta == 20 &&
-            transaction.PointsAfter == 120);
-        Assert.Contains(transactions, transaction =>
-            transaction.Reason == (int)UserEloPointReason.ReviewRating &&
-            transaction.PointsDelta == 50 &&
-            transaction.PointsAfter == 170);
+            transaction.Reason == (int)UserEloPointReason.CompletedJobReview &&
+            transaction.PointsDelta == 44 &&
+            transaction.PointsAfter == 144 &&
+            transaction.PointsBefore == 100 &&
+            transaction.ContractId == seed.ContractId &&
+            transaction.ReviewId == review.ReviewsId &&
+            transaction.Rating == 4.7m);
+        await notifications.Received(1).CreateNotificationAsync(
+            seed.FreelancerUserId,
+            NotificationType.ReviewReceived,
+            Arg.Any<string>(),
+            Arg.Is<string>(content => content.Contains("Completed contract")),
+            seed.ContractId,
+            nameof(Contract),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Handle_FreelancerReviewTargetsClientAndRoundsCriteriaAverage()
+    {
+        await using var context = CreateContext();
+        var now = new DateTime(2026, 6, 12, 9, 0, 0, DateTimeKind.Utc);
+        var seed = await SeedContractAsync(context, ContractStatus.Completed, now);
+        var handler = CreateHandler(context, now);
+
+        var response = await handler.Handle(
+            new CreateReviewCommand(
+                seed.FreelancerUserId,
+                new CreateReviewRequest
+                {
+                    ContractId = seed.ContractId,
+                    Rating = 1,
+                    Comment = "Clear requirements and prompt approval.",
+                    CommunicationRating = 3,
+                    QualityRating = 4,
+                    TimelinessRating = 4
+                }),
+            CancellationToken.None);
+
+        Assert.Equal(seed.ClientUserId, response.RevieweeId);
+        Assert.Equal("Freelancer User", response.ReviewerName);
+        Assert.Equal(3.7m, response.Rating);
+        Assert.Equal(3.7m, (await context.Reviews.SingleAsync()).Rating);
+        Assert.Equal(seed.ClientUserId, (await context.UserEloScores.SingleAsync()).UserId);
+    }
+
+    [Fact]
+    public async Task Validator_RequiresAllCriteriaAndRejectsAnonymousReview()
+    {
+        var command = new CreateReviewCommand(
+            Guid.NewGuid(),
+            new CreateReviewRequest
+            {
+                ContractId = Guid.NewGuid(),
+                Rating = 5,
+                CommunicationRating = null,
+                QualityRating = 5,
+                TimelinessRating = 5,
+                IsAnonymous = true
+            });
+
+        var result = await new CreateReviewCommandValidator().ValidateAsync(command);
+
+        Assert.Contains(result.Errors, error => error.PropertyName.EndsWith("CommunicationRating"));
+        Assert.Contains(result.Errors, error => error.PropertyName.EndsWith("IsAnonymous"));
     }
 
     [Fact]
@@ -137,19 +202,25 @@ public class CreateReviewCommandHandlerTests
 
     private static CreateReviewCommandHandler CreateHandler(
         GigbridgeDbContext context,
-        DateTime now)
+        DateTime now,
+        INotificationService? notifications = null)
     {
         var dateTimeService = new FixedDateTimeService(now);
         return new CreateReviewCommandHandler(
             context,
             dateTimeService,
-            new UserEloService(context, dateTimeService));
+            new UserEloService(context, dateTimeService),
+            notifications ?? new NoopNotificationService());
     }
 
     private static GigbridgeDbContext CreateContext()
     {
         var options = new DbContextOptionsBuilder<GigbridgeDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            // The handler opens a real transaction for Elo + history; the in-memory
+            // store has no transactions, so the ignored-transaction warning (which
+            // throws by default) must be suppressed in tests.
+            .ConfigureWarnings(warnings => warnings.Ignore(InMemoryEventId.TransactionIgnoredWarning))
             .Options;
 
         return new GigbridgeDbContext(options);

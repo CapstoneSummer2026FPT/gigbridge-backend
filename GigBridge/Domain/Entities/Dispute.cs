@@ -82,9 +82,11 @@ public partial class Dispute
 
     public virtual ICollection<DisputeEvidence> DisputeEvidences { get; set; } = new List<DisputeEvidence>();
 
-    public virtual ICollection<DisputeMessage> DisputeMessages { get; set; } = new List<DisputeMessage>();
-
     public virtual ICollection<DisputeMilestoneDecision> MilestoneDecisions { get; set; } = new List<DisputeMilestoneDecision>();
+
+    public virtual ICollection<DisputePenalty> Penalties { get; set; } = new List<DisputePenalty>();
+
+    public virtual ICollection<UserViolation> UserViolations { get; set; } = new List<UserViolation>();
 
     public virtual Milestone? Milestones { get; set; }
 

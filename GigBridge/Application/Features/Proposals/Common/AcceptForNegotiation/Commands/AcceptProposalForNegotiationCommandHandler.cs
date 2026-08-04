@@ -74,6 +74,8 @@ public class AcceptProposalForNegotiationCommandHandler : IRequestHandler<Accept
             throw new NotFoundException("Proposal does not exist.");
         }
 
+        ProposalModerationGuard.EnsureActive(proposal);
+
         if (proposal.JobPosts.ClientProfilesId != clientProfile.ClientProfilesId)
         {
             throw new ForbiddenAccessException("You do not own this job post.");
@@ -198,7 +200,10 @@ public class AcceptProposalForNegotiationCommandHandler : IRequestHandler<Accept
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Failed to send proposal negotiation email to freelancer {Email}", freelancerUser.Email);
+                    _logger.LogError(
+                        ex,
+                        "Failed to send proposal negotiation email to freelancer user {UserId}",
+                        freelancerUser.UserId);
                 }
             }
         }
