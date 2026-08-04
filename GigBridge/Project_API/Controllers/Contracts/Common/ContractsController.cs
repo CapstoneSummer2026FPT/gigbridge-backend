@@ -4,6 +4,9 @@ using Application.Features.Contracts.Common.GetContractByJobPost.Queries;
 using Application.Features.Contracts.Common.GetMyContracts.DTOs;
 using Application.Features.Contracts.Common.GetMyContracts.Queries;
 using Application.Features.Contracts.Common.GetContractById.Queries;
+using Application.Features.Contracts.Freelancer.GetMyCompletedProjects.DTOs;
+using Application.Features.Contracts.Freelancer.GetMyCompletedProjects.Queries;
+using Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -38,6 +41,20 @@ public class ContractsController : BaseApiController
         var result = await Mediator.Send(new GetMyContractsQuery(userId, status));
 
         return Ok(ApiResponse<List<ContractDtoResponse>>.Ok(result, "Success"));
+    }
+
+    [HttpGet("my-completed-projects")]
+    [Authorize(Roles = nameof(UserRole.Freelancer))]
+    public async Task<IActionResult> GetMyCompletedProjects()
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return InvalidTokenResponse();
+        }
+
+        var result = await Mediator.Send(new GetMyCompletedProjectsQuery(userId));
+
+        return Ok(ApiResponse<List<FreelancerCompletedProjectResponse>>.Ok(result, "Success"));
     }
 
     [HttpGet("{contractId:guid}")]
