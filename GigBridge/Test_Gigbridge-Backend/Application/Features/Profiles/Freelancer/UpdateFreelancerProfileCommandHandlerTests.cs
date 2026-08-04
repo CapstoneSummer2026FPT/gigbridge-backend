@@ -293,6 +293,74 @@ public class UpdateFreelancerProfileCommandHandlerTests
         Assert.Contains("active", exception.Message);
     }
 
+    [Fact]
+    public async Task Handle_SynchronizesAndReturnsEnrichedPortfolioItems()
+    {
+        var context = new InMemoryApplicationDbContext();
+        var userId = Guid.NewGuid();
+        var profile = new FreelancerProfile
+        {
+            FreelancerProfilesId = Guid.NewGuid(),
+            UserId = userId,
+            CreatedAt = DateTime.UtcNow.AddDays(-1)
+        };
+        var retainedItem = new PortfolioItem
+        {
+            PortfolioItemsId = Guid.NewGuid(),
+            FreelancerId = profile.FreelancerProfilesId,
+            Freelancer = profile,
+            Title = "Old title"
+        };
+        var removedItem = new PortfolioItem
+        {
+            PortfolioItemsId = Guid.NewGuid(),
+            FreelancerId = profile.FreelancerProfilesId,
+            Freelancer = profile,
+            Title = "Remove me"
+        };
+        profile.PortfolioItems.Add(retainedItem);
+        profile.PortfolioItems.Add(removedItem);
+
+        context.AddSet(CreateFreelancerUser(userId, profile));
+        context.AddSet(profile);
+        var portfolioItems = context.AddSet(retainedItem, removedItem);
+        var (majorId, categoryId) = AddTaxonomy(context);
+        var dto = CreateValidDto(majorId, categoryId);
+        dto.PortfolioItems = new[]
+        {
+            new UpdatePortfolioItemDto
+            {
+                PortfolioItemId = retainedItem.PortfolioItemsId,
+                Title = " Updated project ",
+                Description = " Portfolio description ",
+                ProjectUrl = " https://example.com/project ",
+                ImageUrl = " https://example.com/project.png ",
+                ProjectDate = new DateOnly(2026, 7, 15)
+            },
+            new UpdatePortfolioItemDto
+            {
+                Title = "New project",
+                ProjectDate = new DateOnly(2026, 8, 1)
+            }
+        };
+
+        var result = await CreateHandler(context, userId).Handle(
+            new UpdateFreelancerProfileCommand(dto),
+            CancellationToken.None);
+
+        Assert.DoesNotContain(removedItem, portfolioItems.Entities);
+        Assert.Equal("Updated project", retainedItem.Title);
+        Assert.Equal("Portfolio description", retainedItem.Description);
+        Assert.Equal("https://example.com/project", retainedItem.ProjectUrl);
+        Assert.Equal("https://example.com/project.png", retainedItem.ImageUrl);
+        Assert.Equal(new DateOnly(2026, 7, 15), retainedItem.ProjectDate);
+        Assert.Equal(2, portfolioItems.Entities.Count);
+        Assert.Equal(2, result.PortfolioItems.Count);
+        Assert.Contains(result.PortfolioItems, item =>
+            item.PortfolioItemId == retainedItem.PortfolioItemsId &&
+            item.ProjectDate == "2026-07-15");
+    }
+
     private static UpdateFreelancerProfileDto CreateValidDto(Guid majorId, Guid categoryId)
     {
         return new UpdateFreelancerProfileDto

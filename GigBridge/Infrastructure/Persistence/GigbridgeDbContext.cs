@@ -2104,6 +2104,9 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
                 .HasDefaultValueSql("gen_random_uuid()")
                 .HasColumnName("PortfolioItemsId");
             entity.Property(e => e.FreelancerId).HasColumnName("FreelancerId");
+            entity.Property(e => e.Title).HasMaxLength(200);
+            entity.Property(e => e.Description).HasMaxLength(2000);
+            entity.Property(e => e.ImageUrl).HasMaxLength(2048);
 
             entity.HasOne(d => d.Freelancer).WithMany(p => p.PortfolioItems)
                 .HasForeignKey(d => d.FreelancerId)

@@ -9,4 +9,15 @@ public class UpdateFreelancerProfileDto
     public Guid MajorId { get; set; }
     public IReadOnlyCollection<Guid> CategoryIds { get; set; } = Array.Empty<Guid>();
     public IReadOnlyCollection<Guid>? SkillIds { get; set; }
+    public IReadOnlyCollection<UpdatePortfolioItemDto>? PortfolioItems { get; set; }
+}
+
+public sealed class UpdatePortfolioItemDto
+{
+    public Guid? PortfolioItemId { get; set; }
+    public string Title { get; set; } = null!;
+    public string? Description { get; set; }
+    public string? ProjectUrl { get; set; }
+    public string? ImageUrl { get; set; }
+    public DateOnly? ProjectDate { get; set; }
 }
