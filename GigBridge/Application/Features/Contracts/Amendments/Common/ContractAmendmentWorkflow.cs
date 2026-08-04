@@ -4,7 +4,6 @@ using Application.Common.Interfaces.IService;
 using Application.Features.Wallets.Common;
 using Domain.Entities;
 using Domain.Enums;
-using Domain.Services.Payments;
 using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.Contracts.Amendments.Common;
@@ -159,7 +158,8 @@ internal static class ContractAmendmentWorkflow
             ?? throw new BadRequestException("Wallet balance is insufficient to fund the amendment.");
         var escrow = await context.Set<ContractEscrow>()
             .SingleAsync(item => item.ContractsId == contract.ContractsId, cancellationToken);
-        var tokens = TokenWalletRules.ToTokens(amount);
+        // Contract/escrow amounts are G-coin: the amendment increase is held directly in tokens.
+        var tokens = amount;
         var walletBefore = WalletBalanceAudit.Snapshot(wallet);
         var usage = WalletWorkflow.DebitAvailable(
             wallet,

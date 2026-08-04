@@ -213,7 +213,7 @@ public class ContractWorkflowTests
         {
             UserWalletsId = fixture.WalletId,
             UserId = fixture.ClientUserId,
-            AvailableTokens = 1_009.9999m,
+            AvailableTokens = 1_009_999.9999m,
             HeldTokens = 0m,
             CreatedAt = fixture.Now
         });
@@ -223,26 +223,26 @@ public class ContractWorkflowTests
                 new FundContractEscrowCommand(fixture.ContractId, fixture.ClientUserId),
                 CancellationToken.None));
 
-        fixture.Wallets.Entities[0].AvailableTokens = 1_010m;
+        fixture.Wallets.Entities[0].AvailableTokens = 1_010_000m;
 
         var result = await handler.Handle(
             new FundContractEscrowCommand(fixture.ContractId, fixture.ClientUserId),
             CancellationToken.None);
 
         Assert.Equal(1_000_000m, result.RequiredAmountVnd);
-        Assert.Equal(1_000m, result.HeldTokens);
+        Assert.Equal(1_000_000m, result.HeldTokens);
         Assert.Equal(0m, fixture.Wallets.Entities[0].AvailableTokens);
-        Assert.Equal(1_000m, fixture.Wallets.Entities[0].HeldTokens);
+        Assert.Equal(1_000_000m, fixture.Wallets.Entities[0].HeldTokens);
         Assert.Equal((int)ContractEscrowStatus.Funded, fixture.Escrows.Entities[0].Status);
         Assert.Equal((int)ContractStatus.Active, fixture.Contract.Status);
         Assert.Single(fixture.EsignDocuments.Entities);
         var fee = Assert.Single(fixture.WalletTransactions.Entities.Where(transaction =>
             transaction.Type == (int)WalletTransactionType.Adjustment));
-        Assert.Equal(10m, fee.TokenAmount);
+        Assert.Equal(10_000m, fee.TokenAmount);
         Assert.Equal(10_000m, fee.VndAmount);
         var hold = Assert.Single(fixture.WalletTransactions.Entities.Where(transaction =>
             transaction.Type == (int)WalletTransactionType.EscrowHold));
-        Assert.Equal(1_000m, hold.TokenAmount);
+        Assert.Equal(1_000_000m, hold.TokenAmount);
         Assert.Equal(1_000_000m, hold.VndAmount);
         Assert.Single(fixture.EscrowTransactions.Entities);
     }
@@ -258,8 +258,8 @@ public class ContractWorkflowTests
         {
             UserWalletsId = fixture.WalletId,
             UserId = fixture.ClientUserId,
-            AvailableTokens = 600m,
-            WithdrawableTokens = 410m,
+            AvailableTokens = 600_000m,
+            WithdrawableTokens = 410_000m,
             HeldTokens = 0m,
             CreatedAt = fixture.Now
         });
@@ -276,30 +276,120 @@ public class ContractWorkflowTests
 
         Assert.Equal((int)ContractStatus.Active, result.ContractStatus);
 
-        // 1,000-token hold: 600 deposited + 400 earned (deposited spent first).
+        // 1,000,000-token hold: 600,000 deposited + 400,000 earned (deposited spent first).
         var escrow = fixture.Escrows.Entities[0];
-        Assert.Equal(600m, escrow.DepositedTokens);
-        Assert.Equal(400m, escrow.EarnedTokens);
+        Assert.Equal(600_000m, escrow.DepositedTokens);
+        Assert.Equal(400_000m, escrow.EarnedTokens);
 
-        // The 10-token service fee is charged after the hold from the remaining 10 earned.
+        // The 10,000-token service fee is charged after the hold from the remaining 10,000 earned.
         var wallet = fixture.Wallets.Entities[0];
         Assert.Equal(0m, wallet.AvailableTokens);
         Assert.Equal(0m, wallet.WithdrawableTokens);
-        Assert.Equal(1_000m, wallet.HeldTokens);
+        Assert.Equal(1_000_000m, wallet.HeldTokens);
 
         var hold = Assert.Single(fixture.WalletTransactions.Entities.Where(transaction =>
             transaction.Type == (int)WalletTransactionType.EscrowHold));
         Assert.Equal((int)WalletBalanceSource.Combined, hold.BalanceSource);
-        Assert.Equal(600m, hold.DepositedAmount);
-        Assert.Equal(400m, hold.EarnedAmount);
-        Assert.Equal(1_000m, hold.TokenAmount);
+        Assert.Equal(600_000m, hold.DepositedAmount);
+        Assert.Equal(400_000m, hold.EarnedAmount);
+        Assert.Equal(1_000_000m, hold.TokenAmount);
 
         var fee = Assert.Single(fixture.WalletTransactions.Entities.Where(transaction =>
             transaction.Type == (int)WalletTransactionType.Adjustment));
-        Assert.Equal(10m, fee.TokenAmount);
+        Assert.Equal(10_000m, fee.TokenAmount);
         Assert.Equal((int)WalletBalanceSource.Earned, fee.BalanceSource);
         Assert.Null(fee.DepositedAmount);
-        Assert.Equal(10m, fee.EarnedAmount);
+        Assert.Equal(10_000m, fee.EarnedAmount);
+    }
+
+    [Fact]
+    public async Task FundEscrow_ExactGCoinMath_Funding200Debits202AndHolds200()
+    {
+        var fixture = new ContractWorkflowFixture();
+        fixture.MoveToFullySignedPendingEscrow();
+        fixture.Contract.TotalBudget = 200m;
+        fixture.Escrows.Entities[0].RequiredAmount = 200m;
+        fixture.Wallets.Add(new UserWallet
+        {
+            UserWalletsId = fixture.WalletId,
+            UserId = fixture.ClientUserId,
+            AvailableTokens = 202m,
+            WithdrawableTokens = 0m,
+            HeldTokens = 0m,
+            CreatedAt = fixture.Now
+        });
+
+        var handler = new FundContractEscrowCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopNotificationService(),
+            new NoopChatRealtimeNotifier());
+
+        var result = await handler.Handle(
+            new FundContractEscrowCommand(fixture.ContractId, fixture.ClientUserId),
+            CancellationToken.None);
+
+        // Funding 200 G-coin: -202 available (200 hold + 2 fee), +200 held. No ÷1000.
+        var wallet = fixture.Wallets.Entities[0];
+        Assert.Equal(0m, wallet.AvailableTokens);
+        Assert.Equal(200m, wallet.HeldTokens);
+        Assert.Equal(200m, result.HeldTokens);
+        Assert.Equal((int)ContractEscrowStatus.Funded, fixture.Escrows.Entities[0].Status);
+        Assert.Equal(200m, fixture.Escrows.Entities[0].FundedAmount);
+
+        var hold = Assert.Single(fixture.WalletTransactions.Entities.Where(transaction =>
+            transaction.Type == (int)WalletTransactionType.EscrowHold));
+        Assert.Equal(200m, hold.TokenAmount);
+        Assert.Equal(200m, hold.VndAmount);
+        Assert.Equal($"ESCROW-HOLD-{fixture.Escrows.Entities[0].ContractEscrowId:N}", hold.GatewayTransactionCode);
+
+        var fee = Assert.Single(fixture.WalletTransactions.Entities.Where(transaction =>
+            transaction.Type == (int)WalletTransactionType.Adjustment));
+        Assert.Equal(2m, fee.TokenAmount);
+        Assert.Equal($"SERVICE-FEE-FUND-{fixture.ContractId:N}", fee.GatewayTransactionCode);
+
+        Assert.Single(fixture.EscrowTransactions.Entities);
+    }
+
+    [Fact]
+    public async Task FundEscrow_DuplicateRequestDoesNotDoubleDebit()
+    {
+        var fixture = new ContractWorkflowFixture();
+        fixture.MoveToFullySignedPendingEscrow();
+        fixture.Contract.TotalBudget = 200m;
+        fixture.Escrows.Entities[0].RequiredAmount = 200m;
+        fixture.Wallets.Add(new UserWallet
+        {
+            UserWalletsId = fixture.WalletId,
+            UserId = fixture.ClientUserId,
+            AvailableTokens = 202m,
+            HeldTokens = 0m,
+            CreatedAt = fixture.Now
+        });
+
+        var handler = new FundContractEscrowCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopNotificationService(),
+            new NoopChatRealtimeNotifier());
+
+        var first = await handler.Handle(
+            new FundContractEscrowCommand(fixture.ContractId, fixture.ClientUserId),
+            CancellationToken.None);
+        Assert.Equal((int)ContractStatus.Active, first.ContractStatus);
+
+        var walletTransactionsAfterFirst = fixture.WalletTransactions.Entities.Count;
+        var escrowTransactionsAfterFirst = fixture.EscrowTransactions.Entities.Count;
+
+        var second = await handler.Handle(
+            new FundContractEscrowCommand(fixture.ContractId, fixture.ClientUserId),
+            CancellationToken.None);
+
+        Assert.Equal((int)ContractStatus.Active, second.ContractStatus);
+        Assert.Equal(0m, fixture.Wallets.Entities[0].AvailableTokens);
+        Assert.Equal(200m, fixture.Wallets.Entities[0].HeldTokens);
+        Assert.Equal(walletTransactionsAfterFirst, fixture.WalletTransactions.Entities.Count);
+        Assert.Equal(escrowTransactionsAfterFirst, fixture.EscrowTransactions.Entities.Count);
     }
 
     [Fact]
@@ -313,8 +403,8 @@ public class ContractWorkflowTests
         {
             UserWalletsId = fixture.WalletId,
             UserId = fixture.ClientUserId,
-            AvailableTokens = 600m,
-            WithdrawableTokens = 400m,
+            AvailableTokens = 600_000m,
+            WithdrawableTokens = 400_000m,
             HeldTokens = 0m,
             CreatedAt = fixture.Now
         });
@@ -325,15 +415,15 @@ public class ContractWorkflowTests
             new NoopNotificationService(),
             new NoopChatRealtimeNotifier());
 
-        // 600 deposited + 400 earned = 1,000, but the 10-token fee pushes it over.
+        // 600,000 deposited + 400,000 earned = 1,000,000, but the 10,000-token fee pushes it over.
         await Assert.ThrowsAsync<BadRequestException>(() =>
             handler.Handle(
                 new FundContractEscrowCommand(fixture.ContractId, fixture.ClientUserId),
                 CancellationToken.None));
 
         var wallet = fixture.Wallets.Entities[0];
-        Assert.Equal(600m, wallet.AvailableTokens);
-        Assert.Equal(400m, wallet.WithdrawableTokens);
+        Assert.Equal(600_000m, wallet.AvailableTokens);
+        Assert.Equal(400_000m, wallet.WithdrawableTokens);
         Assert.Equal(0m, wallet.HeldTokens);
         Assert.Empty(fixture.WalletTransactions.Entities);
     }
@@ -348,7 +438,7 @@ public class ContractWorkflowTests
         {
             UserWalletsId = fixture.WalletId,
             UserId = fixture.ClientUserId,
-            AvailableTokens = 1.01m,
+            AvailableTokens = 1_010m,
             HeldTokens = 0m,
             CreatedAt = fixture.Now
         });
@@ -366,9 +456,9 @@ public class ContractWorkflowTests
         Assert.Equal((int)ContractStatus.Active, result.ContractStatus);
         Assert.Equal((int)ContractStatus.Active, fixture.Contract.Status);
         Assert.Equal(1_000m, result.RequiredAmountVnd);
-        Assert.Equal(1m, result.HeldTokens);
+        Assert.Equal(1_000m, result.HeldTokens);
         Assert.Equal(0m, fixture.Wallets.Entities[0].AvailableTokens);
-        Assert.Equal(1m, fixture.Wallets.Entities[0].HeldTokens);
+        Assert.Equal(1_000m, fixture.Wallets.Entities[0].HeldTokens);
         Assert.Equal((int)ContractEscrowStatus.Funded, fixture.Escrows.Entities[0].Status);
         Assert.Equal(fixture.Contract.TotalBudget, fixture.Escrows.Entities[0].RequiredAmount);
         Assert.Equal((int)ESignDocumentStatus.FullySigned, fixture.EsignDocuments.Entities[0].Status);

@@ -87,8 +87,8 @@ public sealed class ContractAmendmentWorkflowTests
         Assert.Equal(2, fixture.Contract.RevisionNumber);
         Assert.Equal(1_200m, fixture.Escrow.FundedAmount);
         Assert.Equal(1_200m, fixture.Escrow.RequiredAmount);
-        Assert.Equal(0.798m, fixture.ClientWallet.AvailableTokens);
-        Assert.Equal(1.2m, fixture.ClientWallet.HeldTokens);
+        Assert.Equal(0m, fixture.ClientWallet.AvailableTokens);
+        Assert.Equal(1_200m, fixture.ClientWallet.HeldTokens);
         Assert.Contains(fixture.Context.Set<WalletTransaction>(), item =>
             item.GatewayTransactionCode == $"AMENDMENT-FUND-{amendment.ContractAmendmentId:N}");
     }
@@ -115,8 +115,8 @@ public sealed class ContractAmendmentWorkflowTests
         Assert.Equal(900m, fixture.Contract.TotalBudget);
         Assert.Equal(900m, fixture.Escrow.FundedAmount);
         Assert.Equal(900m, fixture.Escrow.RequiredAmount);
-        Assert.Equal(1.1m, fixture.ClientWallet.AvailableTokens);
-        Assert.Equal(0.9m, fixture.ClientWallet.HeldTokens);
+        Assert.Equal(302m, fixture.ClientWallet.AvailableTokens);
+        Assert.Equal(900m, fixture.ClientWallet.HeldTokens);
         Assert.Contains(fixture.Context.Set<EscrowTransaction>(), item =>
             item.GatewayTransactionCode == $"AMENDMENT-REFUND-{amendment.ContractAmendmentId:N}");
     }
@@ -178,12 +178,14 @@ public sealed class ContractAmendmentWorkflowTests
                 Status = (int)ContractEscrowStatus.Funded,
                 CreatedAt = Clock.UtcNow
             };
+            // Contract/escrow amounts are G-coin: the held escrow equals the 1,000 G-coin
+            // contract value and 202 available G-coin fund the 200 increase plus 2 fee.
             ClientWallet = new UserWallet
             {
                 UserWalletsId = Guid.NewGuid(),
                 UserId = ClientUserId,
-                AvailableTokens = 1m,
-                HeldTokens = 1m,
+                AvailableTokens = 202m,
+                HeldTokens = 1_000m,
                 CreatedAt = Clock.UtcNow
             };
 
