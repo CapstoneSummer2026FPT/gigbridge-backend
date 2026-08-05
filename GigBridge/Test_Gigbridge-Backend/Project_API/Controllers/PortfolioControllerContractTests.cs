@@ -40,6 +40,29 @@ public sealed class PortfolioControllerContractTests
         Assert.Equal(nameof(UserRole.Freelancer), authorize.Roles);
     }
 
+    [Theory]
+    [InlineData(nameof(PortfolioController.CreatePortfolioItem))]
+    [InlineData(nameof(PortfolioController.UpdatePortfolioItem))]
+    public void WriteActions_AcceptSizeLimitedMultipartFormData(string actionName)
+    {
+        var action = typeof(PortfolioController).GetMethod(actionName);
+        Assert.NotNull(action);
+
+        var consumes = Assert.Single(
+            action.GetCustomAttributes(typeof(ConsumesAttribute), true)
+                .Cast<ConsumesAttribute>());
+        Assert.Contains("multipart/form-data", consumes.ContentTypes);
+
+        Assert.Single(
+            action.GetCustomAttributes(typeof(RequestSizeLimitAttribute), true)
+                .Cast<RequestSizeLimitAttribute>());
+
+        var formParameter = Assert.Single(
+            action.GetParameters(),
+            parameter => parameter.GetCustomAttributes(typeof(FromFormAttribute), true).Length == 1);
+        Assert.NotNull(formParameter);
+    }
+
     private static void AssertActionRoute<TAttribute>(string actionName, string? template)
         where TAttribute : HttpMethodAttribute
     {

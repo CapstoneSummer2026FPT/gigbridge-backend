@@ -1,10 +1,12 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
+using Application.Common.Interfaces.IService;
 using Application.Features.Portfolios.Common;
 using Application.Features.Profiles.FreelancerProfile.GetFreelancerProfile.DTOs;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace Application.Features.Portfolios.CreatePortfolioItem.Commands;
 
@@ -13,10 +15,17 @@ public sealed class CreatePortfolioItemCommandHandler
 {
     private const int MaximumPortfolioItems = 20;
     private readonly IApplicationDbContext _context;
+    private readonly IMediaService _mediaService;
+    private readonly ILogger<CreatePortfolioItemCommandHandler> _logger;
 
-    public CreatePortfolioItemCommandHandler(IApplicationDbContext context)
+    public CreatePortfolioItemCommandHandler(
+        IApplicationDbContext context,
+        IMediaService mediaService,
+        ILogger<CreatePortfolioItemCommandHandler> logger)
     {
         _context = context;
+        _mediaService = mediaService;
+        _logger = logger;
     }
 
     public async Task<PortfolioItemDto> Handle(
@@ -37,20 +46,38 @@ public sealed class CreatePortfolioItemCommandHandler
             throw new BadRequestException("A profile cannot contain more than 20 portfolio items.");
         }
 
-        var item = new PortfolioItem
+        string? uploadedImageUrl = null;
+        try
         {
-            PortfolioItemsId = Guid.NewGuid(),
-            FreelancerId = profile.FreelancerProfilesId,
-            Title = request.Dto.Title.Trim(),
-            Description = PortfolioItemMapping.NormalizeOptional(request.Dto.Description),
-            ProjectUrl = PortfolioItemMapping.NormalizeOptional(request.Dto.ProjectUrl),
-            ImageUrl = PortfolioItemMapping.NormalizeOptional(request.Dto.ImageUrl),
-            ProjectDate = request.Dto.ProjectDate
-        };
+            if (request.Image is not null)
+            {
+                uploadedImageUrl = await PortfolioImageStorage.UploadAsync(
+                    _mediaService,
+                    request.Image,
+                    profile.FreelancerProfilesId,
+                    cancellationToken);
+            }
 
-        _context.Set<PortfolioItem>().Add(item);
-        await _context.SaveChangesAsync(cancellationToken);
+            var item = new PortfolioItem
+            {
+                PortfolioItemsId = Guid.NewGuid(),
+                FreelancerId = profile.FreelancerProfilesId,
+                Title = request.Dto.Title.Trim(),
+                Description = PortfolioItemMapping.NormalizeOptional(request.Dto.Description),
+                ProjectUrl = PortfolioItemMapping.NormalizeOptional(request.Dto.ProjectUrl),
+                ImageUrl = uploadedImageUrl,
+                ProjectDate = request.Dto.ProjectDate
+            };
 
-        return item.ToDto();
+            _context.Set<PortfolioItem>().Add(item);
+            await _context.SaveChangesAsync(cancellationToken);
+
+            return item.ToDto();
+        }
+        catch
+        {
+            await PortfolioImageStorage.TryDeleteAsync(_mediaService, uploadedImageUrl, _logger);
+            throw;
+        }
     }
 }

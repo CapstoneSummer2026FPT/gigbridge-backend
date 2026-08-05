@@ -14,6 +14,7 @@ internal sealed class FakeMediaService : IMediaService
     }
 
     public List<UploadCall> Uploads { get; } = new();
+    public List<string> DeletedFiles { get; } = new();
 
     public async Task<string> UploadFileAsync(
         Stream fileStream,
@@ -33,6 +34,15 @@ internal sealed class FakeMediaService : IMediaService
 
     public Task<string> UploadPrivateFileAsync(Stream fileStream, string fileName, string contentType, string folder, CancellationToken cancellationToken = default)
         => UploadFileAsync(fileStream, fileName, contentType, folder, cancellationToken);
+
+    public Task DeleteFileAsync(
+        string fileUrl,
+        string expectedFolder,
+        CancellationToken cancellationToken = default)
+    {
+        DeletedFiles.Add(fileUrl);
+        return Task.CompletedTask;
+    }
 
     public Task<string> GetPrivateDownloadUrlAsync(string storageKey, string contentType, CancellationToken cancellationToken = default)
         => Task.FromResult(storageKey);
