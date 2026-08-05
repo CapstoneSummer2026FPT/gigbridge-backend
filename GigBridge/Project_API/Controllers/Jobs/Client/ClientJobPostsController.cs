@@ -100,6 +100,9 @@ public class ClientJobPostsController : BaseApiController
         public string ClientPrompt { get; set; } = null!;
         public string Title { get; set; } = null!;
         public string Description { get; set; } = null!;
+        public decimal? BudgetMin { get; set; }
+        public decimal? BudgetMax { get; set; }
+        public string? EstimatedDuration { get; set; }
     }
 
     [HttpPost("ai/generate/hiring-plan")]
@@ -114,7 +117,10 @@ public class ClientJobPostsController : BaseApiController
             userId, 
             request.ClientPrompt, 
             request.Title, 
-            request.Description));
+            request.Description,
+            request.BudgetMin,
+            request.BudgetMax,
+            request.EstimatedDuration));
 
         return Ok(ApiResponse<GenerateJobHiringPlanResponse>.Ok(result, "Job hiring plan generated successfully"));
     }

@@ -28,4 +28,14 @@ public interface IUserEloService
         Guid operationId,
         bool hide,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Deducts 50% of <paramref name="userId"/>'s Elo points (rounded half-up) as a
+    /// dispute-resolution penalty against a violating party. Idempotent per
+    /// (dispute, user). No-op for ineligible roles or when there is nothing to deduct.
+    /// </summary>
+    Task ApplyDisputeResolutionPenaltyAsync(
+        Guid userId,
+        Guid disputeId,
+        CancellationToken cancellationToken);
 }

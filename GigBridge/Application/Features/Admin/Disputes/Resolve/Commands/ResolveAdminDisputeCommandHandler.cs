@@ -24,19 +24,22 @@ public sealed class ResolveAdminDisputeCommandHandler :
     private readonly IChatRealtimeNotifier _realtime;
     private readonly ILogger<ResolveAdminDisputeCommandHandler> _logger;
     private readonly IUserAccountStatusService _accountStatus;
+    private readonly IUserEloService _elo;
 
     public ResolveAdminDisputeCommandHandler(
         IApplicationDbContext context,
         IDateTimeService clock,
         IChatRealtimeNotifier realtime,
         ILogger<ResolveAdminDisputeCommandHandler> logger,
-        IUserAccountStatusService accountStatus)
+        IUserAccountStatusService accountStatus,
+        IUserEloService elo)
     {
         _context = context;
         _clock = clock;
         _realtime = realtime;
         _logger = logger;
         _accountStatus = accountStatus;
+        _elo = elo;
     }
 
     public async Task<AdminDisputeDetailResponse> Handle(
@@ -162,6 +165,11 @@ public sealed class ResolveAdminDisputeCommandHandler :
         var violatingUserId = command.ClientViolation.IsViolation ^ command.FreelancerViolation.IsViolation
             ? command.ClientViolation.IsViolation ? client.UserId : freelancer.UserId
             : (Guid?)null;
+
+        foreach (var userId in violatingUserIds.Distinct().OrderBy(id => id))
+        {
+            await _elo.ApplyDisputeResolutionPenaltyAsync(userId, dispute.DisputesId, cancellationToken);
+        }
 
         foreach (var allocation in allocations.Values)
         {
