@@ -23,5 +23,11 @@ public enum NotificationType
     RankProtectionActivated = 18,
     RankProtectionExpired = 19,
     ReportUpdate = 20,
-    ReviewRequested = 21
+    ReviewRequested = 21,
+
+    /// <summary>Elo points changed via a manual administrator adjustment.</summary>
+    EloPointsUpdated = 22,
+
+    /// <summary>An Elo appeal's status/resolution changed (created, resolved, cancelled).</summary>
+    EloAppealStatusChanged = 23
 }

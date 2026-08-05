@@ -1,3 +1,5 @@
+using Domain.Enums;
+
 namespace Domain.Services;
 
 public static class UserEloCalculator
@@ -35,13 +37,31 @@ public static class UserEloCalculator
 
     public static int CalculateDisputeResolutionDelta(int currentPoints)
     {
+        return CalculatePenaltyDelta(currentPoints, EloAdjustmentMode.Percentage, 50m);
+    }
+
+    /// <summary>
+    /// Computes the negative Elo delta for a configurable penalty. In Percentage
+    /// mode deducts <paramref name="amount"/>% of the current points, leaving
+    /// (100 - amount)% (rounded half-up, i.e. the remaining score rounds up) —
+    /// preserving the original 50% dispute behavior where 1501 → 751 remaining,
+    /// -750. In FixedPoints mode deducts exactly <paramref name="amount"/> points.
+    /// Returns 0 when there is nothing to deduct (points at the minimum).
+    /// </summary>
+    public static int CalculatePenaltyDelta(int currentPoints, EloAdjustmentMode mode, decimal amount)
+    {
         if (currentPoints <= MinimumPoints)
         {
             return 0;
         }
 
-        var halved = (int)Math.Round(currentPoints / 2m, MidpointRounding.AwayFromZero);
-        return halved - currentPoints;
+        if (mode == EloAdjustmentMode.Percentage)
+        {
+            var remaining = (int)Math.Round(currentPoints * (100m - amount) / 100m, MidpointRounding.AwayFromZero);
+            return remaining - currentPoints;
+        }
+
+        return -Math.Abs((int)Math.Round(amount, MidpointRounding.AwayFromZero));
     }
 
     public static int CalculateInactivityPenalty(DateTime lastActivityAt, DateTime now)
