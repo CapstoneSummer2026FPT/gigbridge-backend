@@ -35,7 +35,8 @@ public class UpdateFreelancerProfileCommandHandlerTests
             context,
             new FixedCurrentUserService(userId),
             CreateMapper(),
-            NullLogger<UpdateFreelancerProfileCommandHandler>.Instance);
+            NullLogger<UpdateFreelancerProfileCommandHandler>.Instance,
+            new FakeMediaService());
 
         var result = await handler.Handle(new UpdateFreelancerProfileCommand(CreateValidDto(majorId, categoryId)), CancellationToken.None);
 
@@ -87,7 +88,8 @@ public class UpdateFreelancerProfileCommandHandlerTests
             context,
             new FixedCurrentUserService(userId),
             CreateMapper(),
-            NullLogger<UpdateFreelancerProfileCommandHandler>.Instance);
+            NullLogger<UpdateFreelancerProfileCommandHandler>.Instance,
+            new FakeMediaService());
 
         var result = await handler.Handle(new UpdateFreelancerProfileCommand(CreateValidDto(majorId, categoryId)), CancellationToken.None);
 
@@ -316,7 +318,8 @@ public class UpdateFreelancerProfileCommandHandlerTests
             PortfolioItemsId = Guid.NewGuid(),
             FreelancerId = profile.FreelancerProfilesId,
             Freelancer = profile,
-            Title = "Remove me"
+            Title = "Remove me",
+            ImageUrl = "https://res.cloudinary.com/gigbridge/image/upload/v1/gigbridge/portfolio/profile/remove.png"
         };
         profile.PortfolioItems.Add(retainedItem);
         profile.PortfolioItems.Add(removedItem);
@@ -334,7 +337,6 @@ public class UpdateFreelancerProfileCommandHandlerTests
                 Title = " Updated project ",
                 Description = " Portfolio description ",
                 ProjectUrl = " https://example.com/project ",
-                ImageUrl = " https://example.com/project.png ",
                 ProjectDate = new DateOnly(2026, 7, 15)
             },
             new UpdatePortfolioItemDto
@@ -344,7 +346,8 @@ public class UpdateFreelancerProfileCommandHandlerTests
             }
         };
 
-        var result = await CreateHandler(context, userId).Handle(
+        var mediaService = new FakeMediaService();
+        var result = await CreateHandler(context, userId, mediaService).Handle(
             new UpdateFreelancerProfileCommand(dto),
             CancellationToken.None);
 
@@ -352,10 +355,11 @@ public class UpdateFreelancerProfileCommandHandlerTests
         Assert.Equal("Updated project", retainedItem.Title);
         Assert.Equal("Portfolio description", retainedItem.Description);
         Assert.Equal("https://example.com/project", retainedItem.ProjectUrl);
-        Assert.Equal("https://example.com/project.png", retainedItem.ImageUrl);
+        Assert.Null(retainedItem.ImageUrl);
         Assert.Equal(new DateOnly(2026, 7, 15), retainedItem.ProjectDate);
         Assert.Equal(2, portfolioItems.Entities.Count);
         Assert.Equal(2, result.PortfolioItems.Count);
+        Assert.Contains(removedItem.ImageUrl, mediaService.DeletedFiles);
         Assert.Contains(result.PortfolioItems, item =>
             item.PortfolioItemId == retainedItem.PortfolioItemsId &&
             item.ProjectDate == "2026-07-15");
@@ -478,11 +482,13 @@ public class UpdateFreelancerProfileCommandHandlerTests
 
     private static UpdateFreelancerProfileCommandHandler CreateHandler(
         InMemoryApplicationDbContext context,
-        Guid userId) => new(
+        Guid userId,
+        FakeMediaService? mediaService = null) => new(
             context,
             new FixedCurrentUserService(userId),
             CreateMapper(),
-            NullLogger<UpdateFreelancerProfileCommandHandler>.Instance);
+            NullLogger<UpdateFreelancerProfileCommandHandler>.Instance,
+            mediaService ?? new FakeMediaService());
 
     private static IMapper CreateMapper()
     {

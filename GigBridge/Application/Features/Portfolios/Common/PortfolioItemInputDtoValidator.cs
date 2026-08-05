@@ -15,9 +15,6 @@ public sealed class PortfolioItemInputDtoValidator : AbstractValidator<Portfolio
         RuleFor(item => item.ProjectUrl)
             .Must(BeValidHttpUrl).WithMessage("Portfolio project URL must be an absolute HTTP or HTTPS URL.")
             .When(item => !string.IsNullOrWhiteSpace(item.ProjectUrl));
-        RuleFor(item => item.ImageUrl)
-            .Must(BeValidHttpUrl).WithMessage("Portfolio image URL must be an absolute HTTP or HTTPS URL.")
-            .When(item => !string.IsNullOrWhiteSpace(item.ImageUrl));
     }
 
     private static bool BeValidHttpUrl(string? value)

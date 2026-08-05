@@ -1,6 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Application.Features.Portfolios.Common;
 using Application.Features.Profiles.FreelancerProfile.Common.DTOs;
 using Application.Features.Profiles.FreelancerProfile.Common;
 using Application.Features.Profiles.FreelancerProfile.UpdateFreelancerProfile.DTOs;
@@ -20,17 +21,20 @@ public class UpdateFreelancerProfileCommandHandler
     private readonly ICurrentUserService _currentUserService;
     private readonly IMapper _mapper;
     private readonly ILogger<UpdateFreelancerProfileCommandHandler> _logger;
+    private readonly IMediaService _mediaService;
 
     public UpdateFreelancerProfileCommandHandler(
         IApplicationDbContext context,
         ICurrentUserService currentUserService,
         IMapper mapper,
-        ILogger<UpdateFreelancerProfileCommandHandler> logger)
+        ILogger<UpdateFreelancerProfileCommandHandler> logger,
+        IMediaService mediaService)
     {
         _context = context;
         _currentUserService = currentUserService;
         _mapper = mapper;
         _logger = logger;
+        _mediaService = mediaService;
     }
 
     public async Task<FreelancerProfileResponseDto> Handle(
@@ -104,9 +108,12 @@ public class UpdateFreelancerProfileCommandHandler
                 cancellationToken);
         }
 
+        IReadOnlyList<string> removedPortfolioImageUrls = Array.Empty<string>();
         if (request.Dto.PortfolioItems is not null)
         {
-            SynchronizePortfolioItems(freelancerProfile, request.Dto.PortfolioItems);
+            removedPortfolioImageUrls = SynchronizePortfolioItems(
+                freelancerProfile,
+                request.Dto.PortfolioItems);
         }
 
         freelancerProfile.ProfileCompletionScore = FreelancerProfileTaxonomy.CalculateCompletionScore(freelancerProfile);
@@ -145,10 +152,15 @@ public class UpdateFreelancerProfileCommandHandler
                 exception);
         }
 
+        foreach (var imageUrl in removedPortfolioImageUrls)
+        {
+            await PortfolioImageStorage.TryDeleteAsync(_mediaService, imageUrl, _logger);
+        }
+
         return _mapper.Map<FreelancerProfileResponseDto>(freelancerProfile);
     }
 
-    private void SynchronizePortfolioItems(
+    private IReadOnlyList<string> SynchronizePortfolioItems(
         FreelancerProfileEntity freelancerProfile,
         IReadOnlyCollection<UpdatePortfolioItemDto> requestedItems)
     {
@@ -172,6 +184,11 @@ public class UpdateFreelancerProfileCommandHandler
         var requestedIdSet = requestedIds.ToHashSet();
         var itemsToRemove = freelancerProfile.PortfolioItems
             .Where(item => !requestedIdSet.Contains(item.PortfolioItemsId))
+            .ToList();
+        var removedImageUrls = itemsToRemove
+            .Select(item => item.ImageUrl)
+            .Where(url => !string.IsNullOrWhiteSpace(url))
+            .Cast<string>()
             .ToList();
         if (itemsToRemove.Count > 0)
         {
@@ -204,9 +221,10 @@ public class UpdateFreelancerProfileCommandHandler
             portfolioItem.Title = requestedItem.Title.Trim();
             portfolioItem.Description = NormalizeOptional(requestedItem.Description);
             portfolioItem.ProjectUrl = NormalizeOptional(requestedItem.ProjectUrl);
-            portfolioItem.ImageUrl = NormalizeOptional(requestedItem.ImageUrl);
             portfolioItem.ProjectDate = requestedItem.ProjectDate;
         }
+
+        return removedImageUrls;
     }
 
     private static string? NormalizeOptional(string? value) =>
