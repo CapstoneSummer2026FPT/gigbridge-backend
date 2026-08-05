@@ -39,7 +39,8 @@ public class GenerateJobHiringPlanCommandHandler
             Description = command.Description,
             BudgetMin = command.BudgetMin,
             BudgetMax = command.BudgetMax,
-            EstimatedDuration = command.EstimatedDuration
+            EstimatedDuration = command.EstimatedDuration,
+            ProposalClosingDate = command.ProposalClosingDate
         };
 
         JobPostHiringPlanGenerationResponseDto aiResponse;
