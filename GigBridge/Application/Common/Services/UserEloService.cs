@@ -2,6 +2,7 @@ using System.Text.Json;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
+using Application.Features.Elo.Common;
 using Domain.Entities;
 using Domain.Enums;
 using Domain.Services;
@@ -69,7 +70,8 @@ public class UserEloService : IUserEloService
                     requestedDelta = inactivityPenalty
                 },
                 now,
-                cancellationToken);
+                cancellationToken,
+                sourceType: (int)EloAdjustmentSourceType.System);
 
             score.LastInactivityPenaltyAt = now;
         }
@@ -91,7 +93,8 @@ public class UserEloService : IUserEloService
                     requestedDelta = returnBonus
                 },
                 now,
-                cancellationToken);
+                cancellationToken,
+                sourceType: (int)EloAdjustmentSourceType.System);
 
             score.LastReturnBonusAt = now;
         }
@@ -159,7 +162,8 @@ public class UserEloService : IUserEloService
             cancellationToken,
             contractId: contractId,
             reviewId: reviewId,
-            rating: rating);
+            rating: rating,
+            sourceType: (int)EloAdjustmentSourceType.Review);
     }
 
     public async Task<int> ApplyReviewModerationAsync(
@@ -224,15 +228,18 @@ public class UserEloService : IUserEloService
                 operationId
             },
             now,
-            cancellationToken);
+            cancellationToken,
+            sourceType: (int)EloAdjustmentSourceType.Review);
 
         return score.CurrentPoints - pointsBefore;
     }
 
     /// <summary>
-    /// Deducts 50% of the user's current Elo points (rounded half-up) as a
-    /// dispute-resolution penalty. Idempotent per (dispute, user): a retry after a
-    /// partial failure does not double-deduct. No-op when there is nothing to deduct.
+    /// Deducts the configured dispute-resolution penalty (default 50% of current
+    /// points, rounded half-up) from <paramref name="userId"/>. The policy is read
+    /// from PlatformSetting via <see cref="EloPolicy"/>. Idempotent per
+    /// (dispute, user): a retry after a partial failure does not double-deduct.
+    /// No-op when there is nothing to deduct.
     /// </summary>
     public async Task ApplyDisputeResolutionPenaltyAsync(
         Guid userId,
@@ -248,9 +255,10 @@ public class UserEloService : IUserEloService
             return;
         }
 
+        var policy = await EloPolicy.LoadAsync(_context, cancellationToken);
         var now = _dateTimeService.UtcNow;
         var score = await EnsureScoreAsync(userId, now, cancellationToken);
-        var requestedDelta = UserEloCalculator.CalculateDisputeResolutionDelta(score.CurrentPoints);
+        var requestedDelta = UserEloCalculator.CalculatePenaltyDelta(score.CurrentPoints, policy.Mode, policy.Value);
         if (requestedDelta == 0)
         {
             return;
@@ -267,10 +275,124 @@ public class UserEloService : IUserEloService
             {
                 disputeId,
                 requestedDelta,
-                deductionRatio = 0.5m
+                policyMode = policy.Mode,
+                penaltyValue = policy.Value
             },
             now,
-            cancellationToken);
+            cancellationToken,
+            sourceType: (int)EloAdjustmentSourceType.Dispute,
+            mode: (int)policy.Mode);
+    }
+
+    /// <summary>
+    /// Applies a manual administrator Elo adjustment (increase or decrease) through
+    /// the same idempotent ledger workflow as every other Elo change. The adjustment
+    /// is recorded with SourceType=Admin and the acting admin id, and is idempotent
+    /// per <paramref name="requestId"/> so a client retry cannot double-apply.
+    /// </summary>
+    public async Task<UserEloPointTransaction?> ApplyAdminAdjustmentAsync(
+        Guid adminId,
+        Guid userId,
+        int delta,
+        string? note,
+        Guid requestId,
+        CancellationToken cancellationToken)
+    {
+        var user = await _context.Set<User>()
+            .FirstOrDefaultAsync(item => item.UserId == userId, cancellationToken)
+            ?? throw new NotFoundException("User does not exist.");
+
+        if (!IsEligibleRole(user.Role))
+        {
+            throw new BadRequestException("Elo adjustments can only be applied to client or freelancer accounts.");
+        }
+
+        if (delta == 0)
+        {
+            throw new BadRequestException("Adjustment delta must be non-zero.");
+        }
+
+        var now = _dateTimeService.UtcNow;
+        var score = await EnsureScoreAsync(userId, now, cancellationToken);
+        var reason = delta > 0 ? UserEloPointReason.AdminIncrease : UserEloPointReason.AdminDecrease;
+
+        return await ApplyDeltaAsync(
+            score,
+            delta,
+            reason,
+            "Admin",
+            requestId,
+            CreateAdminAdjustmentKey(requestId),
+            new
+            {
+                adminId,
+                note,
+                requestedDelta = delta,
+                requestId
+            },
+            now,
+            cancellationToken,
+            sourceType: (int)EloAdjustmentSourceType.Admin,
+            appliedByAdminId: adminId);
+    }
+
+    /// <summary>
+    /// Writes the correction transaction for a resolved Elo appeal. FullReversal
+    /// negates the original transaction delta; PartialCorrection and
+    /// CustomAdjustment use <paramref name="correctedDelta"/>. NoChange (and a
+    /// zero requested delta) produce no transaction. Idempotent per appeal via the
+    /// unique idempotency key, so a retry after partial failure never double-corrects.
+    /// </summary>
+    public async Task<UserEloPointTransaction?> ApplyAppealResolutionAsync(
+        EloPointAppeal appeal,
+        EloPointAppealResolution resolution,
+        int? correctedDelta,
+        Guid adminId,
+        CancellationToken cancellationToken)
+    {
+        var original = await _context.Set<UserEloPointTransaction>()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(transaction =>
+                transaction.UserEloPointTransactionsId == appeal.EloPointTransactionId,
+                cancellationToken)
+            ?? throw new NotFoundException("Appealed Elo transaction does not exist.");
+
+        var delta = resolution switch
+        {
+            EloPointAppealResolution.FullReversal => -original.PointsDelta,
+            EloPointAppealResolution.PartialCorrection => correctedDelta ?? 0,
+            EloPointAppealResolution.CustomAdjustment => correctedDelta ?? 0,
+            _ => 0
+        };
+
+        if (delta == 0)
+        {
+            return null;
+        }
+
+        var now = _dateTimeService.UtcNow;
+        var score = await EnsureScoreAsync(appeal.UserId, now, cancellationToken);
+
+        return await ApplyDeltaAsync(
+            score,
+            delta,
+            UserEloPointReason.AppealCorrection,
+            "EloAppeal",
+            appeal.EloPointAppealId,
+            CreateAppealResolutionKey(appeal.EloPointAppealId),
+            new
+            {
+                appealId = appeal.EloPointAppealId,
+                resolution,
+                requestedDelta = delta,
+                correctedDelta,
+                adminId
+            },
+            now,
+            cancellationToken,
+            sourceType: (int)EloAdjustmentSourceType.EloAppeal,
+            eloAppealId: appeal.EloPointAppealId,
+            appliedByAdminId: adminId);
     }
 
     private async Task<UserEloScore> EnsureScoreAsync(Guid userId, DateTime now, CancellationToken cancellationToken)
@@ -310,12 +432,13 @@ public class UserEloService : IUserEloService
                 requestedDelta = UserEloCalculator.DefaultPoints
             },
             now,
-            cancellationToken);
+            cancellationToken,
+            sourceType: (int)EloAdjustmentSourceType.System);
 
         return score;
     }
 
-    private async Task ApplyDeltaAsync(
+    private async Task<UserEloPointTransaction?> ApplyDeltaAsync(
         UserEloScore score,
         int requestedDelta,
         UserEloPointReason reason,
@@ -327,11 +450,15 @@ public class UserEloService : IUserEloService
         CancellationToken cancellationToken,
         Guid? contractId = null,
         Guid? reviewId = null,
-        decimal? rating = null)
+        decimal? rating = null,
+        int? sourceType = null,
+        int? mode = null,
+        Guid? eloAppealId = null,
+        Guid? appliedByAdminId = null)
     {
         if (await TransactionExistsAsync(idempotencyKey, cancellationToken))
         {
-            return;
+            return null;
         }
 
         var pointsBefore = score.CurrentPoints;
@@ -341,7 +468,7 @@ public class UserEloService : IUserEloService
         score.CurrentPoints = pointsAfter;
         score.UpdatedAt = now;
 
-        await AddTransactionIfMissingAsync(
+        return await AddTransactionIfMissingAsync(
             score.UserId,
             effectiveDelta,
             pointsBefore,
@@ -355,10 +482,14 @@ public class UserEloService : IUserEloService
             cancellationToken,
             contractId: contractId,
             reviewId: reviewId,
-            rating: rating);
+            rating: rating,
+            sourceType: sourceType,
+            mode: mode,
+            eloAppealId: eloAppealId,
+            appliedByAdminId: appliedByAdminId);
     }
 
-    private async Task AddTransactionIfMissingAsync(
+    private async Task<UserEloPointTransaction?> AddTransactionIfMissingAsync(
         Guid userId,
         int pointsDelta,
         int pointsBefore,
@@ -372,14 +503,18 @@ public class UserEloService : IUserEloService
         CancellationToken cancellationToken,
         Guid? contractId = null,
         Guid? reviewId = null,
-        decimal? rating = null)
+        decimal? rating = null,
+        int? sourceType = null,
+        int? mode = null,
+        Guid? eloAppealId = null,
+        Guid? appliedByAdminId = null)
     {
         if (await TransactionExistsAsync(idempotencyKey, cancellationToken))
         {
-            return;
+            return null;
         }
 
-        _context.Set<UserEloPointTransaction>().Add(new UserEloPointTransaction
+        var transaction = new UserEloPointTransaction
         {
             UserEloPointTransactionsId = Guid.NewGuid(),
             UserId = userId,
@@ -394,8 +529,15 @@ public class UserEloService : IUserEloService
             ContractId = contractId,
             ReviewId = reviewId,
             Rating = rating,
+            SourceType = sourceType,
+            Mode = mode,
+            EloAppealId = eloAppealId,
+            AppliedByAdminId = appliedByAdminId,
             CreatedAt = now
-        });
+        };
+
+        _context.Set<UserEloPointTransaction>().Add(transaction);
+        return transaction;
     }
 
     private async Task<bool> TransactionExistsAsync(string idempotencyKey, CancellationToken cancellationToken)
@@ -478,5 +620,15 @@ public class UserEloService : IUserEloService
     private static string CreateDisputeResolutionPenaltyKey(Guid disputeId, Guid userId)
     {
         return $"dispute-resolution-penalty:{disputeId}:{userId}";
+    }
+
+    private static string CreateAdminAdjustmentKey(Guid requestId)
+    {
+        return $"elo-admin:{requestId}";
+    }
+
+    private static string CreateAppealResolutionKey(Guid appealId)
+    {
+        return $"elo-appeal-resolution:{appealId}";
     }
 }

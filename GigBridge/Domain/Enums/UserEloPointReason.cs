@@ -21,8 +21,37 @@ public enum UserEloPointReason
 
     /// <summary>
     /// Elo penalty applied to a party flagged as violating platform rules when an
-    /// administrator resolves a dispute. Deducts 50% of current points (rounded
-    /// half-up). One transaction per (dispute, user).
+    /// administrator resolves a dispute. Deducts the configured penalty (default
+    /// 50% of current points, rounded half-up). One transaction per (dispute, user).
     /// </summary>
-    DisputeResolutionPenalty = 8
+    DisputeResolutionPenalty = 8,
+
+    /// <summary>
+    /// Manual Elo increase granted by an administrator through the centralized
+    /// adjustment workflow. Positive PointsDelta.
+    /// </summary>
+    AdminIncrease = 9,
+
+    /// <summary>
+    /// Manual Elo decrease applied by an administrator through the centralized
+    /// adjustment workflow. Negative PointsDelta.
+    /// </summary>
+    AdminDecrease = 10,
+
+    /// <summary>
+    /// Correction transaction written when an Elo appeal is resolved (full reversal,
+    /// partial correction, or custom adjustment). May be positive or negative.
+    /// </summary>
+    AppealCorrection = 11,
+
+    /// <summary>
+    /// Reversal of a prior Elo change that was applied by mistake (e.g. restored
+    /// review Elo). Kept distinct from AppealCorrection for admin/audit clarity.
+    /// </summary>
+    Reversal = 12,
+
+    /// <summary>
+    /// Generic system-driven adjustment that does not map to a named workflow.
+    /// </summary>
+    SystemAdjustment = 13
 }
