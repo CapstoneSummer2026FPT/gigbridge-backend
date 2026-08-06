@@ -26,12 +26,6 @@ RUN dotnet build "./Project_API.csproj" -c $BUILD_CONFIGURATION -o /app/build
 FROM build AS publish
 ARG BUILD_CONFIGURATION=Release
 RUN dotnet publish "./Project_API.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
-RUN dotnet ef migrations bundle \
-    --project "/src/Infrastructure/Infrastructure.csproj" \
-    --startup-project "./Project_API.csproj" \
-    --configuration $BUILD_CONFIGURATION \
-    --output /app/publish/efbundle \
-    --force
 
 # This stage is used in production or when running from VS in regular mode (Default when not using the Debug configuration)
 FROM base AS final
