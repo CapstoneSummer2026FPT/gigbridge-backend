@@ -51,9 +51,9 @@ public class UpdateProposalCommandHandler : IRequestHandler<UpdateProposalComman
 
         ProposalModerationGuard.EnsureActive(proposal);
 
-        if (proposal.Status != 0)
+        if (proposal.Status != (int)Domain.Enums.ProposalStatus.Draft)
         {
-            throw new Exception("Only pending proposal can be updated.");
+            throw new BadRequestException("Only draft proposals can be updated.");
         }
 
         var milestonePlans = (command.Request.MilestonePlans ?? []).ToList();
