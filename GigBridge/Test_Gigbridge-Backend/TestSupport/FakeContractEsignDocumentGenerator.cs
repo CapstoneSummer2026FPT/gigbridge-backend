@@ -10,10 +10,10 @@ internal sealed class FakeContractEsignDocumentGenerator : IContractEsignDocumen
     public string RenderPreview(ContractDocumentSnapshot snapshot) =>
         $"<article><p>{System.Net.WebUtility.HtmlEncode(snapshot.ProjectTitle)}</p></article>";
 
-    public Task<GeneratedContractDocument> GenerateFinalAsync(
+    public Task<GeneratedContractDocument> GenerateAsync(
         ContractDocumentSnapshot snapshot,
-        ContractSignatureSnapshot clientSignature,
-        ContractSignatureSnapshot freelancerSignature,
+        ContractSignatureSnapshot? clientSignature,
+        ContractSignatureSnapshot? freelancerSignature,
         string documentHash,
         CancellationToken cancellationToken)
     {
@@ -26,7 +26,7 @@ internal sealed class FakeContractEsignDocumentGenerator : IContractEsignDocumen
 
     public sealed record GenerateCall(
         ContractDocumentSnapshot Snapshot,
-        ContractSignatureSnapshot ClientSignature,
-        ContractSignatureSnapshot FreelancerSignature,
+        ContractSignatureSnapshot? ClientSignature,
+        ContractSignatureSnapshot? FreelancerSignature,
         string DocumentHash);
 }

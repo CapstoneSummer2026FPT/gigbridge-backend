@@ -1,4 +1,5 @@
 using Domain.Entities;
+using Domain.Enums;
 
 namespace Application.Common.Interfaces.IService;
 
@@ -30,12 +31,41 @@ public interface IUserEloService
         CancellationToken cancellationToken);
 
     /// <summary>
-    /// Deducts 50% of <paramref name="userId"/>'s Elo points (rounded half-up) as a
-    /// dispute-resolution penalty against a violating party. Idempotent per
-    /// (dispute, user). No-op for ineligible roles or when there is nothing to deduct.
+    /// Deducts the configured dispute-resolution penalty (default 50% of current
+    /// points, rounded half-up; policy read from PlatformSetting) from
+    /// <paramref name="userId"/>. Idempotent per (dispute, user). No-op for
+    /// ineligible roles or when there is nothing to deduct.
     /// </summary>
     Task ApplyDisputeResolutionPenaltyAsync(
         Guid userId,
         Guid disputeId,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Applies a manual administrator Elo adjustment through the centralized ledger
+    /// workflow. The delta's sign selects AdminIncrease/AdminDecrease; the change is
+    /// idempotent per <paramref name="requestId"/> and attributed to
+    /// <paramref name="adminId"/>. Returns the created transaction (null when the
+    /// request was already applied).
+    /// </summary>
+    Task<UserEloPointTransaction?> ApplyAdminAdjustmentAsync(
+        Guid adminId,
+        Guid userId,
+        int delta,
+        string? note,
+        Guid requestId,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Writes the correction transaction for a resolved Elo appeal (FullReversal
+    /// negates the original delta; PartialCorrection/CustomAdjustment use
+    /// <paramref name="correctedDelta"/>; NoChange writes nothing). Idempotent per
+    /// appeal. Returns the created transaction, or null when no correction applies.
+    /// </summary>
+    Task<UserEloPointTransaction?> ApplyAppealResolutionAsync(
+        EloPointAppeal appeal,
+        EloPointAppealResolution resolution,
+        int? correctedDelta,
+        Guid adminId,
         CancellationToken cancellationToken);
 }

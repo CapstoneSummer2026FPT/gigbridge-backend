@@ -42,6 +42,8 @@ namespace Application.Features.Auth.Login.Commands
                 .Include(u => u.ClientProfile)
                 .Include(u => u.FreelancerProfile)
                 .Include(u => u.UserEloScore)
+                .Include(u => u.Subscriptions)
+                    .ThenInclude(subscription => subscription.SubscriptionPlans)
                 .FirstOrDefaultAsync(u => u.Email == email, cancellationToken);
 
             if (user is null || string.IsNullOrEmpty(user.Password) || !_passwordHasher.VerifyPassword(request.LoginRequest.Password, user.Password))

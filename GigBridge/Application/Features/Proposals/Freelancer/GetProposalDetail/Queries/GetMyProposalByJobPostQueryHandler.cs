@@ -1,8 +1,9 @@
-﻿using Application.Common.Exceptions;
+using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Features.Proposals.Common;
 using Application.Features.Proposals.Common.DTOs;
 using Domain.Entities;
+using Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -49,6 +50,32 @@ public class GetMyProposalByJobPostQueryHandler
             throw new NotFoundException("Proposal does not exist.");
         }
 
+        var definition = await _context.Set<AiInterviewDefinition>()
+            .AsNoTracking()
+            .Where(d => d.JobPostId == request.JobPostId &&
+                d.Status != AiInterviewDefinitionStatus.Closed)
+            .OrderByDescending(d => d.CreatedAt)
+            .Select(d => new { d.AiInterviewDefinitionsId })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        bool hasAiInterview = definition is not null;
+        bool aiInterviewCompleted = false;
+        bool aiInterviewInProgress = false;
+        Guid? aiInterviewDefinitionId = definition?.AiInterviewDefinitionsId;
+
+        if (definition is not null)
+        {
+            var attempts = await _context.Set<AiInterviewAttempt>()
+                .AsNoTracking()
+                .Where(attempt => attempt.AiInterviewDefinitionId == definition.AiInterviewDefinitionsId &&
+                    attempt.FreelancerUserId == freelancerProfile.UserId)
+                .Select(attempt => attempt.Status)
+                .ToListAsync(cancellationToken);
+
+            aiInterviewCompleted = attempts.Any(status => status == AiInterviewAttemptStatus.Completed);
+            aiInterviewInProgress = !aiInterviewCompleted && attempts.Any(status => status == AiInterviewAttemptStatus.InProgress);
+        }
+
         return new ProposalDetailDto
         {
             ProposalId = proposal.ProposalsId,
@@ -75,7 +102,11 @@ public class GetMyProposalByJobPostQueryHandler
             Status = proposal.Status,
             SubmittedAt = proposal.SubmittedAt,
             UpdatedAt = proposal.UpdatedAt,
-            IsAigenerated = proposal.IsAigenerated
+            IsAigenerated = proposal.IsAigenerated,
+            HasAiInterview = hasAiInterview,
+            AiInterviewCompleted = aiInterviewCompleted,
+            AiInterviewInProgress = aiInterviewInProgress,
+            AiInterviewDefinitionId = aiInterviewDefinitionId
         };
     }
 }

@@ -36,7 +36,11 @@ public class GenerateJobHiringPlanCommandHandler
         {
             ClientPrompt = command.ClientPrompt,
             Title = command.Title,
-            Description = command.Description
+            Description = command.Description,
+            BudgetMin = command.BudgetMin,
+            BudgetMax = command.BudgetMax,
+            EstimatedDuration = command.EstimatedDuration,
+            ProposalClosingDate = command.ProposalClosingDate
         };
 
         JobPostHiringPlanGenerationResponseDto aiResponse;

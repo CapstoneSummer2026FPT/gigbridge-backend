@@ -9,4 +9,5 @@ public sealed class UserProfileDto
     public string? PhoneNumber { get; init; }
     public string? PreferredLanguage { get; init; }
     public int Role { get; init; }
+    public bool IsPremium { get; init; }
 }

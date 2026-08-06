@@ -31,6 +31,7 @@ using Application.Features.Premium.Client.SmartTalentMatching.GetMatches.DTOs;
 using Application.Features.Premium.Client.SmartTalentMatching.GetMatches.Queries;
 using Application.Features.Premium.Client.SmartTalentMatching.Feedback;
 using Application.Features.Premium.Client.AiInterviews.Create.Commands;
+using Application.Features.Premium.Client.AiInterviews.Disable.Commands;
 using Application.Features.Premium.Client.AiInterviews.DTOs;
 using Application.Features.Premium.Client.AiInterviews.GetResults.Queries;
 
@@ -100,6 +101,10 @@ public class ClientJobPostsController : BaseApiController
         public string ClientPrompt { get; set; } = null!;
         public string Title { get; set; } = null!;
         public string Description { get; set; } = null!;
+        public decimal? BudgetMin { get; set; }
+        public decimal? BudgetMax { get; set; }
+        public string? EstimatedDuration { get; set; }
+        public string ProposalClosingDate { get; set; } = null!;
     }
 
     [HttpPost("ai/generate/hiring-plan")]
@@ -114,7 +119,11 @@ public class ClientJobPostsController : BaseApiController
             userId, 
             request.ClientPrompt, 
             request.Title, 
-            request.Description));
+            request.Description,
+            request.BudgetMin,
+            request.BudgetMax,
+            request.EstimatedDuration,
+            request.ProposalClosingDate));
 
         return Ok(ApiResponse<GenerateJobHiringPlanResponse>.Ok(result, "Job hiring plan generated successfully"));
     }
@@ -259,6 +268,17 @@ public class ClientJobPostsController : BaseApiController
             new CreateAiInterviewCommand(userId, jobPostId, request), cancellationToken);
         return StatusCode(StatusCodes.Status201Created,
             ApiResponse<AiInterviewDefinitionDto>.CreatedAt(result, "AI interview definition created"));
+    }
+
+    [HttpDelete("{jobPostId:guid}/ai-interviews")]
+    public async Task<IActionResult> DisableAiInterview(
+        Guid jobPostId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetCurrentUserId(out var userId)) return InvalidTokenResponse();
+        var result = await Mediator.Send(
+            new DisableAiInterviewCommand(userId, jobPostId), cancellationToken);
+        return Ok(ApiResponse<bool>.Ok(result, "AI interview disabled"));
     }
 
     [HttpGet("{jobPostId:guid}/ai-interviews/{interviewId:guid}/results")]

@@ -3,6 +3,7 @@ using Application.Features.ESign.Common.DeleteDocument.Commands;
 using Application.Features.ESign.Common.DownloadDocument.Queries;
 using Application.Features.ESign.Common.GetDocument.Queries;
 using Application.Features.ESign.Common.GetDocuments.Queries;
+using Application.Features.ESign.Common.SavePdf.Commands;
 using Domain.Entities;
 using Domain.Enums;
 using Test_Gigbridge_Backend.TestSupport;
@@ -31,6 +32,7 @@ public sealed class ESignDocumentManagementTests
         Assert.False(finalized.CanCurrentUserSign);
         Assert.True(finalized.HasFinalArtifact);
         Assert.Equal("GB-CONTRACT-FINAL.docx", finalized.FinalizedDocumentFileName);
+        Assert.True(finalized.HasPdfArtifact);
 
         var freelancerResult = await handler.Handle(
             new GetESignDocumentsQuery(
@@ -73,8 +75,9 @@ public sealed class ESignDocumentManagementTests
             new DownloadESignDocumentQuery(fixture.FinalizedDocumentId, fixture.FreelancerUserId),
             CancellationToken.None);
 
-        Assert.Equal(fixture.FinalizedContent, result.Content);
-        Assert.Equal("GB-CONTRACT-FINAL.docx", result.FileName);
+        Assert.Equal(fixture.PdfContent, result.Content);
+        Assert.Equal("Gigbridge-Client-Freelancer-Contract.pdf", result.FileName);
+        Assert.Equal("application/pdf", result.ContentType);
 
         await Assert.ThrowsAsync<ForbiddenAccessException>(() => handler.Handle(
             new DownloadESignDocumentQuery(fixture.FinalizedDocumentId, fixture.OutsiderUserId),
@@ -98,6 +101,24 @@ public sealed class ESignDocumentManagementTests
         Assert.False(result.CanCurrentUserSign);
         Assert.True(result.HasFinalArtifact);
         Assert.Equal("GB-CONTRACT-FINAL.docx", result.FinalizedDocumentFileName);
+        Assert.True(result.HasPdfArtifact);
+    }
+
+    [Fact]
+    public async Task SavePdf_RejectsBrowserGeneratedPdfForContractDocuments()
+    {
+        var fixture = new Fixture();
+        var handler = new SaveESignPdfCommandHandler(fixture.Context);
+
+        await Assert.ThrowsAsync<BadRequestException>(() => handler.Handle(
+            new SaveESignPdfCommand(
+                fixture.FinalizedDocumentId,
+                fixture.ClientUserId,
+                fixture.PdfContent,
+                "stale.pdf",
+                1),
+            CancellationToken.None));
+
     }
 
     [Fact]
@@ -201,6 +222,7 @@ public sealed class ESignDocumentManagementTests
                     DocumentCode = "GB-CONTRACT-PENDING",
                     RenderedHtmlContent = "<h1>Pending</h1>",
                     Status = (int)ESignDocumentStatus.PendingSignatures,
+                    DocumentHash = "pending-hash",
                     CreatedAt = Now
                 },
                 new EsignDocument
@@ -212,11 +234,16 @@ public sealed class ESignDocumentManagementTests
                     DocumentCode = "GB-CONTRACT-FINAL",
                     RenderedHtmlContent = "<h1>Final</h1>",
                     Status = (int)ESignDocumentStatus.FullySigned,
+                    DocumentHash = "final-hash",
                     FinalizedAt = Now.AddDays(-1),
                     FinalizedDocumentContent = FinalizedContent,
                     FinalizedDocumentFileName = "GB-CONTRACT-FINAL.docx",
                     FinalizedDocumentMimeType = DocxContentType,
                     FinalizedDocumentSizeBytes = FinalizedContent.Length,
+                    PdfDocumentContent = PdfContent,
+                    PdfDocumentFileName = "GB-CONTRACT-FINAL.pdf",
+                    PdfDocumentHash = "final-hash:contract-template-pdf-v1",
+                    PdfSignatureCount = 2,
                     CreatedAt = Now.AddDays(-1)
                 });
 
@@ -253,6 +280,7 @@ public sealed class ESignDocumentManagementTests
         public TestDbSet<EsignSignature> Signatures { get; }
         public DateTime Now { get; } = new(2026, 7, 20, 12, 0, 0, DateTimeKind.Utc);
         public byte[] FinalizedContent { get; } = [1, 2, 3, 4];
+        public byte[] PdfContent { get; } = "%PDF-1.7 test"u8.ToArray();
         public Guid ClientUserId { get; } = Guid.NewGuid();
         public Guid FreelancerUserId { get; } = Guid.NewGuid();
         public Guid AdminUserId { get; } = Guid.NewGuid();

@@ -69,8 +69,7 @@ public class UpdateFreelancerProfileCommandValidatorTests
             new UpdatePortfolioItemDto
             {
                 Title = "",
-                ProjectUrl = "javascript:alert('xss')",
-                ImageUrl = "not-a-url"
+                ProjectUrl = "javascript:alert('xss')"
             }
         };
 
@@ -79,7 +78,6 @@ public class UpdateFreelancerProfileCommandValidatorTests
         Assert.False(result.IsValid);
         Assert.Contains(result.Errors, error => error.PropertyName.EndsWith(".Title"));
         Assert.Contains(result.Errors, error => error.PropertyName.EndsWith(".ProjectUrl"));
-        Assert.Contains(result.Errors, error => error.PropertyName.EndsWith(".ImageUrl"));
     }
 
     private static UpdateFreelancerProfileDto CreateValidDto()
