@@ -17,10 +17,9 @@ COPY ["Domain/Domain.csproj", "Domain/"]
 COPY ["Infrastructure/Infrastructure.csproj", "Infrastructure/"]
 COPY ["Application/Application.csproj", "Application/"]
 RUN dotnet restore "./Project_API/Project_API.csproj"
-RUN dotnet tool install --global dotnet-ef --version 8.0.29
-ENV PATH="${PATH}:/root/.dotnet/tools"
 COPY . .
 WORKDIR "/src/Project_API"
+RUN dotnet tool restore
 RUN dotnet build "./Project_API.csproj" -c $BUILD_CONFIGURATION -o /app/build
 
 # This stage is used to publish the service project to be copied to the final stage
