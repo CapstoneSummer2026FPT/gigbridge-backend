@@ -27,4 +27,7 @@ public class JobPostHiringPlanGenerationRequestDto
 
     [JsonPropertyName("estimated_duration")]
     public string? EstimatedDuration { get; set; }
+
+    [JsonPropertyName("proposal_closing_date")]
+    public string ProposalClosingDate { get; set; } = null!;
 }

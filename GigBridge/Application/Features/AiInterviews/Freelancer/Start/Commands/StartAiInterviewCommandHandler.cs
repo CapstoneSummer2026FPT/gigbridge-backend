@@ -53,7 +53,7 @@ public sealed class StartAiInterviewCommandHandler(
             .AnyAsync(proposal => proposal.JobPostsId == command.JobPostId &&
                 proposal.FreelancerProfiles.UserId == command.UserId &&
                 proposal.ModerationStatus == (int)ProposalModerationStatus.Active &&
-                (proposal.Status == 1 || proposal.Status == 2 || proposal.Status == 3),
+                proposal.Status == 0,
                 cancellationToken);
         if (!hasSubmittedProposal)
             throw new ForbiddenAccessException(
