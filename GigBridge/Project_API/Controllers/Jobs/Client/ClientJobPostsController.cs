@@ -31,6 +31,7 @@ using Application.Features.Premium.Client.SmartTalentMatching.GetMatches.DTOs;
 using Application.Features.Premium.Client.SmartTalentMatching.GetMatches.Queries;
 using Application.Features.Premium.Client.SmartTalentMatching.Feedback;
 using Application.Features.Premium.Client.AiInterviews.Create.Commands;
+using Application.Features.Premium.Client.AiInterviews.Disable.Commands;
 using Application.Features.Premium.Client.AiInterviews.DTOs;
 using Application.Features.Premium.Client.AiInterviews.GetResults.Queries;
 
@@ -267,6 +268,17 @@ public class ClientJobPostsController : BaseApiController
             new CreateAiInterviewCommand(userId, jobPostId, request), cancellationToken);
         return StatusCode(StatusCodes.Status201Created,
             ApiResponse<AiInterviewDefinitionDto>.CreatedAt(result, "AI interview definition created"));
+    }
+
+    [HttpDelete("{jobPostId:guid}/ai-interviews")]
+    public async Task<IActionResult> DisableAiInterview(
+        Guid jobPostId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetCurrentUserId(out var userId)) return InvalidTokenResponse();
+        var result = await Mediator.Send(
+            new DisableAiInterviewCommand(userId, jobPostId), cancellationToken);
+        return Ok(ApiResponse<bool>.Ok(result, "AI interview disabled"));
     }
 
     [HttpGet("{jobPostId:guid}/ai-interviews/{interviewId:guid}/results")]
