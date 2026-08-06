@@ -10,3 +10,4 @@ public partial class GigbridgeDbContext
         return new EfApplicationDbContextTransaction(transaction);
     }
 }
+
