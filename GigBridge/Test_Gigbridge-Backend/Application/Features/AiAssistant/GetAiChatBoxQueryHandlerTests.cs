@@ -5,11 +5,11 @@ using System.Threading.Tasks;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces.IService;
 using Application.Common.Models.Ai;
-using Application.Features.Chat.AiAssistant.Queries;
+using Application.Features.AiAssistant.Queries;
 using NSubstitute;
 using Xunit;
 
-namespace Test_Gigbridge_Backend.Application.Features.Chat;
+namespace Test_Gigbridge_Backend.Application.Features.AiAssistant;
 
 public class GetAiChatBoxQueryHandlerTests
 {

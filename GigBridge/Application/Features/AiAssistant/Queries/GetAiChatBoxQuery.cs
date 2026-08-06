@@ -7,7 +7,7 @@ using Application.Common.Interfaces.IService;
 using Application.Common.Models.Ai;
 using MediatR;
 
-namespace Application.Features.Chat.AiAssistant.Queries;
+namespace Application.Features.AiAssistant.Queries;
 
 public sealed record GetAiChatBoxQuery(AiChatBoxRequestDto Request) : IRequest<AiChatBoxResponseDto>;
 

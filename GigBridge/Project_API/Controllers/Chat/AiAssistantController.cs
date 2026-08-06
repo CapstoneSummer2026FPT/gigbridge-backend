@@ -2,7 +2,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Application.Common.Models;
 using Application.Common.Models.Ai;
-using Application.Features.Chat.AiAssistant.Queries;
+using Application.Features.AiAssistant.Queries;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
