@@ -19,15 +19,13 @@ public sealed class GigbridgeDbContextFactory : IDesignTimeDbContextFactory<Gigb
 
         var configuration = new ConfigurationBuilder()
             .SetBasePath(apiDirectory)
-            .AddJsonFile("appsettings.json", optional: false)
+            .AddJsonFile("appsettings.json", optional: true)
             .AddJsonFile($"appsettings.{environment}.json", optional: true)
             .AddEnvironmentVariables()
             .Build();
 
         var connectionString = configuration.GetConnectionString("DefaultConnection")
-            ?? throw new InvalidOperationException(
-                "Connection string 'DefaultConnection' was not found. Configure it in " +
-                "Project_API/appsettings.json or ConnectionStrings__DefaultConnection.");
+            ?? "Host=localhost;Database=dummy;";
 
         var options = new DbContextOptionsBuilder<GigbridgeDbContext>()
             .UseNpgsql(connectionString)
@@ -47,7 +45,6 @@ public sealed class GigbridgeDbContextFactory : IDesignTimeDbContextFactory<Gigb
             if (File.Exists(nested)) return Path.GetDirectoryName(nested)!;
         }
 
-        throw new InvalidOperationException(
-            "Could not locate Project_API/appsettings.json from the current directory.");
+        return Directory.GetCurrentDirectory();
     }
 }
