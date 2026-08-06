@@ -1,9 +1,8 @@
 using System.Threading;
 using System.Threading.Tasks;
-using System.Net.Http;
-using Application.Common.Interfaces.IService;
 using Application.Common.Models;
 using Application.Common.Models.Ai;
+using Application.Features.Chat.AiAssistant.Queries;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -14,13 +13,6 @@ namespace Project_API.Controllers.Chat;
 [Authorize]
 public class AiAssistantController : BaseApiController
 {
-    private readonly IAiServiceClient _aiServiceClient;
-
-    public AiAssistantController(IAiServiceClient aiServiceClient)
-    {
-        _aiServiceClient = aiServiceClient;
-    }
-
     [HttpPost("query")]
     public async Task<IActionResult> QueryChatBox(
         [FromBody] AiChatBoxRequestDto request,
@@ -31,19 +23,7 @@ public class AiAssistantController : BaseApiController
             return InvalidTokenResponse();
         }
 
-        try
-        {
-            var result = await _aiServiceClient.QueryChatBoxAsync(request, cancellationToken);
-            return Ok(ApiResponse<AiChatBoxResponseDto>.Ok(result, "AI response generated successfully."));
-        }
-        catch (HttpRequestException ex)
-        {
-            var statusCode = ex.StatusCode.HasValue ? (int)ex.StatusCode.Value : 500;
-            return StatusCode(statusCode, ApiResponse<object>.Error(statusCode, ex.Message));
-        }
-        catch (System.Exception ex)
-        {
-            return StatusCode(500, ApiResponse<object>.Error(500, ex.Message));
-        }
+        var result = await Mediator.Send(new GetAiChatBoxQuery(request), cancellationToken);
+        return Ok(ApiResponse<AiChatBoxResponseDto>.Ok(result, "AI response generated successfully."));
     }
 }
