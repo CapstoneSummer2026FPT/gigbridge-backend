@@ -7,6 +7,11 @@ namespace Application.Features.JobPosts.Public.GetJobPostDetail.DTOs;
 public record JobPostDetailDto(
     Guid JobPostsId,
     Guid ClientProfilesId,
+    Guid UserId,
+    string FullName,
+    string Email,
+    string? Avatar,
+    string? PhoneNumber,
     string? ClientFullName,
     string Title,
     string Description,

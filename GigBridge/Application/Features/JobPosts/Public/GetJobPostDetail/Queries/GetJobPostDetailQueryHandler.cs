@@ -55,6 +55,11 @@ public class GetJobPostDetailQueryHandler : IRequestHandler<GetJobPostDetailQuer
         return new JobPostDetailDto(
             JobPostsId: jobPost.JobPostsId,
             ClientProfilesId: jobPost.ClientProfilesId,
+            UserId: jobPost.ClientProfiles.UserId,
+            FullName: jobPost.ClientProfiles.User.FullName,
+            Email: jobPost.ClientProfiles.User.Email,
+            Avatar: jobPost.ClientProfiles.User.Avatar,
+            PhoneNumber: jobPost.ClientProfiles.User.PhoneNumber,
             ClientFullName: jobPost.ClientProfiles?.User?.FullName
                             ?? jobPost.ClientProfiles?.CompanyName,
             Title: jobPost.Title,
