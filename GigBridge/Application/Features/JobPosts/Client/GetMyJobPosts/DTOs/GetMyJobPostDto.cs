@@ -46,6 +46,8 @@ public sealed class GetMyJobPostDto
     public bool IsFeatured { get; set; }
     public DateTime? FeaturedUntil { get; set; }
 
+    public bool HasAiInterview { get; set; }
+
     public DateTime CreatedAt { get; set; }
 
     public DateTime? UpdatedAt { get; set; }

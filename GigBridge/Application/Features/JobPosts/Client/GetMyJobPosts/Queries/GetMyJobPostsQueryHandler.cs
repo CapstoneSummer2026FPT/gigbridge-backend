@@ -3,6 +3,7 @@ using Application.Common.Interfaces;
 using Application.Features.JobPosts.Client.Common;
 using Application.Features.JobPosts.Client.GetMyJobPosts.DTOs;
 using Domain.Entities;
+using Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -92,6 +93,18 @@ public class GetMyJobPostsQueryHandler : IRequestHandler<GetMyJobPostsQuery, IEn
                 ProposalCount = jobPost.Proposals.Count(proposal => proposal.Status != 0)
             })
             .ToListAsync(cancellationToken);
+
+        var jobPostIds = jobPosts.Select(x => x.JobPostsId).ToList();
+        var activeInterviews = await _context.Set<AiInterviewDefinition>()
+            .AsNoTracking()
+            .Where(d => jobPostIds.Contains(d.JobPostId) && d.Status != AiInterviewDefinitionStatus.Closed)
+            .Select(d => d.JobPostId)
+            .ToListAsync(cancellationToken);
+
+        foreach (var jp in jobPosts)
+        {
+            jp.HasAiInterview = activeInterviews.Contains(jp.JobPostsId);
+        }
 
         await JobPostSetupProgressBuilder.ApplyAsync(_context, jobPosts, cancellationToken);
 

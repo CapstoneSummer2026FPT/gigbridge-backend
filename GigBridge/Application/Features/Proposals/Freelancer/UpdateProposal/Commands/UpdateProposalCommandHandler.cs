@@ -1,4 +1,4 @@
-﻿using Application.Common.Exceptions;
+using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Features.Proposals.Common;
@@ -76,9 +76,9 @@ public class UpdateProposalCommandHandler : IRequestHandler<UpdateProposalComman
 
         ProposalModerationGuard.EnsureActive(proposal);
 
-        if (proposal.Status != 0)
+        if (proposal.Status != (int)Domain.Enums.ProposalStatus.Draft)
         {
-            throw new Exception("Only pending proposal can be updated.");
+            throw new BadRequestException("Only draft proposals can be updated.");
         }
 
         var milestonePlans = (command.Request.MilestonePlans ?? []).ToList();
@@ -96,14 +96,11 @@ public class UpdateProposalCommandHandler : IRequestHandler<UpdateProposalComman
         proposal.Assumptions = ProposalPlanMapper.Clean(command.Request.Assumptions);
         proposal.OutOfScope = ProposalPlanMapper.Clean(command.Request.OutOfScope);
 
-        _context.Set<ProposalWorkBreakdownItem>().RemoveRange(proposal.ProposalWorkBreakdownItems);
-        _context.Set<ProposalMilestonePlan>().RemoveRange(proposal.ProposalMilestonePlans);
-
-        proposal.ProposalMilestonePlans = milestonePlans
+        var newMilestonePlans = milestonePlans
             .Select((item, index) => ProposalPlanMapper.ToEntity(proposal.ProposalsId, item, index))
             .ToList();
-        var milestoneIdsByOrder = proposal.ProposalMilestonePlans.ToDictionary(item => item.OrderIndex, item => item.ProposalMilestonePlansId);
-        proposal.ProposalWorkBreakdownItems = ProposalPlanMapper.ResolveWorkItems(command.Request.WorkBreakdownItems, milestonePlans)
+        var milestoneIdsByOrder = newMilestonePlans.ToDictionary(item => item.OrderIndex, item => item.ProposalMilestonePlansId);
+        var newWorkItems = ProposalPlanMapper.ResolveWorkItems(command.Request.WorkBreakdownItems, milestonePlans)
             .Select((item, index) => ProposalPlanMapper.ToEntity(
                 proposal.ProposalsId,
                 item,
@@ -112,6 +109,21 @@ public class UpdateProposalCommandHandler : IRequestHandler<UpdateProposalComman
                     ? milestoneId
                     : null))
             .ToList();
+
+        _context.Set<ProposalWorkBreakdownItem>().RemoveRange(proposal.ProposalWorkBreakdownItems);
+        _context.Set<ProposalMilestonePlan>().RemoveRange(proposal.ProposalMilestonePlans);
+
+        proposal.ProposalMilestonePlans.Clear();
+        foreach (var milestone in newMilestonePlans)
+        {
+            proposal.ProposalMilestonePlans.Add(milestone);
+        }
+
+        proposal.ProposalWorkBreakdownItems.Clear();
+        foreach (var item in newWorkItems)
+        {
+            proposal.ProposalWorkBreakdownItems.Add(item);
+        }
 
         proposal.UpdatedAt = _dateTimeService.UtcNow;
 
