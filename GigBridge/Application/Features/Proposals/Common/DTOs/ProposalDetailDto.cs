@@ -1,4 +1,4 @@
-﻿namespace Application.Features.Proposals.Common.DTOs;
+namespace Application.Features.Proposals.Common.DTOs;
 
 public class ProposalDetailDto
 {
@@ -48,4 +48,9 @@ public class ProposalDetailDto
     public DateTime? UpdatedAt { get; set; }
 
     public bool? IsAigenerated { get; set; }
+
+    public bool HasAiInterview { get; set; }
+    public bool AiInterviewCompleted { get; set; }
+    public bool AiInterviewInProgress { get; set; }
+    public Guid? AiInterviewDefinitionId { get; set; }
 }
