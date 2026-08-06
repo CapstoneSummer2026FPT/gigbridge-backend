@@ -18,5 +18,6 @@ public sealed record ESignDocumentListItemResponse(
     string? ExportedPdfUrl,
     bool HasFinalArtifact,
     string? FinalizedDocumentFileName,
+    bool HasPdfArtifact,
     DateTime CreatedAt,
     DateTime? UpdatedAt);

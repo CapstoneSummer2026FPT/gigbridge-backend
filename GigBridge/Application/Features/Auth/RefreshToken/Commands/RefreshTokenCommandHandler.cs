@@ -64,6 +64,9 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, (
         var user = await _context.Set<User>()
             .Include(u => u.ClientProfile)
             .Include(u => u.FreelancerProfile)
+            .Include(u => u.UserEloScore)
+            .Include(u => u.Subscriptions)
+                .ThenInclude(subscription => subscription.SubscriptionPlans)
             .FirstOrDefaultAsync(u => u.UserId == userId, cancellationToken);
 
         if (user is null)
