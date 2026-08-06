@@ -13,6 +13,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
     {
     }
 
+    public void ResetChangeTracker() => ChangeTracker.Clear();
+
     public virtual DbSet<AdminAuditLog> AdminAuditLogs { get; set; }
 
     public virtual DbSet<BankAccount> BankAccounts { get; set; }

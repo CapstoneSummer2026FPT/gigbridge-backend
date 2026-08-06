@@ -10,6 +10,8 @@ namespace Application.Features.Proposals.Freelancer.UpdateProposal.Commands;
 
 public class UpdateProposalCommandHandler : IRequestHandler<UpdateProposalCommand, bool>
 {
+    private const int MaxSaveAttempts = 2;
+
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
 
@@ -22,6 +24,29 @@ public class UpdateProposalCommandHandler : IRequestHandler<UpdateProposalComman
     }
 
     public async Task<bool> Handle(
+        UpdateProposalCommand command,
+        CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; attempt < MaxSaveAttempts; attempt++)
+        {
+            try
+            {
+                await ApplyUpdateAsync(command, cancellationToken);
+                return true;
+            }
+            catch (DbUpdateConcurrencyException) when (attempt < MaxSaveAttempts - 1)
+            {
+                // Npgsql guards every row with the implicit xmin version column. If a
+                // duplicate submit or a racing status update commits first, the save
+                // affects 0 rows. The freelancer's latest edit wins, so reload and retry.
+                _context.ResetChangeTracker();
+            }
+        }
+
+        return false;
+    }
+
+    private async Task ApplyUpdateAsync(
         UpdateProposalCommand command,
         CancellationToken cancellationToken)
     {
@@ -91,7 +116,5 @@ public class UpdateProposalCommandHandler : IRequestHandler<UpdateProposalComman
         proposal.UpdatedAt = _dateTimeService.UtcNow;
 
         await _context.SaveChangesAsync(cancellationToken);
-
-        return true;
     }
 }
