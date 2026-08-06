@@ -61,19 +61,27 @@ public sealed class ContractEsignDocumentGenerator(HttpClient httpClient) : ICon
         return html.Append("</article>").ToString();
     }
 
-    public async Task<GeneratedContractDocument> GenerateFinalAsync(
+    public async Task<GeneratedContractDocument> GenerateAsync(
         ContractDocumentSnapshot snapshot,
-        ContractSignatureSnapshot clientSignature,
-        ContractSignatureSnapshot freelancerSignature,
+        ContractSignatureSnapshot? clientSignature,
+        ContractSignatureSnapshot? freelancerSignature,
         string documentHash,
         CancellationToken cancellationToken)
     {
-        var clientImage = await DownloadSignatureAsync(clientSignature.SignatureImageUrl, cancellationToken);
-        var freelancerImage = await DownloadSignatureAsync(freelancerSignature.SignatureImageUrl, cancellationToken);
+        var clientImage = clientSignature is null
+            ? null
+            : await DownloadSignatureAsync(clientSignature.SignatureImageUrl, cancellationToken);
+        var freelancerImage = freelancerSignature is null
+            ? null
+            : await DownloadSignatureAsync(freelancerSignature.SignatureImageUrl, cancellationToken);
         var content = Render(
             snapshot,
-            new SignatureArtifact(clientSignature, clientImage.Content, clientImage.ContentType),
-            new SignatureArtifact(freelancerSignature, freelancerImage.Content, freelancerImage.ContentType),
+            clientSignature is null || clientImage is null
+                ? null
+                : new SignatureArtifact(clientSignature, clientImage.Content, clientImage.ContentType),
+            freelancerSignature is null || freelancerImage is null
+                ? null
+                : new SignatureArtifact(freelancerSignature, freelancerImage.Content, freelancerImage.ContentType),
             documentHash);
 
         return new GeneratedContractDocument(
@@ -105,9 +113,13 @@ public sealed class ContractEsignDocumentGenerator(HttpClient httpClient) : ICon
             NormalizeTemplateMarkup(body);
             ExpandMilestones(body, snapshot.Milestones);
 
-            if (clientSignature is not null && freelancerSignature is not null)
+            if (clientSignature is not null)
             {
                 AddSignatureImage(mainPart, body, "{{ClientSignatureImage}}", clientSignature, 1U);
+            }
+
+            if (freelancerSignature is not null)
+            {
                 AddSignatureImage(mainPart, body, "{{FreelancerSignatureImage}}", freelancerSignature, 2U);
             }
 

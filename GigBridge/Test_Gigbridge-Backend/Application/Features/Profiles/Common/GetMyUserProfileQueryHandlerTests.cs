@@ -24,6 +24,18 @@ public sealed class GetMyUserProfileQueryHandlerTests
             PreferredLanguage = "vi",
             Role = (int)UserRole.Client
         };
+        user.Subscriptions.Add(new Subscription
+        {
+            Status = SubscriptionStatus.Active,
+            StartDate = DateTime.UtcNow.AddDays(-1),
+            EndDate = DateTime.UtcNow.AddDays(1),
+            SubscriptionPlans = new SubscriptionPlan
+            {
+                IsActive = true,
+                Price = 100,
+                TargetRole = (int)UserRole.Client
+            }
+        });
         context.AddSet(user);
         var handler = new GetMyUserProfileQueryHandler(
             context,
@@ -38,6 +50,8 @@ public sealed class GetMyUserProfileQueryHandlerTests
         Assert.Equal(user.PhoneNumber, result.PhoneNumber);
         Assert.Equal(user.PreferredLanguage, result.PreferredLanguage);
         Assert.Equal(user.Role, result.Role);
+        Assert.True(user.IsPremium);
+        Assert.True(result.IsPremium);
     }
 
     [Fact]

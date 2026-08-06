@@ -2,6 +2,7 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Features.Profiles.Common.DTOs;
 using Domain.Entities;
+using Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -21,6 +22,8 @@ public sealed class GetUserProfileQueryHandler
         GetUserProfileQuery request,
         CancellationToken cancellationToken)
     {
+        var now = DateTime.UtcNow;
+
         var profile = await _context.Set<User>()
             .AsNoTracking()
             .Where(user => user.UserId == request.UserId)
@@ -29,7 +32,16 @@ public sealed class GetUserProfileQueryHandler
                 UserId = user.UserId,
                 FullName = user.FullName,
                 Avatar = user.Avatar,
-                Role = user.Role
+                Role = user.Role,
+                IsPremium = (user.Role == (int)UserRole.Client || user.Role == (int)UserRole.Freelancer) &&
+                    user.Subscriptions.Any(subscription =>
+                        subscription.Status == SubscriptionStatus.Active &&
+                        subscription.StartDate <= now &&
+                        subscription.EndDate > now &&
+                        subscription.SubscriptionPlans.IsActive == true &&
+                        subscription.SubscriptionPlans.Price > 0 &&
+                        (subscription.SubscriptionPlans.TargetRole == null ||
+                         subscription.SubscriptionPlans.TargetRole == user.Role))
             })
             .FirstOrDefaultAsync(cancellationToken);
 

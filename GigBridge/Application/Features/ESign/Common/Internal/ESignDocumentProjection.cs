@@ -42,6 +42,14 @@ internal static class ESignDocumentProjection
         var canCurrentUserSign = signerRole.HasValue &&
             document.Status is (int)ESignDocumentStatus.PendingSignatures or (int)ESignDocumentStatus.PartiallySigned &&
             !hasCurrentUserSigned;
+        var signedCount = signatures.Count(signature =>
+            signature.Status == (int)ESignSignatureStatus.Signed);
+        var hasCurrentPdf = document.PdfDocumentContent is { Length: > 0 } &&
+            document.PdfSignatureCount == signedCount &&
+            string.Equals(
+                document.PdfDocumentHash,
+                ESignPdfArtifactRevision.ExpectedHash(document),
+                StringComparison.Ordinal);
 
         return new ESignDocumentResponse(
             document.EsignDocumentsId,
@@ -59,6 +67,7 @@ internal static class ESignDocumentProjection
             canCurrentUserSign,
             document.FinalizedDocumentContent is { Length: > 0 },
             document.FinalizedDocumentFileName,
+            hasCurrentPdf,
             document.CreatedAt,
             document.UpdatedAt,
             signatures.Select(ToSignatureResponse).ToList());

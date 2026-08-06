@@ -6,10 +6,10 @@ public interface IContractEsignDocumentGenerator
 {
     string RenderPreview(ContractDocumentSnapshot snapshot);
 
-    Task<GeneratedContractDocument> GenerateFinalAsync(
+    Task<GeneratedContractDocument> GenerateAsync(
         ContractDocumentSnapshot snapshot,
-        ContractSignatureSnapshot clientSignature,
-        ContractSignatureSnapshot freelancerSignature,
+        ContractSignatureSnapshot? clientSignature,
+        ContractSignatureSnapshot? freelancerSignature,
         string documentHash,
         CancellationToken cancellationToken);
 }

@@ -968,6 +968,10 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.Property(e => e.FinalizedDocumentContent).HasColumnType("bytea");
             entity.Property(e => e.FinalizedDocumentFileName).HasMaxLength(255);
             entity.Property(e => e.FinalizedDocumentMimeType).HasMaxLength(150);
+            entity.Property(e => e.PdfDocumentContent).HasColumnType("bytea");
+            entity.Property(e => e.PdfDocumentFileName).HasMaxLength(255);
+            entity.Property(e => e.PdfDocumentHash).HasMaxLength(128);
+            entity.Property(e => e.PdfSignatureCount).HasDefaultValue(0);
             entity.Property(e => e.JobPostsId).HasColumnName("JobPostsId");
             entity.Property(e => e.Status)
                 .HasDefaultValue(0)

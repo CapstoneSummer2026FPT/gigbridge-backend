@@ -158,6 +158,12 @@ public sealed class GetESignDocumentsQueryHandler
                 item.Document.ExportedPdfUrl,
                 item.Document.FinalizedDocumentContent != null,
                 item.Document.FinalizedDocumentFileName,
+                item.Document.PdfDocumentContent != null &&
+                item.Document.PdfDocumentHash == (item.Document.DocumentHash ?? string.Empty) +
+                    (item.Document.ContractsId.HasValue ? ":contract-template-pdf-v1" : ":client-pdf-v2") &&
+                item.Document.PdfSignatureCount == _context.Set<EsignSignature>().Count(signature =>
+                    signature.EsignDocumentsId == item.Document.EsignDocumentsId &&
+                    signature.Status == (int)ESignSignatureStatus.Signed),
                 item.Document.CreatedAt,
                 item.Document.UpdatedAt))
             .ToListAsync(cancellationToken);

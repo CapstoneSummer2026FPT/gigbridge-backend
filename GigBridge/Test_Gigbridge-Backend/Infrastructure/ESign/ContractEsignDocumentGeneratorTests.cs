@@ -13,7 +13,7 @@ public sealed class ContractEsignDocumentGeneratorTests
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/wHwAF/gL+XxR8WQAAAABJRU5ErkJggg==");
 
     [Fact]
-    public async Task GenerateFinalAsync_ProducesValidDocxWithoutDeveloperPlaceholders()
+    public async Task GenerateAsync_ProducesValidDocxWithoutDeveloperPlaceholders()
     {
         var generator = new ContractEsignDocumentGenerator(new HttpClient(new SignatureHandler()));
         var now = new DateTime(2026, 7, 20, 12, 0, 0, DateTimeKind.Utc);
@@ -26,7 +26,7 @@ public sealed class ContractEsignDocumentGeneratorTests
 
         var clientSignature = CreateSignature(snapshot.Client.UserId, 0, now);
         var freelancerSignature = CreateSignature(snapshot.Freelancer.UserId, 1, now.AddMinutes(1));
-        var generated = await generator.GenerateFinalAsync(
+        var generated = await generator.GenerateAsync(
             snapshot,
             clientSignature,
             freelancerSignature,
@@ -45,6 +45,26 @@ public sealed class ContractEsignDocumentGeneratorTests
                     text.IndexOf("Milestone 2", StringComparison.Ordinal));
         Assert.Equal(2, mainPart.ImageParts.Count());
         Assert.Empty(new OpenXmlValidator(DocumentFormat.OpenXml.FileFormatVersions.Microsoft365).Validate(document));
+    }
+
+    [Fact]
+    public async Task GenerateAsync_EmbedsEachAvailableSignatureIndependently()
+    {
+        var generator = new ContractEsignDocumentGenerator(new HttpClient(new SignatureHandler()));
+        var now = new DateTime(2026, 8, 6, 12, 0, 0, DateTimeKind.Utc);
+        var snapshot = CreateSnapshot(now);
+
+        var generated = await generator.GenerateAsync(
+            snapshot,
+            CreateSignature(snapshot.Client.UserId, 0, now),
+            null,
+            new string('b', 64),
+            CancellationToken.None);
+
+        using var stream = new MemoryStream(generated.Content);
+        using var document = WordprocessingDocument.Open(stream, false);
+        Assert.Single(document.MainDocumentPart!.ImageParts);
+        Assert.DoesNotContain("{{", document.MainDocumentPart.Document!.InnerText);
     }
 
     private static ContractDocumentSnapshot CreateSnapshot(DateTime now)
