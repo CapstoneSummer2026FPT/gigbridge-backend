@@ -90,8 +90,8 @@ public class SendMessageCommandHandler : IRequestHandler<SendMessageCommand, Mes
             var existingAttachments = await GetMessageAttachments(
                 existingMessage.MessagesId,
                 cancellationToken);
-
-            return ToResponse(existingMessage, existingAttachments);
+            var existingSender = await GetSenderAsync(existingMessage.SenderUserId, cancellationToken);
+            return ToResponse(existingMessage, existingAttachments, existingSender);
         }
 
         var now = _dateTimeService.UtcNow;
@@ -101,6 +101,12 @@ public class SendMessageCommandHandler : IRequestHandler<SendMessageCommand, Mes
                 participant.LeftAt == null &&
                 participant.DeletedAt == null)
             .ToListAsync(cancellationToken);
+
+        var recipient = ResolveDisputeRecipient(conversation, participant, command.DisputeRecipient);
+        var deliveryParticipants = ResolveDeliveryParticipants(
+            conversation,
+            activeParticipants,
+            recipient);
 
         var message = new Message
         {
@@ -119,6 +125,7 @@ public class SendMessageCommandHandler : IRequestHandler<SendMessageCommand, Mes
             ReplyToMessageId = request.ReplyToMessageId,
             Metadata = command.ServerMetadata,
             ClientMessageId = clientMessageId,
+            DisputeRecipient = recipient,
             SentAt = now
         };
 
@@ -149,12 +156,13 @@ public class SendMessageCommandHandler : IRequestHandler<SendMessageCommand, Mes
         conversation.LastMessageId = message.MessagesId;
         conversation.LastMessageAt = now;
         conversation.UpdatedAt = now;
-        IncrementUnreadCounts(activeParticipants, command.UserId);
+        IncrementUnreadCounts(deliveryParticipants, command.UserId);
 
         await _context.SaveChangesAsync(cancellationToken);
 
-        var response = ToResponse(message, messageAttachments);
-        var participantUserIds = activeParticipants
+        var sender = await GetSenderAsync(command.UserId, cancellationToken);
+        var response = ToResponse(message, messageAttachments, sender);
+        var participantUserIds = deliveryParticipants
             .Select(participant => participant.UserId)
             .Distinct()
             .ToArray();
@@ -166,7 +174,7 @@ public class SendMessageCommandHandler : IRequestHandler<SendMessageCommand, Mes
             cancellationToken);
 
         await SendConversationUpdatedEvents(
-            activeParticipants,
+            deliveryParticipants,
             response,
             response.SentAt,
             cancellationToken);
@@ -217,18 +225,65 @@ public class SendMessageCommandHandler : IRequestHandler<SendMessageCommand, Mes
             return;
         }
 
-        var replyExists = await _context.Set<Message>()
+        var reply = await _context.Set<Message>()
             .AsNoTracking()
-            .AnyAsync(
+            .FirstOrDefaultAsync(
                 message =>
                     message.MessagesId == request.ReplyToMessageId.Value &&
                     message.ConversationsId == request.ConversationId,
                 cancellationToken);
 
-        if (!replyExists)
+        if (reply is null)
         {
             throw new BadRequestException("ReplyToMessageId must belong to the same conversation.");
         }
+    }
+
+    private static DisputeMessageRecipient? ResolveDisputeRecipient(
+        Conversation conversation,
+        ConversationParticipant sender,
+        DisputeMessageRecipient? requestedRecipient)
+    {
+        if (conversation.ConversationType != (int)ConversationType.Dispute)
+        {
+            if (requestedRecipient.HasValue)
+                throw new BadRequestException("Recipient targeting is only available for dispute conversations.");
+            return null;
+        }
+
+        if (sender.ParticipantRole == (int)ParticipantRole.Admin)
+        {
+            return requestedRecipient
+                ?? throw new BadRequestException("Administrators must choose Client, Freelancer, or Both.");
+        }
+
+        if (requestedRecipient.HasValue)
+            throw new ForbiddenAccessException("Only an administrator may choose dispute message recipients.");
+
+        return sender.ParticipantRole switch
+        {
+            (int)ParticipantRole.Client => DisputeMessageRecipient.Client,
+            (int)ParticipantRole.Freelancer => DisputeMessageRecipient.Freelancer,
+            _ => throw new ForbiddenAccessException("Only the Client, Freelancer, or assigned administrator may send dispute messages.")
+        };
+    }
+
+    private static IReadOnlyCollection<ConversationParticipant> ResolveDeliveryParticipants(
+        Conversation conversation,
+        IReadOnlyCollection<ConversationParticipant> activeParticipants,
+        DisputeMessageRecipient? recipient)
+    {
+        if (conversation.ConversationType != (int)ConversationType.Dispute || !recipient.HasValue)
+            return activeParticipants;
+
+        return activeParticipants.Where(participant =>
+            participant.ParticipantRole == (int)ParticipantRole.Admin ||
+            recipient == DisputeMessageRecipient.Both ||
+            (recipient == DisputeMessageRecipient.Client &&
+             participant.ParticipantRole == (int)ParticipantRole.Client) ||
+            (recipient == DisputeMessageRecipient.Freelancer &&
+             participant.ParticipantRole == (int)ParticipantRole.Freelancer))
+            .ToList();
     }
 
     private async Task EnsureConversationWritable(
@@ -308,9 +363,17 @@ public class SendMessageCommandHandler : IRequestHandler<SendMessageCommand, Mes
         }
     }
 
+    private async Task<User?> GetSenderAsync(Guid? senderUserId, CancellationToken cancellationToken)
+    {
+        if (!senderUserId.HasValue) return null;
+        return await _context.Set<User>().AsNoTracking()
+            .FirstOrDefaultAsync(user => user.UserId == senderUserId.Value, cancellationToken);
+    }
+
     private static MessageResponse ToResponse(
         Message message,
-        IReadOnlyList<MessageAttachment> attachments)
+        IReadOnlyList<MessageAttachment> attachments,
+        User? sender = null)
     {
         var isDeleted = message.DeletedForEveryoneAt.HasValue;
 
@@ -328,7 +391,11 @@ public class SendMessageCommandHandler : IRequestHandler<SendMessageCommand, Mes
             isDeleted,
             isDeleted
                 ? []
-                : attachments.Select(ToAttachmentResponse).ToList());
+                : attachments.Select(ToAttachmentResponse).ToList(),
+            SenderName: sender?.FullName,
+            SenderAvatar: sender?.Avatar,
+            SenderRole: sender?.Role,
+            DisputeRecipient: message.DisputeRecipient);
     }
 
     private static MessageAttachmentResponse ToAttachmentResponse(MessageAttachment attachment)

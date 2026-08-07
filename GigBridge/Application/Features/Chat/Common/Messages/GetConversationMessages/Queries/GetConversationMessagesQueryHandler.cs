@@ -3,6 +3,7 @@ using Application.Common.Interfaces;
 using Application.Features.Chat.Common.Messages;
 using Application.Features.Chat.Common.Messages.GetConversationMessages.DTOs;
 using Domain.Entities;
+using Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -25,9 +26,9 @@ public class GetConversationMessagesQueryHandler
         GetConversationMessagesQuery request,
         CancellationToken cancellationToken)
     {
-        var isParticipant = await _context.Set<ConversationParticipant>()
+        var participant = await _context.Set<ConversationParticipant>()
             .AsNoTracking()
-            .AnyAsync(
+            .FirstOrDefaultAsync(
                 participant =>
                     participant.ConversationsId == request.ConversationId &&
                     participant.UserId == request.UserId &&
@@ -35,10 +36,17 @@ public class GetConversationMessagesQueryHandler
                     participant.DeletedAt == null,
                 cancellationToken);
 
-        if (!isParticipant && !await CanAdminReadDisputeConversationAsync(request, cancellationToken))
+        var canAdminRead = participant is null && await CanAdminReadDisputeConversationAsync(request, cancellationToken);
+        if (participant is null && !canAdminRead)
         {
             throw new ForbiddenAccessException("You are not a participant in this conversation.");
         }
+
+        var conversationType = await _context.Set<Conversation>().AsNoTracking()
+            .Where(conversation => conversation.ConversationsId == request.ConversationId)
+            .Select(conversation => (int?)conversation.ConversationType)
+            .FirstOrDefaultAsync(cancellationToken)
+            ?? throw new NotFoundException("Conversation does not exist.");
 
         var pageSize = request.PageSize <= 0
             ? DefaultPageSize
@@ -49,6 +57,45 @@ public class GetConversationMessagesQueryHandler
             .Where(message =>
                 message.ConversationsId == request.ConversationId &&
                 message.DeletedForSenderAt == null);
+
+        if (conversationType == (int)ConversationType.Dispute)
+        {
+            if (participant?.ParticipantRole is not (int)ParticipantRole.Admin && !canAdminRead)
+            {
+                // Non-admin participant: only see own messages + messages addressed to their party
+                var recipient = participant?.ParticipantRole == (int)ParticipantRole.Client
+                    ? DisputeMessageRecipient.Client
+                    : DisputeMessageRecipient.Freelancer;
+                query = query.Where(message =>
+                    message.SenderUserId == request.UserId ||
+                    message.DisputeRecipient == null ||
+                    message.DisputeRecipient == DisputeMessageRecipient.Both ||
+                    message.DisputeRecipient == recipient);
+            }
+            else if (canAdminRead && request.AdminDisputeId.HasValue)
+            {
+                // Admin reading via dispute context: apply status-based visibility.
+                // Open (0) and WaitingAdmin (1): hide Client-targeted messages.
+                // UnderReview (2) and beyond: show all messages.
+                var disputeStatus = await _context.Set<Dispute>()
+                    .AsNoTracking()
+                    .Where(d => d.DisputesId == request.AdminDisputeId.Value)
+                    .Select(d => (int?)d.Status)
+                    .FirstOrDefaultAsync(cancellationToken);
+
+                var isBeforeUnderReview = disputeStatus is null ||
+                    disputeStatus == (int)DisputeStatus.Open ||
+                    disputeStatus == (int)DisputeStatus.WaitingAdmin;
+
+                if (isBeforeUnderReview)
+                {
+                    // Hide messages sent exclusively to the Client
+                    query = query.Where(message =>
+                        message.DisputeRecipient == null ||
+                        message.DisputeRecipient != DisputeMessageRecipient.Client);
+                }
+            }
+        }
 
         if (request.Before.HasValue)
         {
@@ -74,6 +121,11 @@ public class GetConversationMessagesQueryHandler
         var attachmentsByMessage = attachments
             .GroupBy(attachment => attachment.MessagesId)
             .ToDictionary(group => group.Key, group => group.Select(ToAttachmentResponse).ToList());
+        var senderIds = messages.Where(message => message.SenderUserId.HasValue)
+            .Select(message => message.SenderUserId!.Value).ToHashSet();
+        var senders = await _context.Set<User>().AsNoTracking()
+            .Where(user => senderIds.Contains(user.UserId))
+            .ToDictionaryAsync(user => user.UserId, cancellationToken);
         var scheduleIds = messages
             .Where(message => message.ScheduleId.HasValue)
             .Select(message => message.ScheduleId!.Value)
@@ -92,6 +144,9 @@ public class GetConversationMessagesQueryHandler
                 now,
                 message.ScheduleId.HasValue
                     ? schedulesById.GetValueOrDefault(message.ScheduleId.Value)
+                    : null,
+                message.SenderUserId.HasValue
+                    ? senders.GetValueOrDefault(message.SenderUserId.Value)
                     : null))
             .ToList();
     }
@@ -134,7 +189,8 @@ public class GetConversationMessagesQueryHandler
         IReadOnlyList<MessageAttachmentResponse> attachments,
         Guid viewerUserId,
         DateTime utcNow,
-        Schedule? currentSchedule)
+        Schedule? currentSchedule,
+        User? sender)
     {
         var isDeleted = message.DeletedForEveryoneAt.HasValue;
 
@@ -151,7 +207,11 @@ public class GetConversationMessagesQueryHandler
             isDeleted ? null : message.EditedAt,
             isDeleted,
             isDeleted ? [] : attachments,
-            isDeleted ? null : MessageHelpers.ParseScheduleMetadata(message, viewerUserId, utcNow, currentSchedule));
+            isDeleted ? null : MessageHelpers.ParseScheduleMetadata(message, viewerUserId, utcNow, currentSchedule),
+            sender?.FullName,
+            sender?.Avatar,
+            sender?.Role,
+            message.DisputeRecipient);
     }
 
     private static MessageAttachmentResponse ToAttachmentResponse(MessageAttachment attachment)
