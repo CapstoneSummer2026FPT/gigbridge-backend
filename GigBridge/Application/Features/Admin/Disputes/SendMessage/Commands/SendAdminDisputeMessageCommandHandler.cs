@@ -46,8 +46,6 @@ public sealed class SendAdminDisputeMessageCommandHandler : IRequestHandler<Send
             .AsNoTracking()
             .FirstOrDefaultAsync(item => item.DisputesId == command.DisputeId, cancellationToken)
             ?? throw new NotFoundException("Dispute does not exist.");
-        if (dispute.AssignedAdminId != command.AdminId)
-            throw new ForbiddenAccessException("Only the assigned administrator may send official dispute messages.");
         if (!Enum.IsDefined(command.Recipient))
             throw new BadRequestException("A valid dispute message recipient is required.");
 
