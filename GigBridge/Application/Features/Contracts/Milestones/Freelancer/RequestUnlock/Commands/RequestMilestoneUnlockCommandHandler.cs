@@ -61,14 +61,10 @@ public sealed class RequestMilestoneUnlockCommandHandler :
         var milestones = await MilestoneWorkflowGuard.OrderMilestones(
                 _context.Set<Milestone>().Where(item => item.ContractsId == contract.ContractsId))
             .ToListAsync(cancellationToken);
-        if (milestones.Count(item => item.Status == (int)MilestoneStatus.InProgress) >= 2)
-        {
-            throw new BadRequestException("At most two milestones may be in progress at the same time.");
-        }
         var nextPending = milestones.FirstOrDefault(item => item.Status == (int)MilestoneStatus.Pending);
         if (nextPending?.MilestonesId != milestone.MilestonesId)
         {
-            throw new BadRequestException("Only the next pending milestone can be requested for early start.");
+            throw new BadRequestException("Only the next consecutive pending milestone can be requested for early start.");
         }
         var hasPendingRequest = await _context.Set<MilestoneEarlyStartRequest>().AnyAsync(
             item => item.MilestonesId == milestone.MilestonesId &&
