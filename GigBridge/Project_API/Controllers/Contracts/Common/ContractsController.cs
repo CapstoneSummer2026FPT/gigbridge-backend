@@ -4,6 +4,8 @@ using Application.Features.Contracts.Common.GetContractByJobPost.Queries;
 using Application.Features.Contracts.Common.GetMyContracts.DTOs;
 using Application.Features.Contracts.Common.GetMyContracts.Queries;
 using Application.Features.Contracts.Common.GetContractById.Queries;
+using Application.Features.Contracts.Common.GetWorkspaceFiles.DTOs;
+using Application.Features.Contracts.Common.GetWorkspaceFiles.Queries;
 using Application.Features.Contracts.Freelancer.GetMyCompletedProjects.DTOs;
 using Application.Features.Contracts.Freelancer.GetMyCompletedProjects.Queries;
 using Domain.Enums;
@@ -68,6 +70,23 @@ public class ContractsController : BaseApiController
         var result = await Mediator.Send(new GetContractByIdQuery(contractId, userId));
 
         return Ok(ApiResponse<ContractDetailResponse>.Ok(result, "Success"));
+    }
+
+    /// <summary>
+    /// Get all files shared in the workspace conversation for a contract.
+    /// Accessible by the contract's client, freelancer, or an admin.
+    /// </summary>
+    [HttpGet("{contractId:guid}/workspace/files")]
+    public async Task<IActionResult> GetWorkspaceFiles(Guid contractId)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return InvalidTokenResponse();
+        }
+
+        var result = await Mediator.Send(new GetWorkspaceFilesQuery(contractId, userId));
+
+        return Ok(ApiResponse<IReadOnlyList<WorkspaceFileResponse>>.Ok(result, "Success"));
     }
 }
 
