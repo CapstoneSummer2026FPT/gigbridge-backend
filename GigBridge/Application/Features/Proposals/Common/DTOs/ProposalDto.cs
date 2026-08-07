@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Application.Common.Models.Ai;
 
 namespace Application.Features.Proposals.Common.DTOs;
 
@@ -36,4 +37,7 @@ public class ProposalDto
     public DateTime? AiEvaluatedAt { get; set; }
     public List<string>? AiTechnicalSkills { get; set; }
     public List<string>? AiSoftSkills { get; set; }
+    public string? AiHolisticAdjustmentReason { get; set; }
+    public int? AiHolisticAdjustment { get; set; }
+    public List<GradedQuestionDto>? AiGradedQuestions { get; set; }
 }
