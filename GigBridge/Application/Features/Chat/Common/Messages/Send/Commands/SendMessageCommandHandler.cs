@@ -70,7 +70,27 @@ public class SendMessageCommandHandler : IRequestHandler<SendMessageCommand, Mes
 
         if (participant is null)
         {
-            throw new ForbiddenAccessException("You are not a participant in this conversation.");
+            var senderUser = await _context.Set<User>().AsNoTracking()
+                .FirstOrDefaultAsync(u => u.UserId == command.UserId && u.IsActive, cancellationToken);
+
+            if (senderUser?.Role == (int)UserRole.Admin &&
+                (conversation.ConversationType == (int)ConversationType.Dispute || conversation.DisputesId.HasValue))
+            {
+                participant = new ConversationParticipant
+                {
+                    ConversationParticipantId = Guid.NewGuid(),
+                    ConversationsId = request.ConversationId,
+                    UserId = command.UserId,
+                    JoinedAt = _dateTimeService.UtcNow,
+                    ParticipantRole = (int)ParticipantRole.Admin
+                };
+                _context.Set<ConversationParticipant>().Add(participant);
+                await _context.SaveChangesAsync(cancellationToken);
+            }
+            else
+            {
+                throw new ForbiddenAccessException("You are not a participant in this conversation.");
+            }
         }
 
         await EnsureConversationWritable(conversation, participant, cancellationToken);
@@ -80,7 +100,6 @@ public class SendMessageCommandHandler : IRequestHandler<SendMessageCommand, Mes
         var existingMessage = await _context.Set<Message>()
             .FirstOrDefaultAsync(
                 message =>
-                    message.ConversationsId == request.ConversationId &&
                     message.SenderUserId == command.UserId &&
                     message.ClientMessageId == clientMessageId,
                 cancellationToken);
