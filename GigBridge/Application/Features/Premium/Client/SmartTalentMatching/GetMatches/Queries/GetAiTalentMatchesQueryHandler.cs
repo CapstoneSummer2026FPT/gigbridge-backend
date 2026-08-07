@@ -7,7 +7,6 @@ using Application.Features.Premium.Client.SmartTalentMatching.GetMatches.DTOs;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
 namespace Application.Features.Premium.Client.SmartTalentMatching.GetMatches.Queries;
@@ -17,7 +16,6 @@ public sealed class GetAiTalentMatchesQueryHandler(
     IPremiumAccessService premiumAccess,
     IDateTimeService clock,
     IAiServiceClient aiServiceClient,
-    IConfiguration configuration,
     ILogger<GetAiTalentMatchesQueryHandler> logger)
     : IRequestHandler<GetAiTalentMatchesQuery, AiTalentMatchingResultDto>
 {
@@ -29,13 +27,6 @@ public sealed class GetAiTalentMatchesQueryHandler(
         GetAiTalentMatchesQuery query,
         CancellationToken cancellationToken)
     {
-        var featureEnabled = bool.TryParse(
-            configuration["FeatureFlags:AiSmartTalentMatchingV1"],
-            out var enabled) && enabled;
-        if (!featureEnabled)
-        {
-            throw new ForbiddenAccessException("AI smart talent matching is not enabled.");
-        }
 
         await premiumAccess.RequirePremiumClientAsync(query.UserId, cancellationToken);
         var stopwatch = Stopwatch.StartNew();
@@ -162,20 +153,6 @@ public sealed class GetAiTalentMatchesQueryHandler(
             match.Candidate.CompletedContractCount,
             match.Candidate.EloPoints)).ToList();
 
-        if (bool.TryParse(
-                configuration["FeatureFlags:AiSmartTalentMatchingShadowComparison"],
-                out var shadowEnabled) && shadowEnabled)
-        {
-            var shadowIds = RankWithLegacyScorer(pool, query.TopK);
-            var aiIds = matches.Select(match => match.FreelancerProfileId).ToHashSet();
-            logger.LogInformation(
-                "AI talent matching shadow comparison {MatchRunId} for job {JobPostId}: AI={AiCount}, Legacy={LegacyCount}, OverlapAtK={OverlapAtK}",
-                run.TalentMatchRunId,
-                query.JobPostId,
-                aiIds.Count,
-                shadowIds.Count,
-                shadowIds.Count(aiIds.Contains));
-        }
 
         foreach (var match in matches)
         {
