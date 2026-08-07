@@ -125,34 +125,34 @@ public sealed class ESignController : BaseApiController
         return Ok(ApiResponse<ESignPdfArtifactResponse>.Ok(result, "PDF prepared from the contract template"));
     }
 
-    [HttpPost("documents/{documentId:guid}/pdf/upload")]
-    [RequestSizeLimit(20 * 1024 * 1024)]
-    public async Task<IActionResult> SavePdf(
-        Guid documentId,
-        [FromForm] IFormFile file,
-        [FromForm] int signatureCount)
-    {
-        if (!TryGetCurrentUserId(out var userId))
-        {
-            return InvalidTokenResponse();
-        }
+    //[HttpPost("documents/{documentId:guid}/pdf/upload")]
+    //[RequestSizeLimit(20 * 1024 * 1024)]
+    //public async Task<IActionResult> SavePdf(
+    //    Guid documentId,
+    //    [FromForm] IFormFile file,
+    //    [FromForm] int signatureCount)
+    //{
+    //    if (!TryGetCurrentUserId(out var userId))
+    //    {
+    //        return InvalidTokenResponse();
+    //    }
 
-        if (file.Length == 0)
-        {
-            return BadRequest(ApiResponse<object>.BadRequest("A PDF file is required"));
-        }
+    //    if (file.Length == 0)
+    //    {
+    //        return BadRequest(ApiResponse<object>.BadRequest("A PDF file is required"));
+    //    }
 
-        await using var stream = new MemoryStream();
-        await file.CopyToAsync(stream, HttpContext.RequestAborted);
-        var result = await Mediator.Send(new SaveESignPdfCommand(
-            documentId,
-            userId,
-            stream.ToArray(),
-            file.FileName,
-            signatureCount));
+    //    await using var stream = new MemoryStream();
+    //    await file.CopyToAsync(stream, HttpContext.RequestAborted);
+    //    var result = await Mediator.Send(new SaveESignPdfCommand(
+    //        documentId,
+    //        userId,
+    //        stream.ToArray(),
+    //        file.FileName,
+    //        signatureCount));
 
-        return Ok(ApiResponse<ESignPdfArtifactResponse>.Ok(result, "PDF saved"));
-    }
+    //    return Ok(ApiResponse<ESignPdfArtifactResponse>.Ok(result, "PDF saved"));
+    //}
 
     [HttpPost("documents/from-job/{jobPostId:guid}")]
     [Authorize(Roles = "Client")]

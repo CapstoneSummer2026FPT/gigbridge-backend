@@ -1597,6 +1597,9 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
         modelBuilder.Entity<Message>(entity =>
         {
+            entity.ToTable(table => table.HasCheckConstraint(
+                "CK_Messages_DisputeRecipient_Valid",
+                "\"DisputeRecipient\" IS NULL OR \"DisputeRecipient\" BETWEEN 0 AND 2"));
             entity.HasKey(e => e.MessagesId).HasName("Messages_pkey");
 
             entity.HasIndex(e => new { e.ConversationsId, e.SentAt }, "IX_Messages_ConversationsId_SentAt").IsDescending(false, true);
@@ -1615,6 +1618,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.Property(e => e.MessageType)
                 .HasDefaultValue(0)
                 .HasComment("Enum MessageType: 0=Text, 1=Image, 2=File, 3=System, 4=FinalOffer, 5=ContractEvent, 6=MilestoneEvent, 7=PaymentEvent, 8=DisputeEvent");
+            entity.Property(e => e.DisputeRecipient)
+                .HasComment("Enum DisputeMessageRecipient: 0=Client, 1=Freelancer, 2=Both; null=non-dispute or legacy shared");
             entity.Property(e => e.Metadata).HasColumnType("jsonb");
             entity.Property(e => e.ReplyToMessageId).HasColumnName("ReplyToMessageId");
             entity.Property(e => e.SenderUserId).HasColumnName("SenderUserId");
