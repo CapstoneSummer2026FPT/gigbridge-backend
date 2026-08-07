@@ -31,6 +31,9 @@ public class GenerateJobDescriptionDetailsResponse
     public List<GeneratedSkillDto> Skills { get; set; } = new();
     public List<string> CustomSkills { get; set; } = new();
     public string Description { get; set; } = null!;
+    public decimal? BudgetMin { get; set; }
+    public decimal? BudgetMax { get; set; }
+    public string? EstimatedDuration { get; set; }
     public string AiDisclaimer { get; set; } = string.Empty;
 }
 

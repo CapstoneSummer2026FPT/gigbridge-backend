@@ -141,7 +141,7 @@ public sealed class SignContractCommandHandler :
             var freelancerSignature = ContractEsignRenderer.ToSignatureSnapshot(
                 signed.Single(signature => signature.SignerRole == (int)ESignerRole.Freelancer));
             var documentHash = ContractEsignRenderer.ComputeFinalHash(document, clientSignature, freelancerSignature);
-            var finalized = await _documentGenerator.GenerateFinalAsync(
+            var finalized = await _documentGenerator.GenerateAsync(
                 snapshot,
                 clientSignature,
                 freelancerSignature,

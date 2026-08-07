@@ -4,6 +4,10 @@ using System.Security.Claims;
 using Application.Features.Chat.Common.Conversations.EnsureParticipant.Queries;
 using Application.Features.Chat.Common.Conversations.MarkAsRead.Commands;
 using MediatR;
+using Application.Common.Interfaces;
+using Domain.Entities;
+using Domain.Enums;
+using Microsoft.EntityFrameworkCore;
 
 namespace Project_API.Hubs;
 
@@ -11,10 +15,12 @@ namespace Project_API.Hubs;
 public class ChatHub : Hub
 {
     private readonly IMediator _mediator;
+    private readonly IApplicationDbContext _context;
 
-    public ChatHub(IMediator mediator)
+    public ChatHub(IMediator mediator, IApplicationDbContext context)
     {
         _mediator = mediator;
+        _context = context;
     }
 
     public static string GetConversationGroupName(Guid conversationId)
@@ -38,6 +44,8 @@ public class ChatHub : Hub
     {
         var userId = GetCurrentUserId();
         await EnsureParticipant(conversationId, userId);
+        if (await IsDisputeConversation(conversationId))
+            return; // A group typing event could disclose a private dispute thread.
         await Clients
             .OthersInGroup(GetConversationGroupName(conversationId))
             .SendAsync("Typing", new { conversationId, userId });
@@ -47,10 +55,17 @@ public class ChatHub : Hub
     {
         var userId = GetCurrentUserId();
         await EnsureParticipant(conversationId, userId);
+        if (await IsDisputeConversation(conversationId))
+            return;
         await Clients
             .OthersInGroup(GetConversationGroupName(conversationId))
             .SendAsync("StopTyping", new { conversationId, userId });
     }
+
+    private Task<bool> IsDisputeConversation(Guid conversationId) =>
+        _context.Set<Conversation>().AsNoTracking().AnyAsync(
+            conversation => conversation.ConversationsId == conversationId &&
+                            conversation.ConversationType == (int)ConversationType.Dispute);
 
     public async Task MarkAsRead(Guid conversationId, Guid messageId)
     {

@@ -7,6 +7,7 @@ namespace Application.Common.Interfaces.IService;
 public interface IMediaService
 {
     Task<string> UploadFileAsync(Stream fileStream, string fileName, string contentType, string folder, CancellationToken cancellationToken = default);
+    Task DeleteFileAsync(string fileUrl, string expectedFolder, CancellationToken cancellationToken = default);
     Task<string> UploadPrivateFileAsync(Stream fileStream, string fileName, string contentType, string folder, CancellationToken cancellationToken = default);
     Task<string> GetPrivateDownloadUrlAsync(string storageKey, string contentType, CancellationToken cancellationToken = default);
     Task DeletePrivateFileAsync(string storageKey, string contentType, CancellationToken cancellationToken = default);

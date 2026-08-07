@@ -183,6 +183,7 @@ public static class DependencyInjection
         services.AddScoped<IEmailService, EmailService>();
         services.AddHttpClient<IContractEsignDocumentGenerator, ContractEsignDocumentGenerator>(client =>
             client.Timeout = TimeSpan.FromSeconds(15));
+        services.AddScoped<IWordToPdfConverter, WordToPdfConverter>();
         services.AddScoped<IAuthEmailSender, AuthEmailSender>();
         services.AddSingleton<IScheduleEmailRenderer, ScheduleEmailRenderer>();
         services.AddSingleton<IProposalNegotiationEmailRenderer, ProposalNegotiationEmailRenderer>();

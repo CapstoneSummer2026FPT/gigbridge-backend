@@ -4,6 +4,7 @@ using Application.Features.Chat.Common.Messages.GetConversationMessages.DTOs;
 using Application.Features.Chat.Common.Messages.Send.DTOs;
 using Application.Features.JobPosts.Common;
 using Domain.Entities;
+using Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -70,6 +71,9 @@ public class GetMyConversationsQueryHandler
         var unreadByConversation = participants.ToDictionary(
             participant => participant.ConversationsId,
             participant => participant.UnreadCount);
+        var roleByConversation = participants.ToDictionary(
+            participant => participant.ConversationsId,
+            participant => participant.ParticipantRole);
 
         var allParticipants = await _context.Set<ConversationParticipant>()
             .AsNoTracking()
@@ -105,6 +109,13 @@ public class GetMyConversationsQueryHandler
             .Select(conversation => {
                 otherParticipantsLookup.TryGetValue(conversation.ConversationsId, out var otherParticipant);
                 latestOffersLookup.TryGetValue(conversation.ConversationsId, out var latestOffer);
+                Message? message = null;
+                var hasLastMessage = conversation.LastMessageId.HasValue &&
+                    lastMessages.TryGetValue(conversation.LastMessageId.Value, out message);
+                var isVisibleLastMessage = !hasLastMessage ||
+                    conversation.ConversationType != (int)ConversationType.Dispute ||
+                    IsVisibleToParticipant(message!, request.UserId,
+                        roleByConversation.GetValueOrDefault(conversation.ConversationsId));
 
                 return new ConversationSummaryResponse(
                     conversation.ConversationsId,
@@ -117,12 +128,11 @@ public class GetMyConversationsQueryHandler
                     conversation.Status,
                     unreadByConversation.GetValueOrDefault(conversation.ConversationsId),
                     conversation.CreatedAt,
-                    conversation.LastMessageAt,
-                    conversation.LastMessageId.HasValue &&
-                        lastMessages.TryGetValue(conversation.LastMessageId.Value, out var message)
+                    isVisibleLastMessage ? conversation.LastMessageAt : null,
+                    hasLastMessage && isVisibleLastMessage
                         ? ToMessageResponse(
-                            message,
-                            attachmentsByMessage.GetValueOrDefault(message.MessagesId) ?? [])
+                            message!,
+                            attachmentsByMessage.GetValueOrDefault(message!.MessagesId) ?? [])
                         : null,
                     otherParticipant?.UserId,
                     otherParticipant?.User?.FullName,
@@ -148,6 +158,20 @@ public class GetMyConversationsQueryHandler
                 );
             })
             .ToList();
+    }
+
+    private static bool IsVisibleToParticipant(Message message, Guid userId, int participantRole)
+    {
+        if (participantRole == (int)ParticipantRole.Admin ||
+            message.SenderUserId == userId ||
+            message.DisputeRecipient is null ||
+            message.DisputeRecipient == DisputeMessageRecipient.Both)
+            return true;
+
+        return (message.DisputeRecipient == DisputeMessageRecipient.Client &&
+                participantRole == (int)ParticipantRole.Client) ||
+               (message.DisputeRecipient == DisputeMessageRecipient.Freelancer &&
+                participantRole == (int)ParticipantRole.Freelancer);
     }
 
     private static MessageResponse ToMessageResponse(

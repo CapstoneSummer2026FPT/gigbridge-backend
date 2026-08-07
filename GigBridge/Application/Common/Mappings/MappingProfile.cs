@@ -18,6 +18,9 @@ public class MappingProfile : Profile
     {
         CreateMap<User, UserDTO>()
             .ForMember(
+                dest => dest.IsPremium,
+                opt => opt.MapFrom(src => src.IsPremium))
+            .ForMember(
                 dest => dest.EloPoints,
                 opt => opt.MapFrom(src => src.UserEloScore != null
                     ? src.UserEloScore.CurrentPoints

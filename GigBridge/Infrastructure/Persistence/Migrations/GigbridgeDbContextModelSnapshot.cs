@@ -1310,12 +1310,10 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex("ScheduleId");
 
-                    b.HasIndex("Channel", "Status", "NextAttemptAt", "DeliveryOutboxId")
-                        .HasDatabaseName("IX_DeliveryOutboxes_Active_Channel_Status_Due_Id")
+                    b.HasIndex(new[] { "Channel", "Status", "NextAttemptAt", "DeliveryOutboxId" }, "IX_DeliveryOutboxes_Active_Channel_Status_Due_Id")
                         .HasFilter("\"Status\" IN (0, 1)");
 
-                    b.HasIndex("Status", "DeliveredAt")
-                        .HasDatabaseName("IX_DeliveryOutboxes_Delivered_Retention")
+                    b.HasIndex(new[] { "Status", "DeliveredAt" }, "IX_DeliveryOutboxes_Delivered_Retention")
                         .HasFilter("\"Status\" = 2 AND \"DeliveredAt\" IS NOT NULL");
 
                     b.ToTable("DeliveryOutboxes");
@@ -1697,6 +1695,131 @@ namespace Infrastructure.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Domain.Entities.EloPointAppeal", b =>
+                {
+                    b.Property<Guid>("EloPointAppealId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("EloPointAppealId")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<Guid?>("AppliedTransactionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("CancelledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CancelledById")
+                        .HasColumnType("uuid")
+                        .HasColumnName("CancelledById");
+
+                    b.Property<int?>("CorrectedDelta")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid>("EloPointTransactionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<int?>("Resolution")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ResolutionNote")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ReviewedByAdminId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer")
+                        .HasComment("Enum EloPointAppealStatus: 0=Pending, 1=UnderReview, 2=Approved, 3=PartiallyApproved, 4=Rejected, 5=Cancelled");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("UserId");
+
+                    b.HasKey("EloPointAppealId")
+                        .HasName("EloPointAppeals_pkey");
+
+                    b.HasIndex("AppliedTransactionId");
+
+                    b.HasIndex("EloPointTransactionId");
+
+                    b.HasIndex("ReviewedByAdminId");
+
+                    b.HasIndex(new[] { "Status", "CreatedAt" }, "IX_EloPointAppeals_Status_CreatedAt")
+                        .IsDescending(false, true);
+
+                    b.HasIndex(new[] { "UserId", "Status" }, "IX_EloPointAppeals_UserId_Status");
+
+                    b.HasIndex(new[] { "UserId", "EloPointTransactionId" }, "IX_EloPointAppeals_UserId_Transaction_Active")
+                        .IsUnique()
+                        .HasFilter("\"Status\" IN (0, 1)");
+
+                    b.ToTable("EloPointAppeals", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.Entities.EloPointAppealEvidence", b =>
+                {
+                    b.Property<Guid>("EloPointAppealEvidenceId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("EloPointAppealEvidenceId")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("EloPointAppealId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("FileName")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<long?>("FileSize")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("FileUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<Guid>("UploadedById")
+                        .HasColumnType("uuid")
+                        .HasColumnName("UploadedById");
+
+                    b.HasKey("EloPointAppealEvidenceId")
+                        .HasName("EloPointAppealEvidence_pkey");
+
+                    b.HasIndex("UploadedById");
+
+                    b.HasIndex(new[] { "EloPointAppealId" }, "IX_EloPointAppealEvidence_AppealId");
+
+                    b.ToTable("EloPointAppealEvidence");
+                });
+
             modelBuilder.Entity("Domain.Entities.EscrowTransaction", b =>
                 {
                     b.Property<Guid>("EscrowTransactionId")
@@ -1817,6 +1940,22 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<Guid>("JobPostsId")
                         .HasColumnType("uuid")
                         .HasColumnName("JobPostsId");
+
+                    b.Property<byte[]>("PdfDocumentContent")
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("PdfDocumentFileName")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("PdfDocumentHash")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<int>("PdfSignatureCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
 
                     b.Property<string>("RenderedHtmlContent")
                         .IsRequired()
@@ -3113,6 +3252,128 @@ namespace Infrastructure.Persistence.Migrations
                     b.ToTable("MajorCategories");
                 });
 
+            modelBuilder.Entity("Domain.Entities.MarketplaceAnalyticsDailyAggregate", b =>
+                {
+                    b.Property<Guid>("MarketplaceAnalyticsDailyAggregateId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<string>("DimensionKey")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<string>("DimensionType")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
+
+                    b.Property<long>("DistinctActorCount")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<long>("ResultCountTotal")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("SaveCount")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("SearchCount")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long>("ViewCount")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("ZeroResultCount")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("MarketplaceAnalyticsDailyAggregateId")
+                        .HasName("MarketplaceAnalyticsDailyAggregates_pkey");
+
+                    b.HasIndex(new[] { "DimensionType", "Date" }, "IX_MarketplaceAnalyticsDailyAggregates_Type_Date");
+
+                    b.HasIndex(new[] { "Date", "DimensionType", "DimensionKey" }, "UX_MarketplaceAnalyticsDailyAggregates_Dimension")
+                        .IsUnique();
+
+                    b.ToTable("MarketplaceAnalyticsDailyAggregates", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.Entities.MarketplaceAnalyticsEvent", b =>
+                {
+                    b.Property<Guid>("MarketplaceAnalyticsEventId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<string>("ActorKey")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("DedupeKey")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("FilterMetadata")
+                        .HasColumnType("jsonb");
+
+                    b.Property<Guid?>("JobPostId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("NormalizedQuery")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<DateTime>("OccurredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("ResultCount")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("SearchEventId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("integer");
+
+                    b.HasKey("MarketplaceAnalyticsEventId")
+                        .HasName("MarketplaceAnalyticsEvents_pkey");
+
+                    b.HasIndex(new[] { "JobPostId", "Type", "OccurredAt" }, "IX_MarketplaceAnalyticsEvents_Job_Type_OccurredAt")
+                        .HasFilter("\"JobPostId\" IS NOT NULL");
+
+                    b.HasIndex(new[] { "NormalizedQuery", "OccurredAt" }, "IX_MarketplaceAnalyticsEvents_Query_OccurredAt")
+                        .HasFilter("\"NormalizedQuery\" IS NOT NULL");
+
+                    b.HasIndex(new[] { "SearchEventId" }, "IX_MarketplaceAnalyticsEvents_SearchEventId")
+                        .HasFilter("\"SearchEventId\" IS NOT NULL");
+
+                    b.HasIndex(new[] { "Type", "OccurredAt" }, "IX_MarketplaceAnalyticsEvents_Type_OccurredAt");
+
+                    b.HasIndex(new[] { "DedupeKey" }, "UX_MarketplaceAnalyticsEvents_DedupeKey")
+                        .IsUnique();
+
+                    b.ToTable("MarketplaceAnalyticsEvents", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_MarketplaceAnalyticsEvents_ResultCount", "\"ResultCount\" IS NULL OR \"ResultCount\" >= 0");
+                        });
+                });
+
             modelBuilder.Entity("Domain.Entities.Message", b =>
                 {
                     b.Property<Guid>("MessagesId")
@@ -3137,6 +3398,10 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.Property<DateTime?>("DeletedForSenderAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("DisputeRecipient")
+                        .HasColumnType("integer")
+                        .HasComment("Enum DisputeMessageRecipient: 0=Client, 1=Freelancer, 2=Both; null=non-dispute or legacy shared");
 
                     b.Property<DateTime?>("EditedAt")
                         .HasColumnType("timestamp with time zone");
@@ -3188,7 +3453,10 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "ConversationsId", "SenderUserId", "ClientMessageId" }, "Messages_conv_sender_client_key")
                         .IsUnique();
 
-                    b.ToTable("Messages");
+                    b.ToTable("Messages", t =>
+                        {
+                            t.HasCheckConstraint("CK_Messages_DisputeRecipient_Valid", "\"DisputeRecipient\" IS NULL OR \"DisputeRecipient\" BETWEEN 0 AND 2");
+                        });
                 });
 
             modelBuilder.Entity("Domain.Entities.MessageAttachment", b =>
@@ -3830,6 +4098,94 @@ namespace Infrastructure.Persistence.Migrations
                     b.ToTable("PayoutOutboxes");
                 });
 
+            modelBuilder.Entity("Domain.Entities.PlatformRevenueEvent", b =>
+                {
+                    b.Property<Guid>("PlatformRevenueEventId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<Guid?>("ContractId")
+                        .HasColumnType("uuid");
+
+                    b.Property<decimal>("GigCoinAmount")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<bool>("IsBackfilled")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Metadata")
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTime>("OccurredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("PayerUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("RecordedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Source")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("SourceEntityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SourceEntityType")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SourceReference")
+                        .IsRequired()
+                        .HasMaxLength(240)
+                        .HasColumnType("character varying(240)");
+
+                    b.Property<decimal>("VndEquivalent")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("VndPerGigCoin")
+                        .HasPrecision(18, 4)
+                        .HasColumnType("numeric(18,4)");
+
+                    b.Property<Guid?>("WalletTransactionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("WalletWithdrawalId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("PlatformRevenueEventId")
+                        .HasName("PlatformRevenueEvents_pkey");
+
+                    b.HasIndex(new[] { "ContractId", "OccurredAt" }, "IX_PlatformRevenueEvents_ContractId_OccurredAt");
+
+                    b.HasIndex(new[] { "PayerUserId", "OccurredAt" }, "IX_PlatformRevenueEvents_PayerUserId_OccurredAt");
+
+                    b.HasIndex(new[] { "Source", "OccurredAt" }, "IX_PlatformRevenueEvents_Source_OccurredAt");
+
+                    b.HasIndex(new[] { "WalletTransactionId" }, "UX_PlatformRevenueEvents_WalletTransactionId")
+                        .IsUnique()
+                        .HasFilter("\"WalletTransactionId\" IS NOT NULL");
+
+                    b.HasIndex(new[] { "WalletWithdrawalId" }, "UX_PlatformRevenueEvents_WalletWithdrawalId")
+                        .IsUnique()
+                        .HasFilter("\"WalletWithdrawalId\" IS NOT NULL");
+
+                    b.ToTable("PlatformRevenueEvents", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_PlatformRevenueEvents_GigCoinAmount", "\"GigCoinAmount\" >= 0");
+
+                            t.HasCheckConstraint("CK_PlatformRevenueEvents_Origin", "(\"WalletTransactionId\" IS NOT NULL)::integer + (\"WalletWithdrawalId\" IS NOT NULL)::integer = 1");
+
+                            t.HasCheckConstraint("CK_PlatformRevenueEvents_Rate", "\"VndPerGigCoin\" > 0");
+
+                            t.HasCheckConstraint("CK_PlatformRevenueEvents_VndEquivalent", "\"VndEquivalent\" >= 0");
+                        });
+                });
+
             modelBuilder.Entity("Domain.Entities.PlatformSetting", b =>
                 {
                     b.Property<Guid>("PlatformSettingsId")
@@ -3881,13 +4237,13 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnName("PortfolioItemsId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
-                    b.Property<Guid>("FreelancerId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("FreelancerId");
-
                     b.Property<string>("Description")
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
+
+                    b.Property<Guid>("FreelancerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("FreelancerId");
 
                     b.Property<string>("ImageUrl")
                         .HasMaxLength(2048)
@@ -3909,6 +4265,51 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "FreelancerId" }, "IX_PortfolioItems_FreelancerId");
 
                     b.ToTable("PortfolioItems");
+                });
+
+            modelBuilder.Entity("Domain.Entities.PremiumUsageEvent", b =>
+                {
+                    b.Property<Guid>("PremiumUsageEventId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(240)
+                        .HasColumnType("character varying(240)");
+
+                    b.Property<Guid?>("JobPostId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Metadata")
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTime>("OccurredAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("PromotionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("PremiumUsageEventId")
+                        .HasName("PremiumUsageEvents_pkey");
+
+                    b.HasIndex(new[] { "JobPostId" }, "IX_PremiumUsageEvents_JobPostId");
+
+                    b.HasIndex(new[] { "Type", "OccurredAt" }, "IX_PremiumUsageEvents_Type_OccurredAt");
+
+                    b.HasIndex(new[] { "UserId", "OccurredAt" }, "IX_PremiumUsageEvents_UserId_OccurredAt");
+
+                    b.HasIndex(new[] { "IdempotencyKey" }, "UX_PremiumUsageEvents_IdempotencyKey")
+                        .IsUnique();
+
+                    b.ToTable("PremiumUsageEvents", (string)null);
                 });
 
             modelBuilder.Entity("Domain.Entities.Proposal", b =>
@@ -5479,6 +5880,10 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnName("UserEloPointTransactionsId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
+                    b.Property<Guid?>("AppliedByAdminId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("AppliedByAdminId");
+
                     b.Property<Guid?>("ContractId")
                         .HasColumnType("uuid")
                         .HasColumnName("ContractId");
@@ -5488,6 +5893,10 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasDefaultValueSql("now()");
 
+                    b.Property<Guid?>("EloAppealId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("EloAppealId");
+
                     b.Property<string>("IdempotencyKey")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -5495,6 +5904,10 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.Property<string>("Metadata")
                         .HasColumnType("jsonb");
+
+                    b.Property<int?>("Mode")
+                        .HasColumnType("integer")
+                        .HasComment("Enum EloAdjustmentMode: 0=FixedPoints, 1=Percentage");
 
                     b.Property<int>("PointsAfter")
                         .ValueGeneratedOnAdd()
@@ -5513,7 +5926,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.Property<int>("Reason")
                         .HasColumnType("integer")
-                        .HasComment("Enum UserEloPointReason: 0=InitialGrant, 1=InactivityPenalty, 2=ReturnBonus, 3=JobCompletion, 4=ReviewRating, 5=LegacyIntegrityPenalty, 6=ReviewModeration, 7=CompletedJobReview");
+                        .HasComment("Enum UserEloPointReason: 0=InitialGrant, 1=InactivityPenalty, 2=ReturnBonus, 3=JobCompletion, 4=ReviewRating, 5=LegacyIntegrityPenalty, 6=ReviewModeration, 7=CompletedJobReview, 8=DisputeResolutionPenalty, 9=AdminIncrease, 10=AdminDecrease, 11=AppealCorrection, 12=Reversal, 13=SystemAdjustment");
 
                     b.Property<Guid?>("ReviewId")
                         .HasColumnType("uuid")
@@ -5526,12 +5939,20 @@ namespace Infrastructure.Persistence.Migrations
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
+                    b.Property<int?>("SourceType")
+                        .HasColumnType("integer")
+                        .HasComment("Enum EloAdjustmentSourceType: 0=Review, 1=Dispute, 2=EloAppeal, 3=Admin, 4=System");
+
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid")
                         .HasColumnName("UserId");
 
                     b.HasKey("UserEloPointTransactionsId")
                         .HasName("UserEloPointTransactions_pkey");
+
+                    b.HasIndex("AppliedByAdminId");
+
+                    b.HasIndex("EloAppealId");
 
                     b.HasIndex(new[] { "IdempotencyKey" }, "IX_UserEloPointTransactions_IdempotencyKey")
                         .IsUnique();
@@ -5544,6 +5965,8 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.HasIndex(new[] { "UserId", "CreatedAt" }, "IX_UserEloPointTransactions_UserId_CreatedAt")
                         .IsDescending(false, true);
+
+                    b.HasIndex(new[] { "UserId", "SourceType" }, "IX_UserEloPointTransactions_UserId_SourceType");
 
                     b.ToTable("UserEloPointTransactions", t =>
                         {
@@ -6640,6 +7063,63 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("ViolatingUser");
                 });
 
+            modelBuilder.Entity("Domain.Entities.EloPointAppeal", b =>
+                {
+                    b.HasOne("Domain.Entities.UserEloPointTransaction", "AppliedTransaction")
+                        .WithMany()
+                        .HasForeignKey("AppliedTransactionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("EloPointAppeals_elo_AppliedTransactionId_fkey");
+
+                    b.HasOne("Domain.Entities.UserEloPointTransaction", "EloPointTransaction")
+                        .WithMany()
+                        .HasForeignKey("EloPointTransactionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("EloPointAppeals_elo_EloPointTransactionId_fkey");
+
+                    b.HasOne("Domain.Entities.User", "ReviewedByAdmin")
+                        .WithMany()
+                        .HasForeignKey("ReviewedByAdminId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("EloPointAppeals_usr_ReviewedByAdminId_fkey");
+
+                    b.HasOne("Domain.Entities.User", "User")
+                        .WithMany("EloPointAppeals")
+                        .HasForeignKey("UserId")
+                        .IsRequired()
+                        .HasConstraintName("EloPointAppeals_usr_UserId_fkey");
+
+                    b.Navigation("AppliedTransaction");
+
+                    b.Navigation("EloPointTransaction");
+
+                    b.Navigation("ReviewedByAdmin");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Domain.Entities.EloPointAppealEvidence", b =>
+                {
+                    b.HasOne("Domain.Entities.EloPointAppeal", "EloPointAppeal")
+                        .WithMany("Evidence")
+                        .HasForeignKey("EloPointAppealId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("EloPointAppealEvidence_elo_EloPointAppealId_fkey");
+
+                    b.HasOne("Domain.Entities.User", "UploadedBy")
+                        .WithMany()
+                        .HasForeignKey("UploadedById")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("EloPointAppealEvidence_usr_UploadedById_fkey");
+
+                    b.Navigation("EloPointAppeal");
+
+                    b.Navigation("UploadedBy");
+                });
+
             modelBuilder.Entity("Domain.Entities.EscrowTransaction", b =>
                 {
                     b.HasOne("Domain.Entities.ContractEscrow", "ContractEscrow")
@@ -7020,6 +7500,17 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("Major");
                 });
 
+            modelBuilder.Entity("Domain.Entities.MarketplaceAnalyticsEvent", b =>
+                {
+                    b.HasOne("Domain.Entities.JobPost", "JobPost")
+                        .WithMany()
+                        .HasForeignKey("JobPostId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("FK_MarketplaceAnalyticsEvents_JobPosts_JobPostId");
+
+                    b.Navigation("JobPost");
+                });
+
             modelBuilder.Entity("Domain.Entities.Message", b =>
                 {
                     b.HasOne("Domain.Entities.Conversation", "Conversations")
@@ -7230,6 +7721,41 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("WalletWithdrawal");
                 });
 
+            modelBuilder.Entity("Domain.Entities.PlatformRevenueEvent", b =>
+                {
+                    b.HasOne("Domain.Entities.Contract", "Contract")
+                        .WithMany()
+                        .HasForeignKey("ContractId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_PlatformRevenueEvents_Contracts_ContractId");
+
+                    b.HasOne("Domain.Entities.User", "PayerUser")
+                        .WithMany()
+                        .HasForeignKey("PayerUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_PlatformRevenueEvents_Users_PayerUserId");
+
+                    b.HasOne("Domain.Entities.WalletTransaction", "WalletTransaction")
+                        .WithMany()
+                        .HasForeignKey("WalletTransactionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_PlatformRevenueEvents_WalletTransactions_WalletTransactionId");
+
+                    b.HasOne("Domain.Entities.WalletWithdrawal", "WalletWithdrawal")
+                        .WithMany()
+                        .HasForeignKey("WalletWithdrawalId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("FK_PlatformRevenueEvents_WalletWithdrawals_WalletWithdrawalId");
+
+                    b.Navigation("Contract");
+
+                    b.Navigation("PayerUser");
+
+                    b.Navigation("WalletTransaction");
+
+                    b.Navigation("WalletWithdrawal");
+                });
+
             modelBuilder.Entity("Domain.Entities.PlatformSetting", b =>
                 {
                     b.HasOne("Domain.Entities.User", "UpdatedByAdmin")
@@ -7249,6 +7775,25 @@ namespace Infrastructure.Persistence.Migrations
                         .HasConstraintName("PortfolioItems_fl_FreelancerId_fkey");
 
                     b.Navigation("Freelancer");
+                });
+
+            modelBuilder.Entity("Domain.Entities.PremiumUsageEvent", b =>
+                {
+                    b.HasOne("Domain.Entities.JobPost", "JobPost")
+                        .WithMany()
+                        .HasForeignKey("JobPostId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("FK_PremiumUsageEvents_JobPosts_JobPostId");
+
+                    b.HasOne("Domain.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("FK_PremiumUsageEvents_Users_UserId");
+
+                    b.Navigation("JobPost");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Domain.Entities.Proposal", b =>
@@ -7742,11 +8287,27 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.UserEloPointTransaction", b =>
                 {
+                    b.HasOne("Domain.Entities.User", "AppliedByAdmin")
+                        .WithMany()
+                        .HasForeignKey("AppliedByAdminId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("UserEloPointTransactions_usr_AppliedByAdminId_fkey");
+
+                    b.HasOne("Domain.Entities.EloPointAppeal", "EloAppeal")
+                        .WithMany()
+                        .HasForeignKey("EloAppealId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("UserEloPointTransactions_elo_EloAppealId_fkey");
+
                     b.HasOne("Domain.Entities.User", "User")
                         .WithMany("UserEloPointTransactions")
                         .HasForeignKey("UserId")
                         .IsRequired()
                         .HasConstraintName("UserEloPointTransactions_usr_UserId_fkey");
+
+                    b.Navigation("AppliedByAdmin");
+
+                    b.Navigation("EloAppeal");
 
                     b.Navigation("User");
                 });
@@ -8010,6 +8571,11 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("UserViolations");
                 });
 
+            modelBuilder.Entity("Domain.Entities.EloPointAppeal", b =>
+                {
+                    b.Navigation("Evidence");
+                });
+
             modelBuilder.Entity("Domain.Entities.EsignDocument", b =>
                 {
                     b.Navigation("EsignSignatures");
@@ -8245,6 +8811,8 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.Navigation("DisputeRespondents");
 
+                    b.Navigation("EloPointAppeals");
+
                     b.Navigation("EsignSignatures");
 
                     b.Navigation("EsignTemplates");
@@ -8322,8 +8890,6 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.Navigation("WalletWithdrawals");
                 });
-
-            AnalyticsModelConfiguration.Configure(modelBuilder);
 #pragma warning restore 612, 618
         }
     }

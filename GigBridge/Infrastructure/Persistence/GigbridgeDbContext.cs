@@ -13,6 +13,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
     {
     }
 
+    public void ResetChangeTracker() => ChangeTracker.Clear();
+
     public virtual DbSet<AdminAuditLog> AdminAuditLogs { get; set; }
 
     public virtual DbSet<BankAccount> BankAccounts { get; set; }
@@ -968,6 +970,10 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.Property(e => e.FinalizedDocumentContent).HasColumnType("bytea");
             entity.Property(e => e.FinalizedDocumentFileName).HasMaxLength(255);
             entity.Property(e => e.FinalizedDocumentMimeType).HasMaxLength(150);
+            entity.Property(e => e.PdfDocumentContent).HasColumnType("bytea");
+            entity.Property(e => e.PdfDocumentFileName).HasMaxLength(255);
+            entity.Property(e => e.PdfDocumentHash).HasMaxLength(128);
+            entity.Property(e => e.PdfSignatureCount).HasDefaultValue(0);
             entity.Property(e => e.JobPostsId).HasColumnName("JobPostsId");
             entity.Property(e => e.Status)
                 .HasDefaultValue(0)
@@ -1591,6 +1597,9 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
         modelBuilder.Entity<Message>(entity =>
         {
+            entity.ToTable(table => table.HasCheckConstraint(
+                "CK_Messages_DisputeRecipient_Valid",
+                "\"DisputeRecipient\" IS NULL OR \"DisputeRecipient\" BETWEEN 0 AND 2"));
             entity.HasKey(e => e.MessagesId).HasName("Messages_pkey");
 
             entity.HasIndex(e => new { e.ConversationsId, e.SentAt }, "IX_Messages_ConversationsId_SentAt").IsDescending(false, true);
@@ -1609,6 +1618,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.Property(e => e.MessageType)
                 .HasDefaultValue(0)
                 .HasComment("Enum MessageType: 0=Text, 1=Image, 2=File, 3=System, 4=FinalOffer, 5=ContractEvent, 6=MilestoneEvent, 7=PaymentEvent, 8=DisputeEvent");
+            entity.Property(e => e.DisputeRecipient)
+                .HasComment("Enum DisputeMessageRecipient: 0=Client, 1=Freelancer, 2=Both; null=non-dispute or legacy shared");
             entity.Property(e => e.Metadata).HasColumnType("jsonb");
             entity.Property(e => e.ReplyToMessageId).HasColumnName("ReplyToMessageId");
             entity.Property(e => e.SenderUserId).HasColumnName("SenderUserId");
@@ -2656,18 +2667,26 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
                 .IsUnique()
                 .HasFilter("\"Reason\" = 7");
 
+            // Admin/appeal history grouping: every Elo history screen filters by
+            // (user, source) so a composite index keeps those queries on an index scan.
+            entity.HasIndex(e => new { e.UserId, e.SourceType }, "IX_UserEloPointTransactions_UserId_SourceType");
+
             entity.Property(e => e.UserEloPointTransactionsId)
                 .HasDefaultValueSql("gen_random_uuid()")
                 .HasColumnName("UserEloPointTransactionsId");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.AppliedByAdminId).HasColumnName("AppliedByAdminId");
             entity.Property(e => e.ContractId).HasColumnName("ContractId");
+            entity.Property(e => e.EloAppealId).HasColumnName("EloAppealId");
             entity.Property(e => e.IdempotencyKey).HasMaxLength(200);
             entity.Property(e => e.Metadata).HasColumnType("jsonb");
+            entity.Property(e => e.Mode).HasComment("Enum EloAdjustmentMode: 0=FixedPoints, 1=Percentage");
             entity.Property(e => e.PointsAfter).HasDefaultValue(0);
             entity.Property(e => e.Rating).HasPrecision(3, 1);
-            entity.Property(e => e.Reason).HasComment("Enum UserEloPointReason: 0=InitialGrant, 1=InactivityPenalty, 2=ReturnBonus, 3=JobCompletion, 4=ReviewRating, 5=LegacyIntegrityPenalty, 6=ReviewModeration, 7=CompletedJobReview");
+            entity.Property(e => e.Reason).HasComment("Enum UserEloPointReason: 0=InitialGrant, 1=InactivityPenalty, 2=ReturnBonus, 3=JobCompletion, 4=ReviewRating, 5=LegacyIntegrityPenalty, 6=ReviewModeration, 7=CompletedJobReview, 8=DisputeResolutionPenalty, 9=AdminIncrease, 10=AdminDecrease, 11=AppealCorrection, 12=Reversal, 13=SystemAdjustment");
             entity.Property(e => e.ReviewId).HasColumnName("ReviewId");
             entity.Property(e => e.SourceEntityType).HasMaxLength(50);
+            entity.Property(e => e.SourceType).HasComment("Enum EloAdjustmentSourceType: 0=Review, 1=Dispute, 2=EloAppeal, 3=Admin, 4=System");
             entity.Property(e => e.UserId).HasColumnName("UserId");
 
             entity.ToTable(t =>
@@ -2679,6 +2698,90 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
                 .HasForeignKey(d => d.UserId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("UserEloPointTransactions_usr_UserId_fkey");
+
+            entity.HasOne(d => d.EloAppeal).WithMany()
+                .HasForeignKey(d => d.EloAppealId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("UserEloPointTransactions_elo_EloAppealId_fkey");
+
+            entity.HasOne(d => d.AppliedByAdmin).WithMany()
+                .HasForeignKey(d => d.AppliedByAdminId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("UserEloPointTransactions_usr_AppliedByAdminId_fkey");
+        });
+
+        modelBuilder.Entity<EloPointAppeal>(entity =>
+        {
+            entity.ToTable("EloPointAppeals");
+
+            entity.HasKey(e => e.EloPointAppealId).HasName("EloPointAppeals_pkey");
+
+            entity.HasIndex(e => new { e.UserId, e.Status }, "IX_EloPointAppeals_UserId_Status");
+
+            entity.HasIndex(e => new { e.Status, e.CreatedAt }, "IX_EloPointAppeals_Status_CreatedAt").IsDescending(false, true);
+
+            // Duplicate-prevention: at most one active appeal per transaction. Once
+            // resolved/cancelled the row is terminal, so a filtered unique index is
+            // the DB-level guarantee (matching the Elo transaction idempotency pattern).
+            entity.HasIndex(e => new { e.UserId, e.EloPointTransactionId }, "IX_EloPointAppeals_UserId_Transaction_Active")
+                .IsUnique()
+                .HasFilter("\"Status\" IN (0, 1)");
+
+            entity.Property(e => e.EloPointAppealId)
+                .HasDefaultValueSql("gen_random_uuid()")
+                .HasColumnName("EloPointAppealId");
+            entity.Property(e => e.CancelledById).HasColumnName("CancelledById");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.Reason).HasMaxLength(2000);
+            entity.Property(e => e.ResolutionNote).HasMaxLength(2000);
+            entity.Property(e => e.Status).HasComment("Enum EloPointAppealStatus: 0=Pending, 1=UnderReview, 2=Approved, 3=PartiallyApproved, 4=Rejected, 5=Cancelled");
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.UserId).HasColumnName("UserId");
+
+            entity.HasOne(d => d.User).WithMany(p => p.EloPointAppeals)
+                .HasForeignKey(d => d.UserId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("EloPointAppeals_usr_UserId_fkey");
+
+            entity.HasOne(d => d.EloPointTransaction).WithMany()
+                .HasForeignKey(d => d.EloPointTransactionId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("EloPointAppeals_elo_EloPointTransactionId_fkey");
+
+            entity.HasOne(d => d.AppliedTransaction).WithMany()
+                .HasForeignKey(d => d.AppliedTransactionId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("EloPointAppeals_elo_AppliedTransactionId_fkey");
+
+            entity.HasOne(d => d.ReviewedByAdmin).WithMany()
+                .HasForeignKey(d => d.ReviewedByAdminId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("EloPointAppeals_usr_ReviewedByAdminId_fkey");
+        });
+
+        modelBuilder.Entity<EloPointAppealEvidence>(entity =>
+        {
+            entity.HasKey(e => e.EloPointAppealEvidenceId).HasName("EloPointAppealEvidence_pkey");
+
+            entity.HasIndex(e => e.EloPointAppealId, "IX_EloPointAppealEvidence_AppealId");
+
+            entity.Property(e => e.EloPointAppealEvidenceId)
+                .HasDefaultValueSql("gen_random_uuid()")
+                .HasColumnName("EloPointAppealEvidenceId");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.FileName).HasMaxLength(255);
+            entity.Property(e => e.FileUrl).HasMaxLength(1000);
+            entity.Property(e => e.UploadedById).HasColumnName("UploadedById");
+
+            entity.HasOne(d => d.EloPointAppeal).WithMany(p => p.Evidence)
+                .HasForeignKey(d => d.EloPointAppealId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("EloPointAppealEvidence_elo_EloPointAppealId_fkey");
+
+            entity.HasOne(d => d.UploadedBy).WithMany()
+                .HasForeignKey(d => d.UploadedById)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("EloPointAppealEvidence_usr_UploadedById_fkey");
         });
 
         modelBuilder.Entity<UserEloScore>(entity =>

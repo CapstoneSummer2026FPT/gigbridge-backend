@@ -3,6 +3,7 @@ using Application.Common.Interfaces;
 using Application.Features.Chat.Common.Messages;
 using Application.Features.Chat.Common.Messages.GetConversationMessages.DTOs;
 using Domain.Entities;
+using Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -25,9 +26,9 @@ public class GetConversationMessagesQueryHandler
         GetConversationMessagesQuery request,
         CancellationToken cancellationToken)
     {
-        var isParticipant = await _context.Set<ConversationParticipant>()
+        var participant = await _context.Set<ConversationParticipant>()
             .AsNoTracking()
-            .AnyAsync(
+            .FirstOrDefaultAsync(
                 participant =>
                     participant.ConversationsId == request.ConversationId &&
                     participant.UserId == request.UserId &&
@@ -35,10 +36,17 @@ public class GetConversationMessagesQueryHandler
                     participant.DeletedAt == null,
                 cancellationToken);
 
-        if (!isParticipant && !await CanAdminReadDisputeConversationAsync(request, cancellationToken))
+        var canAdminRead = participant is null && await CanAdminReadDisputeConversationAsync(request, cancellationToken);
+        if (participant is null && !canAdminRead)
         {
             throw new ForbiddenAccessException("You are not a participant in this conversation.");
         }
+
+        var conversationType = await _context.Set<Conversation>().AsNoTracking()
+            .Where(conversation => conversation.ConversationsId == request.ConversationId)
+            .Select(conversation => (int?)conversation.ConversationType)
+            .FirstOrDefaultAsync(cancellationToken)
+            ?? throw new NotFoundException("Conversation does not exist.");
 
         var pageSize = request.PageSize <= 0
             ? DefaultPageSize
@@ -49,6 +57,23 @@ public class GetConversationMessagesQueryHandler
             .Where(message =>
                 message.ConversationsId == request.ConversationId &&
                 message.DeletedForSenderAt == null);
+
+        if (conversationType == (int)ConversationType.Dispute)
+        {
+            var isUserAdmin = participant?.ParticipantRole == (int)ParticipantRole.Admin || canAdminRead;
+            if (!isUserAdmin)
+            {
+                // Non-admin participant: only see own messages + messages addressed to their party
+                var recipient = participant?.ParticipantRole == (int)ParticipantRole.Client
+                    ? DisputeMessageRecipient.Client
+                    : DisputeMessageRecipient.Freelancer;
+                query = query.Where(message =>
+                    message.SenderUserId == request.UserId ||
+                    message.DisputeRecipient == null ||
+                    message.DisputeRecipient == DisputeMessageRecipient.Both ||
+                    message.DisputeRecipient == recipient);
+            }
+        }
 
         if (request.Before.HasValue)
         {
@@ -74,6 +99,11 @@ public class GetConversationMessagesQueryHandler
         var attachmentsByMessage = attachments
             .GroupBy(attachment => attachment.MessagesId)
             .ToDictionary(group => group.Key, group => group.Select(ToAttachmentResponse).ToList());
+        var senderIds = messages.Where(message => message.SenderUserId.HasValue)
+            .Select(message => message.SenderUserId!.Value).ToHashSet();
+        var senders = await _context.Set<User>().AsNoTracking()
+            .Where(user => senderIds.Contains(user.UserId))
+            .ToDictionaryAsync(user => user.UserId, cancellationToken);
         var scheduleIds = messages
             .Where(message => message.ScheduleId.HasValue)
             .Select(message => message.ScheduleId!.Value)
@@ -92,6 +122,9 @@ public class GetConversationMessagesQueryHandler
                 now,
                 message.ScheduleId.HasValue
                     ? schedulesById.GetValueOrDefault(message.ScheduleId.Value)
+                    : null,
+                message.SenderUserId.HasValue
+                    ? senders.GetValueOrDefault(message.SenderUserId.Value)
                     : null))
             .ToList();
     }
@@ -134,7 +167,8 @@ public class GetConversationMessagesQueryHandler
         IReadOnlyList<MessageAttachmentResponse> attachments,
         Guid viewerUserId,
         DateTime utcNow,
-        Schedule? currentSchedule)
+        Schedule? currentSchedule,
+        User? sender)
     {
         var isDeleted = message.DeletedForEveryoneAt.HasValue;
 
@@ -151,7 +185,11 @@ public class GetConversationMessagesQueryHandler
             isDeleted ? null : message.EditedAt,
             isDeleted,
             isDeleted ? [] : attachments,
-            isDeleted ? null : MessageHelpers.ParseScheduleMetadata(message, viewerUserId, utcNow, currentSchedule));
+            isDeleted ? null : MessageHelpers.ParseScheduleMetadata(message, viewerUserId, utcNow, currentSchedule),
+            sender?.FullName,
+            sender?.Avatar,
+            sender?.Role,
+            message.DisputeRecipient);
     }
 
     private static MessageAttachmentResponse ToAttachmentResponse(MessageAttachment attachment)

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
+using Application.Common.Models.Ai;
 using Application.Features.Proposals.Common.DTOs;
 using Domain.Entities;
 
@@ -28,6 +29,12 @@ internal static class ProposalProjection
         if (!string.IsNullOrEmpty(judging?.SoftSkillsJson))
         {
             try { softSkills = JsonSerializer.Deserialize<List<string>>(judging.SoftSkillsJson); } catch { }
+        }
+
+        List<GradedQuestionDto>? gradedQuestions = null;
+        if (!string.IsNullOrEmpty(judging?.GradedQuestionsJson))
+        {
+            try { gradedQuestions = JsonSerializer.Deserialize<List<GradedQuestionDto>>(judging.GradedQuestionsJson); } catch { }
         }
 
         return new ProposalDto
@@ -61,7 +68,10 @@ internal static class ProposalProjection
             AiRecommendedHire = judging?.RecommendedHire,
             AiEvaluatedAt = judging?.EvaluatedAt,
             AiTechnicalSkills = techSkills,
-            AiSoftSkills = softSkills
+            AiSoftSkills = softSkills,
+            AiHolisticAdjustmentReason = judging?.HolisticAdjustmentReason,
+            AiHolisticAdjustment = judging?.HolisticAdjustment,
+            AiGradedQuestions = gradedQuestions
         };
     }
 

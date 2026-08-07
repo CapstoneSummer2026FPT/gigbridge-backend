@@ -8,6 +8,8 @@ using Application.Features.ESign.Common.GetDocument.Queries;
 using Application.Features.ESign.Common.DownloadDocument.Queries;
 using Application.Features.ESign.Common.GetDocuments.Queries;
 using Application.Features.ESign.Common.GetMySignedDocuments.Queries;
+using Application.Features.ESign.Common.GeneratePdf.Commands;
+using Application.Features.ESign.Common.SavePdf.Commands;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -109,6 +111,49 @@ public sealed class ESignController : BaseApiController
         Response.Headers.CacheControl = "private, no-store";
         Response.Headers.Pragma = "no-cache";
         return File(result.Content, result.ContentType, result.FileName);
+    }
+
+    [HttpPost("documents/{documentId:guid}/pdf")]
+    public async Task<IActionResult> GeneratePdf(Guid documentId)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return InvalidTokenResponse();
+        }
+
+        var result = await Mediator.Send(new GenerateESignPdfCommand(documentId, userId));
+        return Ok(ApiResponse<ESignPdfArtifactResponse>.Ok(result, "PDF prepared from the contract template"));
+    }
+
+    [HttpPost("documents/{documentId:guid}/pdf/upload")]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(20 * 1024 * 1024)]
+    
+    public async Task<IActionResult> SavePdf(
+        Guid documentId,
+        IFormFile file,
+        [FromForm] int signatureCount)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return InvalidTokenResponse();
+        }
+
+        if (file.Length == 0)
+        {
+            return BadRequest(ApiResponse<object>.BadRequest("A PDF file is required"));
+        }
+
+        await using var stream = new MemoryStream();
+        await file.CopyToAsync(stream, HttpContext.RequestAborted);
+        var result = await Mediator.Send(new SaveESignPdfCommand(
+            documentId,
+            userId,
+            stream.ToArray(),
+            file.FileName,
+            signatureCount));
+
+        return Ok(ApiResponse<ESignPdfArtifactResponse>.Ok(result, "PDF saved"));
     }
 
     [HttpPost("documents/from-job/{jobPostId:guid}")]

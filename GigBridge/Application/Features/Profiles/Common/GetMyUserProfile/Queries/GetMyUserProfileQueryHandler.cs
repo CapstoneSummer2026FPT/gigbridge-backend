@@ -3,6 +3,7 @@ using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
 using Application.Features.Profiles.Common.DTOs;
 using Domain.Entities;
+using Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -31,6 +32,8 @@ public sealed class GetMyUserProfileQueryHandler
             throw new BadRequestException("User ID from token is invalid or missing.");
         }
 
+        var now = DateTime.UtcNow;
+
         var profile = await _context.Set<User>()
             .AsNoTracking()
             .Where(user => user.UserId == currentUserId)
@@ -42,7 +45,16 @@ public sealed class GetMyUserProfileQueryHandler
                 Avatar = user.Avatar,
                 PhoneNumber = user.PhoneNumber,
                 PreferredLanguage = user.PreferredLanguage,
-                Role = user.Role
+                Role = user.Role,
+                IsPremium = (user.Role == (int)UserRole.Client || user.Role == (int)UserRole.Freelancer) &&
+                    user.Subscriptions.Any(subscription =>
+                        subscription.Status == SubscriptionStatus.Active &&
+                        subscription.StartDate <= now &&
+                        subscription.EndDate > now &&
+                        subscription.SubscriptionPlans.IsActive == true &&
+                        subscription.SubscriptionPlans.Price > 0 &&
+                        (subscription.SubscriptionPlans.TargetRole == null ||
+                         subscription.SubscriptionPlans.TargetRole == user.Role))
             })
             .FirstOrDefaultAsync(cancellationToken);
 
