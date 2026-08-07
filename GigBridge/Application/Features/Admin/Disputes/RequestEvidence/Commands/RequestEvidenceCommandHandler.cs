@@ -66,8 +66,16 @@ public sealed class RequestEvidenceCommandHandler :
             throw new BadRequestException("The dispute respondent is not available.");
 
         var now = _dateTimeService.UtcNow;
-        if (command.Deadline.HasValue && command.Deadline.Value <= now)
-            throw new BadRequestException("Evidence request deadline must be in the future.");
+        DateTime? deadlineUtc = null;
+        if (command.Deadline.HasValue)
+        {
+            deadlineUtc = command.Deadline.Value.Kind == DateTimeKind.Unspecified
+                ? DateTime.SpecifyKind(command.Deadline.Value, DateTimeKind.Utc)
+                : command.Deadline.Value.ToUniversalTime();
+
+            if (deadlineUtc.Value <= now)
+                throw new BadRequestException("Evidence request deadline must be in the future.");
+        }
 
         var groupId = Guid.NewGuid();
         var targets = command.Target == EvidenceRequestTarget.Both
@@ -87,7 +95,7 @@ public sealed class RequestEvidenceCommandHandler :
             RequestGroupId = groupId,
             RequestedByAdminId = command.AdminId,
             RequestedAt = now,
-            Deadline = command.Deadline,
+            Deadline = deadlineUtc,
             RequestTarget = (int)target,
             IsRequestFulfilled = false,
             CreatedAt = now
@@ -104,8 +112,8 @@ public sealed class RequestEvidenceCommandHandler :
             EvidenceRequestTarget.Respondent => "respondent",
             _ => "reporter and respondent"
         };
-        var deadlineText = command.Deadline.HasValue
-            ? $" by {command.Deadline.Value:yyyy-MM-dd}"
+        var deadlineText = deadlineUtc.HasValue
+            ? $" by {deadlineUtc.Value:yyyy-MM-dd}"
             : string.Empty;
         var conversation = await _context.Set<Conversation>()
             .FirstOrDefaultAsync(item => item.DisputesId == dispute.DisputesId, cancellationToken);
