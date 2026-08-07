@@ -40,6 +40,14 @@ public partial class EsignDocument
 
     public long? FinalizedDocumentSizeBytes { get; set; }
 
+    public byte[]? PdfDocumentContent { get; set; }
+
+    public string? PdfDocumentFileName { get; set; }
+
+    public int PdfSignatureCount { get; set; }
+
+    public string? PdfDocumentHash { get; set; }
+
     public DateTime CreatedAt { get; set; }
 
     public DateTime? UpdatedAt { get; set; }

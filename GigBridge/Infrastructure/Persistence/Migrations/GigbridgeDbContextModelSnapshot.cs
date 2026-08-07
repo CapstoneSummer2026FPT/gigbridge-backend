@@ -1937,6 +1937,22 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<long?>("FinalizedDocumentSizeBytes")
                         .HasColumnType("bigint");
 
+                    b.Property<byte[]>("PdfDocumentContent")
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("PdfDocumentFileName")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("PdfDocumentHash")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<int>("PdfSignatureCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
                     b.Property<Guid>("JobPostsId")
                         .HasColumnType("uuid")
                         .HasColumnName("JobPostsId");

@@ -6,6 +6,7 @@ using Application.Common.Options;
 using Application.Features.Auth.Shared.DTOs;
 using Application.Features.Chat.Common.Schedules;
 using Application.Features.Contracts.Common.DTOs;
+using Application.Features.ESign.Common.Internal;
 using Application.Features.Notifications.Common.DTOs;
 using Domain.Entities;
 using Domain.Enums;
@@ -981,17 +982,25 @@ public sealed class DeliveryOutboxService : BackgroundService
             .Select(item => new FinalContractArtifact(
                 item.Status,
                 item.DocumentCode,
-                item.FinalizedDocumentContent,
-                item.FinalizedDocumentFileName,
-                item.FinalizedDocumentMimeType))
+                item.PdfDocumentContent,
+                item.PdfDocumentFileName,
+                "application/pdf",
+                item.DocumentHash,
+                item.PdfDocumentHash,
+                item.PdfSignatureCount))
             .FirstOrDefaultAsync(ct)
             ?? throw new InvalidOperationException("The finalized ESign document no longer exists.");
         if (document.Status != (int)ESignDocumentStatus.FullySigned ||
             document.Content is not { Length: > 0 } ||
             string.IsNullOrWhiteSpace(document.FileName) ||
-            string.IsNullOrWhiteSpace(document.MimeType))
+            string.IsNullOrWhiteSpace(document.MimeType) ||
+            document.PdfSignatureCount != 2 ||
+            !string.Equals(
+                document.PdfDocumentHash,
+                $"{document.DocumentHash}:contract-template-pdf-v1",
+                StringComparison.Ordinal))
         {
-            throw new InvalidOperationException("The finalized ESign DOCX artifact is not available.");
+            throw new InvalidOperationException("The finalized ESign PDF artifact is not available.");
         }
 
         var recipientName = WebUtility.HtmlEncode(payload.RecipientName);
@@ -1005,14 +1014,17 @@ public sealed class DeliveryOutboxService : BackgroundService
             {
                 To = payload.Email,
                 Subject = $"[GigBridge] Hợp đồng {document.DocumentCode} đã hoàn tất",
-                Body = $"<p>Xin chào {recipientName},</p><p>Hợp đồng <strong>{contractTitle}</strong> ({code}) đã được Client và Freelancer ký đầy đủ.</p><p>Bản DOCX hoàn tất được đính kèm email này.</p>",
-                TextBody = $"Xin chào {payload.RecipientName}, hợp đồng {payload.ContractTitle} ({document.DocumentCode}) đã được ký đầy đủ. Bản DOCX hoàn tất được đính kèm email này.",
+                Body = $"<p>Xin chào {recipientName},</p><p>Hợp đồng <strong>{contractTitle}</strong> ({code}) đã được Client và Freelancer ký đầy đủ.</p><p>Bản PDF hoàn tất được đính kèm email này.</p>",
+                TextBody = $"Xin chào {payload.RecipientName}, hợp đồng {payload.ContractTitle} ({document.DocumentCode}) đã được ký đầy đủ. Bản PDF hoàn tất được đính kèm email này.",
                 IsHtml = true,
                 IdempotencyKey = job.DeliveryKey,
                 MessageId = $"<{job.DeliveryKey.Replace(':', '.')}@gigbridge.local>",
                 ByteAttachments =
                 [
-                    new EmailByteAttachment(document.FileName, document.Content, document.MimeType)
+                    new EmailByteAttachment(
+                        ESignPdfArtifactRevision.ContractFileName,
+                        document.Content,
+                        document.MimeType)
                 ]
             });
     }
@@ -1088,7 +1100,10 @@ public sealed class DeliveryOutboxService : BackgroundService
         string DocumentCode,
         byte[]? Content,
         string? FileName,
-        string? MimeType);
+        string? MimeType,
+        string? DocumentHash,
+        string? PdfDocumentHash,
+        int PdfSignatureCount);
 
     private sealed record PreparedDelivery(
         DeliveryOutboxLease Lease,

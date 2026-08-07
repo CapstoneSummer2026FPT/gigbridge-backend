@@ -33,6 +33,7 @@ public sealed class GetUserProfileQueryHandlerTests
         Assert.Equal(user.FullName, result.FullName);
         Assert.Equal(user.Avatar, result.Avatar);
         Assert.Equal(user.Role, result.Role);
+        Assert.False(result.IsPremium);
     }
 
     [Fact]

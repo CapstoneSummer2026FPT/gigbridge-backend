@@ -35,6 +35,8 @@ public sealed class UpdateUserProfileCommandHandler
         }
 
         var user = await _context.Set<User>()
+            .Include(candidate => candidate.Subscriptions)
+                .ThenInclude(subscription => subscription.SubscriptionPlans)
             .FirstOrDefaultAsync(candidate => candidate.UserId == currentUserId, cancellationToken);
 
         if (user is null)
@@ -65,7 +67,8 @@ public sealed class UpdateUserProfileCommandHandler
             Avatar = user.Avatar,
             PhoneNumber = user.PhoneNumber,
             PreferredLanguage = user.PreferredLanguage,
-            Role = user.Role
+            Role = user.Role,
+            IsPremium = user.IsPremium
         };
     }
 

@@ -80,6 +80,8 @@ public class GoogleLoginCommandHandler : IRequestHandler<GoogleLoginCommand, (Lo
             .Include(u => u.ClientProfile)
             .Include(u => u.FreelancerProfile)
             .Include(u => u.UserEloScore)
+            .Include(u => u.Subscriptions)
+                .ThenInclude(subscription => subscription.SubscriptionPlans)
             .FirstOrDefaultAsync(u => u.Email == email, cancellationToken);
     }
 

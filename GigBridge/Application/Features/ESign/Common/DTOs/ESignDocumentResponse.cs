@@ -16,6 +16,7 @@ public sealed record ESignDocumentResponse(
     bool CanCurrentUserSign,
     bool HasFinalArtifact,
     string? FinalizedDocumentFileName,
+    bool HasPdfArtifact,
     DateTime CreatedAt,
     DateTime? UpdatedAt,
     IReadOnlyList<ESignSignatureResponse> Signatures);

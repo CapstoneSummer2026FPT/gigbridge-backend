@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel.DataAnnotations.Schema;
+using Domain.Enums;
 
 namespace Domain.Entities;
 
@@ -27,6 +29,27 @@ public partial class User
     public bool IsActive { get; set; }
 
     public bool IsSetup { get; set; }
+
+    [NotMapped]
+    public bool IsPremium
+    {
+        get
+        {
+            var now = DateTime.UtcNow;
+
+            return (Role == (int)UserRole.Client || Role == (int)UserRole.Freelancer) &&
+                Subscriptions.Any(subscription =>
+                    subscription.Status == SubscriptionStatus.Active &&
+                    subscription.StartDate <= now &&
+                    subscription.EndDate > now &&
+                    subscription.SubscriptionPlans is
+                    {
+                        IsActive: true,
+                        Price: > 0
+                    } plan &&
+                    (plan.TargetRole == null || plan.TargetRole == Role));
+        }
+    }
 
     public DateTime? SuspendedUntil { get; set; }
 
