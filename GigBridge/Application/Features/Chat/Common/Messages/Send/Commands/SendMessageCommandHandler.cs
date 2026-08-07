@@ -193,11 +193,14 @@ public class SendMessageCommandHandler : IRequestHandler<SendMessageCommand, Mes
             response,
             cancellationToken);
 
-        await _chatRealtimeNotifier.SendConversationEventAsync(
-            request.ConversationId,
-            "ReceiveMessage",
-            response,
-            cancellationToken);
+        if (recipient == null || recipient == DisputeMessageRecipient.Both)
+        {
+            await _chatRealtimeNotifier.SendConversationEventAsync(
+                request.ConversationId,
+                "ReceiveMessage",
+                response,
+                cancellationToken);
+        }
 
         await SendConversationUpdatedEvents(
             deliveryParticipants,
