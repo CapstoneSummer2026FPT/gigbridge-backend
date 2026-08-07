@@ -57,10 +57,9 @@ public sealed class RequestEvidenceCommandHandler :
         if (dispute.AssignedAdminId != command.AdminId)
             throw new ForbiddenAccessException("Only the assigned administrator may request evidence for this dispute.");
 
-        if (dispute.Status is not ((int)DisputeStatus.UnderReview) and
-            not ((int)DisputeStatus.WaitingEvidence))
+        if (dispute.Status is (int)DisputeStatus.Resolved or (int)DisputeStatus.Closed)
         {
-            throw new BadRequestException("Evidence can only be requested while a dispute is under review or waiting for evidence.");
+            throw new BadRequestException("Evidence can only be requested while a dispute is active.");
         }
 
         if (!dispute.RespondentId.HasValue)
@@ -96,7 +95,7 @@ public sealed class RequestEvidenceCommandHandler :
 
         await using var transaction = await _context.BeginTransactionAsync(cancellationToken);
         _context.Set<DisputeEvidence>().AddRange(placeholders);
-        dispute.Status = (int)DisputeStatus.WaitingEvidence;
+        dispute.Status = (int)DisputeStatus.UnderReview;
         dispute.UpdatedAt = now;
 
         var targetLabel = command.Target switch
