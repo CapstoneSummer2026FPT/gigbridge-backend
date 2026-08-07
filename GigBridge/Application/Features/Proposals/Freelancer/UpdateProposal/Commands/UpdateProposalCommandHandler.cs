@@ -10,7 +10,7 @@ namespace Application.Features.Proposals.Freelancer.UpdateProposal.Commands;
 
 public class UpdateProposalCommandHandler : IRequestHandler<UpdateProposalCommand, bool>
 {
-    private const int MaxSaveAttempts = 2;
+    private const int MaxSaveAttempts = 3;
 
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
@@ -34,12 +34,18 @@ public class UpdateProposalCommandHandler : IRequestHandler<UpdateProposalComman
                 await ApplyUpdateAsync(command, cancellationToken);
                 return true;
             }
-            catch (DbUpdateConcurrencyException) when (attempt < MaxSaveAttempts - 1)
+            catch (DbUpdateConcurrencyException)
             {
-                // Npgsql guards every row with the implicit xmin version column. If a
-                // duplicate submit or a racing status update commits first, the save
-                // affects 0 rows. The freelancer's latest edit wins, so reload and retry.
+                // A resumed question flow can briefly race a draft autosave/status
+                // update. Drop stale tracked entities and reload the draft before
+                // applying the freelancer's latest edit again.
                 _context.ResetChangeTracker();
+
+                if (attempt == MaxSaveAttempts - 1)
+                {
+                    throw new ConflictException(
+                        "The proposal was updated in another request. Please retry submitting it.");
+                }
             }
         }
 
