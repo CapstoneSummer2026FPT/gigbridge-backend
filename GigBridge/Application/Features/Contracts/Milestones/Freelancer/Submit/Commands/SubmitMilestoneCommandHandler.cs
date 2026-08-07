@@ -49,9 +49,9 @@ public sealed class SubmitMilestoneCommandHandler :
             command.MilestoneId,
             cancellationToken);
 
-        if (milestone.Status != (int)MilestoneStatus.InProgress)
+        if (milestone.Status != (int)MilestoneStatus.InProgress && milestone.Status != (int)MilestoneStatus.Pending)
         {
-            throw new BadRequestException("Only in-progress milestones can be submitted.");
+            throw new BadRequestException("Only in-progress or pending milestones can be submitted.");
         }
 
         var workItems = await _context.Set<ContractWorkItem>()
