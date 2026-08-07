@@ -18,19 +18,22 @@ public sealed class UpdateAdminDisputeStatusCommandHandler :
     private static readonly HashSet<(int, int)> AllowedTransitions =
     [
         ((int)DisputeStatus.Open, (int)DisputeStatus.WaitingAdmin),
+        ((int)DisputeStatus.Open, (int)DisputeStatus.UnderReview),
         ((int)DisputeStatus.WaitingAdmin, (int)DisputeStatus.UnderReview),
+        ((int)DisputeStatus.UnderReview, (int)DisputeStatus.WaitingAdmin),
         ((int)DisputeStatus.UnderReview, (int)DisputeStatus.WaitingEvidence),
         ((int)DisputeStatus.UnderReview, (int)DisputeStatus.DecisionPending),
         ((int)DisputeStatus.WaitingEvidence, (int)DisputeStatus.UnderReview),
+        ((int)DisputeStatus.DecisionPending, (int)DisputeStatus.UnderReview),
         ((int)DisputeStatus.Resolved, (int)DisputeStatus.Closed),
     ];
 
     private static readonly Dictionary<int, string> StatusLabels = new()
     {
-        [(int)DisputeStatus.WaitingAdmin] = "waiting for admin assignment",
-        [(int)DisputeStatus.UnderReview] = "under review",
-        [(int)DisputeStatus.WaitingEvidence] = "waiting for additional evidence",
-        [(int)DisputeStatus.DecisionPending] = "pending decision",
+        [(int)DisputeStatus.WaitingAdmin] = "waiting for admin",
+        [(int)DisputeStatus.UnderReview] = "in progress",
+        [(int)DisputeStatus.WaitingEvidence] = "in progress",
+        [(int)DisputeStatus.DecisionPending] = "in progress",
         [(int)DisputeStatus.Closed] = "closed",
     };
 
