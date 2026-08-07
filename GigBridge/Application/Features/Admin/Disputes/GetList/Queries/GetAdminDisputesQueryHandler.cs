@@ -64,7 +64,7 @@ public sealed class GetAdminDisputesQueryHandler :
                     ? null
                     : dispute.Contracts.FreelancerProfiles.User.FullName,
                 MilestoneTitle = dispute.Milestones == null ? null : dispute.Milestones.Title,
-                EvidenceCount = dispute.DisputeEvidences.Count
+                EvidenceCount = dispute.DisputeEvidences.Count(e => e.FileName != null)
             })
             .ToListAsync(cancellationToken);
 
