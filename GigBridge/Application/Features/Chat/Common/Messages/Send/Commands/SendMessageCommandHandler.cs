@@ -100,6 +100,7 @@ public class SendMessageCommandHandler : IRequestHandler<SendMessageCommand, Mes
         var existingMessage = await _context.Set<Message>()
             .FirstOrDefaultAsync(
                 message =>
+                    message.ConversationsId == request.ConversationId &&
                     message.SenderUserId == command.UserId &&
                     message.ClientMessageId == clientMessageId,
                 cancellationToken);
@@ -188,6 +189,12 @@ public class SendMessageCommandHandler : IRequestHandler<SendMessageCommand, Mes
 
         await _chatRealtimeNotifier.SendUsersEventAsync(
             participantUserIds,
+            "ReceiveMessage",
+            response,
+            cancellationToken);
+
+        await _chatRealtimeNotifier.SendConversationEventAsync(
+            request.ConversationId,
             "ReceiveMessage",
             response,
             cancellationToken);
