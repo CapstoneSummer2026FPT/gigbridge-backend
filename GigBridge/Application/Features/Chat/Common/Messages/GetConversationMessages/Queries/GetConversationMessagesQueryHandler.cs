@@ -58,17 +58,43 @@ public class GetConversationMessagesQueryHandler
                 message.ConversationsId == request.ConversationId &&
                 message.DeletedForSenderAt == null);
 
-        if (conversationType == (int)ConversationType.Dispute &&
-            participant?.ParticipantRole is not (int)ParticipantRole.Admin)
+        if (conversationType == (int)ConversationType.Dispute)
         {
-            var recipient = participant?.ParticipantRole == (int)ParticipantRole.Client
-                ? DisputeMessageRecipient.Client
-                : DisputeMessageRecipient.Freelancer;
-            query = query.Where(message =>
-                message.SenderUserId == request.UserId ||
-                message.DisputeRecipient == null ||
-                message.DisputeRecipient == DisputeMessageRecipient.Both ||
-                message.DisputeRecipient == recipient);
+            if (participant?.ParticipantRole is not (int)ParticipantRole.Admin && !canAdminRead)
+            {
+                // Non-admin participant: only see own messages + messages addressed to their party
+                var recipient = participant?.ParticipantRole == (int)ParticipantRole.Client
+                    ? DisputeMessageRecipient.Client
+                    : DisputeMessageRecipient.Freelancer;
+                query = query.Where(message =>
+                    message.SenderUserId == request.UserId ||
+                    message.DisputeRecipient == null ||
+                    message.DisputeRecipient == DisputeMessageRecipient.Both ||
+                    message.DisputeRecipient == recipient);
+            }
+            else if (canAdminRead && request.AdminDisputeId.HasValue)
+            {
+                // Admin reading via dispute context: apply status-based visibility.
+                // Open (0) and WaitingAdmin (1): hide Client-targeted messages.
+                // UnderReview (2) and beyond: show all messages.
+                var disputeStatus = await _context.Set<Dispute>()
+                    .AsNoTracking()
+                    .Where(d => d.DisputesId == request.AdminDisputeId.Value)
+                    .Select(d => (int?)d.Status)
+                    .FirstOrDefaultAsync(cancellationToken);
+
+                var isBeforeUnderReview = disputeStatus is null ||
+                    disputeStatus == (int)DisputeStatus.Open ||
+                    disputeStatus == (int)DisputeStatus.WaitingAdmin;
+
+                if (isBeforeUnderReview)
+                {
+                    // Hide messages sent exclusively to the Client
+                    query = query.Where(message =>
+                        message.DisputeRecipient == null ||
+                        message.DisputeRecipient != DisputeMessageRecipient.Client);
+                }
+            }
         }
 
         if (request.Before.HasValue)
