@@ -304,11 +304,11 @@ public sealed class FundContractEscrowCommandHandler :
     private async Task StartFirstMilestoneAsync(Guid contractId, DateTime now, CancellationToken cancellationToken)
     {
         var first = await _context.Set<Milestone>()
-            .Where(item => item.ContractsId == contractId)
+            .Where(item => item.ContractsId == contractId && item.Status == (int)MilestoneStatus.Pending)
             .OrderBy(item => item.SortOrder ?? int.MaxValue)
             .ThenBy(item => item.CreatedAt)
             .FirstOrDefaultAsync(cancellationToken);
-        if (first is not null && first.Status == (int)MilestoneStatus.Pending)
+        if (first is not null)
         {
             first.Status = (int)MilestoneStatus.InProgress;
             first.StartedAt = now;
