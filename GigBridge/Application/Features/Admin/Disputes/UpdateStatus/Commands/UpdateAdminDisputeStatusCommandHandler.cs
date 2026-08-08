@@ -17,24 +17,17 @@ public sealed class UpdateAdminDisputeStatusCommandHandler :
 {
     private static readonly HashSet<(int, int)> AllowedTransitions =
     [
-        ((int)DisputeStatus.Open, (int)DisputeStatus.WaitingAdmin),
-        ((int)DisputeStatus.Open, (int)DisputeStatus.UnderReview),
-        ((int)DisputeStatus.WaitingAdmin, (int)DisputeStatus.UnderReview),
-        ((int)DisputeStatus.UnderReview, (int)DisputeStatus.WaitingAdmin),
-        ((int)DisputeStatus.UnderReview, (int)DisputeStatus.WaitingEvidence),
-        ((int)DisputeStatus.UnderReview, (int)DisputeStatus.DecisionPending),
-        ((int)DisputeStatus.WaitingEvidence, (int)DisputeStatus.UnderReview),
-        ((int)DisputeStatus.DecisionPending, (int)DisputeStatus.UnderReview),
-        ((int)DisputeStatus.Resolved, (int)DisputeStatus.Closed),
+        ((int)DisputeStatus.WaitingAdmin, (int)DisputeStatus.InProgress),
+        ((int)DisputeStatus.InProgress,   (int)DisputeStatus.WaitingAdmin),
+        ((int)DisputeStatus.Resolved,     (int)DisputeStatus.Closed),
     ];
 
     private static readonly Dictionary<int, string> StatusLabels = new()
     {
         [(int)DisputeStatus.WaitingAdmin] = "waiting for admin",
-        [(int)DisputeStatus.UnderReview] = "in progress",
-        [(int)DisputeStatus.WaitingEvidence] = "in progress",
-        [(int)DisputeStatus.DecisionPending] = "in progress",
-        [(int)DisputeStatus.Closed] = "closed",
+        [(int)DisputeStatus.InProgress]   = "in progress",
+        [(int)DisputeStatus.Resolved]     = "resolved",
+        [(int)DisputeStatus.Closed]       = "closed",
     };
 
     private readonly IApplicationDbContext _context;
@@ -89,8 +82,8 @@ public sealed class UpdateAdminDisputeStatusCommandHandler :
             .Select(u => u.FullName)
             .FirstOrDefaultAsync(cancellationToken);
 
-        // Auto-assign admin if transitioning to UnderReview
-        if (command.Status == DisputeStatus.UnderReview)
+        // Auto-assign admin when moving to InProgress
+        if (command.Status == DisputeStatus.InProgress)
         {
             dispute.AssignedAdminId ??= command.AdminId;
             dispute.AssignedAt ??= now;

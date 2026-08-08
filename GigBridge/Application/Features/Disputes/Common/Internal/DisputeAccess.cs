@@ -29,11 +29,8 @@ internal static class DisputeAccess
 {
     public static readonly int[] ActiveStatuses =
     [
-        (int)DisputeStatus.Open,
         (int)DisputeStatus.WaitingAdmin,
-        (int)DisputeStatus.UnderReview,
-        (int)DisputeStatus.WaitingEvidence,
-        (int)DisputeStatus.DecisionPending
+        (int)DisputeStatus.InProgress,
     ];
 
     public static bool CanCreateForContractStatus(int status) =>

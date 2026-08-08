@@ -43,7 +43,7 @@ public sealed class CreateDisputeCommandHandler(
             InitiatorId = command.UserId,
             MilestonesId = command.Request.MilestoneId,
             Reason = command.Request.Reason.Trim(),
-            Status = 0,
+            Status = (int)DisputeStatus.WaitingAdmin,
             IsVipPriority = fastTrack.IsVipPriority,
             ResolutionTargetAt = fastTrack.ResolutionTargetAt,
             AiAnalysisStatus = fastTrack.AiAnalysisStatus,

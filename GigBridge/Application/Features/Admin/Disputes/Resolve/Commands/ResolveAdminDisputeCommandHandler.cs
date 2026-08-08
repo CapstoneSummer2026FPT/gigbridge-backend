@@ -70,9 +70,8 @@ public sealed class ResolveAdminDisputeCommandHandler :
 
         if (dispute.Status is (int)DisputeStatus.Resolved or (int)DisputeStatus.Closed)
             throw new ConflictException("This dispute has already been resolved.");
-        if (dispute.Status is not ((int)DisputeStatus.UnderReview) and
-            not ((int)DisputeStatus.WaitingEvidence) and not ((int)DisputeStatus.DecisionPending))
-            throw new ConflictException("The dispute status changed before resolution.");
+        if (dispute.Status is not (int)DisputeStatus.InProgress)
+            throw new ConflictException("The dispute must be In Progress before it can be resolved.");
         if (dispute.AssignedAdminId != command.AdminId)
             throw new ForbiddenAccessException("Only the assigned administrator may resolve this dispute.");
         if (await _context.Set<DisputeMilestoneDecision>()
