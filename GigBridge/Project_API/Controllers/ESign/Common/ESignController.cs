@@ -126,10 +126,11 @@ public sealed class ESignController : BaseApiController
     }
 
     [HttpPost("documents/{documentId:guid}/pdf/upload")]
+    [Consumes("multipart/form-data")]
     [RequestSizeLimit(20 * 1024 * 1024)]
     public async Task<IActionResult> SavePdf(
         Guid documentId,
-        [FromForm] IFormFile file,
+        IFormFile file,
         [FromForm] int signatureCount)
     {
         if (!TryGetCurrentUserId(out var userId))
