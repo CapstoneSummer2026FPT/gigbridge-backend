@@ -42,6 +42,9 @@ public interface IAiServiceClient
     Task<TalentRerankResponseDto> RerankTalentAsync(
         TalentRerankRequestDto request,
         CancellationToken cancellationToken = default);
+    Task<JobRerankResponseDto> RerankJobsForFreelancerAsync(
+        JobRerankRequestDto request,
+        CancellationToken cancellationToken = default);
 }
 
 
