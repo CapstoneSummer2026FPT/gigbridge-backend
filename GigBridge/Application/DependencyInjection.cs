@@ -83,18 +83,20 @@ public static class DependencyInjection
         services.AddScoped<IAdminAnalyticsService, AdminAnalyticsService>();
         services.AddScoped<IMarketplaceAnalyticsRecorder, MarketplaceAnalyticsRecorder>();
 
-        services.AddSingleton<DeadlineWarningService>();
-        services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<DeadlineWarningService>());
+        if (BackgroundWorkerOptions.IsEnabled(configuration))
+        {
+            services.AddSingleton<DeadlineWarningService>();
+            services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<DeadlineWarningService>());
 
+            services.AddSingleton<DeliveryOutboxService>();
+            services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<DeliveryOutboxService>());
 
-        services.AddSingleton<DeliveryOutboxService>();
-        services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<DeliveryOutboxService>());
+            services.AddSingleton<PayoutOutboxWorker>();
+            services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<PayoutOutboxWorker>());
 
-        services.AddSingleton<PayoutOutboxWorker>();
-        services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<PayoutOutboxWorker>());
-
-        services.AddSingleton<ContractAutoCompletionWorker>();
-        services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<ContractAutoCompletionWorker>());
+            services.AddSingleton<ContractAutoCompletionWorker>();
+            services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<ContractAutoCompletionWorker>());
+        }
 
         return services;
     }
