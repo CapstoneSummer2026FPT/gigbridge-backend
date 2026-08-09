@@ -124,6 +124,7 @@ public sealed class AdminDisputesController : BaseApiController
         Guid disputeId,
         Guid conversationId,
         [FromForm] string? content,
+        [FromForm] DisputeMessageRecipient recipient,
         [FromForm] List<IFormFile>? attachments)
     {
         if (!TryGetCurrentUserId(out var adminId))
@@ -145,7 +146,8 @@ public sealed class AdminDisputesController : BaseApiController
                 conversationId,
                 adminId,
                 content,
-                files));
+                files,
+                recipient));
             return Ok(ApiResponse<MessageResponse>.Ok(result, "Official message sent successfully."));
         }
         finally

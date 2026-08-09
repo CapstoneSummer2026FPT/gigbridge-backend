@@ -69,6 +69,10 @@ internal sealed class InMemoryApplicationDbContext : IApplicationDbContext
 
         return Task.FromResult(1);
     }
+
+    public void ResetChangeTracker()
+    {
+    }
 }
 
 internal sealed class NoopApplicationDbContextTransaction : IApplicationDbContextTransaction

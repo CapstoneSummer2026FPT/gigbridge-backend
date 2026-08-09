@@ -10,6 +10,8 @@ namespace Application.Features.Proposals.Freelancer.UpdateProposal.Commands;
 
 public class UpdateProposalCommandHandler : IRequestHandler<UpdateProposalCommand, bool>
 {
+    private const int MaxSaveAttempts = 3;
+
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
 
@@ -22,6 +24,35 @@ public class UpdateProposalCommandHandler : IRequestHandler<UpdateProposalComman
     }
 
     public async Task<bool> Handle(
+        UpdateProposalCommand command,
+        CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; attempt < MaxSaveAttempts; attempt++)
+        {
+            try
+            {
+                await ApplyUpdateAsync(command, cancellationToken);
+                return true;
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                // A resumed question flow can briefly race a draft autosave/status
+                // update. Drop stale tracked entities and reload the draft before
+                // applying the freelancer's latest edit again.
+                _context.ResetChangeTracker();
+
+                if (attempt == MaxSaveAttempts - 1)
+                {
+                    throw new ConflictException(
+                        "The proposal was updated in another request. Please retry submitting it.");
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private async Task ApplyUpdateAsync(
         UpdateProposalCommand command,
         CancellationToken cancellationToken)
     {
@@ -103,7 +134,5 @@ public class UpdateProposalCommandHandler : IRequestHandler<UpdateProposalComman
         proposal.UpdatedAt = _dateTimeService.UtcNow;
 
         await _context.SaveChangesAsync(cancellationToken);
-
-        return true;
     }
 }

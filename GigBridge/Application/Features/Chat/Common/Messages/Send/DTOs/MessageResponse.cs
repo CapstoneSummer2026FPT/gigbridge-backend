@@ -1,5 +1,6 @@
 using Application.Features.Chat.Common.Messages.GetConversationMessages.DTOs;
 using Application.Features.Chat.Common.Schedules;
+using Domain.Enums;
 
 namespace Application.Features.Chat.Common.Messages.Send.DTOs;
 
@@ -16,4 +17,8 @@ public record MessageResponse(
     DateTime? EditedAt,
     bool IsDeleted,
     IReadOnlyList<MessageAttachmentResponse> Attachments,
-    ScheduleEventResponse? Schedule = null);
+    ScheduleEventResponse? Schedule = null,
+    string? SenderName = null,
+    string? SenderAvatar = null,
+    int? SenderRole = null,
+    DisputeMessageRecipient? DisputeRecipient = null);

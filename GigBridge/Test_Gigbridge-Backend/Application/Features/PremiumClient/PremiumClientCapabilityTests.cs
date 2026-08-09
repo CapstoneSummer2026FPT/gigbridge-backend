@@ -281,14 +281,11 @@ public sealed class PremiumClientCapabilityTests
                 cancellation.Cancel();
                 return Task.FromException<TalentRerankResponseDto>(new TaskCanceledException());
             });
-        var configuration = Substitute.For<IConfiguration>();
-        configuration["FeatureFlags:AiSmartTalentMatchingV1"].Returns("true");
         var handler = new GetAiTalentMatchesQueryHandler(
             context,
             new Premium(true),
             new Clock(now),
             aiService,
-            configuration,
             Substitute.For<ILogger<GetAiTalentMatchesQueryHandler>>());
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => handler.Handle(

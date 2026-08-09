@@ -26,6 +26,12 @@ public partial class Message
 
     public string? ClientMessageId { get; set; }
 
+    /// <summary>
+    /// Audience for dispute conversations. Null remains valid for non-dispute
+    /// and legacy shared records, which are treated as visible to both parties.
+    /// </summary>
+    public DisputeMessageRecipient? DisputeRecipient { get; set; }
+
     public Guid? ScheduleId { get; set; }
 
     public ScheduleEventType? ScheduleEventType { get; set; }

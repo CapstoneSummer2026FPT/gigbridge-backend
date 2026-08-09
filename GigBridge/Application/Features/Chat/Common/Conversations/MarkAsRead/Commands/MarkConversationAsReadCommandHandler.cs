@@ -4,6 +4,7 @@ using Application.Common.Interfaces.IService;
 using Application.Features.Chat.Common.Messages.GetConversationMessages.DTOs;
 using Application.Features.Chat.Common.Messages.Send.DTOs;
 using Domain.Entities;
+using Domain.Enums;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -43,17 +44,26 @@ public class MarkConversationAsReadCommandHandler
             throw new ForbiddenAccessException("You are not a participant in this conversation.");
         }
 
-        var messageExists = await _context.Set<Message>()
-            .AnyAsync(
+        var message = await _context.Set<Message>()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(
                 message =>
                     message.ConversationsId == request.ConversationId &&
                     message.MessagesId == request.MessageId,
                 cancellationToken);
 
-        if (!messageExists)
+        if (message is null)
         {
             throw new NotFoundException("Message does not exist in this conversation.");
         }
+
+        var conversationType = await _context.Set<Conversation>().AsNoTracking()
+            .Where(conversation => conversation.ConversationsId == request.ConversationId)
+            .Select(conversation => (int?)conversation.ConversationType)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (conversationType == (int)ConversationType.Dispute &&
+            !IsVisibleToParticipant(message, request.UserId, participant.ParticipantRole))
+            throw new ForbiddenAccessException("This dispute message is not visible to you.");
 
         participant.LastReadMessageId = request.MessageId;
         participant.LastReadAt = _dateTimeService.UtcNow;
@@ -67,18 +77,7 @@ public class MarkConversationAsReadCommandHandler
                 conversation => conversation.ConversationsId == request.ConversationId,
                 cancellationToken);
 
-        var lastMessage = await GetLastMessageResponse(conversation, cancellationToken);
-
-        await _chatRealtimeNotifier.SendConversationEventAsync(
-            request.ConversationId,
-            "ConversationRead",
-            new
-            {
-                conversationId = request.ConversationId,
-                userId = request.UserId,
-                messageId = request.MessageId
-            },
-            cancellationToken);
+        var lastMessage = await GetLastMessageResponse(conversation, participant, cancellationToken);
 
         await _chatRealtimeNotifier.SendUserEventAsync(
             request.UserId,
@@ -95,8 +94,15 @@ public class MarkConversationAsReadCommandHandler
         return true;
     }
 
+    private static bool IsVisibleToParticipant(Message message, Guid userId, int participantRole) =>
+        participantRole == (int)ParticipantRole.Admin || message.SenderUserId == userId ||
+        message.DisputeRecipient is null || message.DisputeRecipient == DisputeMessageRecipient.Both ||
+        (message.DisputeRecipient == DisputeMessageRecipient.Client && participantRole == (int)ParticipantRole.Client) ||
+        (message.DisputeRecipient == DisputeMessageRecipient.Freelancer && participantRole == (int)ParticipantRole.Freelancer);
+
     private async Task<MessageResponse?> GetLastMessageResponse(
         Conversation? conversation,
+        ConversationParticipant participant,
         CancellationToken cancellationToken)
     {
         if (conversation?.LastMessageId is null)
@@ -114,6 +120,9 @@ public class MarkConversationAsReadCommandHandler
         {
             return null;
         }
+        if (conversation?.ConversationType == (int)ConversationType.Dispute &&
+            !IsVisibleToParticipant(message, participant.UserId, participant.ParticipantRole))
+            return null;
 
         var attachments = await _context.Set<MessageAttachment>()
             .AsNoTracking()

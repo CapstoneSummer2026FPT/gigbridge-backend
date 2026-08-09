@@ -46,8 +46,8 @@ public sealed class SendAdminDisputeMessageCommandHandler : IRequestHandler<Send
             .AsNoTracking()
             .FirstOrDefaultAsync(item => item.DisputesId == command.DisputeId, cancellationToken)
             ?? throw new NotFoundException("Dispute does not exist.");
-        if (dispute.AssignedAdminId != command.AdminId)
-            throw new ForbiddenAccessException("Only the assigned administrator may send official dispute messages.");
+        if (!Enum.IsDefined(command.Recipient))
+            throw new BadRequestException("A valid dispute message recipient is required.");
 
         var validConversation = await _context.Set<Conversation>().AsNoTracking().AnyAsync(item =>
             item.ConversationsId == command.ConversationId &&
@@ -94,7 +94,11 @@ public sealed class SendAdminDisputeMessageCommandHandler : IRequestHandler<Send
             if (command.Content.Contains("@Respondent", StringComparison.OrdinalIgnoreCase) && dispute.RespondentId.HasValue)
                 mentioned.Add(dispute.RespondentId.Value);
         }
-        mentioned = mentioned.Distinct().ToList();
+        mentioned = mentioned.Distinct().Where(userId =>
+            command.Recipient == DisputeMessageRecipient.Both ||
+            (command.Recipient == DisputeMessageRecipient.Client && userId == dispute.InitiatorId) ||
+            (command.Recipient == DisputeMessageRecipient.Freelancer && userId == dispute.RespondentId))
+            .ToList();
         var metadata = mentioned.Count == 0 ? null : JsonSerializer.Serialize(new { mentionedUserIds = mentioned });
         var response = await _sender.Send(new SendMessageCommand(
             command.AdminId,
@@ -104,7 +108,8 @@ public sealed class SendAdminDisputeMessageCommandHandler : IRequestHandler<Send
                 command.Content,
                 null,
                 attachments),
-            metadata), cancellationToken);
+            metadata,
+            command.Recipient), cancellationToken);
 
         foreach (var userId in mentioned)
         {
