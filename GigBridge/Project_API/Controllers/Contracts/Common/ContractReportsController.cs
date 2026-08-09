@@ -12,7 +12,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Domain.Enums;
 
-namespace Project_API.Controllers;
+namespace Project_API.Controllers.Contracts.Common;
 
 [ApiController]
 [Route("api/contracts/{contractId:guid}/reports")]
@@ -20,7 +20,7 @@ namespace Project_API.Controllers;
 public sealed class ContractReportsController : BaseApiController
 {
     private const long MaxAttachmentFileSizeBytes = 100 * 1024 * 1024;
-    private const long MaxRequestSizeBytes = MaxAttachmentFileSizeBytes * 5 + (2 * 1024 * 1024); // Allow up to 5 attachments + overhead
+    private const long MaxRequestSizeBytes = MaxAttachmentFileSizeBytes * 5 + 2 * 1024 * 1024; // Allow up to 5 attachments + overhead
 
     /// <summary>
     /// Create a new report/issue for a contract.
