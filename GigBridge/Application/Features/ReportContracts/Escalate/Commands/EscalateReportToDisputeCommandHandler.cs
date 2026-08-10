@@ -181,7 +181,7 @@ public sealed class EscalateReportToDisputeCommandHandler :
             ClaimedAmount = command.ClaimedAmount,
             RequestedResolution = command.RequestedResolution.Trim(),
             Urgency = (int)command.Urgency.Value,
-            Status = (int)DisputeStatus.Open,
+            Status = (int)DisputeStatus.WaitingAdmin,
             Resolution = null,
             ResolutionNote = null,
             ResolvedByAdminId = null,

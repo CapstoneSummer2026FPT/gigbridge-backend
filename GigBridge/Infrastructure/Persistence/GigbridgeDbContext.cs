@@ -756,7 +756,7 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
                 .HasComment("Enum DisputeUrgency: 0=Normal, 1=High, 2=Critical");
             entity.Property(e => e.OpenedAt);
             entity.Property(e => e.Resolution).HasComment("Enum DisputeResolution: 0=ClientFavored, 1=FreelancerFavored, 2=Split, 3=Dismissed");
-            entity.Property(e => e.Status).HasComment("Enum DisputeStatus: 0=Open, 1=WaitingAdmin, 2=UnderReview, 3=WaitingEvidence, 4=DecisionPending, 5=Resolved, 6=Closed");
+            entity.Property(e => e.Status).HasComment("Enum DisputeStatus: 0=WaitingAdmin, 1=InProgress, 2=Resolved, 3=Closed");
             entity.Property(e => e.AssignedAdminId).HasColumnName("AssignedAdminId");
             entity.Property(e => e.AssignedAt);
             entity.Property(e => e.IsVipPriority).HasDefaultValue(false);
