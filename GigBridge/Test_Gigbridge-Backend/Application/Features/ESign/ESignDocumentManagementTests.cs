@@ -242,7 +242,7 @@ public sealed class ESignDocumentManagementTests
                     FinalizedDocumentSizeBytes = FinalizedContent.Length,
                     PdfDocumentContent = PdfContent,
                     PdfDocumentFileName = "GB-CONTRACT-FINAL.pdf",
-                    PdfDocumentHash = "final-hash:contract-template-pdf-v1",
+                    PdfDocumentHash = "final-hash:contract-template-pdf-v2",
                     PdfSignatureCount = 2,
                     CreatedAt = Now.AddDays(-1)
                 });

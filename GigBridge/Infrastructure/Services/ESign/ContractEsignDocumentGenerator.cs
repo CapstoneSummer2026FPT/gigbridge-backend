@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using Application.Common.Interfaces.IService;
+using Application.Common.Services;
 using Application.Features.Contracts.Common.DTOs;
 using Domain.Services.Payments;
 using DocumentFormat.OpenXml;
@@ -336,7 +337,7 @@ public sealed class ContractEsignDocumentGenerator(HttpClient httpClient) : ICon
         replacements[$"{{{{{prefix}SignMethod}}}}"] = signature is null ? "Chưa ký" : "Xác nhận điện tử trên GigBridge";
         replacements[$"{{{{{prefix}SignIp}}}}"] = signature is null ? "Chưa ký" : ValueOr(signature.IpAddress, "Không ghi nhận");
         replacements[$"{{{{{prefix}UserAgent}}}}"] = signature is null ? "Chưa ký" : ValueOr(signature.UserAgent, "Không ghi nhận");
-        replacements[$"{{{{{prefix}ConsentVersion}}}}"] = signature is null ? "Chưa ký" : "1.0-DATN";
+        replacements[$"{{{{{prefix}ConsentVersion}}}}"] = signature is null ? "Chưa ký" : "Ver 1.0 Gigbridge";
         replacements[$"{{{{{prefix}SignatureImage}}}}"] = signature is null ? "Chưa ký" : string.Empty;
 
         if (prefix == "Client")
@@ -446,14 +447,34 @@ public sealed class ContractEsignDocumentGenerator(HttpClient httpClient) : ICon
             ?? throw new InvalidOperationException($"Signature placeholder '{placeholder}' was not found.");
         ReplaceText(paragraph, placeholder, string.Empty);
 
+        paragraph.ParagraphProperties ??= new ParagraphProperties();
+        paragraph.ParagraphProperties.Justification = new Justification
+        {
+            Val = JustificationValues.Center
+        };
+        paragraph.ParagraphProperties.SpacingBetweenLines = new SpacingBetweenLines
+        {
+            Before = "0",
+            After = "0"
+        };
+
         var imagePart = mainPart.AddImagePart(artifact.ContentType);
         using (var image = new MemoryStream(artifact.Content, writable: false))
         {
             imagePart.FeedData(image);
         }
 
-        var width = Math.Clamp(artifact.Signature.SignatureWidth ?? 300, 100, 600);
-        var height = Math.Clamp(artifact.Signature.SignatureHeight ?? 100, 40, 250);
+        const int maxFieldWidth = 220;
+        const int maxFieldHeight = 80;
+        var requestedWidth = Math.Clamp(artifact.Signature.SignatureWidth ?? maxFieldWidth, 1, 1200);
+        var requestedHeight = Math.Clamp(artifact.Signature.SignatureHeight ?? maxFieldHeight, 1, 500);
+        var fitScale = Math.Min(
+            1d,
+            Math.Min(
+                (double)maxFieldWidth / requestedWidth,
+                (double)maxFieldHeight / requestedHeight));
+        var width = Math.Max(1, (int)Math.Round(requestedWidth * fitScale));
+        var height = Math.Max(1, (int)Math.Round(requestedHeight * fitScale));
         var cx = width * 9525L;
         var cy = height * 9525L;
         var relationshipId = mainPart.GetIdOfPart(imagePart);
@@ -491,6 +512,12 @@ public sealed class ContractEsignDocumentGenerator(HttpClient httpClient) : ICon
 
     private async Task<DownloadedImage> DownloadSignatureAsync(string imageUrl, CancellationToken cancellationToken)
     {
+        if (imageUrl.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+        {
+            var parsed = SignatureImageStorage.ParseImageDataUri(imageUrl);
+            return new DownloadedImage(parsed.Bytes, parsed.ContentType);
+        }
+
         if (!Uri.TryCreate(imageUrl, UriKind.Absolute, out var uri) ||
             uri.Scheme != Uri.UriSchemeHttps ||
             !(uri.Host.Equals("res.cloudinary.com", StringComparison.OrdinalIgnoreCase) ||

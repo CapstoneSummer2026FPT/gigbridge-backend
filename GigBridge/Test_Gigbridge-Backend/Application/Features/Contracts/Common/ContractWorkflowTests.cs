@@ -564,7 +564,7 @@ public class ContractWorkflowTests
             new SignContractCommand(
                 fixture.ContractId,
                 fixture.ClientUserId,
-                new SignContractRequest(SignatureDataUri, 300, 100, true, "1.0-DATN"),
+                new SignContractRequest(SignatureDataUri, 300, 100, true, "Ver 1.0 Gigbridge"),
                 "127.0.0.1",
                 "test"),
             CancellationToken.None);
@@ -574,7 +574,7 @@ public class ContractWorkflowTests
         Assert.Equal(fixture.ClientSignatureUrl, fixture.EsignSignatures.Entities[0].SignatureImageUrl);
         Assert.Equal("esign/signatures", fixture.MediaService.Uploads[0].Folder);
         Assert.Equal("image/png", fixture.MediaService.Uploads[0].ContentType);
-        Assert.Equal("1.0-DATN", fixture.EsignSignatures.Entities[0].PolicyVersion);
+        Assert.Equal("Ver 1.0 Gigbridge", fixture.EsignSignatures.Entities[0].PolicyVersion);
         Assert.Equal(fixture.Now, fixture.EsignSignatures.Entities[0].PolicyAcceptedAt);
         Assert.Null(fixture.EsignDocuments.Entities[0].FinalizedDocumentContent);
         Assert.Empty(fixture.DeliveryOutboxes.Entities);
@@ -584,7 +584,7 @@ public class ContractWorkflowTests
                 new SignContractCommand(
                     fixture.ContractId,
                     fixture.ClientUserId,
-                    new SignContractRequest(SignatureDataUri, null, null, true, "1.0-DATN"),
+                    new SignContractRequest(SignatureDataUri, null, null, true, "Ver 1.0 Gigbridge"),
                     null,
                     null),
                 CancellationToken.None));
@@ -593,7 +593,7 @@ public class ContractWorkflowTests
             new SignContractCommand(
                 fixture.ContractId,
                 fixture.FreelancerUserId,
-                new SignContractRequest(SignatureDataUri, 300, 100, true, "1.0-DATN"),
+                new SignContractRequest(SignatureDataUri, 300, 100, true, "Ver 1.0 Gigbridge"),
                 "127.0.0.1",
                 "test"),
             CancellationToken.None);
@@ -718,7 +718,7 @@ public class ContractWorkflowTests
             new SignContractCommand(
                 fixture.ContractId,
                 fixture.FreelancerUserId,
-                new SignContractRequest(SignatureDataUri, 300, 100, true, "1.0-DATN"),
+                new SignContractRequest(SignatureDataUri, 300, 100, true, "Ver 1.0 Gigbridge"),
                 "127.0.0.1",
                 "test"),
             CancellationToken.None);
@@ -788,7 +788,7 @@ public class ContractWorkflowTests
                 new SignContractCommand(
                     fixture.ContractId,
                     fixture.ClientUserId,
-                    new SignContractRequest("not-base64", null, null, true, "1.0-DATN"),
+                    new SignContractRequest("not-base64", null, null, true, "Ver 1.0 Gigbridge"),
                     null,
                     null),
                 CancellationToken.None));
