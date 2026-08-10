@@ -323,6 +323,32 @@ public class AiServiceClient : IAiServiceClient
         return apiResponse.Data;
     }
 
+    public async Task<JobRerankResponseDto> RerankJobsForFreelancerAsync(
+        JobRerankRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient.PostAsJsonAsync(
+            "api/ai/matching/browse-jobs", request, cancellationToken);
+        if (!response.IsSuccessStatusCode)
+            throw new ExternalServiceException(
+                "AI service is temporarily unavailable. Please try again later.");
+        ApiResponse<JobRerankResponseDto>? apiResponse;
+        try
+        {
+            apiResponse = await response.Content.ReadFromJsonAsync<ApiResponse<JobRerankResponseDto>>(
+                cancellationToken: cancellationToken);
+        }
+        catch (JsonException exception)
+        {
+            throw new ExternalServiceException(
+                "AI service returned an invalid response. Please try again later.", exception);
+        }
+        if (apiResponse is null || !apiResponse.Success || apiResponse.Data is null)
+            throw new ExternalServiceException(
+                "AI service is temporarily unavailable. Please try again later.");
+        return apiResponse.Data;
+    }
+
     private static async Task<T> ReadInterviewResponseAsync<T>(
         HttpResponseMessage response,
         CancellationToken cancellationToken) => await ReadAiResponseAsync<T>(response, cancellationToken);

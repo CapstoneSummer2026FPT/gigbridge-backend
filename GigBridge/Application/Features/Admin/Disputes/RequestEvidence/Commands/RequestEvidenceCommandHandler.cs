@@ -103,7 +103,7 @@ public sealed class RequestEvidenceCommandHandler :
 
         await using var transaction = await _context.BeginTransactionAsync(cancellationToken);
         _context.Set<DisputeEvidence>().AddRange(placeholders);
-        dispute.Status = (int)DisputeStatus.UnderReview;
+        dispute.Status = (int)DisputeStatus.InProgress;
         dispute.UpdatedAt = now;
 
         var targetLabel = command.Target switch

@@ -53,7 +53,7 @@ public sealed class AdminDashboardSummaryTests
             ContractReport(ContractReportAdminStatus.AwaitingInformation),
             ContractReport(ContractReportAdminStatus.Closed));
         context.Disputes.AddRange(
-            Dispute(DisputeStatus.DecisionPending),
+            Dispute(DisputeStatus.InProgress),
             Dispute(DisputeStatus.Resolved));
         context.WalletWithdrawals.AddRange(
             Withdrawal(WithdrawalStatus.SyncRequired),

@@ -17,7 +17,7 @@ public sealed class AddDisputeEvidenceCommandHandlerTests
     [InlineData(false)]
     public async Task Handle_AllowsEitherContractPartyAndPersistsEvidence(bool uploadAsClient)
     {
-        var fixture = CreateFixture((int)DisputeStatus.Open);
+        var fixture = CreateFixture((int)DisputeStatus.WaitingAdmin);
         var uploaderId = uploadAsClient ? fixture.ClientUserId : fixture.FreelancerUserId;
 
         var result = await fixture.Handler.Handle(

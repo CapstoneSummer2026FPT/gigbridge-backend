@@ -54,7 +54,7 @@ public sealed class AdminContractReportMutationTests
     public async Task LinkDispute_RejectsDifferentContract()
     {
         var (handler, context, _, _, report, admin, _) = Create();
-        var dispute = new Dispute { DisputesId = Guid.NewGuid(), ContractsId = Guid.NewGuid(), Status = (int)DisputeStatus.Open };
+        var dispute = new Dispute { DisputesId = Guid.NewGuid(), ContractsId = Guid.NewGuid(), Status = (int)DisputeStatus.WaitingAdmin };
         context.AddSet(dispute);
         await Assert.ThrowsAsync<BadRequestException>(() => handler.Handle(new LinkContractReportDisputeCommand(admin.UserId, report.ReportContractId, new(dispute.DisputesId, "Same issue.")), default));
         Assert.Null(dispute.RelatedReportId);
