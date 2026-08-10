@@ -194,13 +194,19 @@ public sealed class ResolveAdminDisputeCommandHandler :
 
             milestone.ReleasedAmount += allocation.FreelancerAward;
             if (allocation.FreelancerAward > 0m) milestone.LastReleasedAt = now;
-            milestone.Status = allocation.Outcome switch
-            {
-                DisputeMilestoneOutcome.Accepted or DisputeMilestoneOutcome.PartiallyAccepted => (int)MilestoneStatus.Approved,
-                DisputeMilestoneOutcome.Rejected => (int)MilestoneStatus.InProgress,
-                _ => (int)MilestoneStatus.Cancelled
-            };
-            if (milestone.Status == (int)MilestoneStatus.Approved) milestone.ApprovedAt ??= now;
+            var finalizedByResume = command.ContractAction == AdminContractAction.Resume &&
+                (allocation.Outcome == DisputeMilestoneOutcome.Accepted ||
+                 allocation.Outcome == DisputeMilestoneOutcome.PartiallyAccepted);
+            milestone.Status = finalizedByResume
+                ? (int)MilestoneStatus.Completed
+                : allocation.Outcome switch
+                {
+                    DisputeMilestoneOutcome.Accepted or DisputeMilestoneOutcome.PartiallyAccepted => (int)MilestoneStatus.Approved,
+                    DisputeMilestoneOutcome.Rejected => (int)MilestoneStatus.InProgress,
+                    _ => (int)MilestoneStatus.Cancelled
+                };
+            if (milestone.Status is (int)MilestoneStatus.Approved or (int)MilestoneStatus.Completed)
+                milestone.ApprovedAt ??= now;
             milestone.UpdatedAt = now;
         }
 

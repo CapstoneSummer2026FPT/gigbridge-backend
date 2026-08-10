@@ -184,7 +184,8 @@ internal static class AdminDisputeSupport
             ? "Client"
             : freelancer?.UserId == dispute.InitiatorId ? "Freelancer" : null;
 
-        var approvedCount = milestones.Count(item => item.Status == (int)MilestoneStatus.Approved);
+        var approvedCount = milestones.Count(item =>
+            item.Status is (int)MilestoneStatus.Approved or (int)MilestoneStatus.Completed);
         var progress = milestones.Count == 0
             ? 0
             : (int)Math.Round(approvedCount * 100m / milestones.Count, MidpointRounding.AwayFromZero);

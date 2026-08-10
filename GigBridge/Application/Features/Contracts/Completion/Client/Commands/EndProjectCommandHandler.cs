@@ -69,7 +69,7 @@ public sealed class EndProjectCommandHandler : IRequestHandler<EndProjectCommand
 
         if (milestones.Count == 0)
             throw new BadRequestException("Contract must have at least one milestone before ending the project.");
-        if (milestones.Any(item => item.Status != (int)MilestoneStatus.Approved))
+        if (milestones.Any(item => item.Status is not ((int)MilestoneStatus.Approved or (int)MilestoneStatus.Completed)))
             throw new BadRequestException("All milestones must be approved before ending the project.");
         if (escrow.Status is (int)ContractEscrowStatus.Disputed or
             (int)ContractEscrowStatus.Cancelled or (int)ContractEscrowStatus.Refunded)

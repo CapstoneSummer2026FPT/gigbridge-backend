@@ -68,7 +68,7 @@ public sealed class ApproveMilestoneCommandHandler :
         var next = milestones.FirstOrDefault(candidate =>
             candidate.Status == (int)MilestoneStatus.Pending &&
             milestones.Where(previous => (previous.SortOrder ?? 0) < (candidate.SortOrder ?? 0))
-                .All(previous => previous.Status == (int)MilestoneStatus.Approved));
+                .All(previous => previous.Status is (int)MilestoneStatus.Approved or (int)MilestoneStatus.Completed));
         if (next is not null)
         {
             next.Status = (int)MilestoneStatus.InProgress;
