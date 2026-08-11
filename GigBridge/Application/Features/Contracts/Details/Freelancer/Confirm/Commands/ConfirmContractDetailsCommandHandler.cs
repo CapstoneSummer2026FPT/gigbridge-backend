@@ -17,17 +17,20 @@ public sealed class ConfirmContractDetailsCommandHandler :
     private readonly IDateTimeService _dateTimeService;
     private readonly IChatRealtimeNotifier _chatRealtimeNotifier;
     private readonly IContractEsignDocumentGenerator _documentGenerator;
+    private readonly IUserAuditLogService _userAuditLog;
 
     public ConfirmContractDetailsCommandHandler(
         IApplicationDbContext context,
         IDateTimeService dateTimeService,
         IChatRealtimeNotifier chatRealtimeNotifier,
-        IContractEsignDocumentGenerator documentGenerator)
+        IContractEsignDocumentGenerator documentGenerator,
+        IUserAuditLogService userAuditLog)
     {
         _context = context;
         _dateTimeService = dateTimeService;
         _chatRealtimeNotifier = chatRealtimeNotifier;
         _documentGenerator = documentGenerator;
+        _userAuditLog = userAuditLog;
     }
 
     public async Task<ContractWorkflowResponse> Handle(
@@ -87,6 +90,13 @@ public sealed class ConfirmContractDetailsCommandHandler :
             "Contract details confirmed. Contract is ready for signatures.",
             now,
             cancellationToken);
+
+        _userAuditLog.Add(
+            command.UserId,
+            UserRole.Freelancer,
+            AuditUserActionType.ConfirmedParticipation,
+            contract.ContractsId,
+            "Freelancer confirmed participation in the project.");
 
         await _context.SaveChangesAsync(cancellationToken);
 

@@ -312,7 +312,8 @@ public sealed class PremiumClientCapabilityTests
             Title = "Contract"
         });
         var disputes = context.AddSet<Dispute>();
-        var handler = new CreateDisputeCommandHandler(context, new Premium(true), new Clock(now));
+        var userAuditLog = new CapturingUserAuditLogService();
+        var handler = new CreateDisputeCommandHandler(context, new Premium(true), new Clock(now), userAuditLog);
 
         var result = await handler.Handle(new CreateDisputeCommand(
             userId, new CreateDisputeRequest(contractId, null, "Delivery does not match requirements")),
@@ -322,6 +323,13 @@ public sealed class PremiumClientCapabilityTests
         Assert.Equal(now.AddHours(24), result.ResolutionTargetAt);
         Assert.Equal(DisputeAiAnalysisStatus.Unavailable.ToString(), result.AiAnalysisStatus);
         Assert.Single(disputes.Entities);
+
+        var auditEntry = Assert.Single(userAuditLog.Entries);
+        Assert.Equal(userId, auditEntry.UserId);
+        Assert.Equal(UserRole.Client, auditEntry.Role);
+        Assert.Equal(AuditUserActionType.DisputeCreated, auditEntry.ActionType);
+        Assert.Equal(contractId, auditEntry.ContractId);
+        Assert.Equal(disputes.Entities[0].DisputesId, auditEntry.DisputeId);
     }
 
     [Fact]

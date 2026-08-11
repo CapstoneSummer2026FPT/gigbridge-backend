@@ -24,6 +24,7 @@ public sealed class EscalateReportToDisputeCommandHandler :
     private readonly IChatRealtimeNotifier _chatRealtimeNotifier;
     private readonly ILogger<EscalateReportToDisputeCommandHandler> _logger;
     private readonly IAdminAuditService? _audit;
+    private readonly IUserAuditLogService _userAuditLog;
 
     public EscalateReportToDisputeCommandHandler(
         IApplicationDbContext context,
@@ -32,6 +33,7 @@ public sealed class EscalateReportToDisputeCommandHandler :
         INotificationService notificationService,
         IChatRealtimeNotifier chatRealtimeNotifier,
         ILogger<EscalateReportToDisputeCommandHandler> logger,
+        IUserAuditLogService userAuditLog,
         IAdminAuditService? audit = null)
     {
         _context = context;
@@ -40,6 +42,7 @@ public sealed class EscalateReportToDisputeCommandHandler :
         _notificationService = notificationService;
         _chatRealtimeNotifier = chatRealtimeNotifier;
         _logger = logger;
+        _userAuditLog = userAuditLog;
         _audit = audit;
     }
 
@@ -266,9 +269,26 @@ public sealed class EscalateReportToDisputeCommandHandler :
             now);
 
         if (isAdminEscalation)
+        {
             _audit?.Add(command.AdminActorId!.Value, AdminAuditActions.ContractReportEscalated, nameof(ReportContract), report.ReportContractId,
                 new { status = (int)ContractReportStatus.WaitingReporterConfirmation, adminReviewStatus = (int)ContractReportAdminStatus.UnderReview },
                 new { report.Status, report.AdminReviewStatus, disputeId = dispute.DisputesId, report.ContractId, report.ReporterId, report.RespondentId, reason = command.AdminReason });
+        }
+        else
+        {
+            // Admin-driven escalations are attributed to the admin via IAdminAuditService above,
+            // not to a Client/Freelancer actor.
+            var escalatorRole = participants.GetRole(command.UserId);
+            _userAuditLog.Add(
+                command.UserId,
+                escalatorRole == "Client" ? UserRole.Client : UserRole.Freelancer,
+                AuditUserActionType.DisputeEscalated,
+                command.ContractId,
+                "Escalated a report to a dispute.",
+                milestoneId: report.MilestoneId,
+                reportId: report.ReportContractId,
+                disputeId: dispute.DisputesId);
+        }
 
         await _context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);

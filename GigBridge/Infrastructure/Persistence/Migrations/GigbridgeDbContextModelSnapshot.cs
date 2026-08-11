@@ -220,6 +220,77 @@ namespace Infrastructure.Persistence.Migrations
                     b.ToTable("AiInterviewDefinitions", (string)null);
                 });
 
+            modelBuilder.Entity("Domain.Entities.AuditLogWorkSpace", b =>
+                {
+                    b.Property<Guid>("AuditLogWorkSpaceId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<int>("ActionType")
+                        .HasColumnType("integer")
+                        .HasComment("Enum AuditUserActionType: 0=ConfirmedParticipation, 1=SignedEsignContract, 2=RequestedEarlyStart, 3=MilestoneSubmitted, 4=EscrowFunded, 5=MilestoneApproved, 6=ReportCreated, 7=DisputeCreated, 8=DisputeEscalated");
+
+                    b.Property<Guid>("ContractId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<Guid?>("DisputeId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("JobPostId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("MilestoneId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("RelatedEntityId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RelatedEntityType")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid?>("ReportId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("UserRole")
+                        .HasColumnType("integer")
+                        .HasComment("Enum UserRole: 0=Client, 1=Freelancer, 2=Admin");
+
+                    b.HasKey("AuditLogWorkSpaceId");
+
+                    b.HasIndex("ContractId");
+
+                    b.HasIndex("CreatedAt");
+
+                    b.HasIndex("DisputeId");
+
+                    b.HasIndex("MilestoneId");
+
+                    b.HasIndex("ReportId");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("ContractId", "CreatedAt");
+
+                    b.HasIndex("DisputeId", "CreatedAt");
+
+                    b.ToTable("AuditLogWorkSpaces");
+                });
+
             modelBuilder.Entity("Domain.Entities.BankAccount", b =>
                 {
                     b.Property<Guid>("BankAccountId")
@@ -3560,6 +3631,12 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("PaidAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<decimal>("RefundedAmount")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasDefaultValue(0m);
+
                     b.Property<decimal>("ReleasedAmount")
                         .ValueGeneratedOnAdd()
                         .HasPrecision(18, 2)
@@ -3576,7 +3653,7 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.Property<int>("Status")
                         .HasColumnType("integer")
-                        .HasComment("Enum MilestoneStatus: 0=Pending, 1=InProgress, 2=Submitted, 3=Approved, 4=PaymentProofUploaded, 5=PaymentConfirmed, 6=Disputed");
+                        .HasComment("Enum MilestoneStatus: 0=Pending, 1=InProgress, 2=Submitted, 3=Approved, 4=PaymentProofUploaded, 5=PaymentConfirmed, 6=Disputed, 7=Cancelled, 8=Completed");
 
                     b.Property<string>("SubmissionDescription")
                         .HasMaxLength(5000)
@@ -6574,6 +6651,46 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("ClientUser");
 
                     b.Navigation("JobPost");
+                });
+
+            modelBuilder.Entity("Domain.Entities.AuditLogWorkSpace", b =>
+                {
+                    b.HasOne("Domain.Entities.Contract", "Contract")
+                        .WithMany()
+                        .HasForeignKey("ContractId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Domain.Entities.Dispute", "Dispute")
+                        .WithMany()
+                        .HasForeignKey("DisputeId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Domain.Entities.Milestone", "Milestone")
+                        .WithMany()
+                        .HasForeignKey("MilestoneId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Domain.Entities.ReportContract", "Report")
+                        .WithMany()
+                        .HasForeignKey("ReportId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Domain.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Contract");
+
+                    b.Navigation("Dispute");
+
+                    b.Navigation("Milestone");
+
+                    b.Navigation("Report");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("Domain.Entities.BankAccount", b =>

@@ -19,17 +19,20 @@ public sealed class FundContractEscrowCommandHandler :
     private readonly IDateTimeService _dateTimeService;
     private readonly INotificationService _notificationService;
     private readonly IChatRealtimeNotifier _chatRealtimeNotifier;
+    private readonly IUserAuditLogService _userAuditLog;
 
     public FundContractEscrowCommandHandler(
         IApplicationDbContext context,
         IDateTimeService dateTimeService,
         INotificationService notificationService,
-        IChatRealtimeNotifier chatRealtimeNotifier)
+        IChatRealtimeNotifier chatRealtimeNotifier,
+        IUserAuditLogService userAuditLog)
     {
         _context = context;
         _dateTimeService = dateTimeService;
         _notificationService = notificationService;
         _chatRealtimeNotifier = chatRealtimeNotifier;
+        _userAuditLog = userAuditLog;
     }
 
     public async Task<FundContractEscrowResponse> Handle(
@@ -235,6 +238,15 @@ public sealed class FundContractEscrowCommandHandler :
             "Escrow funded. Contract is now active.",
             now,
             cancellationToken);
+
+        _userAuditLog.Add(
+            command.UserId,
+            UserRole.Client,
+            AuditUserActionType.EscrowFunded,
+            contract.ContractsId,
+            $"Funded contract escrow: {requiredAmount:N2} GigCoin.",
+            relatedEntityId: escrow.ContractEscrowId,
+            relatedEntityType: nameof(ContractEscrow));
 
         // Fetch UserIds to create persistent notifications
         var clientProfile = await _context.Set<ClientProfile>()

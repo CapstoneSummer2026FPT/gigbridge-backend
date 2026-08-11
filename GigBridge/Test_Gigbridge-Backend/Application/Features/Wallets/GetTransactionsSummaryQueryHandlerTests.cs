@@ -47,6 +47,53 @@ public class GetTransactionsSummaryQueryHandlerTests
     }
 
     [Fact]
+    public async Task Handle_TotalWithdrawnIncludesFreelancerCreditedEscrowReleases()
+    {
+        var context = new InMemoryApplicationDbContext();
+        context.AddSet<WalletTransaction>(
+            // Freelancer's own credited row from a milestone withdrawal / dispute-resolution
+            // release: BalanceSource=Earned. Must count toward Total Withdrawn.
+            Tx(_userId, (int)WalletTransactionType.EscrowRelease, (int)WalletTransactionStatus.Succeeded, 20m,
+                (int)WalletBalanceSource.Earned),
+            Tx(_userId, (int)WalletTransactionType.EscrowRelease, (int)WalletTransactionStatus.Succeeded, 15m,
+                (int)WalletBalanceSource.Earned),
+            // A literal bank/gateway cash-out still counts too.
+            Tx(_userId, (int)WalletTransactionType.WithdrawalSuccess, (int)WalletTransactionStatus.Succeeded, 5m));
+
+        var result = await Handle(context);
+
+        Assert.Equal(40m, result.TotalWithdrawn);
+    }
+
+    [Fact]
+    public async Task Handle_TotalWithdrawnExcludesTheClientsDebitSideOfAnEscrowRelease()
+    {
+        var context = new InMemoryApplicationDbContext();
+        context.AddSet<WalletTransaction>(
+            // The client's own row for the same release event: a Held* source, not Earned.
+            // This is money leaving their escrow, not something *they* withdrew.
+            Tx(_userId, (int)WalletTransactionType.EscrowRelease, (int)WalletTransactionStatus.Succeeded, 20m,
+                (int)WalletBalanceSource.HeldDeposited));
+
+        var result = await Handle(context);
+
+        Assert.Equal(0m, result.TotalWithdrawn);
+    }
+
+    [Fact]
+    public async Task Handle_TotalWithdrawnIgnoresNonSucceededEscrowReleases()
+    {
+        var context = new InMemoryApplicationDbContext();
+        context.AddSet<WalletTransaction>(
+            Tx(_userId, (int)WalletTransactionType.EscrowRelease, (int)WalletTransactionStatus.Pending, 20m,
+                (int)WalletBalanceSource.Earned));
+
+        var result = await Handle(context);
+
+        Assert.Equal(0m, result.TotalWithdrawn);
+    }
+
+    [Fact]
     public async Task Handle_RefundsIncludesBothEscrowRefundAndWithdrawalRefund()
     {
         var context = new InMemoryApplicationDbContext();
@@ -117,7 +164,7 @@ public class GetTransactionsSummaryQueryHandlerTests
         return await handler.Handle(new GetWalletTransactionsSummaryQuery(_userId), CancellationToken.None);
     }
 
-    private static WalletTransaction Tx(Guid userId, int type, int status, decimal amount) => new()
+    private static WalletTransaction Tx(Guid userId, int type, int status, decimal amount, int balanceSource = 0) => new()
     {
         WalletTransactionsId = Guid.NewGuid(),
         UserWalletsId = Guid.NewGuid(),
@@ -126,7 +173,7 @@ public class GetTransactionsSummaryQueryHandlerTests
         VndAmount = 0m,
         Type = type,
         Status = status,
-        BalanceSource = 0,
+        BalanceSource = balanceSource,
         CreatedAt = new DateTime(2026, 6, 11, 10, 0, 0, DateTimeKind.Utc)
     };
 }

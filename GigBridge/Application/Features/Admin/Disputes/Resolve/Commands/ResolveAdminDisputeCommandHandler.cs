@@ -5,6 +5,7 @@ using Application.Common.Interfaces.IService;
 using Application.Features.Admin.Disputes.Common.DTOs;
 using Application.Features.Admin.Disputes.Common.Internal;
 using Application.Features.Contracts.Common.Internal;
+using Application.Features.Contracts.Milestones.Common.Internal;
 using Application.Features.Wallets.Common;
 using Application.Common.Services;
 using Domain.Entities;
@@ -193,16 +194,24 @@ public sealed class ResolveAdminDisputeCommandHandler :
                     allocation, violatingUserId, command.AdminId, command.ResolutionNote, now);
 
             milestone.ReleasedAmount += allocation.FreelancerAward;
+            milestone.RefundedAmount += allocation.ClientRefund + allocation.PenaltyAmount;
             if (allocation.FreelancerAward > 0m) milestone.LastReleasedAt = now;
-            milestone.Status = allocation.Outcome switch
-            {
-                DisputeMilestoneOutcome.Accepted or DisputeMilestoneOutcome.PartiallyAccepted => (int)MilestoneStatus.Approved,
-                DisputeMilestoneOutcome.Rejected => (int)MilestoneStatus.InProgress,
-                _ => (int)MilestoneStatus.Cancelled
-            };
-            if (milestone.Status == (int)MilestoneStatus.Approved) milestone.ApprovedAt ??= now;
+            var finalizedByResume = command.ContractAction == AdminContractAction.Resume &&
+                allocation.Outcome != DisputeMilestoneOutcome.Rejected;
+            milestone.Status = finalizedByResume
+                ? (int)MilestoneStatus.Completed
+                : allocation.Outcome switch
+                {
+                    DisputeMilestoneOutcome.Accepted or DisputeMilestoneOutcome.PartiallyAccepted => (int)MilestoneStatus.Approved,
+                    DisputeMilestoneOutcome.Rejected => (int)MilestoneStatus.InProgress,
+                    _ => (int)MilestoneStatus.Cancelled
+                };
+            if (milestone.Status is (int)MilestoneStatus.Approved or (int)MilestoneStatus.Completed)
+                milestone.ApprovedAt ??= now;
             milestone.UpdatedAt = now;
         }
+
+        MilestoneWorkflowGuard.AdvanceNextMilestone(milestones, now);
 
         escrow.ReleasedAmount += totalRelease;
         escrow.FundedAmount -= totalRefund + totalPenalty;
@@ -248,6 +257,11 @@ public sealed class ResolveAdminDisputeCommandHandler :
             })
         });
 
+        // The dispute conversation is deliberately left writable here (Status stays Active):
+        // per the DisputeStatus state machine, a dispute only ever transitions from Resolved
+        // to Closed as an explicit, separate admin action (UpdateAdminDisputeStatusCommandHandler),
+        // which is the single place that locks the conversation. Resolving the dispute here
+        // (Resume or Terminate) must not lock it early.
         var conversation = await _context.Set<Conversation>()
             .FirstOrDefaultAsync(item => item.DisputesId == dispute.DisputesId, cancellationToken);
         if (conversation is not null)
@@ -256,8 +270,11 @@ public sealed class ResolveAdminDisputeCommandHandler :
             if (totalRefund > 0) AddSystemMessage(conversation, $"{totalRefund:N2} G-coin refunded to the client.", now, systemMessages);
             if (totalRelease > 0) AddSystemMessage(conversation, $"{totalRelease:N2} G-coin released to the freelancer.", now, systemMessages);
             if (totalPenalty > 0) AddSystemMessage(conversation, $"{totalPenalty:N2} G-coin retained by the platform as a dispute penalty.", now, systemMessages);
-            AddSystemMessage(conversation, command.ContractAction == AdminContractAction.Resume
-                ? "Contract has been resumed." : "Contract has been terminated.", now, systemMessages);
+            AddSystemMessage(conversation,
+                command.ContractAction == AdminContractAction.Resume
+                    ? "The contract has resumed."
+                    : "Contract has been terminated.",
+                now, systemMessages);
             AddSystemMessage(conversation,
                 $"Final decision: {AdminDisputeSupport.GetResolutionLabel((int)command.Resolution)}. {command.ResolutionNote.Trim()}",
                 now, systemMessages);
@@ -288,6 +305,19 @@ public sealed class ResolveAdminDisputeCommandHandler :
             {
                 _logger.LogWarning(exception, "Failed to publish dispute resolution message {MessageId}.", message.MessagesId);
             }
+        }
+
+        try
+        {
+            await _realtime.SendUsersEventAsync(
+                new[] { client.UserId, freelancer.UserId },
+                "ContractUpdated",
+                new { contractId = contract.ContractsId },
+                cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            _logger.LogWarning(exception, "Failed to publish contract update after dispute resolution for contract {ContractId}.", contract.ContractsId);
         }
 
         return await AdminDisputeSupport.GetDetailAsync(_context, dispute.DisputesId, cancellationToken);

@@ -1,3 +1,5 @@
+using Application.Features.Wallets.Common;
+
 namespace Application.Features.Wallets.Common.DTOs;
 
 public sealed record WalletTransactionResponse(
@@ -9,6 +11,7 @@ public sealed record WalletTransactionResponse(
     int Type,
     int Status,
     int BalanceSource,
+    bool IsCredit,
     decimal? DepositedAmount,
     decimal? EarnedAmount,
     string? IdempotencyKey,
@@ -32,6 +35,7 @@ public sealed record WalletTransactionResponse(
             transaction.Type,
             transaction.Status,
             transaction.BalanceSource,
+            WalletTransactionDirection.IsCredit(transaction.Type, transaction.BalanceSource),
             transaction.DepositedAmount,
             transaction.EarnedAmount,
             transaction.IdempotencyKey,

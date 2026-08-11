@@ -53,4 +53,29 @@ internal static class ContractConversationEvents
 
         return message;
     }
+
+    /// <summary>
+    /// Locks the workspace and dispute conversations of a contract so neither party can
+    /// send messages anymore. Used when a contract is completed or terminated.
+    /// </summary>
+    public static async Task CloseContractConversationsAsync(
+        IApplicationDbContext context,
+        Guid contractId,
+        DateTime now,
+        CancellationToken cancellationToken)
+    {
+        var conversations = await context.Set<Conversation>()
+            .Where(conversation =>
+                conversation.ContractsId == contractId &&
+                conversation.DeletedAt == null &&
+                (conversation.ConversationType == (int)ConversationType.ContractWorkroom ||
+                 conversation.ConversationType == (int)ConversationType.Dispute))
+            .ToListAsync(cancellationToken);
+
+        foreach (var conversation in conversations)
+        {
+            conversation.Status = (int)ConversationStatus.Closed;
+            conversation.UpdatedAt = now;
+        }
+    }
 }

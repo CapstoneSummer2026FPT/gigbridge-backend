@@ -69,7 +69,7 @@ public sealed class EndProjectCommandHandler : IRequestHandler<EndProjectCommand
 
         if (milestones.Count == 0)
             throw new BadRequestException("Contract must have at least one milestone before ending the project.");
-        if (milestones.Any(item => item.Status != (int)MilestoneStatus.Approved))
+        if (milestones.Any(item => item.Status is not ((int)MilestoneStatus.Approved or (int)MilestoneStatus.Completed)))
             throw new BadRequestException("All milestones must be approved before ending the project.");
         if (escrow.Status is (int)ContractEscrowStatus.Disputed or
             (int)ContractEscrowStatus.Cancelled or (int)ContractEscrowStatus.Refunded)
@@ -79,7 +79,7 @@ public sealed class EndProjectCommandHandler : IRequestHandler<EndProjectCommand
             escrow.Status != (int)ContractEscrowStatus.Released)
             throw new BadRequestException("Escrow must be funded before ending the project.");
 
-        var milestoneTotal = milestones.Sum(item => item.Amount);
+        var milestoneTotal = milestones.Sum(item => item.Amount - item.RefundedAmount);
         if (Math.Abs(escrow.FundedAmount - milestoneTotal) > 0.01m)
             throw new BadRequestException("Escrow funding must match the contract milestone total.");
 
@@ -111,6 +111,9 @@ public sealed class EndProjectCommandHandler : IRequestHandler<EndProjectCommand
             "Project ended. Final 20% retention released to freelancer.",
             now,
             cancellationToken);
+        // Lock the workspace and any lingering dispute chat once the project is completed.
+        await ContractConversationEvents.CloseContractConversationsAsync(
+            _context, contract.ContractsId, now, cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
