@@ -564,7 +564,7 @@ public class ContractWorkflowTests
             new SignContractCommand(
                 fixture.ContractId,
                 fixture.ClientUserId,
-                new SignContractRequest(SignatureDataUri, 300, 100, true, "Ver 1.0 Gigbridge"),
+                new SignContractRequest(SignatureDataUri, 300, 100),
                 "127.0.0.1",
                 "test"),
             CancellationToken.None);
@@ -584,7 +584,7 @@ public class ContractWorkflowTests
                 new SignContractCommand(
                     fixture.ContractId,
                     fixture.ClientUserId,
-                    new SignContractRequest(SignatureDataUri, null, null, true, "Ver 1.0 Gigbridge"),
+                    new SignContractRequest(SignatureDataUri, null, null),
                     null,
                     null),
                 CancellationToken.None));
@@ -593,7 +593,7 @@ public class ContractWorkflowTests
             new SignContractCommand(
                 fixture.ContractId,
                 fixture.FreelancerUserId,
-                new SignContractRequest(SignatureDataUri, 300, 100, true, "Ver 1.0 Gigbridge"),
+                new SignContractRequest(SignatureDataUri, 300, 100),
                 "127.0.0.1",
                 "test"),
             CancellationToken.None);
@@ -718,7 +718,7 @@ public class ContractWorkflowTests
             new SignContractCommand(
                 fixture.ContractId,
                 fixture.FreelancerUserId,
-                new SignContractRequest(SignatureDataUri, 300, 100, true, "Ver 1.0 Gigbridge"),
+                new SignContractRequest(SignatureDataUri, 300, 100),
                 "127.0.0.1",
                 "test"),
             CancellationToken.None);
@@ -741,35 +741,6 @@ public class ContractWorkflowTests
         Assert.Single(mediaService.Uploads);
     }
 
-    [Theory]
-    [InlineData(false, null)]
-    [InlineData(true, null)]
-    [InlineData(true, "0.9")]
-    public async Task SignContract_RejectsMissingOrWrongPolicyAcceptance(bool accepted, string? version)
-    {
-        var fixture = new ContractWorkflowFixture();
-        fixture.MoveToPendingSignatureWithDocument();
-        var handler = new SignContractCommandHandler(
-            fixture.Context,
-            new FixedDateTimeService(fixture.Now),
-            new NoopChatRealtimeNotifier(),
-            fixture.MediaService,
-            fixture.DocumentGenerator);
-
-        await Assert.ThrowsAsync<BadRequestException>(() =>
-            handler.Handle(
-                new SignContractCommand(
-                    fixture.ContractId,
-                    fixture.ClientUserId,
-                    new SignContractRequest(SignatureDataUri, 300, 100, accepted, version),
-                    null,
-                    null),
-                CancellationToken.None));
-
-        Assert.Empty(fixture.MediaService.Uploads);
-        Assert.Empty(fixture.EsignSignatures.Entities);
-    }
-
     [Fact]
     public async Task SignContract_RejectsInvalidSignatureDataUri()
     {
@@ -788,7 +759,7 @@ public class ContractWorkflowTests
                 new SignContractCommand(
                     fixture.ContractId,
                     fixture.ClientUserId,
-                    new SignContractRequest("not-base64", null, null, true, "Ver 1.0 Gigbridge"),
+                    new SignContractRequest("not-base64", null, null),
                     null,
                     null),
                 CancellationToken.None));
