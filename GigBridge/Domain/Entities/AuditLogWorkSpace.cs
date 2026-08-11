@@ -8,9 +8,9 @@ namespace Domain.Entities;
 /// Written only after the corresponding business operation succeeds. Used by Admins to
 /// reconstruct the chronological sequence of events before/after a dispute.
 /// </summary>
-public partial class AuditLogUser
+public partial class AuditLogWorkSpace
 {
-    public Guid AuditLogUsersId { get; set; }
+    public Guid AuditLogWorkSpaceId { get; set; }
 
     public Guid UserId { get; set; }
 

@@ -18,7 +18,7 @@ public sealed class UserAuditLogServiceTests
     public void Add_PopulatesAllFieldsAndUsesServerClock()
     {
         var context = new InMemoryApplicationDbContext();
-        var logs = context.AddSet<AuditLogUser>();
+        var logs = context.AddSet<AuditLogWorkSpace>();
         var now = new DateTime(2026, 8, 11, 10, 0, 0, DateTimeKind.Utc);
         var service = new UserAuditLogService(context, new FixedDateTimeService(now));
 
@@ -44,7 +44,7 @@ public sealed class UserAuditLogServiceTests
             relatedEntityType: "TestEntity");
 
         var entry = Assert.Single(logs.Entities);
-        Assert.NotEqual(Guid.Empty, entry.AuditLogUsersId);
+        Assert.NotEqual(Guid.Empty, entry.AuditLogWorkSpaceId);
         Assert.Equal(userId, entry.UserId);
         Assert.Equal((int)UserRole.Freelancer, entry.UserRole);
         Assert.Equal((int)AuditUserActionType.MilestoneSubmitted, entry.ActionType);
@@ -63,7 +63,7 @@ public sealed class UserAuditLogServiceTests
     public void Add_WithoutOptionalFields_LeavesThemNull()
     {
         var context = new InMemoryApplicationDbContext();
-        var logs = context.AddSet<AuditLogUser>();
+        var logs = context.AddSet<AuditLogWorkSpace>();
         var now = new DateTime(2026, 8, 11, 10, 0, 0, DateTimeKind.Utc);
         var service = new UserAuditLogService(context, new FixedDateTimeService(now));
 

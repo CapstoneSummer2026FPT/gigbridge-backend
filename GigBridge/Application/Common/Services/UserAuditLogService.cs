@@ -29,9 +29,9 @@ public sealed class UserAuditLogService : IUserAuditLogService
         Guid? relatedEntityId = null,
         string? relatedEntityType = null)
     {
-        _context.Set<AuditLogUser>().Add(new AuditLogUser
+        _context.Set<AuditLogWorkSpace>().Add(new AuditLogWorkSpace
         {
-            AuditLogUsersId = Guid.NewGuid(),
+            AuditLogWorkSpaceId = Guid.NewGuid(),
             UserId = userId,
             UserRole = (int)role,
             ActionType = (int)actionType,

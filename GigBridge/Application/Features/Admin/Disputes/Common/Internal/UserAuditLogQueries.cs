@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Application.Features.Admin.Disputes.Common.Internal;
 
 /// <summary>
-/// Shared read logic for the Client/Freelancer action audit trail (AuditLogUser), reused by
+/// Shared read logic for the Client/Freelancer action audit trail (AuditLogWorkSpace), reused by
 /// both the dispute-detail response and the standalone per-contract admin endpoint.
 /// </summary>
 internal static class UserAuditLogQueries
@@ -16,7 +16,7 @@ internal static class UserAuditLogQueries
         Guid contractId,
         CancellationToken cancellationToken)
     {
-        var logs = await context.Set<AuditLogUser>()
+        var logs = await context.Set<AuditLogWorkSpace>()
             .AsNoTracking()
             .Include(item => item.User)
             .Include(item => item.Milestone)
@@ -25,7 +25,7 @@ internal static class UserAuditLogQueries
             .ToListAsync(cancellationToken);
 
         return logs.Select(item => new AdminUserAuditEventResponse(
-                item.AuditLogUsersId,
+                item.AuditLogWorkSpaceId,
                 item.UserId,
                 item.User?.FullName,
                 item.UserRole,

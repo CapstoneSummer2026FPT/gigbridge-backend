@@ -17,7 +17,7 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
     public virtual DbSet<AdminAuditLog> AdminAuditLogs { get; set; }
 
-    public virtual DbSet<AuditLogUser> AuditLogUsers { get; set; }
+    public virtual DbSet<AuditLogWorkSpace> AuditLogWorkSpaces { get; set; }
 
     public virtual DbSet<BankAccount> BankAccounts { get; set; }
 
@@ -907,10 +907,10 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
                 .HasForeignKey(e => e.EscrowTransactionId).OnDelete(DeleteBehavior.Restrict);
         });
 
-        modelBuilder.Entity<AuditLogUser>(entity =>
+        modelBuilder.Entity<AuditLogWorkSpace>(entity =>
         {
-            entity.HasKey(e => e.AuditLogUsersId);
-            entity.Property(e => e.AuditLogUsersId).HasDefaultValueSql("gen_random_uuid()");
+            entity.HasKey(e => e.AuditLogWorkSpaceId);
+            entity.Property(e => e.AuditLogWorkSpaceId).HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.UserRole).HasComment("Enum UserRole: 0=Client, 1=Freelancer, 2=Admin");
             entity.Property(e => e.ActionType).HasComment(
                 "Enum AuditUserActionType: 0=ConfirmedParticipation, 1=SignedEsignContract, 2=RequestedEarlyStart, " +
