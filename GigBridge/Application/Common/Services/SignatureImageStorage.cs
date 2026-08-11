@@ -29,7 +29,7 @@ public static partial class SignatureImageStorage
             cancellationToken);
     }
 
-    private static ParsedDataUri ParseImageDataUri(string? value)
+    public static SignatureImageData ParseImageDataUri(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
         {
@@ -64,7 +64,7 @@ public static partial class SignatureImageStorage
             throw new BadRequestException("Signature image must be PNG or JPEG.");
         }
 
-        return new ParsedDataUri(contentType, bytes);
+        return new SignatureImageData(contentType, bytes);
     }
 
     private static string ToFileExtension(string contentType)
@@ -82,5 +82,5 @@ public static partial class SignatureImageStorage
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex ImageDataUriRegex();
 
-    private sealed record ParsedDataUri(string ContentType, byte[] Bytes);
+    public sealed record SignatureImageData(string ContentType, byte[] Bytes);
 }
