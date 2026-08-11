@@ -1,6 +1,7 @@
 using Application.Common.Interfaces;
 using Application.Common.Models;
 using Application.Features.ESign.Common.DTOs;
+using Application.Features.ESign.Common.Internal;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
@@ -105,7 +106,9 @@ public sealed class GetMySignedESignDocumentsQueryHandler
                 document.FinalizedDocumentFileName,
                 document.PdfDocumentContent != null &&
                 document.PdfDocumentHash == (document.DocumentHash ?? string.Empty) +
-                    (document.ContractsId.HasValue ? ":contract-template-pdf-v2" : ":client-pdf-v2") &&
+                    (document.ContractsId.HasValue
+                        ? ESignPdfArtifactRevision.ContractTemplate
+                        : ESignPdfArtifactRevision.ClientRendered) &&
                 document.PdfSignatureCount == _context.Set<EsignSignature>().Count(signature =>
                     signature.EsignDocumentsId == document.EsignDocumentsId &&
                     signature.Status == (int)ESignSignatureStatus.Signed),

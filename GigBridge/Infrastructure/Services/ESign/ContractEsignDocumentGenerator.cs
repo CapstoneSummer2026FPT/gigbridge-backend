@@ -23,6 +23,9 @@ public sealed class ContractEsignDocumentGenerator(HttpClient httpClient) : ICon
     private const string DocxMimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
     private const int MaxSignatureBytes = 5 * 1024 * 1024;
     private static readonly CultureInfo VietnamCulture = CultureInfo.GetCultureInfo("vi-VN");
+    private static readonly Regex ProposalEditorUrl = new(
+        @"(?:https?://[^\s/]+)?/proposals/create/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:/questions)?(?:[?#][^\s]*)?",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     public string RenderPreview(ContractDocumentSnapshot snapshot)
     {
@@ -234,22 +237,33 @@ public sealed class ContractEsignDocumentGenerator(HttpClient httpClient) : ICon
         templateRow.Remove();
     }
 
-    private static Dictionary<string, string> BuildMilestoneReplacements(ContractMilestoneSnapshot milestone) => new(StringComparer.Ordinal)
+    private static Dictionary<string, string> BuildMilestoneReplacements(ContractMilestoneSnapshot milestone)
     {
-        ["{{#Milestones}}"] = string.Empty,
-        ["{{/Milestones}}"] = string.Empty,
-        ["{{MilestoneNo}}"] = milestone.Number.ToString(VietnamCulture),
-        ["{{MilestoneTitle}}"] = milestone.Title,
-        ["{{MilestoneDescription}}"] = ValueOr(milestone.Description, "Không áp dụng"),
-        ["{{MilestoneDeliverable}}"] = ValueOr(milestone.Deliverable, "Không áp dụng"),
-        ["{{MilestoneAcceptanceCriteria}}"] = ValueOr(milestone.AcceptanceCriteria, "Không áp dụng"),
-        ["{{MilestoneStartDate}}"] = FormatDate(milestone.StartDate),
-        ["{{MilestoneDueDate}}"] = FormatDate(milestone.DueDate),
-        ["{{MilestoneRevisionLimit}}"] = ValueOr(milestone.RevisionLimit, "Không áp dụng"),
-        // Snapshot amounts are G-coin: the VND column converts to VND, the G-coin column renders the value directly.
-        ["{{MilestoneValueVND}}"] = FormatNumber(TokenWalletRules.ToVnd(milestone.ValueVnd)),
-        ["{{MilestoneValueGigCoin}}"] = FormatNumber(milestone.ValueVnd)
-    };
+        var title = ValueOr(RemoveProposalEditorUrls(milestone.Title), $"Milestone {milestone.Number}");
+        var deliverable = ValueOr(
+            RemoveProposalEditorUrls(milestone.Deliverable),
+            $"Hoàn thành hạng mục “{title}”");
+        var acceptanceCriteria = ValueOr(
+            RemoveProposalEditorUrls(milestone.AcceptanceCriteria),
+            $"Hoàn thành đầy đủ hạng mục “{title}” và được Bên A nghiệm thu.");
+
+        return new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["{{#Milestones}}"] = string.Empty,
+            ["{{/Milestones}}"] = string.Empty,
+            ["{{MilestoneNo}}"] = milestone.Number.ToString(VietnamCulture),
+            ["{{MilestoneTitle}}"] = title,
+            ["{{MilestoneDescription}}"] = ValueOr(milestone.Description, "Không áp dụng"),
+            ["{{MilestoneDeliverable}}"] = deliverable,
+            ["{{MilestoneAcceptanceCriteria}}"] = acceptanceCriteria,
+            ["{{MilestoneStartDate}}"] = FormatDate(milestone.StartDate),
+            ["{{MilestoneDueDate}}"] = FormatDate(milestone.DueDate),
+            ["{{MilestoneRevisionLimit}}"] = ValueOr(milestone.RevisionLimit, "Không áp dụng"),
+            // Snapshot amounts are G-coin: the VND column converts to VND, the G-coin column renders the value directly.
+            ["{{MilestoneValueVND}}"] = FormatNumber(TokenWalletRules.ToVnd(milestone.ValueVnd)),
+            ["{{MilestoneValueGigCoin}}"] = FormatNumber(milestone.ValueVnd)
+        };
+    }
 
     private static Dictionary<string, string> BuildReplacements(
         ContractDocumentSnapshot snapshot,
@@ -573,6 +587,16 @@ public sealed class ContractEsignDocumentGenerator(HttpClient httpClient) : ICon
     }
 
     private static string ValueOr(string? value, string fallback) => string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
+
+    private static string? RemoveProposalEditorUrls(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+
+        var sanitized = ProposalEditorUrl.Replace(value, string.Empty)
+            .Trim()
+            .Trim(' ', '\t', '\r', '\n', '.', ',', ';', ':', '-');
+        return string.IsNullOrWhiteSpace(sanitized) ? null : sanitized;
+    }
 
     private sealed record DownloadedImage(byte[] Content, string ContentType);
     private sealed record SignatureArtifact(ContractSignatureSnapshot Signature, byte[] Content, string ContentType);

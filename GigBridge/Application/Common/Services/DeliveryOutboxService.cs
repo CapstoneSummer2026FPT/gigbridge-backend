@@ -997,7 +997,7 @@ public sealed class DeliveryOutboxService : BackgroundService
             document.PdfSignatureCount != 2 ||
             !string.Equals(
                 document.PdfDocumentHash,
-                $"{document.DocumentHash}:contract-template-pdf-v2",
+                $"{document.DocumentHash}{ESignPdfArtifactRevision.ContractTemplate}",
                 StringComparison.Ordinal))
         {
             throw new InvalidOperationException("The finalized ESign PDF artifact is not available.");
