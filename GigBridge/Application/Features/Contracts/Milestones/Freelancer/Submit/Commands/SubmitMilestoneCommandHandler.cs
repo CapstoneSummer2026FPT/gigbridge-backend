@@ -16,15 +16,18 @@ public sealed class SubmitMilestoneCommandHandler :
 {
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
+    private readonly IUserAuditLogService _userAuditLog;
     private readonly IMediaService? _mediaService;
 
     public SubmitMilestoneCommandHandler(
         IApplicationDbContext context,
         IDateTimeService dateTimeService,
+        IUserAuditLogService userAuditLog,
         IMediaService? mediaService = null)
     {
         _context = context;
         _dateTimeService = dateTimeService;
+        _userAuditLog = userAuditLog;
         _mediaService = mediaService;
     }
 
@@ -96,6 +99,14 @@ public sealed class SubmitMilestoneCommandHandler :
             $"Milestone submitted: {milestone.Title}.",
             now,
             cancellationToken);
+
+        _userAuditLog.Add(
+            command.UserId,
+            UserRole.Freelancer,
+            AuditUserActionType.MilestoneSubmitted,
+            contract.ContractsId,
+            $"Submitted milestone: {milestone.Title}.",
+            milestoneId: milestone.MilestonesId);
 
         await _context.SaveChangesAsync(cancellationToken);
 

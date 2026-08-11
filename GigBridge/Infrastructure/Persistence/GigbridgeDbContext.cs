@@ -17,6 +17,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
     public virtual DbSet<AdminAuditLog> AdminAuditLogs { get; set; }
 
+    public virtual DbSet<AuditLogUser> AuditLogUsers { get; set; }
+
     public virtual DbSet<BankAccount> BankAccounts { get; set; }
 
     public DbSet<DataProtectionKey> DataProtectionKeys { get; set; }
@@ -903,6 +905,39 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
                 .HasForeignKey(e => e.ClientDebitWalletTransactionId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(e => e.EscrowTransaction).WithMany()
                 .HasForeignKey(e => e.EscrowTransactionId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<AuditLogUser>(entity =>
+        {
+            entity.HasKey(e => e.AuditLogUsersId);
+            entity.Property(e => e.AuditLogUsersId).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.UserRole).HasComment("Enum UserRole: 0=Client, 1=Freelancer, 2=Admin");
+            entity.Property(e => e.ActionType).HasComment(
+                "Enum AuditUserActionType: 0=ConfirmedParticipation, 1=SignedEsignContract, 2=RequestedEarlyStart, " +
+                "3=MilestoneSubmitted, 4=EscrowFunded, 5=MilestoneApproved, 6=ReportCreated, 7=DisputeCreated, 8=DisputeEscalated");
+            entity.Property(e => e.Description).HasMaxLength(1000);
+            entity.Property(e => e.RelatedEntityType).HasMaxLength(100);
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+
+            entity.HasIndex(e => e.ContractId);
+            entity.HasIndex(e => e.DisputeId);
+            entity.HasIndex(e => e.UserId);
+            entity.HasIndex(e => e.MilestoneId);
+            entity.HasIndex(e => e.ReportId);
+            entity.HasIndex(e => e.CreatedAt);
+            entity.HasIndex(e => new { e.ContractId, e.CreatedAt });
+            entity.HasIndex(e => new { e.DisputeId, e.CreatedAt });
+
+            entity.HasOne(e => e.User).WithMany()
+                .HasForeignKey(e => e.UserId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.Contract).WithMany()
+                .HasForeignKey(e => e.ContractId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.Milestone).WithMany()
+                .HasForeignKey(e => e.MilestoneId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.Report).WithMany()
+                .HasForeignKey(e => e.ReportId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.Dispute).WithMany()
+                .HasForeignKey(e => e.DisputeId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<UserViolation>(entity =>

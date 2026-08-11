@@ -372,7 +372,8 @@ internal static class AdminDisputeSupport
             auditTrail,
             decisions,
             penalties,
-            auditTrail.FirstOrDefault(item => item.Action == "Dispute.FinalResolution")?.AuditId);
+            auditTrail.FirstOrDefault(item => item.Action == "Dispute.FinalResolution")?.AuditId,
+            await UserAuditLogQueries.GetForContractAsync(context, contract.ContractsId, cancellationToken));
     }
 
     public static async Task NotifyParticipantsAsync(

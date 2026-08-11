@@ -5,6 +5,7 @@ using Application.Common.Interfaces.IService;
 using Application.Features.Admin.Disputes.Common.DTOs;
 using Application.Features.Admin.Disputes.Common.Internal;
 using Application.Features.Contracts.Common.Internal;
+using Application.Features.Contracts.Milestones.Common.Internal;
 using Application.Features.Wallets.Common;
 using Application.Common.Services;
 using Domain.Entities;
@@ -209,6 +210,8 @@ public sealed class ResolveAdminDisputeCommandHandler :
                 milestone.ApprovedAt ??= now;
             milestone.UpdatedAt = now;
         }
+
+        MilestoneWorkflowGuard.AdvanceNextMilestone(milestones, now);
 
         escrow.ReleasedAmount += totalRelease;
         escrow.FundedAmount -= totalRefund + totalPenalty;

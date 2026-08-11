@@ -75,6 +75,7 @@ public static class DependencyInjection
         services.AddScoped<ScheduleWorkflowService>();
         services.AddScoped<IUserAccountStatusService, UserAccountStatusService>();
         services.AddScoped<IAdminAuditService, AdminAuditService>();
+        services.AddScoped<IUserAuditLogService, UserAuditLogService>();
         services.AddScoped<IUserEloService, UserEloService>();
         services.AddScoped<IReviewModerationService, ReviewModerationService>();
         services.AddScoped<IPremiumAccessService, PremiumAccessService>();

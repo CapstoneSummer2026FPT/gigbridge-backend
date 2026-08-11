@@ -2,7 +2,11 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces.IService;
 using Application.Features.Admin.Disputes.Resolve.Commands;
 using Application.Features.Contracts.Completion.Client.Commands;
+using Application.Features.Contracts.Milestones.Freelancer.RequestUnlock.Commands;
+using Application.Features.Contracts.Milestones.Freelancer.Submit.Commands;
 using Application.Features.Contracts.Milestones.Freelancer.Withdraw.Commands;
+using Application.Features.Contracts.WorkItems.Freelancer.Update.Commands;
+using Application.Features.Contracts.WorkItems.Freelancer.Update.DTOs;
 using Domain.Entities;
 using Domain.Enums;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -399,6 +403,337 @@ public sealed class ResolveAdminDisputeCommandHandlerTests
             null,
             allocations,
             contractAction,
+            new AdminViolationInput(false, null, null, null),
+            new AdminViolationInput(false, null, null, null));
+    }
+
+    // ---------------------------------------------------------------------
+    // Keep Contract must lock the disputed milestone AND advance the workspace
+    // to the next milestone. Regression coverage for: "workspace still treats
+    // the disputed milestone as active" after Resume.
+    // ---------------------------------------------------------------------
+
+    [Fact]
+    public async Task Resolve_Resume_AdvancesNextPendingMilestoneToInProgress()
+    {
+        var fixture = new KeepContractAdvanceFixture();
+        var handler = fixture.CreateHandler();
+
+        await handler.Handle(
+            fixture.BuildCommand(new AdminMilestoneAllocationInput(
+                fixture.M3Id, DisputeMilestoneOutcome.Accepted, 25m, 0m, 0m,
+                "Work was substantially complete; admin approves full release to the freelancer.")),
+            CancellationToken.None);
+
+        Assert.Equal((int)MilestoneStatus.Completed, fixture.M3.Status);
+        Assert.Equal((int)MilestoneStatus.InProgress, fixture.M4.Status);
+        Assert.NotNull(fixture.M4.StartedAt);
+    }
+
+    [Fact]
+    public async Task Resolve_Resume_LockedMilestoneRejectsSubmitWithdrawUnlockAndWorkItemUpdate()
+    {
+        var fixture = new KeepContractAdvanceFixture();
+        var handler = fixture.CreateHandler();
+
+        await handler.Handle(
+            fixture.BuildCommand(new AdminMilestoneAllocationInput(
+                fixture.M3Id, DisputeMilestoneOutcome.Accepted, 25m, 0m, 0m,
+                "Work was substantially complete; admin approves full release to the freelancer.")),
+            CancellationToken.None);
+
+        var submitHandler = new SubmitMilestoneCommandHandler(
+            fixture.Context, new FixedDateTimeService(fixture.Now), new CapturingUserAuditLogService());
+        await Assert.ThrowsAsync<BadRequestException>(() => submitHandler.Handle(
+            new SubmitMilestoneCommand(fixture.ContractId, fixture.M3Id, fixture.FreelancerUserId),
+            CancellationToken.None));
+
+        var withdrawHandler = new WithdrawMilestoneCommandHandler(
+            fixture.Context, new FixedDateTimeService(fixture.Now));
+        await Assert.ThrowsAsync<BadRequestException>(() => withdrawHandler.Handle(
+            new WithdrawMilestoneCommand(fixture.ContractId, fixture.M3Id, fixture.FreelancerUserId),
+            CancellationToken.None));
+
+        var unlockHandler = new RequestMilestoneUnlockCommandHandler(
+            fixture.Context, new FixedDateTimeService(fixture.Now), new NoopNotificationService(),
+            new CapturingUserAuditLogService());
+        await Assert.ThrowsAsync<BadRequestException>(() => unlockHandler.Handle(
+            new RequestMilestoneUnlockCommand(fixture.ContractId, fixture.M3Id, fixture.FreelancerUserId, "Early start"),
+            CancellationToken.None));
+
+        var workItemHandler = new UpdateContractWorkItemCommandHandler(
+            fixture.Context, new FixedDateTimeService(fixture.Now));
+        await Assert.ThrowsAsync<BadRequestException>(() => workItemHandler.Handle(
+            new UpdateContractWorkItemCommand(
+                fixture.ContractId, fixture.M3Id, Guid.NewGuid(), fixture.FreelancerUserId,
+                new UpdateContractWorkItemRequest((int)ContractWorkItemStatus.InProgress, null)),
+            CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Resolve_Resume_DoesNotCreateDuplicateEscrowOrWalletTransactions()
+    {
+        var fixture = new KeepContractAdvanceFixture();
+        var handler = fixture.CreateHandler();
+
+        await handler.Handle(
+            fixture.BuildCommand(new AdminMilestoneAllocationInput(
+                fixture.M3Id, DisputeMilestoneOutcome.Accepted, 25m, 0m, 0m,
+                "Work was substantially complete; admin approves full release to the freelancer.")),
+            CancellationToken.None);
+
+        // AdvanceNextMilestone only flips Milestone.Status/StartedAt — it must not touch
+        // escrow or wallet ledgers. Exactly one release should exist, for M3's dispute payout.
+        var walletTransactions = fixture.Context.Set<WalletTransaction>().ToList();
+        var escrowTransactions = fixture.Context.Set<EscrowTransaction>().ToList();
+        Assert.Equal(2, walletTransactions.Count); // client debit + freelancer credit, one release
+        Assert.Single(escrowTransactions);
+        Assert.All(walletTransactions, tx => Assert.Equal(25m, tx.TokenAmount));
+    }
+
+    [Fact]
+    public async Task Resolve_Resume_FinalMilestoneDispute_CompletesWithNoNextMilestoneAndAllowsEndProject()
+    {
+        var fixture = new KeepContractAdvanceFixture(disputeIsLastMilestone: true);
+        var handler = fixture.CreateHandler();
+
+        await handler.Handle(
+            fixture.BuildCommand(new AdminMilestoneAllocationInput(
+                fixture.M3Id, DisputeMilestoneOutcome.Accepted, 25m, 0m, 0m,
+                "Work was substantially complete; admin approves full release to the freelancer.")),
+            CancellationToken.None);
+
+        Assert.Equal((int)MilestoneStatus.Completed, fixture.M3.Status);
+        // M4 wasn't part of this fixture's chain (M3 is the last milestone) — nothing to advance.
+
+        var endProjectHandler = new EndProjectCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now.AddMinutes(10)),
+            fixture.Realtime,
+            new NoopNotificationService());
+
+        var result = await endProjectHandler.Handle(
+            new EndProjectCommand(fixture.ContractId, fixture.ClientUserId),
+            CancellationToken.None);
+
+        Assert.Equal((int)ContractStatus.Completed, result.ContractStatus);
+    }
+
+    [Fact]
+    public async Task Resolve_Resume_M1ToM4Example_FinalRemainingPayoutIs35()
+    {
+        var fixture = new KeepContractAdvanceFixture();
+        var handler = fixture.CreateHandler();
+
+        await handler.Handle(
+            fixture.BuildCommand(new AdminMilestoneAllocationInput(
+                fixture.M3Id, DisputeMilestoneOutcome.Accepted, 25m, 0m, 0m,
+                "Work was substantially complete; admin approves full release to the freelancer.")),
+            CancellationToken.None);
+
+        Assert.Equal((int)MilestoneStatus.InProgress, fixture.M4.Status);
+
+        // Freelancer finishes M4 through the normal flow; client approves it. This is the
+        // only remaining milestone with money left in escrow (M1/M2 already 80%-withdrawn,
+        // M3 already fully released via the dispute).
+        fixture.M4.Status = (int)MilestoneStatus.Approved;
+        fixture.M4.ApprovedAt = fixture.Now;
+
+        var endProjectHandler = new EndProjectCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now.AddMinutes(10)),
+            fixture.Realtime,
+            new NoopNotificationService());
+
+        var result = await endProjectHandler.Handle(
+            new EndProjectCommand(fixture.ContractId, fixture.ClientUserId),
+            CancellationToken.None);
+
+        // M1 remaining 5 + M2 remaining 5 + M3 remaining 0 (already released) + M4 remaining 25 = 35.
+        // Derived from real milestone/escrow state, not hardcoded in the handler.
+        Assert.Equal(35m, result.ReleasedAmountVnd);
+    }
+
+    /// <summary>
+    /// The M1-M4 scenario from the bug report: M1/M2 already Completed with an 80%-cap
+    /// early withdrawal each (20 of 25 released), M3 disputed (still InProgress, nothing
+    /// released), M4 pending. Escrow: FundedAmount=100, ReleasedAmount=40 (20+20).
+    /// </summary>
+    private sealed class KeepContractAdvanceFixture
+    {
+        public InMemoryApplicationDbContext Context { get; } = new();
+        public DateTime Now { get; } = new(2026, 8, 11, 9, 0, 0, DateTimeKind.Utc);
+        public CapturingChatRealtimeNotifier Realtime { get; } = new();
+
+        public Guid ClientUserId { get; } = Guid.NewGuid();
+        public Guid FreelancerUserId { get; } = Guid.NewGuid();
+        public Guid AdminUserId { get; } = Guid.NewGuid();
+        public Guid ContractId { get; } = Guid.NewGuid();
+        public Guid M3Id { get; } = Guid.NewGuid();
+        public Guid DisputeId { get; } = Guid.NewGuid();
+
+        public Contract Contract { get; }
+        public ContractEscrow Escrow { get; }
+        public Milestone M1 { get; }
+        public Milestone M2 { get; }
+        public Milestone M3 { get; }
+        public Milestone M4 { get; } = null!;
+        public Dispute Dispute { get; }
+
+        public KeepContractAdvanceFixture(bool disputeIsLastMilestone = false)
+        {
+            var clientUser = new User { UserId = ClientUserId, Role = (int)UserRole.Client, Email = "client@example.com", FullName = "Client", IsActive = true };
+            var freelancerUser = new User { UserId = FreelancerUserId, Role = (int)UserRole.Freelancer, Email = "freelancer@example.com", FullName = "Freelancer", IsActive = true };
+            var adminUser = new User { UserId = AdminUserId, Role = (int)UserRole.Admin, Email = "admin@example.com", FullName = "Admin", IsActive = true };
+
+            var clientProfile = new ClientProfile { ClientProfilesId = Guid.NewGuid(), UserId = ClientUserId, User = clientUser, CreatedAt = Now };
+            var freelancerProfile = new FreelancerProfile { FreelancerProfilesId = Guid.NewGuid(), UserId = FreelancerUserId, User = freelancerUser, CreatedAt = Now };
+
+            var jobPost = new JobPost
+            {
+                JobPostsId = Guid.NewGuid(),
+                ClientProfilesId = clientProfile.ClientProfilesId,
+                Title = "Test job",
+                Description = "Test job description",
+                Status = 1,
+                CreatedAt = Now
+            };
+
+            M1 = new Milestone
+            {
+                MilestonesId = Guid.NewGuid(), ContractsId = ContractId, Title = "M1", Amount = 25m,
+                Status = (int)MilestoneStatus.Completed, ReleasedAmount = 20m, SortOrder = 0, CreatedAt = Now, ApprovedAt = Now
+            };
+            M2 = new Milestone
+            {
+                MilestonesId = Guid.NewGuid(), ContractsId = ContractId, Title = "M2", Amount = 25m,
+                Status = (int)MilestoneStatus.Completed, ReleasedAmount = 20m, SortOrder = 1, CreatedAt = Now, ApprovedAt = Now
+            };
+            M3 = new Milestone
+            {
+                MilestonesId = M3Id, ContractsId = ContractId, Title = "M3 (disputed)", Amount = 25m,
+                Status = (int)MilestoneStatus.InProgress, SortOrder = 2, CreatedAt = Now
+            };
+
+            var milestones = new List<Milestone> { M1, M2, M3 };
+            var fundedAmount = 75m;
+            if (!disputeIsLastMilestone)
+            {
+                M4 = new Milestone
+                {
+                    MilestonesId = Guid.NewGuid(), ContractsId = ContractId, Title = "M4", Amount = 25m,
+                    Status = (int)MilestoneStatus.Pending, SortOrder = 3, CreatedAt = Now
+                };
+                milestones.Add(M4);
+                fundedAmount = 100m;
+            }
+
+            Contract = new Contract
+            {
+                ContractsId = ContractId,
+                JobPostsId = jobPost.JobPostsId,
+                ClientProfilesId = clientProfile.ClientProfilesId,
+                FreelancerProfilesId = freelancerProfile.FreelancerProfilesId,
+                Title = "Test contract",
+                TotalBudget = fundedAmount,
+                Status = (int)ContractStatus.Disputed,
+                CreatedAt = Now,
+                ClientProfiles = clientProfile,
+                FreelancerProfiles = freelancerProfile,
+                Milestones = milestones
+            };
+
+            Escrow = new ContractEscrow
+            {
+                ContractEscrowId = Guid.NewGuid(),
+                ContractsId = ContractId,
+                RequiredAmount = fundedAmount,
+                FundedAmount = fundedAmount,
+                ReleasedAmount = 40m,
+                RequiredPercentage = 1.0m,
+                Currency = "VND",
+                DepositedTokens = fundedAmount - 40m,
+                EarnedTokens = 0m,
+                Status = (int)ContractEscrowStatus.PartiallyReleased,
+                CreatedAt = Now,
+                FundedAt = Now
+            };
+
+            Dispute = new Dispute
+            {
+                DisputesId = DisputeId,
+                ContractsId = ContractId,
+                InitiatorId = FreelancerUserId,
+                RespondentId = ClientUserId,
+                MilestonesId = M3Id,
+                Reason = "Payment dispute",
+                Status = (int)DisputeStatus.InProgress,
+                AssignedAdminId = AdminUserId,
+                AssignedAt = Now,
+                CreatedAt = Now,
+                Contracts = Contract,
+                Initiator = freelancerUser
+            };
+
+            var disputeConversation = new Conversation
+            {
+                ConversationsId = Guid.NewGuid(),
+                ConversationType = (int)ConversationType.Dispute,
+                Title = "Dispute chat",
+                ContractsId = ContractId,
+                DisputesId = DisputeId,
+                CreatedByUserId = FreelancerUserId,
+                Status = (int)ConversationStatus.Active,
+                CreatedAt = Now
+            };
+
+            var clientWallet = new UserWallet
+            {
+                UserWalletsId = Guid.NewGuid(), UserId = ClientUserId,
+                AvailableTokens = 0m, HeldTokens = fundedAmount - 40m, CreatedAt = Now
+            };
+            var freelancerWallet = new UserWallet
+            {
+                UserWalletsId = Guid.NewGuid(), UserId = FreelancerUserId,
+                AvailableTokens = 0m, WithdrawableTokens = 40m, CreatedAt = Now
+            };
+
+            Context.AddSet(clientUser, freelancerUser, adminUser);
+            Context.AddSet(clientProfile);
+            Context.AddSet(freelancerProfile);
+            Context.AddSet(jobPost);
+            Context.AddSet(Contract);
+            Context.AddSet(milestones.ToArray());
+            Context.AddSet(Escrow);
+            Context.AddSet(Dispute);
+            Context.AddSet(disputeConversation);
+            Context.AddSet(clientWallet, freelancerWallet);
+            Context.AddSet<WalletTransaction>();
+            Context.AddSet<EscrowTransaction>();
+            Context.AddSet<DisputeMilestoneDecision>();
+            Context.AddSet<DisputePenalty>();
+            Context.AddSet<AdminAuditLog>();
+            Context.AddSet<DisputeEvidence>();
+            Context.AddSet<Message>();
+            Context.AddSet<UserViolation>();
+        }
+
+        public ResolveAdminDisputeCommandHandler CreateHandler() => new(
+            Context,
+            new FixedDateTimeService(Now.AddMinutes(5)),
+            Realtime,
+            NullLogger<ResolveAdminDisputeCommandHandler>.Instance,
+            Substitute.For<IUserAccountStatusService>(),
+            Substitute.For<IUserEloService>());
+
+        public ResolveAdminDisputeCommand BuildCommand(AdminMilestoneAllocationInput allocation) => new(
+            DisputeId,
+            AdminUserId,
+            DisputeResolution.Split,
+            "Resolution note.",
+            null,
+            new[] { allocation },
+            AdminContractAction.Resume,
             new AdminViolationInput(false, null, null, null),
             new AdminViolationInput(false, null, null, null));
     }

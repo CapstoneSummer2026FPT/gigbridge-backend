@@ -13,7 +13,8 @@ namespace Application.Features.Disputes.Client.Create.Commands;
 public sealed class CreateDisputeCommandHandler(
     IApplicationDbContext context,
     IPremiumAccessService premiumAccess,
-    IDateTimeService clock) : IRequestHandler<CreateDisputeCommand, DisputeDto>
+    IDateTimeService clock,
+    IUserAuditLogService userAuditLog) : IRequestHandler<CreateDisputeCommand, DisputeDto>
 {
     public async Task<DisputeDto> Handle(CreateDisputeCommand command, CancellationToken cancellationToken)
     {
@@ -52,6 +53,16 @@ public sealed class CreateDisputeCommandHandler(
         contract.Status = (int)ContractStatus.Disputed;
         contract.UpdatedAt = now;
         context.Set<Dispute>().Add(dispute);
+
+        userAuditLog.Add(
+            command.UserId,
+            UserRole.Client,
+            AuditUserActionType.DisputeCreated,
+            contract.ContractsId,
+            "Created a dispute.",
+            milestoneId: dispute.MilestonesId,
+            disputeId: dispute.DisputesId);
+
         await context.SaveChangesAsync(cancellationToken);
         return Map(dispute);
     }
