@@ -75,7 +75,7 @@ public sealed class ContractEsignDocumentGeneratorTests
             Guid.NewGuid(), Guid.NewGuid(), "Trần Văn Freelancer", "freelancer@example.com", "0900000002", "Hà Nội");
         return new ContractDocumentSnapshot(
             Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
-            "GB-TEST-0001", 1, 1, "1.0-DATN", now,
+            "GB-TEST-0001", 1, 1, "Ver 1.0 Gigbridge", now,
             new DateOnly(2026, 7, 21), new DateOnly(2026, 8, 21),
             "Hợp đồng kiểm thử", "Mô tả dự án", "Phát triển và bàn giao", "Không bao gồm hosting", 1_000_000m,
             client, freelancer,
@@ -86,7 +86,7 @@ public sealed class ContractEsignDocumentGeneratorTests
     }
 
     private static ContractSignatureSnapshot CreateSignature(Guid userId, int role, DateTime signedAt) =>
-        new(userId, role, "https://res.cloudinary.com/gigbridge/signature.png", 300, 100, signedAt, "127.0.0.1", "xunit", "1.0-DATN", signedAt);
+        new(userId, role, "https://res.cloudinary.com/gigbridge/signature.png", 300, 100, signedAt, "127.0.0.1", "xunit", "Ver 1.0 Gigbridge", signedAt);
 
     private sealed class SignatureHandler : HttpMessageHandler
     {

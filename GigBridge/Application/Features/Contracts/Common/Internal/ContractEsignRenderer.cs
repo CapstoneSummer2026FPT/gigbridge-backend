@@ -14,7 +14,7 @@ namespace Application.Features.Contracts.Common.Internal;
 internal static class ContractEsignRenderer
 {
     public const string FixedPriceTemplateCode = "CONTRACT_FIXED_PRICE";
-    public const string PolicyVersion = "1.0-DATN";
+    public const string PolicyVersion = "Ver 1.0 Gigbridge";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public static async Task<EsignDocument> EnsureDocumentAsync(

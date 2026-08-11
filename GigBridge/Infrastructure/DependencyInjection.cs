@@ -7,6 +7,7 @@ using Application.Features.Chat.Common.Schedules;
 using Application.Features.Chat.Common.FinalOffers.Shared.Email;
 using Application.Features.JobInvitations.Common.Email;
 using Application.Features.Proposals.Common.Email;
+using Application.Common.Options;
 using Infrastructure.BackgroundJobs;
 using Infrastructure.ExternalServices.Ai;
 using Infrastructure.ExternalServices.GoogleMeet;
@@ -39,8 +40,9 @@ public static class DependencyInjection
             ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
         var allowLocalHttp = IsLocalEnvironment(configuration["ASPNETCORE_ENVIRONMENT"]);
 
+        var pooledConnectionString = DatabasePoolOptions.Apply(connectionString, configuration);
         services.AddDbContext<GigbridgeDbContext>(options =>
-            options.UseNpgsql(connectionString));
+            options.UseNpgsql(pooledConnectionString));
 
         services.AddScoped<IApplicationDbContext>(provider =>
             provider.GetRequiredService<GigbridgeDbContext>());
@@ -305,9 +307,12 @@ public static class DependencyInjection
 
         services.AddScoped<GoogleMeetIdTokenValidator>();
         services.AddScoped<IGoogleMeetOAuthService, GoogleMeetOAuthService>();
-        services.AddHostedService<GoogleMeetProvisioningWorker>();
-        services.AddHostedService<PremiumExpiryWorker>();
-        services.AddHostedService<AnalyticsMaintenanceWorker>();
+        if (BackgroundWorkerOptions.IsEnabled(configuration))
+        {
+            services.AddHostedService<GoogleMeetProvisioningWorker>();
+            services.AddHostedService<PremiumExpiryWorker>();
+            services.AddHostedService<AnalyticsMaintenanceWorker>();
+        }
 
         // Data Protection for encrypted tokens
         services.AddDataProtection()

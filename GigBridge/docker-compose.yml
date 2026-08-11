@@ -10,6 +10,14 @@ services:
 
       # Database
       - ConnectionStrings__DefaultConnection=${DATABASE_URL}
+      - DatabasePool__MaxPoolSize=${DATABASE_POOL_MAX_SIZE:-5}
+      - DatabasePool__MinPoolSize=0
+      - DatabasePool__ConnectionIdleLifetimeSeconds=${DATABASE_POOL_IDLE_SECONDS:-60}
+      - DatabasePool__ConnectionPruningIntervalSeconds=10
+      - DatabasePool__ApplicationName=${DATABASE_POOL_APPLICATION_NAME:-GigBridge-Production}
+
+      # Run these on only one production instance. Development defaults to disabled.
+      - BackgroundWorkers__Enabled=${BACKGROUND_WORKERS_ENABLED:-true}
 
       # Redis (External Connection)
       - Redis__ConnectionString=${REDIS_CONNECTION_STRING}

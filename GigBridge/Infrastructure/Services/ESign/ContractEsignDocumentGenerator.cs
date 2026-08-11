@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using Application.Common.Interfaces.IService;
+using Application.Common.Services;
 using Application.Features.Contracts.Common.DTOs;
 using Domain.Services.Payments;
 using DocumentFormat.OpenXml;
@@ -22,6 +23,9 @@ public sealed class ContractEsignDocumentGenerator(HttpClient httpClient) : ICon
     private const string DocxMimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
     private const int MaxSignatureBytes = 5 * 1024 * 1024;
     private static readonly CultureInfo VietnamCulture = CultureInfo.GetCultureInfo("vi-VN");
+    private static readonly Regex ProposalEditorUrl = new(
+        @"(?:https?://[^\s/]+)?/proposals/create/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:/questions)?(?:[?#][^\s]*)?",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     public string RenderPreview(ContractDocumentSnapshot snapshot)
     {
@@ -233,22 +237,33 @@ public sealed class ContractEsignDocumentGenerator(HttpClient httpClient) : ICon
         templateRow.Remove();
     }
 
-    private static Dictionary<string, string> BuildMilestoneReplacements(ContractMilestoneSnapshot milestone) => new(StringComparer.Ordinal)
+    private static Dictionary<string, string> BuildMilestoneReplacements(ContractMilestoneSnapshot milestone)
     {
-        ["{{#Milestones}}"] = string.Empty,
-        ["{{/Milestones}}"] = string.Empty,
-        ["{{MilestoneNo}}"] = milestone.Number.ToString(VietnamCulture),
-        ["{{MilestoneTitle}}"] = milestone.Title,
-        ["{{MilestoneDescription}}"] = ValueOr(milestone.Description, "Không áp dụng"),
-        ["{{MilestoneDeliverable}}"] = ValueOr(milestone.Deliverable, "Không áp dụng"),
-        ["{{MilestoneAcceptanceCriteria}}"] = ValueOr(milestone.AcceptanceCriteria, "Không áp dụng"),
-        ["{{MilestoneStartDate}}"] = FormatDate(milestone.StartDate),
-        ["{{MilestoneDueDate}}"] = FormatDate(milestone.DueDate),
-        ["{{MilestoneRevisionLimit}}"] = ValueOr(milestone.RevisionLimit, "Không áp dụng"),
-        // Snapshot amounts are G-coin: the VND column converts to VND, the G-coin column renders the value directly.
-        ["{{MilestoneValueVND}}"] = FormatNumber(TokenWalletRules.ToVnd(milestone.ValueVnd)),
-        ["{{MilestoneValueGigCoin}}"] = FormatNumber(milestone.ValueVnd)
-    };
+        var title = ValueOr(RemoveProposalEditorUrls(milestone.Title), $"Milestone {milestone.Number}");
+        var deliverable = ValueOr(
+            RemoveProposalEditorUrls(milestone.Deliverable),
+            $"Hoàn thành hạng mục “{title}”");
+        var acceptanceCriteria = ValueOr(
+            RemoveProposalEditorUrls(milestone.AcceptanceCriteria),
+            $"Hoàn thành đầy đủ hạng mục “{title}” và được Bên A nghiệm thu.");
+
+        return new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["{{#Milestones}}"] = string.Empty,
+            ["{{/Milestones}}"] = string.Empty,
+            ["{{MilestoneNo}}"] = milestone.Number.ToString(VietnamCulture),
+            ["{{MilestoneTitle}}"] = title,
+            ["{{MilestoneDescription}}"] = ValueOr(milestone.Description, "Không áp dụng"),
+            ["{{MilestoneDeliverable}}"] = deliverable,
+            ["{{MilestoneAcceptanceCriteria}}"] = acceptanceCriteria,
+            ["{{MilestoneStartDate}}"] = FormatDate(milestone.StartDate),
+            ["{{MilestoneDueDate}}"] = FormatDate(milestone.DueDate),
+            ["{{MilestoneRevisionLimit}}"] = ValueOr(milestone.RevisionLimit, "Không áp dụng"),
+            // Snapshot amounts are G-coin: the VND column converts to VND, the G-coin column renders the value directly.
+            ["{{MilestoneValueVND}}"] = FormatNumber(TokenWalletRules.ToVnd(milestone.ValueVnd)),
+            ["{{MilestoneValueGigCoin}}"] = FormatNumber(milestone.ValueVnd)
+        };
+    }
 
     private static Dictionary<string, string> BuildReplacements(
         ContractDocumentSnapshot snapshot,
@@ -336,7 +351,7 @@ public sealed class ContractEsignDocumentGenerator(HttpClient httpClient) : ICon
         replacements[$"{{{{{prefix}SignMethod}}}}"] = signature is null ? "Chưa ký" : "Xác nhận điện tử trên GigBridge";
         replacements[$"{{{{{prefix}SignIp}}}}"] = signature is null ? "Chưa ký" : ValueOr(signature.IpAddress, "Không ghi nhận");
         replacements[$"{{{{{prefix}UserAgent}}}}"] = signature is null ? "Chưa ký" : ValueOr(signature.UserAgent, "Không ghi nhận");
-        replacements[$"{{{{{prefix}ConsentVersion}}}}"] = signature is null ? "Chưa ký" : "1.0-DATN";
+        replacements[$"{{{{{prefix}ConsentVersion}}}}"] = signature is null ? "Chưa ký" : "Ver 1.0 Gigbridge";
         replacements[$"{{{{{prefix}SignatureImage}}}}"] = signature is null ? "Chưa ký" : string.Empty;
 
         if (prefix == "Client")
@@ -446,14 +461,34 @@ public sealed class ContractEsignDocumentGenerator(HttpClient httpClient) : ICon
             ?? throw new InvalidOperationException($"Signature placeholder '{placeholder}' was not found.");
         ReplaceText(paragraph, placeholder, string.Empty);
 
+        paragraph.ParagraphProperties ??= new ParagraphProperties();
+        paragraph.ParagraphProperties.Justification = new Justification
+        {
+            Val = JustificationValues.Center
+        };
+        paragraph.ParagraphProperties.SpacingBetweenLines = new SpacingBetweenLines
+        {
+            Before = "0",
+            After = "0"
+        };
+
         var imagePart = mainPart.AddImagePart(artifact.ContentType);
         using (var image = new MemoryStream(artifact.Content, writable: false))
         {
             imagePart.FeedData(image);
         }
 
-        var width = Math.Clamp(artifact.Signature.SignatureWidth ?? 300, 100, 600);
-        var height = Math.Clamp(artifact.Signature.SignatureHeight ?? 100, 40, 250);
+        const int maxFieldWidth = 220;
+        const int maxFieldHeight = 80;
+        var requestedWidth = Math.Clamp(artifact.Signature.SignatureWidth ?? maxFieldWidth, 1, 1200);
+        var requestedHeight = Math.Clamp(artifact.Signature.SignatureHeight ?? maxFieldHeight, 1, 500);
+        var fitScale = Math.Min(
+            1d,
+            Math.Min(
+                (double)maxFieldWidth / requestedWidth,
+                (double)maxFieldHeight / requestedHeight));
+        var width = Math.Max(1, (int)Math.Round(requestedWidth * fitScale));
+        var height = Math.Max(1, (int)Math.Round(requestedHeight * fitScale));
         var cx = width * 9525L;
         var cy = height * 9525L;
         var relationshipId = mainPart.GetIdOfPart(imagePart);
@@ -491,6 +526,12 @@ public sealed class ContractEsignDocumentGenerator(HttpClient httpClient) : ICon
 
     private async Task<DownloadedImage> DownloadSignatureAsync(string imageUrl, CancellationToken cancellationToken)
     {
+        if (imageUrl.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+        {
+            var parsed = SignatureImageStorage.ParseImageDataUri(imageUrl);
+            return new DownloadedImage(parsed.Bytes, parsed.ContentType);
+        }
+
         if (!Uri.TryCreate(imageUrl, UriKind.Absolute, out var uri) ||
             uri.Scheme != Uri.UriSchemeHttps ||
             !(uri.Host.Equals("res.cloudinary.com", StringComparison.OrdinalIgnoreCase) ||
@@ -546,6 +587,16 @@ public sealed class ContractEsignDocumentGenerator(HttpClient httpClient) : ICon
     }
 
     private static string ValueOr(string? value, string fallback) => string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
+
+    private static string? RemoveProposalEditorUrls(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+
+        var sanitized = ProposalEditorUrl.Replace(value, string.Empty)
+            .Trim()
+            .Trim(' ', '\t', '\r', '\n', '.', ',', ';', ':', '-');
+        return string.IsNullOrWhiteSpace(sanitized) ? null : sanitized;
+    }
 
     private sealed record DownloadedImage(byte[] Content, string ContentType);
     private sealed record SignatureArtifact(ContractSignatureSnapshot Signature, byte[] Content, string ContentType);
