@@ -1,5 +1,7 @@
+using Application.Features.Portfolios.Common.DTOs;
 using Domain.Enums;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Routing;
 using Project_API.Controllers.Profiles.Freelancer;
@@ -57,10 +59,13 @@ public sealed class PortfolioControllerContractTests
             action.GetCustomAttributes(typeof(RequestSizeLimitAttribute), true)
                 .Cast<RequestSizeLimitAttribute>());
 
-        var formParameter = Assert.Single(
-            action.GetParameters(),
-            parameter => parameter.GetCustomAttributes(typeof(FromFormAttribute), true).Length == 1);
-        Assert.NotNull(formParameter);
+        var formParameters = action.GetParameters()
+            .Where(parameter =>
+                parameter.GetCustomAttributes(typeof(FromFormAttribute), true).Length == 1)
+            .ToArray();
+
+        Assert.Contains(formParameters, parameter => parameter.ParameterType == typeof(PortfolioItemInputDto));
+        Assert.Contains(action.GetParameters(), parameter => parameter.ParameterType == typeof(IFormFile));
     }
 
     private static void AssertActionRoute<TAttribute>(string actionName, string? template)

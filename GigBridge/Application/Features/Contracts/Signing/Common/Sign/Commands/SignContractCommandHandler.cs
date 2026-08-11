@@ -53,23 +53,11 @@ public sealed class SignContractCommandHandler :
             throw new BadRequestException("Contract can only be signed after details are confirmed.");
         }
 
-        if (!command.Request.PolicyAccepted)
-        {
-            throw new BadRequestException(
-                $"You must accept GigBridge policy {ContractEsignRenderer.PolicyVersion} before signing.");
-        }
-
         var signerRole = await ResolveSignerRoleAsync(contract, command.UserId, cancellationToken);
         var now = _dateTimeService.UtcNow;
         var document = await ContractEsignRenderer.EnsureDocumentAsync(
             _context, _documentGenerator, contract, now, cancellationToken);
         var snapshot = ContractEsignRenderer.GetSnapshot(document);
-
-        if (!string.Equals(command.Request.PolicyVersion, snapshot.PolicyVersion, StringComparison.Ordinal))
-        {
-            throw new BadRequestException(
-                $"You must accept GigBridge policy {snapshot.PolicyVersion} before signing.");
-        }
 
         var existingSignature = await _context.Set<EsignSignature>()
             .FirstOrDefaultAsync(
