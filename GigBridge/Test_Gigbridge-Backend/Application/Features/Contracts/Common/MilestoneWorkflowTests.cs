@@ -269,17 +269,15 @@ public class MilestoneWorkflowTests
         Assert.Equal((int)ContractEscrowStatus.PartiallyReleased, fixture.Escrow.Status);
         Assert.Equal(680_000m, fixture.ClientWallet.HeldTokens);
         Assert.Equal(0m, fixture.FreelancerWallet.AvailableTokens);
-        Assert.Equal(316_800m, fixture.FreelancerWallet.WithdrawableTokens);
-        Assert.Equal(3, fixture.WalletTransactions.Entities.Count);
+        Assert.Equal(320_000m, fixture.FreelancerWallet.WithdrawableTokens);
+        Assert.Equal(2, fixture.WalletTransactions.Entities.Count);
         Assert.Single(fixture.EscrowTransactions.Entities);
         Assert.Equal(2, fixture.Context.TransactionBeginCount);
         Assert.Equal(2, fixture.Context.TransactionLockCount);
         Assert.Equal(1, fixture.Context.TransactionCommitCount);
 
-        var fee = Assert.Single(fixture.WalletTransactions.Entities.Where(transaction =>
+        Assert.Empty(fixture.WalletTransactions.Entities.Where(transaction =>
             transaction.Type == (int)WalletTransactionType.Adjustment));
-        Assert.Equal(3_200m, fee.TokenAmount);
-        Assert.Equal(3_200m, fee.VndAmount);
         Assert.Contains(
             fixture.Context.Set<Message>().ToList(),
             message => message.Content == "Milestone early withdrawal released: Milestone 1.");
@@ -421,7 +419,7 @@ public class MilestoneWorkflowTests
         Assert.Equal(800_000m, fixture.Escrow.ReleasedAmount);
         Assert.Equal(200_000m, fixture.ClientWallet.HeldTokens);
         Assert.Equal(0m, fixture.FreelancerWallet.AvailableTokens);
-        Assert.Equal(792_000m, fixture.FreelancerWallet.WithdrawableTokens);
+        Assert.Equal(800_000m, fixture.FreelancerWallet.WithdrawableTokens);
 
         var result = await endProjectHandler.Handle(
             new EndProjectCommand(fixture.ContractId, fixture.ClientUserId),
@@ -434,7 +432,7 @@ public class MilestoneWorkflowTests
         Assert.Equal(fixture.Now.AddMinutes(6), fixture.Contract.CompletedAt);
         Assert.Equal(0m, fixture.ClientWallet.HeldTokens);
         Assert.Equal(0m, fixture.ClientWallet.AvailableTokens);
-        Assert.Equal(990_000m, fixture.FreelancerWallet.WithdrawableTokens);
+        Assert.Equal(1_000_000m, fixture.FreelancerWallet.WithdrawableTokens);
 
         var claim = await claimHandler.Handle(
             new ClaimFinalPayoutCommand(fixture.ContractId, fixture.FreelancerUserId),
@@ -446,8 +444,8 @@ public class MilestoneWorkflowTests
         Assert.All(fixture.Milestones.Entities, milestone => Assert.Equal(milestone.Amount, milestone.ReleasedAmount));
         Assert.Equal((int)ContractEscrowStatus.Released, fixture.Escrow.Status);
         Assert.Equal(0m, fixture.ClientWallet.HeldTokens);
-        Assert.Equal(990_000m, fixture.FreelancerWallet.WithdrawableTokens);
-        Assert.Equal(18, fixture.WalletTransactions.Entities.Count);
+        Assert.Equal(1_000_000m, fixture.FreelancerWallet.WithdrawableTokens);
+        Assert.Equal(12, fixture.WalletTransactions.Entities.Count);
         Assert.Equal(6, fixture.EscrowTransactions.Entities.Count);
         Assert.Contains(realtime.ConversationEvents, evt => evt.EventName == "ContractCompleted");
         Assert.Contains(realtime.UsersEvents, evt => evt.EventName == "ContractCompleted");
@@ -495,10 +493,10 @@ public class MilestoneWorkflowTests
         Assert.Equal(0m, retry.ReleasedAmountVnd);
         Assert.Equal(walletTransactionCount, fixture.WalletTransactions.Entities.Count);
         Assert.Equal(escrowTransactionCount, fixture.EscrowTransactions.Entities.Count);
-        Assert.Equal(9, fixture.WalletTransactions.Entities.Count);
+        Assert.Equal(6, fixture.WalletTransactions.Entities.Count);
         Assert.Equal(0m, fixture.ClientWallet.AvailableTokens);
         Assert.Equal(0m, fixture.ClientWallet.HeldTokens);
-        Assert.Equal(990_000m, fixture.FreelancerWallet.WithdrawableTokens);
+        Assert.Equal(1_000_000m, fixture.FreelancerWallet.WithdrawableTokens);
 
         await claimHandler.Handle(
             new ClaimFinalPayoutCommand(fixture.ContractId, fixture.FreelancerUserId),
@@ -509,7 +507,7 @@ public class MilestoneWorkflowTests
         Assert.True(claimRetry.AlreadyClaimed);
         Assert.Equal(0m, claimRetry.ReleasedAmountVnd);
         Assert.Equal(0m, fixture.ClientWallet.HeldTokens);
-        Assert.Equal(990_000m, fixture.FreelancerWallet.WithdrawableTokens);
+        Assert.Equal(1_000_000m, fixture.FreelancerWallet.WithdrawableTokens);
     }
 
     [Fact]
@@ -569,7 +567,7 @@ public class MilestoneWorkflowTests
             CancellationToken.None));
 
         Assert.Equal(0m, fixture.ClientWallet.HeldTokens);
-        Assert.Equal(9, fixture.WalletTransactions.Entities.Count);
+        Assert.Equal(6, fixture.WalletTransactions.Entities.Count);
         Assert.Equal(0m, fixture.ClientWallet.AvailableTokens);
     }
 

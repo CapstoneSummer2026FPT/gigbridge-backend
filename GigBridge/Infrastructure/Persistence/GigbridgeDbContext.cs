@@ -1751,8 +1751,11 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.Property(e => e.ReleasedAmount)
                 .HasPrecision(18, 2)
                 .HasDefaultValue(0m);
+            entity.Property(e => e.RefundedAmount)
+                .HasPrecision(18, 2)
+                .HasDefaultValue(0m);
             entity.Property(e => e.SortOrder).HasDefaultValue(0);
-            entity.Property(e => e.Status).HasComment("Enum MilestoneStatus: 0=Pending, 1=InProgress, 2=Submitted, 3=Approved, 4=PaymentProofUploaded, 5=PaymentConfirmed, 6=Disputed");
+            entity.Property(e => e.Status).HasComment("Enum MilestoneStatus: 0=Pending, 1=InProgress, 2=Submitted, 3=Approved, 4=PaymentProofUploaded, 5=PaymentConfirmed, 6=Disputed, 7=Cancelled, 8=Completed");
             entity.Property(e => e.Title).HasMaxLength(500);
             entity.Property(e => e.SubmissionDescription).HasMaxLength(5000);
 

@@ -59,7 +59,7 @@ public sealed class WithdrawMilestoneCommandHandler :
         }
 
         var releaseCapVnd = decimal.Round(
-            milestone.Amount * NormalFreelancerReleasePercentage,
+            (milestone.Amount - milestone.RefundedAmount) * NormalFreelancerReleasePercentage,
             2,
             MidpointRounding.AwayFromZero);
         var releasableVnd = releaseCapVnd - milestone.ReleasedAmount;

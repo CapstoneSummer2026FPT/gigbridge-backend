@@ -100,7 +100,7 @@ internal static class AdminDisputeSupport
 
         var conversations = await context.Set<Conversation>()
             .AsNoTracking()
-            .Where(item => item.ContractsId == contract.ContractsId)
+            .Where(item => item.ContractsId == contract.ContractsId && item.DeletedAt == null)
             .Select(item => new { item.ConversationsId, item.ConversationType, item.DisputesId })
             .ToListAsync(cancellationToken);
 

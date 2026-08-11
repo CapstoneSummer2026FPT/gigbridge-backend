@@ -52,8 +52,10 @@ public sealed class GetFinancialOverviewQueryHandler :
             _dateTimeService.UtcNow,
             timeZone);
         IReadOnlyList<string> serviceFeePrefixes = isClient
-            ? [ServiceFeeWorkflow.ClientFundingFeePrefix, ServiceFeeWorkflow.EndProjectFeePrefix]
+            ? [ServiceFeeWorkflow.ClientFundingFeePrefix]
             : [ServiceFeeWorkflow.FreelancerReleaseFeePrefix, ServiceFeeWorkflow.AcceptJobFeePrefix];
+        var firstServiceFeePrefix = serviceFeePrefixes[0];
+        var secondServiceFeePrefix = serviceFeePrefixes.Count > 1 ? serviceFeePrefixes[1] : null;
 
         var transactions = await _context.Set<WalletTransaction>()
             .AsNoTracking()
@@ -68,8 +70,8 @@ public sealed class GetFinancialOverviewQueryHandler :
                  (isClient && transaction.Type == (int)WalletTransactionType.EscrowRefund) ||
                  (transaction.Type == (int)WalletTransactionType.Adjustment &&
                   transaction.IdempotencyKey != null &&
-                  (transaction.IdempotencyKey.StartsWith(serviceFeePrefixes[0]) ||
-                   transaction.IdempotencyKey.StartsWith(serviceFeePrefixes[1])))))
+                  (transaction.IdempotencyKey.StartsWith(firstServiceFeePrefix) ||
+                   (secondServiceFeePrefix != null && transaction.IdempotencyKey.StartsWith(secondServiceFeePrefix))))))
             .Select(transaction => new FinancialTransactionRecord(
                 transaction.WalletTransactionsId,
                 transaction.ContractsId!.Value,
