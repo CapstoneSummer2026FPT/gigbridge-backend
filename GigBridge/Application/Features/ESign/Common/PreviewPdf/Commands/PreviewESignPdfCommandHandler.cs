@@ -38,9 +38,6 @@ public sealed class PreviewESignPdfCommandHandler(
             throw new BadRequestException("This document does not use the contract Word template.");
         }
 
-        // Validate the temporary image without uploading or persisting it.
-        SignatureImageStorage.ParseImageDataUri(request.Request.SignatureImageUrl);
-
         var snapshot = ContractEsignRenderer.GetSnapshot(document);
         var signerRole = snapshot.Client.UserId == request.UserId
             ? ESignerRole.Client
@@ -51,42 +48,86 @@ public sealed class PreviewESignPdfCommandHandler(
         var signatures = await context.Set<EsignSignature>()
             .AsNoTracking()
             .Where(signature =>
-                signature.EsignDocumentsId == document.EsignDocumentsId &&
-                signature.Status == (int)ESignSignatureStatus.Signed)
+                signature.EsignDocumentsId == document.EsignDocumentsId)
             .ToListAsync(cancellationToken);
 
-        if (signatures.Any(signature => signature.UserId == request.UserId))
+        if (document.Status == (int)ESignDocumentStatus.FullySigned ||
+            signatures.Any(signature =>
+                signature.UserId == request.UserId &&
+                signature.Status == (int)ESignSignatureStatus.Signed))
         {
             throw new ConflictException("This user has already signed the contract.");
+        }
+
+        var identityCode = ContractIdentityCode.Normalize(request.Request.IdentityOrTaxCode);
+        var existingDraft = signatures.SingleOrDefault(signature =>
+            signature.UserId == request.UserId &&
+            signature.Status == (int)ESignSignatureStatus.Pending);
+        var signatureImageUrl = request.Request.SignatureImageUrl?.Trim();
+        if (!string.IsNullOrWhiteSpace(signatureImageUrl))
+        {
+            // Validate the temporary image without uploading or persisting it.
+            SignatureImageStorage.ParseImageDataUri(signatureImageUrl);
+        }
+        else
+        {
+            signatureImageUrl = existingDraft?.SignatureImageUrl;
+        }
+
+        if (string.IsNullOrWhiteSpace(signatureImageUrl))
+        {
+            throw new BadRequestException("Signature image is required for the first draft preview.");
         }
 
         var previewSignature = new ContractSignatureSnapshot(
             request.UserId,
             (int)signerRole,
-            request.Request.SignatureImageUrl,
-            request.Request.SignatureWidth,
-            request.Request.SignatureHeight,
+            signatureImageUrl,
+            request.Request.SignatureWidth ?? existingDraft?.SignatureWidth,
+            request.Request.SignatureHeight ?? existingDraft?.SignatureHeight,
             DateTime.UtcNow,
             request.IpAddress,
             request.UserAgent,
             snapshot.PolicyVersion,
-            DateTime.UtcNow);
+            DateTime.UtcNow,
+            false);
+
+        var counterpart = signatures.SingleOrDefault(signature =>
+            signature.UserId != request.UserId &&
+            (signature.Status == (int)ESignSignatureStatus.Signed ||
+             IsValidPendingDraft(signature, snapshot.PolicyVersion)));
+        var counterpartSnapshot = counterpart is null
+            ? null
+            : counterpart.Status == (int)ESignSignatureStatus.Signed
+                ? ContractEsignRenderer.ToSignatureSnapshot(counterpart)
+                : ContractEsignRenderer.ToDraftSignatureSnapshot(counterpart);
 
         var clientSignature = signerRole == ESignerRole.Client
             ? previewSignature
-            : signatures
-                .Where(signature => signature.SignerRole == (int)ESignerRole.Client)
-                .Select(ContractEsignRenderer.ToSignatureSnapshot)
-                .SingleOrDefault();
+            : counterpartSnapshot?.SignerRole == (int)ESignerRole.Client
+                ? counterpartSnapshot
+                : null;
         var freelancerSignature = signerRole == ESignerRole.Freelancer
             ? previewSignature
-            : signatures
-                .Where(signature => signature.SignerRole == (int)ESignerRole.Freelancer)
-                .Select(ContractEsignRenderer.ToSignatureSnapshot)
-                .SingleOrDefault();
+            : counterpartSnapshot?.SignerRole == (int)ESignerRole.Freelancer
+                ? counterpartSnapshot
+                : null;
+
+        var previewSnapshot = ContractEsignRenderer.WithIdentityCodes(
+            snapshot,
+            signerRole == ESignerRole.Client
+                ? identityCode
+                : counterpart?.SignerRole == (int)ESignerRole.Client
+                    ? counterpart.IdentityOrTaxCode
+                    : snapshot.Client.IdentityOrTaxCode,
+            signerRole == ESignerRole.Freelancer
+                ? identityCode
+                : counterpart?.SignerRole == (int)ESignerRole.Freelancer
+                    ? counterpart.IdentityOrTaxCode
+                    : snapshot.Freelancer.IdentityOrTaxCode);
 
         var wordDocument = await documentGenerator.GenerateAsync(
-            snapshot,
+            previewSnapshot,
             clientSignature,
             freelancerSignature,
             document.DocumentHash ?? string.Empty,
@@ -98,7 +139,15 @@ public sealed class PreviewESignPdfCommandHandler(
 
         return new ESignDocumentDownloadResponse(
             pdf,
-            "Gigbridge-Client-Freelancer-Contract-preview.pdf",
+            "Gigbridge-Client-Freelancer-Contract-BAN-XEM-TRUOC.pdf",
             "application/pdf");
     }
+
+    private static bool IsValidPendingDraft(EsignSignature signature, string policyVersion) =>
+        signature.Status == (int)ESignSignatureStatus.Pending &&
+        signature.DraftSubmittedAt.HasValue &&
+        !string.IsNullOrWhiteSpace(signature.SignatureImageUrl) &&
+        ContractIdentityCode.IsValid(signature.IdentityOrTaxCode) &&
+        signature.PolicyAcceptedAt.HasValue &&
+        string.Equals(signature.PolicyVersion, policyVersion, StringComparison.Ordinal);
 }

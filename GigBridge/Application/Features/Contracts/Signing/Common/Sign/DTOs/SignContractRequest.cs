@@ -1,6 +1,9 @@
 namespace Application.Features.Contracts.Signing.Common.Sign.DTOs;
 
 public sealed record SignContractRequest(
-    string SignatureImageUrl,
+    string? SignatureImageUrl,
     int? SignatureWidth,
-    int? SignatureHeight);
+    int? SignatureHeight,
+    string IdentityOrTaxCode,
+    bool PolicyAccepted,
+    string? PolicyVersion);

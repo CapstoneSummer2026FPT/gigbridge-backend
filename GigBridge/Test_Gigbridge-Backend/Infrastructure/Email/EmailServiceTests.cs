@@ -9,7 +9,7 @@ namespace Test_Gigbridge_Backend.Infrastructure.Email;
 public sealed class EmailServiceTests
 {
     [Fact]
-    public async Task SendEmailAsync_UsesIdempotencyKeyAndPrivateByteAttachment()
+    public async Task SendEmailAsync_UsesIdempotencyKeyAndFinalContractPdfAttachment()
     {
         var resend = Substitute.For<IResend>();
         var configuration = new ConfigurationBuilder().AddInMemoryCollection().Build();
@@ -24,9 +24,9 @@ public sealed class EmailServiceTests
             ByteAttachments =
             [
                 new EmailByteAttachment(
-                    "GigBridge-contract.docx",
+                    "Gigbridge-Client-Freelancer-Contract.pdf",
                     content,
-                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+                    "application/pdf")
             ]
         });
 
@@ -34,7 +34,8 @@ public sealed class EmailServiceTests
         Assert.Equal("esign:document:client", call.GetArguments()[0]);
         var message = Assert.IsType<EmailMessage>(call.GetArguments()[1]);
         var attachment = Assert.Single(message.Attachments!);
-        Assert.Equal("GigBridge-contract.docx", attachment.Filename);
+        Assert.Equal("Gigbridge-Client-Freelancer-Contract.pdf", attachment.Filename);
+        Assert.Equal("application/pdf", attachment.ContentType);
         Assert.Equal(content, attachment.Content!.Value.AsByteArray());
     }
 }

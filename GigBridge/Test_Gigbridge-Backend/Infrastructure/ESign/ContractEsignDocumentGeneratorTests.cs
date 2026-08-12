@@ -41,9 +41,19 @@ public sealed class ContractEsignDocumentGeneratorTests
         Assert.DoesNotContain("PHỤ LỤC D", text);
         Assert.Contains("Không cung cấp", text);
         Assert.Contains("127.0.0.1", text);
+        Assert.Equal(1, CountOccurrences(text, "Bên A và Bên B sau đây gọi riêng là “Bên”"));
         Assert.True(text.IndexOf("Milestone 1", StringComparison.Ordinal) <
                     text.IndexOf("Milestone 2", StringComparison.Ordinal));
         Assert.Equal(2, mainPart.ImageParts.Count());
+        var finalBody = mainPart.Document.Body!;
+        Assert.DoesNotContain(
+            finalBody.Elements<DocumentFormat.OpenXml.Wordprocessing.Paragraph>(),
+            item => item.Descendants<DocumentFormat.OpenXml.Wordprocessing.Break>()
+                .Any(lineBreak => lineBreak.Type?.Value == DocumentFormat.OpenXml.Wordprocessing.BreakValues.Page));
+        Assert.Contains(
+            finalBody.Elements<DocumentFormat.OpenXml.Wordprocessing.Paragraph>(),
+            item => item.InnerText.Contains("THÔNG TIN GIAO KẾT", StringComparison.Ordinal) &&
+                    item.ParagraphProperties?.PageBreakBefore is not null);
         Assert.Empty(new OpenXmlValidator(DocumentFormat.OpenXml.FileFormatVersions.Microsoft365).Validate(document));
     }
 
@@ -56,7 +66,7 @@ public sealed class ContractEsignDocumentGeneratorTests
 
         var generated = await generator.GenerateAsync(
             snapshot,
-            CreateSignature(snapshot.Client.UserId, 0, now),
+            CreateSignature(snapshot.Client.UserId, 0, now) with { IsFinalized = false },
             null,
             new string('b', 64),
             CancellationToken.None);
@@ -64,7 +74,32 @@ public sealed class ContractEsignDocumentGeneratorTests
         using var stream = new MemoryStream(generated.Content);
         using var document = WordprocessingDocument.Open(stream, false);
         Assert.Single(document.MainDocumentPart!.ImageParts);
-        Assert.DoesNotContain("{{", document.MainDocumentPart.Document!.InnerText);
+        var text = document.MainDocumentPart.Document!.InnerText;
+        Assert.Contains("BẢN XEM TRƯỚC – CHƯA CÓ HIỆU LỰC", text);
+        Assert.Contains("Bản tạm – chưa có hiệu lực", text);
+        Assert.DoesNotContain("{{", text);
+        var body = document.MainDocumentPart.Document.Body!;
+        var previewNotice = body.Elements<DocumentFormat.OpenXml.Wordprocessing.Paragraph>()
+            .Single(item => item.InnerText.Contains("BẢN XEM TRƯỚC – CHƯA CÓ HIỆU LỰC", StringComparison.Ordinal));
+        Assert.NotNull(previewNotice.ParagraphProperties?.PageBreakBefore);
+        Assert.DoesNotContain(
+            body.Elements<DocumentFormat.OpenXml.Wordprocessing.Paragraph>(),
+            item => item.Descendants<DocumentFormat.OpenXml.Wordprocessing.Break>()
+                .Any(lineBreak => lineBreak.Type?.Value == DocumentFormat.OpenXml.Wordprocessing.BreakValues.Page));
+        Assert.Empty(new OpenXmlValidator(DocumentFormat.OpenXml.FileFormatVersions.Microsoft365).Validate(document));
+    }
+
+    private static int CountOccurrences(string value, string search)
+    {
+        var count = 0;
+        var index = 0;
+        while ((index = value.IndexOf(search, index, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            index += search.Length;
+        }
+
+        return count;
     }
 
     private static ContractDocumentSnapshot CreateSnapshot(DateTime now)

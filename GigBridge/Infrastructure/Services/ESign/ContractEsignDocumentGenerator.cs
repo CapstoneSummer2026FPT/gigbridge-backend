@@ -114,8 +114,16 @@ public sealed class ContractEsignDocumentGenerator(HttpClient httpClient) : ICon
                 ?? throw new InvalidOperationException("The ESign template has no document body.");
 
             RemoveDeveloperAppendix(body);
+            NormalizeCoverPageBreak(body);
+            RemoveAdjacentDuplicateParagraphs(body);
             NormalizeTemplateMarkup(body);
             ExpandMilestones(body, snapshot.Milestones);
+
+            if (clientSignature?.Signature.IsFinalized == false ||
+                freelancerSignature?.Signature.IsFinalized == false)
+            {
+                AddPreviewNotice(body);
+            }
 
             if (clientSignature is not null)
             {
@@ -153,6 +161,103 @@ public sealed class ContractEsignDocumentGenerator(HttpClient httpClient) : ICon
         return output.ToArray();
     }
 
+    private static void AddPreviewNotice(Body body)
+    {
+        var pageStart = body.Elements<Paragraph>()
+            .FirstOrDefault(item => item.ParagraphProperties?.PageBreakBefore is not null);
+        var paragraphProperties = new ParagraphProperties();
+        if (pageStart is not null)
+        {
+            paragraphProperties.Append(new PageBreakBefore());
+        }
+        paragraphProperties.Append(
+            new SpacingBetweenLines { Before = "0", After = "160" },
+            new Justification { Val = JustificationValues.Center });
+        var paragraph = new Paragraph(
+            paragraphProperties,
+            new Run(
+                new RunProperties(
+                    new Bold(),
+                    new Color { Val = "C2410C" },
+                    new FontSize { Val = "24" }),
+                new Text("BẢN XEM TRƯỚC – CHƯA CÓ HIỆU LỰC")));
+
+        if (pageStart is null)
+        {
+            body.InsertAt(paragraph, 0);
+            return;
+        }
+
+        pageStart.ParagraphProperties!.PageBreakBefore!.Remove();
+        pageStart.InsertBeforeSelf(paragraph);
+    }
+
+    private static void NormalizeCoverPageBreak(Body body)
+    {
+        var manualBreakParagraph = body.Elements<Paragraph>()
+            .FirstOrDefault(item => item.Descendants<Break>()
+                .Any(lineBreak => lineBreak.Type?.Value == BreakValues.Page));
+        if (manualBreakParagraph is null)
+        {
+            return;
+        }
+
+        var children = body.ChildElements.ToList();
+        var breakIndex = children.IndexOf(manualBreakParagraph);
+        var pageStart = children.Skip(breakIndex + 1).OfType<Paragraph>().FirstOrDefault()
+            ?? throw new InvalidOperationException("The ESign template page break has no following paragraph.");
+
+        manualBreakParagraph.Remove();
+        SetPageBreakBefore(pageStart);
+    }
+
+    private static void SetPageBreakBefore(Paragraph paragraph)
+    {
+        paragraph.ParagraphProperties ??= new ParagraphProperties();
+        var properties = paragraph.ParagraphProperties;
+        properties.PageBreakBefore?.Remove();
+
+        var pageBreak = new PageBreakBefore();
+        var keepLines = properties.GetFirstChild<KeepLines>();
+        var keepNext = properties.GetFirstChild<KeepNext>();
+        if (keepLines is not null)
+        {
+            keepLines.InsertAfterSelf(pageBreak);
+        }
+        else if (keepNext is not null)
+        {
+            keepNext.InsertAfterSelf(pageBreak);
+        }
+        else
+        {
+            properties.PrependChild(pageBreak);
+        }
+    }
+
+    private static void RemoveAdjacentDuplicateParagraphs(Body body)
+    {
+        Paragraph? previousParagraph = null;
+        foreach (var element in body.ChildElements.ToArray())
+        {
+            if (element is not Paragraph paragraph)
+            {
+                previousParagraph = null;
+                continue;
+            }
+
+            var text = paragraph.InnerText.Trim();
+            if (text.Length > 0 &&
+                previousParagraph is not null &&
+                string.Equals(text, previousParagraph.InnerText.Trim(), StringComparison.Ordinal))
+            {
+                paragraph.Remove();
+                continue;
+            }
+
+            previousParagraph = paragraph;
+        }
+    }
+
     private static void RemoveDeveloperAppendix(Body body)
     {
         var marker = body.Descendants<Paragraph>()
@@ -184,13 +289,17 @@ public sealed class ContractEsignDocumentGenerator(HttpClient httpClient) : ICon
             var shading = properties.GetFirstChild<Shading>();
             var margins = properties.GetFirstChild<TableCellMargin>();
             var alignment = properties.GetFirstChild<TableCellVerticalAlignment>();
+            var hideMark = properties.GetFirstChild<HideMark>();
 
             if (shading is not null)
             {
                 shading.Val ??= ShadingPatternValues.Clear;
             }
 
-            foreach (var element in new OpenXmlElement?[] { shading, margins, alignment })
+            // CT_TcPr requires these elements in schema order. Move w:hideMark
+            // together with the preceding tail; otherwise moving only shd/tcMar/
+            // vAlign would leave hideMark before them and invalidate cloned rows.
+            foreach (var element in new OpenXmlElement?[] { shading, margins, alignment, hideMark })
             {
                 if (element is null) continue;
                 element.Remove();
@@ -274,7 +383,7 @@ public sealed class ContractEsignDocumentGenerator(HttpClient httpClient) : ICon
         var clientFee = snapshot.TotalContractValueVnd * 0.01m;
         var initialRelease = snapshot.TotalContractValueVnd * 0.80m;
         var retention = snapshot.TotalContractValueVnd - initialRelease;
-        var effectiveAt = clientSignature is not null && freelancerSignature is not null
+        var effectiveAt = clientSignature is { IsFinalized: true } && freelancerSignature is { IsFinalized: true }
             ? new[] { clientSignature.SignedAtUtc, freelancerSignature.SignedAtUtc }.Max()
             : (DateTime?)null;
 
@@ -346,12 +455,17 @@ public sealed class ContractEsignDocumentGenerator(HttpClient httpClient) : ICon
         replacements[$"{{{{{prefix}Phone}}}}"] = ValueOr(party.Phone, "Không cung cấp");
         replacements[$"{{{{{prefix}Address}}}}"] = ValueOr(party.Address, "Không cung cấp");
         replacements[$"{{{{{prefix}IdentityOrTaxCode}}}}"] = ValueOr(party.IdentityOrTaxCode, "Không cung cấp");
-        replacements[$"{{{{{prefix}SignStatus}}}}"] = signature is null ? "Chưa ký" : "Đã ký";
+        var signatureStatus = signature is null
+            ? "Chưa ký"
+            : signature.IsFinalized
+                ? "Đã ký"
+                : "Bản tạm – chưa có hiệu lực";
+        replacements[$"{{{{{prefix}SignStatus}}}}"] = signatureStatus;
         replacements[$"{{{{{prefix}SignedAt}}}}"] = signature is null ? "Chưa ký" : FormatVietnamTime(signature.SignedAtUtc, true);
         replacements[$"{{{{{prefix}SignMethod}}}}"] = signature is null ? "Chưa ký" : "Xác nhận điện tử trên GigBridge";
         replacements[$"{{{{{prefix}SignIp}}}}"] = signature is null ? "Chưa ký" : ValueOr(signature.IpAddress, "Không ghi nhận");
         replacements[$"{{{{{prefix}UserAgent}}}}"] = signature is null ? "Chưa ký" : ValueOr(signature.UserAgent, "Không ghi nhận");
-        replacements[$"{{{{{prefix}ConsentVersion}}}}"] = signature is null ? "Chưa ký" : "Ver 1.0 Gigbridge";
+        replacements[$"{{{{{prefix}ConsentVersion}}}}"] = signature is null ? "Chưa ký" : ValueOr(signature.PolicyVersion, "Không ghi nhận");
         replacements[$"{{{{{prefix}SignatureImage}}}}"] = signature is null ? "Chưa ký" : string.Empty;
 
         if (prefix == "Client")

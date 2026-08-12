@@ -1,4 +1,3 @@
-using System.Net;
 using System.Text.Json;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.IService;
@@ -6,6 +5,7 @@ using Application.Common.Options;
 using Application.Features.Auth.Shared.DTOs;
 using Application.Features.Chat.Common.Schedules;
 using Application.Features.Contracts.Common.DTOs;
+using Application.Features.Contracts.Common.Email;
 using Application.Features.ESign.Common.Internal;
 using Application.Features.Notifications.Common.DTOs;
 using Domain.Entities;
@@ -38,6 +38,7 @@ public sealed class DeliveryOutboxService : BackgroundService
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<DeliveryOutboxService> _logger;
     private readonly IScheduleEmailRenderer _emailRenderer;
+    private readonly ISignedEmailRenderer _signedEmailRenderer;
     private readonly DeliveryOutboxOptions _options;
     private readonly DeliveryOutboxDatabaseGate _databaseGate;
     private readonly string _frontendBaseUrl;
@@ -47,11 +48,13 @@ public sealed class DeliveryOutboxService : BackgroundService
         ILogger<DeliveryOutboxService> logger,
         IConfiguration configuration,
         IScheduleEmailRenderer emailRenderer,
+        ISignedEmailRenderer signedEmailRenderer,
         IOptions<DeliveryOutboxOptions> options)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
         _emailRenderer = emailRenderer;
+        _signedEmailRenderer = signedEmailRenderer;
         _options = options.Value;
         _databaseGate = new DeliveryOutboxDatabaseGate(_options.MaxConcurrentDbConnections);
         _frontendBaseUrl = (configuration["FrontendBaseUrl"] ?? "http://localhost:5173").TrimEnd('/');
@@ -65,6 +68,9 @@ public sealed class DeliveryOutboxService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        _logger.LogInformation("Delivery outbox worker started.");
+        await RecoverReadyFinalContractEmailsAsync(stoppingToken);
+
         var backfill = _options.ScheduleStartBackfillEnabled
             ? RunScheduleStartBackfillAsync(stoppingToken)
             : Task.CompletedTask;
@@ -74,6 +80,79 @@ public sealed class DeliveryOutboxService : BackgroundService
             RunChannelLoopAsync(DeliveryChannel.Email, stoppingToken),
             RunMaintenanceLoopAsync(stoppingToken),
             backfill);
+    }
+
+    private async Task RecoverReadyFinalContractEmailsAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var context = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
+            var failedDeliveries = await context.Set<DeliveryOutbox>()
+                .Where(delivery =>
+                    delivery.ScheduleId == null &&
+                    delivery.Channel == (int)DeliveryChannel.Email &&
+                    delivery.Status == (int)DeliveryOutboxStatus.DeadLettered &&
+                    delivery.DeliveryKey.StartsWith("esign:") &&
+                    delivery.LastError == "The finalized ESign PDF artifact is not available.")
+                .ToListAsync(cancellationToken);
+            if (failedDeliveries.Count == 0)
+            {
+                return;
+            }
+
+            var deliveryDocuments = failedDeliveries
+                .Select(delivery => new
+                {
+                    Delivery = delivery,
+                    Payload = TryReadContractDeliveryPayload(delivery.Payload)
+                })
+                .Where(item => item.Payload is not null)
+                .ToList();
+            var documentIds = deliveryDocuments
+                .Select(item => item.Payload!.DocumentId)
+                .Distinct()
+                .ToArray();
+            var documents = await context.Set<EsignDocument>()
+                .AsNoTracking()
+                .Where(document => documentIds.Contains(document.EsignDocumentsId))
+                .ToListAsync(cancellationToken);
+            var readyDocumentIds = documents
+                .Where(IsFinalContractPdfReady)
+                .Select(document => document.EsignDocumentsId)
+                .ToHashSet();
+            var now = DateTime.UtcNow;
+
+            foreach (var item in deliveryDocuments.Where(item =>
+                         readyDocumentIds.Contains(item.Payload!.DocumentId)))
+            {
+                item.Delivery.Status = (int)DeliveryOutboxStatus.Pending;
+                item.Delivery.AttemptCount = 0;
+                item.Delivery.NextAttemptAt = now;
+                item.Delivery.ClaimToken = null;
+                item.Delivery.LastError = null;
+            }
+
+            var recoveredCount = deliveryDocuments.Count(item =>
+                readyDocumentIds.Contains(item.Payload!.DocumentId));
+            if (recoveredCount > 0)
+            {
+                await context.SaveChangesAsync(cancellationToken);
+                _logger.LogInformation(
+                    "Requeued {Count} finalized contract email deliveries.",
+                    recoveredCount);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            _logger.LogWarning(
+                exception,
+                "Finalized contract email recovery could not be completed at startup.");
+        }
     }
 
     private async Task RunChannelLoopAsync(
@@ -477,6 +556,9 @@ public sealed class DeliveryOutboxService : BackgroundService
 
         if (outcome.Succeeded)
         {
+            _logger.LogInformation(
+                "Delivery {DeliveryKey} completed successfully.",
+                outcome.DeliveryKey);
             return;
         }
 
@@ -963,7 +1045,7 @@ public sealed class DeliveryOutboxService : BackgroundService
             schedule.ScheduledAtUtc);
     }
 
-    private static async Task<PreparedDelivery> PrepareFinalContractEmailAsync(
+    private async Task<PreparedDelivery> PrepareFinalContractEmailAsync(
         IApplicationDbContext context,
         DeliveryOutboxLease lease,
         DeliveryOutbox job,
@@ -1003,9 +1085,10 @@ public sealed class DeliveryOutboxService : BackgroundService
             throw new InvalidOperationException("The finalized ESign PDF artifact is not available.");
         }
 
-        var recipientName = WebUtility.HtmlEncode(payload.RecipientName);
-        var contractTitle = WebUtility.HtmlEncode(payload.ContractTitle);
-        var code = WebUtility.HtmlEncode(document.DocumentCode);
+        var signedEmail = _signedEmailRenderer.Render(new SignedEmailModel(
+            payload.RecipientName,
+            payload.ContractTitle,
+            document.DocumentCode));
         return PreparedDelivery.ForEmail(
             lease,
             job.DeliveryKey,
@@ -1013,9 +1096,9 @@ public sealed class DeliveryOutboxService : BackgroundService
             new EmailRequest
             {
                 To = payload.Email,
-                Subject = $"[GigBridge] Hợp đồng {document.DocumentCode} đã hoàn tất",
-                Body = $"<p>Xin chào {recipientName},</p><p>Hợp đồng <strong>{contractTitle}</strong> ({code}) đã được Client và Freelancer ký đầy đủ.</p><p>Bản PDF hoàn tất được đính kèm email này.</p>",
-                TextBody = $"Xin chào {payload.RecipientName}, hợp đồng {payload.ContractTitle} ({document.DocumentCode}) đã được ký đầy đủ. Bản PDF hoàn tất được đính kèm email này.",
+                Subject = signedEmail.Subject,
+                Body = signedEmail.HtmlBody,
+                TextBody = signedEmail.TextBody,
                 IsHtml = true,
                 IdempotencyKey = job.DeliveryKey,
                 MessageId = $"<{job.DeliveryKey.Replace(':', '.')}@gigbridge.local>",
@@ -1049,6 +1132,28 @@ public sealed class DeliveryOutboxService : BackgroundService
 
     private static bool IsPermanentFailure(Exception exception) =>
         exception is JsonException or InvalidOperationException;
+
+    private static ContractEsignDeliveryPayload? TryReadContractDeliveryPayload(string payload)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<ContractEsignDeliveryPayload>(payload, JsonOptions);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static bool IsFinalContractPdfReady(EsignDocument document) =>
+        document.Status == (int)ESignDocumentStatus.FullySigned &&
+        document.PdfDocumentContent is { Length: > 0 } &&
+        !string.IsNullOrWhiteSpace(document.PdfDocumentFileName) &&
+        document.PdfSignatureCount == 2 &&
+        string.Equals(
+            document.PdfDocumentHash,
+            ESignPdfArtifactRevision.ExpectedHash(document),
+            StringComparison.Ordinal);
 
     private static string StartDeliveryKey(
         Guid scheduleId,
