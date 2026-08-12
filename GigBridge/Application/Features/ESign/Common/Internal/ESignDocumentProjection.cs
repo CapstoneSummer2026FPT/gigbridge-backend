@@ -1,4 +1,5 @@
 using Application.Common.Interfaces;
+using Application.Features.Contracts.Common.Internal;
 using Application.Features.ESign.Common.DTOs;
 using Domain.Entities;
 using Domain.Enums;
@@ -70,10 +71,12 @@ internal static class ESignDocumentProjection
             hasCurrentPdf,
             document.CreatedAt,
             document.UpdatedAt,
-            signatures.Select(ToSignatureResponse).ToList());
+            signatures.Select(signature => ToSignatureResponse(signature, currentUserId)).ToList());
     }
 
-    public static ESignSignatureResponse ToSignatureResponse(EsignSignature signature)
+    public static ESignSignatureResponse ToSignatureResponse(
+        EsignSignature signature,
+        Guid currentUserId)
     {
         return new ESignSignatureResponse(
             signature.EsignSignaturesId,
@@ -83,13 +86,27 @@ internal static class ESignDocumentProjection
             signature.SignatureImageUrl,
             signature.SignatureWidth,
             signature.SignatureHeight,
+            currentUserId == signature.UserId
+                ? signature.IdentityOrTaxCode
+                : null,
+            signature.Status == (int)ESignSignatureStatus.Pending &&
+                signature.DraftSubmittedAt.HasValue &&
+                !string.IsNullOrWhiteSpace(signature.SignatureImageUrl) &&
+                ContractIdentityCode.IsValid(signature.IdentityOrTaxCode) &&
+                signature.PolicyAcceptedAt.HasValue &&
+                string.Equals(
+                    signature.PolicyVersion,
+                    ContractEsignRenderer.PolicyVersion,
+                    StringComparison.Ordinal),
             signature.Status,
             signature.SignedAt,
+            signature.DraftSubmittedAt,
             signature.DeclinedAt,
             signature.DeclineReason,
             signature.IpAddress,
             signature.UserAgent,
-            signature.CreatedAt);
+            signature.CreatedAt,
+            signature.UpdatedAt);
     }
 
     private static async Task<int?> ResolveSignerRoleAsync(

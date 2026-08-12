@@ -164,8 +164,40 @@ internal static class ContractEsignRenderer
             signature.IpAddress,
             signature.UserAgent,
             signature.PolicyVersion,
-            signature.PolicyAcceptedAt);
+            signature.PolicyAcceptedAt,
+            true);
     }
+
+    public static ContractSignatureSnapshot ToDraftSignatureSnapshot(EsignSignature signature)
+    {
+        if (!signature.DraftSubmittedAt.HasValue || string.IsNullOrWhiteSpace(signature.SignatureImageUrl))
+        {
+            throw new BadRequestException("A contract signature draft is missing required evidence.");
+        }
+
+        return new ContractSignatureSnapshot(
+            signature.UserId,
+            signature.SignerRole,
+            signature.SignatureImageUrl,
+            signature.SignatureWidth,
+            signature.SignatureHeight,
+            signature.DraftSubmittedAt.Value,
+            signature.IpAddress,
+            signature.UserAgent,
+            signature.PolicyVersion,
+            signature.PolicyAcceptedAt,
+            false);
+    }
+
+    public static ContractDocumentSnapshot WithIdentityCodes(
+        ContractDocumentSnapshot snapshot,
+        string? clientIdentityOrTaxCode,
+        string? freelancerIdentityOrTaxCode) =>
+        snapshot with
+        {
+            Client = snapshot.Client with { IdentityOrTaxCode = clientIdentityOrTaxCode },
+            Freelancer = snapshot.Freelancer with { IdentityOrTaxCode = freelancerIdentityOrTaxCode }
+        };
 
     public static string ComputeFinalHash(
         EsignDocument document,

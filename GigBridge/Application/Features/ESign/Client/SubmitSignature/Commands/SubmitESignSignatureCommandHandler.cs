@@ -112,6 +112,6 @@ public sealed class SubmitESignSignatureCommandHandler
 
         await _context.SaveChangesAsync(cancellationToken);
 
-        return ESignDocumentProjection.ToSignatureResponse(signature);
+        return ESignDocumentProjection.ToSignatureResponse(signature, command.UserId);
     }
 }

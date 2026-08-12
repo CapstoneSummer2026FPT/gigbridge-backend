@@ -8,10 +8,14 @@ public sealed record ESignSignatureResponse(
     string? SignatureImageUrl,
     int? SignatureWidth,
     int? SignatureHeight,
+    string? IdentityOrTaxCode,
+    bool IsDraftValid,
     int Status,
     DateTime? SignedAt,
+    DateTime? DraftSubmittedAt,
     DateTime? DeclinedAt,
     string? DeclineReason,
     string? IpAddress,
     string? UserAgent,
-    DateTime CreatedAt);
+    DateTime CreatedAt,
+    DateTime? UpdatedAt);

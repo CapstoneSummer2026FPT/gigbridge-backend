@@ -23,6 +23,9 @@
     <EmbeddedResource Include="Templates\ESign\GigBridge_Hop_dong_Esign_Template.docx">
       <LogicalName>Infrastructure.Templates.ESign.GigBridge_Hop_dong_Esign_Template.docx</LogicalName>
     </EmbeddedResource>
+    <EmbeddedResource Include="Templates\ESign\SignedEmail.html">
+      <LogicalName>SignedEmailTemplates/SignedEmail.html</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 
   <ItemGroup>

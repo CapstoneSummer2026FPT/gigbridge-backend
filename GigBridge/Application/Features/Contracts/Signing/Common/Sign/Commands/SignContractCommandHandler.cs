@@ -4,6 +4,7 @@ using Application.Common.Interfaces.IService;
 using Application.Common.Services;
 using Application.Features.Contracts.Common.DTOs;
 using Application.Features.Contracts.Common.Internal;
+using Application.Features.ESign.Common.Internal;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
@@ -20,6 +21,7 @@ public sealed class SignContractCommandHandler :
     private readonly IChatRealtimeNotifier _chatRealtimeNotifier;
     private readonly IMediaService _mediaService;
     private readonly IContractEsignDocumentGenerator _documentGenerator;
+    private readonly IWordToPdfConverter _pdfConverter;
     private readonly IUserAuditLogService _userAuditLog;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -29,6 +31,7 @@ public sealed class SignContractCommandHandler :
         IChatRealtimeNotifier chatRealtimeNotifier,
         IMediaService mediaService,
         IContractEsignDocumentGenerator documentGenerator,
+        IWordToPdfConverter pdfConverter,
         IUserAuditLogService userAuditLog)
     {
         _context = context;
@@ -36,6 +39,7 @@ public sealed class SignContractCommandHandler :
         _chatRealtimeNotifier = chatRealtimeNotifier;
         _mediaService = mediaService;
         _documentGenerator = documentGenerator;
+        _pdfConverter = pdfConverter;
         _userAuditLog = userAuditLog;
     }
 
@@ -43,6 +47,10 @@ public sealed class SignContractCommandHandler :
         SignContractCommand command,
         CancellationToken cancellationToken)
     {
+        await using var transaction = await _context.BeginTransactionAsync(cancellationToken);
+        await transaction.AcquireTransactionLockAsync(
+            ContractEscrowLock.ForContract(command.ContractId), cancellationToken);
+
         var contract = await _context.Set<Contract>()
             .FirstOrDefaultAsync(contract => contract.ContractsId == command.ContractId, cancellationToken);
 
@@ -53,6 +61,13 @@ public sealed class SignContractCommandHandler :
 
         if (contract.Status != (int)ContractStatus.PendingSignature)
         {
+            if (contract.Status is (int)ContractStatus.PendingEscrow or
+                (int)ContractStatus.Active or
+                (int)ContractStatus.Completed)
+            {
+                throw new ConflictException("This contract has already been fully signed.");
+            }
+
             throw new BadRequestException("Contract can only be signed after details are confirmed.");
         }
 
@@ -61,6 +76,15 @@ public sealed class SignContractCommandHandler :
         var document = await ContractEsignRenderer.EnsureDocumentAsync(
             _context, _documentGenerator, contract, now, cancellationToken);
         var snapshot = ContractEsignRenderer.GetSnapshot(document);
+
+        if (!command.Request.PolicyAccepted ||
+            !string.Equals(command.Request.PolicyVersion, snapshot.PolicyVersion, StringComparison.Ordinal))
+        {
+            throw new BadRequestException("The current E-sign policy must be accepted before submitting a signature draft.");
+        }
+
+        var identityOrTaxCode = ContractIdentityCode.Normalize(
+            command.Request.IdentityOrTaxCode);
 
         var existingSignature = await _context.Set<EsignSignature>()
             .FirstOrDefaultAsync(
@@ -88,58 +112,87 @@ public sealed class SignContractCommandHandler :
             _context.Set<EsignSignature>().Add(existingSignature);
         }
 
-        existingSignature.SignatureImageUrl = await SignatureImageStorage.UploadSignatureImageAsync(
-            _mediaService,
-            command.Request.SignatureImageUrl,
-            document.EsignDocumentsId,
-            command.UserId,
-            cancellationToken);
-        existingSignature.SignatureWidth = command.Request.SignatureWidth;
-        existingSignature.SignatureHeight = command.Request.SignatureHeight;
-        existingSignature.Status = (int)ESignSignatureStatus.Signed;
-        existingSignature.SignedAt = now;
+        if (!string.IsNullOrWhiteSpace(command.Request.SignatureImageUrl))
+        {
+            existingSignature.SignatureImageUrl = await SignatureImageStorage.UploadSignatureImageAsync(
+                _mediaService,
+                command.Request.SignatureImageUrl,
+                document.EsignDocumentsId,
+                command.UserId,
+                cancellationToken);
+            existingSignature.SignatureWidth = command.Request.SignatureWidth;
+            existingSignature.SignatureHeight = command.Request.SignatureHeight;
+        }
+        else if (string.IsNullOrWhiteSpace(existingSignature.SignatureImageUrl))
+        {
+            throw new BadRequestException("Signature image is required when creating the first signature draft.");
+        }
+
+        existingSignature.Status = (int)ESignSignatureStatus.Pending;
+        existingSignature.SignedAt = null;
+        existingSignature.IdentityOrTaxCode = identityOrTaxCode;
+        existingSignature.DraftSubmittedAt = now;
+        existingSignature.UpdatedAt = now;
         existingSignature.IpAddress = command.IpAddress;
         existingSignature.UserAgent = command.UserAgent;
-        existingSignature.PolicyVersion = snapshot.PolicyVersion;
+        existingSignature.PolicyVersion = command.Request.PolicyVersion;
         existingSignature.PolicyAcceptedAt = now;
+        existingSignature.DeclinedAt = null;
+        existingSignature.DeclineReason = null;
 
-        var readiness = await ContractEsignSignatureBridge.ApplyClientJobPostSignatureAndGetReadinessAsync(
-            _context,
-            contract,
-            document,
-            now,
-            cancellationToken,
-            signerRole);
+        document.Status = (int)ESignDocumentStatus.PendingSignatures;
+        document.UpdatedAt = now;
+        ClearFinalArtifact(document);
+        InvalidatePdfArtifact(document);
 
-        var isFullySigned = readiness.IsFullySigned;
+        await _context.SaveChangesAsync(cancellationToken);
+
+        var drafts = await _context.Set<EsignSignature>()
+            .Where(signature =>
+                signature.EsignDocumentsId == document.EsignDocumentsId &&
+                signature.Status == (int)ESignSignatureStatus.Pending)
+            .OrderBy(signature => signature.SignerRole)
+            .ToListAsync(cancellationToken);
+
+        var clientDraft = drafts.FirstOrDefault(signature =>
+            signature.SignerRole == (int)ESignerRole.Client && IsValidDraft(signature, snapshot.PolicyVersion));
+        var freelancerDraft = drafts.FirstOrDefault(signature =>
+            signature.SignerRole == (int)ESignerRole.Freelancer && IsValidDraft(signature, snapshot.PolicyVersion));
+        var isFullySigned = clientDraft is not null && freelancerDraft is not null;
 
         Guid? escrowId = null;
 
         if (isFullySigned)
         {
-            var signed = await _context.Set<EsignSignature>()
-                .Where(signature =>
-                    signature.EsignDocumentsId == document.EsignDocumentsId &&
-                    signature.Status == (int)ESignSignatureStatus.Signed)
-                .ToListAsync(cancellationToken);
-            if (signed.All(signature => signature.UserId != existingSignature.UserId))
+            var finalSnapshot = ContractEsignRenderer.WithIdentityCodes(
+                snapshot,
+                clientDraft!.IdentityOrTaxCode,
+                freelancerDraft!.IdentityOrTaxCode);
+            document.ContractSnapshotJson = JsonSerializer.Serialize(finalSnapshot, JsonOptions);
+
+            foreach (var signature in new[] { clientDraft, freelancerDraft })
             {
-                signed.Add(existingSignature);
+                signature.Status = (int)ESignSignatureStatus.Signed;
+                signature.SignedAt = signature.DraftSubmittedAt;
+                signature.UpdatedAt = now;
             }
 
             var clientSignature = ContractEsignRenderer.ToSignatureSnapshot(
-                signed.Single(signature => signature.SignerRole == (int)ESignerRole.Client));
+                clientDraft);
             var freelancerSignature = ContractEsignRenderer.ToSignatureSnapshot(
-                signed.Single(signature => signature.SignerRole == (int)ESignerRole.Freelancer));
+                freelancerDraft);
             var documentHash = ContractEsignRenderer.ComputeFinalHash(document, clientSignature, freelancerSignature);
             var finalized = await _documentGenerator.GenerateAsync(
-                snapshot,
+                finalSnapshot,
                 clientSignature,
                 freelancerSignature,
                 documentHash,
                 cancellationToken);
+            var finalizedPdf = await _pdfConverter.ConvertAsync(
+                finalized.Content,
+                finalized.FileName,
+                cancellationToken);
 
-            document.ContractSnapshotJson ??= JsonSerializer.Serialize(snapshot, JsonOptions);
             document.DocumentHash = documentHash;
             document.FinalizedDocumentContent = finalized.Content;
             document.FinalizedDocumentFileName = finalized.FileName;
@@ -148,9 +201,13 @@ public sealed class SignContractCommandHandler :
             document.Status = (int)ESignDocumentStatus.FullySigned;
             document.FinalizedAt = now;
             document.UpdatedAt = now;
+            document.PdfDocumentContent = finalizedPdf;
+            document.PdfDocumentFileName = ESignPdfArtifactRevision.ContractFileName;
+            document.PdfDocumentHash = $"{documentHash}{ESignPdfArtifactRevision.ContractTemplate}";
+            document.PdfSignatureCount = 2;
 
-            AddFinalContractEmail(snapshot, document.EsignDocumentsId, snapshot.Client, now);
-            AddFinalContractEmail(snapshot, document.EsignDocumentsId, snapshot.Freelancer, now);
+            AddFinalContractEmail(finalSnapshot, document.EsignDocumentsId, finalSnapshot.Client, now);
+            AddFinalContractEmail(finalSnapshot, document.EsignDocumentsId, finalSnapshot.Freelancer, now);
 
             var escrow = await ContractEscrowReadiness.EnsurePendingEscrowAsync(
                 _context,
@@ -171,23 +228,22 @@ public sealed class SignContractCommandHandler :
                     "Contract fully signed. Waiting for client escrow funding.",
                     now);
             }
-        }
-        else
-        {
-            document.Status = (int)ESignDocumentStatus.PartiallySigned;
-            document.UpdatedAt = now;
-        }
 
-        _userAuditLog.Add(
-            command.UserId,
-            signerRole == ESignerRole.Client ? UserRole.Client : UserRole.Freelancer,
-            AuditUserActionType.SignedEsignContract,
-            contract.ContractsId,
-            isFullySigned ? "Signed the e-sign contract; both parties have now signed." : "Signed the e-sign contract.",
-            relatedEntityId: document.EsignDocumentsId,
-            relatedEntityType: nameof(EsignDocument));
+            foreach (var signature in new[] { clientDraft, freelancerDraft })
+            {
+                _userAuditLog.Add(
+                    signature.UserId,
+                    signature.SignerRole == (int)ESignerRole.Client ? UserRole.Client : UserRole.Freelancer,
+                    AuditUserActionType.SignedEsignContract,
+                    contract.ContractsId,
+                    "Contract signature finalized after both parties submitted valid signature drafts.",
+                    relatedEntityId: document.EsignDocumentsId,
+                    relatedEntityType: nameof(EsignDocument));
+            }
+        }
 
         await _context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         if (isFullySigned)
         {
@@ -216,6 +272,31 @@ public sealed class SignContractCommandHandler :
             contract.Status,
             escrowId,
             document.EsignDocumentsId);
+    }
+
+    private static bool IsValidDraft(EsignSignature signature, string policyVersion) =>
+        signature.DraftSubmittedAt.HasValue &&
+        !string.IsNullOrWhiteSpace(signature.SignatureImageUrl) &&
+        ContractIdentityCode.IsValid(signature.IdentityOrTaxCode) &&
+        signature.PolicyAcceptedAt.HasValue &&
+        string.Equals(signature.PolicyVersion, policyVersion, StringComparison.Ordinal);
+
+    private static void InvalidatePdfArtifact(EsignDocument document)
+    {
+        document.PdfDocumentContent = null;
+        document.PdfDocumentFileName = null;
+        document.PdfDocumentHash = null;
+        document.PdfSignatureCount = 0;
+    }
+
+    private static void ClearFinalArtifact(EsignDocument document)
+    {
+        document.FinalizedDocumentContent = null;
+        document.FinalizedDocumentFileName = null;
+        document.FinalizedDocumentMimeType = null;
+        document.FinalizedDocumentSizeBytes = null;
+        document.FinalizedAt = null;
+        document.ExportedPdfUrl = null;
     }
 
     private void AddFinalContractEmail(
