@@ -1,6 +1,21 @@
 using Application.Common.Interfaces;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+using Domain.Enums.Auditing;
+using Domain.Enums.Chat;
+using Domain.Enums.Contracts;
+using Domain.Enums.Contracts.Escrow;
+using Domain.Enums.Contracts.Milestones;
+using Domain.Enums.Disputes;
+using Domain.Enums.Elo;
+using Domain.Enums.ESign;
+using Domain.Enums.JobInvitations;
+using Domain.Enums.Notifications;
+using Domain.Enums.Premium;
+using Domain.Enums.Proposals;
+using Domain.Enums.Reports;
+using Domain.Enums.Subscriptions;
+using Domain.Enums.Wallets;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 

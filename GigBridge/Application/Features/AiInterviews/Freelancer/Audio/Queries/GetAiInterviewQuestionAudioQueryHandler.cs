@@ -1,4 +1,4 @@
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Ai;
 using Application.Common.Models.Ai;
 using MediatR;
 

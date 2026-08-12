@@ -1,10 +1,15 @@
+using Domain.Enums.Proposals;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Time;
+using Application.Features.Admin.AuditLogs.Common.Interfaces;
+using Application.Features.Admin.AuditLogs.Common.Services;
 using Application.Common.Models;
-using Application.Common.Services;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+using Domain.Enums.AiInterviews;
+using Domain.Enums.Contracts;
+using Domain.Enums.Subscriptions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 

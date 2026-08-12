@@ -1,3 +1,4 @@
+using Domain.Enums.Accounts;
 using System;
 
 namespace Application.Features.Auth.Shared.DTOs

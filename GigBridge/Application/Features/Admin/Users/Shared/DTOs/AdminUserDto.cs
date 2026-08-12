@@ -1,3 +1,4 @@
+using Domain.Enums.Accounts;
 namespace Application.Features.Admin.Users.Shared.DTOs;
 
 public class AdminUserDto

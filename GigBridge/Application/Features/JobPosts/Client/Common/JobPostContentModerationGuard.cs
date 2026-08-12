@@ -1,5 +1,5 @@
 using Application.Common.Exceptions;
-using Application.Common.Interfaces.IService;
+using Application.Features.JobPosts.Common.ContentModeration;
 
 namespace Application.Features.JobPosts.Client.Common;
 

@@ -1,5 +1,6 @@
+using Application.Features.Wallets.Common.Models;
 using System.Text.Json;
-using Application.Common.Interfaces.IService;
+using Application.Features.Wallets.Common.Interfaces;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 

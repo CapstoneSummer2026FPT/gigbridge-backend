@@ -1,10 +1,16 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Features.Notifications.Common.Interfaces;
 using Application.Features.Admin.Disputes.Common.DTOs;
 using Application.Features.Disputes.Common.DTOs;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+using Domain.Enums.Chat;
+using Domain.Enums.Contracts.Escrow;
+using Domain.Enums.Contracts.Milestones;
+using Domain.Enums.Disputes;
+using Domain.Enums.Notifications;
+using Domain.Enums.Wallets;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 

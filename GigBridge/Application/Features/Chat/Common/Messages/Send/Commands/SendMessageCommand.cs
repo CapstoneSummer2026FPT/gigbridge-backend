@@ -1,5 +1,5 @@
 using Application.Features.Chat.Common.Messages.Send.DTOs;
-using Domain.Enums;
+using Domain.Enums.Disputes;
 using MediatR;
 
 namespace Application.Features.Chat.Common.Messages.Send.Commands;

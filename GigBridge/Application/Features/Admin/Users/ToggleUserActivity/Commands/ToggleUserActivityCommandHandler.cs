@@ -1,5 +1,5 @@
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.InternalServices.Accounts.Interfaces;
 using MediatR;
 
 namespace Application.Features.Admin.Users.ToggleUserActivity.Commands;

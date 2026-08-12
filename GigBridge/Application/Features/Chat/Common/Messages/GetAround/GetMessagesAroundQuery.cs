@@ -3,7 +3,8 @@ using Application.Common.Interfaces;
 using Application.Features.Chat.Common.Messages;
 using Application.Features.Chat.Common.Messages.GetConversationMessages.DTOs;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Chat;
+using Domain.Enums.Disputes;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 

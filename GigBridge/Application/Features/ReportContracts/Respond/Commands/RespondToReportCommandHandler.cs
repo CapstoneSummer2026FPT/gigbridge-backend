@@ -1,11 +1,15 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Media;
+using Application.Common.Interfaces.Time;
+using Application.Features.Chat.Common.Interfaces;
+using Application.Features.Notifications.Common.Interfaces;
 using Application.Features.ReportContracts.Common.DTOs;
 using Application.Features.ReportContracts.Common.Internal;
 using Application.Features.ReportContracts.Create.Commands;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Notifications;
+using Domain.Enums.Reports;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -71,7 +75,7 @@ public sealed class RespondToReportCommandHandler :
         }
 
         // Only pending reports can be responded to
-        if (report.Status != (int)Domain.Enums.ContractReportStatus.Pending)
+        if (report.Status != (int)Domain.Enums.Reports.ContractReportStatus.Pending)
         {
             throw new BadRequestException("This report has already been responded to or is resolved.");
         }
@@ -125,7 +129,7 @@ public sealed class RespondToReportCommandHandler :
         report.Explanation = command.Explanation?.Trim();
         report.ProposedResolution = command.ProposedResolution?.Trim();
         report.RejectReason = command.RejectReason?.Trim();
-        report.Status = (int)Domain.Enums.ContractReportStatus.WaitingReporterConfirmation;
+        report.Status = (int)Domain.Enums.Reports.ContractReportStatus.WaitingReporterConfirmation;
         report.RespondedAt = now;
         report.UpdatedAt = now;
 

@@ -1,3 +1,4 @@
+using Domain.Enums.Chat;
 using System;
 
 namespace Domain.Entities;

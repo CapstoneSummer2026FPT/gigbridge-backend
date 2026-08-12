@@ -1,3 +1,5 @@
+using Domain.Enums.Accounts;
+using Domain.Enums.Contracts;
 using Application.Features.Disputes.Common.DTOs;
 
 namespace Application.Features.Admin.Disputes.Common.DTOs;

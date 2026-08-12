@@ -1,3 +1,4 @@
+using Domain.Enums.Contracts;
 using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 

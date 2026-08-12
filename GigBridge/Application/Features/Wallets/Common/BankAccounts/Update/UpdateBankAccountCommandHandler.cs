@@ -1,9 +1,10 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Time;
+using Application.Features.Wallets.Common.Interfaces;
 using Application.Features.Wallets.Common.DTOs;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Wallets;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Cryptography;

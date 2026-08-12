@@ -1,4 +1,4 @@
-using Domain.Enums;
+using Domain.Enums.ESign;
 using FluentValidation;
 
 namespace Application.Features.ESign.Common.GetDocuments.Queries;

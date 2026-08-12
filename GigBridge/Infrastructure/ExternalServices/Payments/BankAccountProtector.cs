@@ -1,4 +1,4 @@
-using Application.Common.Interfaces.IService;
+using Application.Features.Wallets.Common.Interfaces;
 using Microsoft.AspNetCore.DataProtection;
 
 namespace Infrastructure.ExternalServices.Payments;

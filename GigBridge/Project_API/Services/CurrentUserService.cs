@@ -1,5 +1,5 @@
 using System.Security.Claims;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Identity;
 using Microsoft.AspNetCore.Http;
 namespace Project_API.Services;
 public class CurrentUserService : ICurrentUserService {

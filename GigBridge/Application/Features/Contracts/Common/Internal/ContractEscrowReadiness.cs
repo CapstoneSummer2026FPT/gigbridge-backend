@@ -1,7 +1,9 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Contracts;
+using Domain.Enums.Contracts.Escrow;
+using Domain.Enums.ESign;
 using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.Contracts.Common.Internal;

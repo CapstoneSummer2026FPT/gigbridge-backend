@@ -1,9 +1,12 @@
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Time;
 using Application.Features.Contracts.Amendments.Commands;
 using Application.Features.Contracts.Amendments.DTOs;
 using Application.Features.Contracts.Details.Client.Update.DTOs;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Contracts;
+using Domain.Enums.Contracts.Amendments;
+using Domain.Enums.Contracts.Escrow;
+using Domain.Enums.Contracts.Milestones;
 using Test_Gigbridge_Backend.TestSupport;
 
 namespace Test_Gigbridge_Backend.Application.Features.Contracts.Common;

@@ -1,5 +1,5 @@
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Time;
 using Application.Common.Models;
 using Application.Common.Models.Ai;
 using Application.Features.AiInterviews.Freelancer.Audio.Queries;
@@ -7,7 +7,8 @@ using Application.Features.AiInterviews.Freelancer.Confirm.Commands;
 using Application.Features.AiInterviews.Freelancer.Start.Commands;
 using Application.Features.AiInterviews.Freelancer.Transcribe.Commands;
 using Application.Features.AiInterviews.Freelancer.Requirement;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+using Domain.Enums.Proposals;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;

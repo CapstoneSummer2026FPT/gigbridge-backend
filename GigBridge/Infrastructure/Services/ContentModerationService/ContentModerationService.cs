@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
-using Application.Common.Interfaces.IService;
+using Application.Features.JobPosts.Common.ContentModeration;
 
 namespace Infrastructure.Services.ContentModerationService;
 

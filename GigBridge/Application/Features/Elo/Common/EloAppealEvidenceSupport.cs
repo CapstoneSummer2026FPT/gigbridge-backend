@@ -1,5 +1,5 @@
 using Application.Common.Exceptions;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Media;
 using Domain.Entities;
 
 namespace Application.Features.Elo.Common;

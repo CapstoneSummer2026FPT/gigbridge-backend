@@ -1,9 +1,9 @@
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Time;
 using Application.Features.Admin.Analytics.Common.DTOs;
 using Application.Features.Admin.Analytics.Common.Services;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.MarketplaceAnalytics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;

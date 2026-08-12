@@ -1,12 +1,18 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Time;
+using Application.Features.Chat.Common.Interfaces;
+using Application.Features.Notifications.Common.Interfaces;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.Contracts.Completion.Client.DTOs;
 using Application.Features.Premium.Client.SmartTalentMatching.Feedback;
 using Application.Features.Contracts.Completion.Common.Internal;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Contracts;
+using Domain.Enums.Contracts.Escrow;
+using Domain.Enums.Contracts.Milestones;
+using Domain.Enums.Notifications;
+using Domain.Enums.Premium;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 

@@ -1,3 +1,4 @@
+using Domain.Enums.Contracts;
 namespace Domain.Entities;
 
 public partial class Contract

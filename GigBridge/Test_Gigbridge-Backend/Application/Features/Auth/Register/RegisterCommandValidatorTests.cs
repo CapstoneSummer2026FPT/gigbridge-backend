@@ -1,6 +1,6 @@
 using Application.Features.Auth.Register.Commands;
 using Application.Features.Auth.Register.DTOs;
-using Domain.Enums;
+using Domain.Enums.Accounts;
 
 namespace Test_Gigbridge_Backend.Application.Features.Auth.Register;
 

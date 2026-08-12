@@ -1,3 +1,4 @@
+using Domain.Enums.Contracts;
 namespace Application.Features.Contracts.Escrow.Client.Fund.DTOs;
 
 public sealed record FundContractEscrowResponse(

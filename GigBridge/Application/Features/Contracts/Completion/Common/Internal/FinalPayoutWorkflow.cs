@@ -2,7 +2,7 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Features.Wallets.Common;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Contracts.Escrow;
 using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.Contracts.Completion.Common.Internal;

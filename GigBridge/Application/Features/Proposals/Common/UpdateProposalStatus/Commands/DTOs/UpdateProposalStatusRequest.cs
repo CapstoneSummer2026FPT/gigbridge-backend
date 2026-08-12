@@ -1,4 +1,5 @@
-﻿namespace Application.Features.Proposals.Common.UpdateProposalStatus.Commands.DTOs;
+using Domain.Enums.Proposals;
+namespace Application.Features.Proposals.Common.UpdateProposalStatus.Commands.DTOs;
 
 public class UpdateProposalStatusRequest
 {

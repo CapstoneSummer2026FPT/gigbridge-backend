@@ -3,7 +3,9 @@ using Application.Common.Interfaces;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.Wallets.Common;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+using Domain.Enums.Contracts.Escrow;
+using Domain.Enums.Contracts.Milestones;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 

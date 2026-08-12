@@ -1,5 +1,5 @@
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.InternalServices.Accounts.Interfaces;
 using Application.Features.Admin.Users.Shared.DTOs;
 using AutoMapper;
 using MediatR;

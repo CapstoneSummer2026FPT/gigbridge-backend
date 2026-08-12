@@ -1,5 +1,6 @@
 using Application.Common.Exceptions;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Caching;
+using Application.Features.Auth.Common.Interfaces;
 using Application.Features.Auth.Common;
 using MediatR;
 using System.Security.Cryptography;

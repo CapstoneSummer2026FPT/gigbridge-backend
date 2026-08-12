@@ -1,5 +1,6 @@
+using Application.Common.Interfaces.Templates;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
@@ -8,7 +9,7 @@ namespace Project_API.Extensions;
 public static class ESignTemplateInitializationExtensions
 {
     private const string FixedPriceTemplateCode = "CONTRACT_FIXED_PRICE";
-    private const string TemplateFileName = "ContractFixedPriceTemporary.html";
+    private const string TemplatePath = "ESign/Seed/ContractFixedPriceTemporary.html";
 
     public static async Task EnsureLocalESignTemplatesAsync(this WebApplication app)
     {
@@ -24,6 +25,7 @@ public static class ESignTemplateInitializationExtensions
         {
             using var scope = app.Services.CreateScope();
             var context = scope.ServiceProvider.GetRequiredService<GigbridgeDbContext>();
+            var templateReader = scope.ServiceProvider.GetRequiredService<ITemplateReader>();
 
 
             var hasActiveFixedPriceTemplate = await context.EsignTemplates
@@ -33,15 +35,6 @@ public static class ESignTemplateInitializationExtensions
 
             if (hasActiveFixedPriceTemplate)
             {
-                return;
-            }
-
-            var templatePath = Path.Combine(app.Environment.ContentRootPath, "Templates", TemplateFileName);
-            if (!File.Exists(templatePath))
-            {
-                logger.LogWarning(
-                    "Temporary e-sign template file was not found at {TemplatePath}.",
-                    templatePath);
                 return;
             }
 
@@ -72,7 +65,7 @@ public static class ESignTemplateInitializationExtensions
                 EsignTemplatesId = Guid.NewGuid(),
                 Name = "Temporary Fixed Price Agreement",
                 TemplateCode = FixedPriceTemplateCode,
-                HtmlContent = await File.ReadAllTextAsync(templatePath),
+                HtmlContent = await templateReader.ReadTextAsync(TemplatePath),
                 Version = latestVersion + 1,
                 PlaceholderSchema = """
                     {

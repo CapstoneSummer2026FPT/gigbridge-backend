@@ -1,10 +1,16 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.InternalServices.Auditing.Interfaces;
+using Application.Common.Interfaces.Time;
+using Application.Features.Chat.Common.Interfaces;
+using Application.Features.ESign.Common.Interfaces;
 using Application.Features.Contracts.Common.DTOs;
 using Application.Features.Contracts.Common.Internal;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+using Domain.Enums.Auditing;
+using Domain.Enums.Contracts;
+using Domain.Enums.Contracts.Escrow;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 

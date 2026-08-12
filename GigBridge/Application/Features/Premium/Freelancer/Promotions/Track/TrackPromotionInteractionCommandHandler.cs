@@ -1,11 +1,12 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Caching;
+using Application.Common.Interfaces.Time;
 using Application.Features.Premium.Common;
 using Application.Features.Premium.Freelancer.Promotions.Common;
 using Application.Features.Premium.Freelancer.Promotions.DTOs;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Premium;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 namespace Application.Features.Premium.Freelancer.Promotions.Track;

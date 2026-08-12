@@ -3,7 +3,9 @@ using Application.Features.Admin.Users.GetAllUser.DTOs;
 using Application.Features.Admin.Users.Shared.DTOs;
 using AutoMapper;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+using Domain.Enums.Reports;
+using Domain.Enums.Subscriptions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 

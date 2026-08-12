@@ -1,9 +1,11 @@
 using Application.Common.Exceptions;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Media;
+using Application.Common.Interfaces.Time;
 using Application.Features.Disputes.Common.Internal;
 using Application.Features.Disputes.Evidence.Add.Commands;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Contracts;
+using Domain.Enums.Disputes;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Test_Gigbridge_Backend.TestSupport;

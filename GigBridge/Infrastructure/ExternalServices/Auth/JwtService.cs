@@ -2,9 +2,10 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
-using Application.Common.Interfaces.IService;
+using Application.Features.Auth.Common.Interfaces;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 

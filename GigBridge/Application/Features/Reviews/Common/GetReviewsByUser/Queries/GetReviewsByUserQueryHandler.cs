@@ -2,7 +2,7 @@ using Application.Common.Interfaces;
 using Application.Features.Reviews.Common;
 using Application.Features.Reviews.Common.DTOs;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Reviews;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 

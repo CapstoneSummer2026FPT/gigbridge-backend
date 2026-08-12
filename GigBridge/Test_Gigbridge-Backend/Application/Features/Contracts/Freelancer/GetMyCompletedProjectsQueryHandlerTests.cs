@@ -1,7 +1,9 @@
+using Domain.Enums.AiInterviews;
 using Application.Common.Exceptions;
 using Application.Features.Contracts.Freelancer.GetMyCompletedProjects.Queries;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+using Domain.Enums.Contracts;
 using Test_Gigbridge_Backend.TestSupport;
 
 namespace Test_Gigbridge_Backend.Application.Features.Contracts.Freelancer;

@@ -1,10 +1,14 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Caching;
+using Application.Common.Interfaces.Time;
+using Application.Features.Notifications.Common.Interfaces;
+using Application.Features.Premium.Common.Interfaces;
 using Application.Features.Premium.Freelancer.RankProtection.DTOs;
 using Application.Features.Premium.Freelancer.RankProtection.GetRankProtection;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Notifications;
+using Domain.Enums.Premium;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 

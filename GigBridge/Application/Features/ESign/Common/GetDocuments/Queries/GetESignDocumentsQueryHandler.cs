@@ -4,7 +4,8 @@ using Application.Common.Models;
 using Application.Features.ESign.Common.DTOs;
 using Application.Features.ESign.Common.Internal;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+using Domain.Enums.ESign;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 

@@ -1,16 +1,21 @@
 using System;
 using System.IO;
 using System.Net;
-using System.Reflection;
 using System.Text;
+using Application.Common.Interfaces.Templates;
 using Application.Features.Proposals.Common.Email;
 
 namespace Infrastructure.Services.Email;
 
 public sealed class ProposalNegotiationEmailRenderer : IProposalNegotiationEmailRenderer
 {
-    private const string LayoutResource = "ScheduleEmailTemplates/ScheduleEmail.html";
-    private static readonly Assembly Assembly = typeof(ScheduleEmailRenderer).Assembly;
+    private const string LayoutTemplate = "Common/Email/NotificationLayout.html";
+    private readonly ITemplateReader _templateReader;
+
+    public ProposalNegotiationEmailRenderer(ITemplateReader templateReader)
+    {
+        _templateReader = templateReader;
+    }
 
     public RenderedProposalNegotiationEmail Render(ProposalNegotiationEmailModel model)
     {
@@ -24,7 +29,7 @@ public sealed class ProposalNegotiationEmailRenderer : IProposalNegotiationEmail
         var actorLabel = "Accepted by:";
         var actorName = model.ClientName;
 
-        var htmlBody = ReadResource(LayoutResource)
+        var htmlBody = _templateReader.ReadText(LayoutTemplate)
             .Replace("{{PREVIEW}}", E(headline))
             .Replace("{{BADGE_BACKGROUND}}", "#ecfeff")
             .Replace("{{ACCENT}}", "#0891b2")
@@ -57,11 +62,4 @@ public sealed class ProposalNegotiationEmailRenderer : IProposalNegotiationEmail
 
     private static string E(string? value) => WebUtility.HtmlEncode(value ?? string.Empty);
 
-    private static string ReadResource(string name)
-    {
-        using var stream = Assembly.GetManifestResourceStream(name)
-            ?? throw new InvalidOperationException($"Embedded email layout '{name}' was not found.");
-        using var reader = new StreamReader(stream, Encoding.UTF8);
-        return reader.ReadToEnd();
-    }
 }

@@ -1,8 +1,8 @@
-using Application.Common.Interfaces.IService;
+using Application.Features.Premium.Common.Interfaces;
 using Application.Features.Premium.Common;
 using Application.Features.Profiles.FreelancerProfile.GetFreelancerProfile.Queries;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using NSubstitute;

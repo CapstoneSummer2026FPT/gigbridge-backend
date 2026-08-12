@@ -3,7 +3,7 @@ using Application.Features.Premium.Freelancer.RankProtection.ActivateRankProtect
 using Application.Features.Premium.Freelancer.RankProtection.CancelRankProtection;
 using Application.Features.Premium.Freelancer.RankProtection.DTOs;
 using Application.Features.Premium.Freelancer.RankProtection.GetRankProtection;
-using Domain.Enums;
+using Domain.Enums.Accounts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Project_API.Controllers.Common;

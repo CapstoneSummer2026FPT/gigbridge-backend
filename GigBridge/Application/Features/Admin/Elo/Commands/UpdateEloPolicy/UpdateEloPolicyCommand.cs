@@ -1,5 +1,5 @@
 using Application.Features.Elo.DTOs;
-using Domain.Enums;
+using Domain.Enums.Elo;
 using MediatR;
 
 namespace Application.Features.Admin.Elo.Commands.UpdateEloPolicy;

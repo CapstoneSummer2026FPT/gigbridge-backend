@@ -1,4 +1,4 @@
-using Application.Common.Interfaces.IService;
+using Application.Features.Notifications.Common.Interfaces;
 using MediatR;
 
 namespace Application.Features.Admin.Notifications.Broadcast;
@@ -16,7 +16,7 @@ public class CreateBroadcastCommandHandler : IRequestHandler<CreateBroadcastComm
     {
         await _notificationService.CreateBroadcastNotificationAsync(
             request.Target,
-            (Domain.Enums.NotificationType)request.Type,
+            (Domain.Enums.Notifications.NotificationType)request.Type,
             request.Title,
             request.Content,
             request.ReferenceId,

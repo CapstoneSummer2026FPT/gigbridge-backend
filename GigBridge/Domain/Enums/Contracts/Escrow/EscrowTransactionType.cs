@@ -1,0 +1,11 @@
+namespace Domain.Enums.Contracts.Escrow;
+
+public enum EscrowTransactionType
+{
+    Deposit = 0,
+    ReleaseToFreelancer = 1,
+    RefundToClient = 2,
+    PlatformFee = 3,
+    Adjustment = 4,
+    DisputePenalty = 5
+}

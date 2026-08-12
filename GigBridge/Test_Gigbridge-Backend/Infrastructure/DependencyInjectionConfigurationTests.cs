@@ -1,9 +1,19 @@
 using Application;
+using Application.Common.InternalServices.Accounts.Interfaces;
+using Application.Common.InternalServices.Auditing.Interfaces;
+using Application.Common.Interfaces;
+using Application.Common.Interfaces.Caching;
+using Application.Common.Interfaces.Time;
+using Application.Features.Admin.AuditLogs.Common.Interfaces;
+using Application.Features.Elo.Common.Interfaces;
+using Application.Features.Premium.Common.Interfaces;
+using Application.Features.Proposals.Common.Interfaces;
 using Infrastructure.BackgroundJobs;
 using Infrastructure.Persistence;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using NSubstitute;
 using Npgsql;
 
 namespace Test_Gigbridge_backend.Infrastructure;
@@ -39,6 +49,26 @@ public sealed class DependencyInjectionConfigurationTests
         Assert.Equal(
             4,
             services.Count(descriptor => descriptor.ServiceType == typeof(IHostedService)));
+    }
+
+    [Fact]
+    public void ApplicationServices_ResolveFromModularRegistrations()
+    {
+        var services = new ServiceCollection();
+        services.AddSingleton(Substitute.For<IApplicationDbContext>());
+        services.AddSingleton(Substitute.For<IDateTimeService>());
+        services.AddSingleton(Substitute.For<ICacheService>());
+        services.AddSingleton(Substitute.For<IRequestMetadataAccessor>());
+        services.AddApplicationServices(Configuration("Development"));
+        using var provider = services.BuildServiceProvider();
+
+        Assert.NotNull(provider.GetRequiredService<IUserAccountStatusService>());
+        Assert.NotNull(provider.GetRequiredService<IUserAuditLogService>());
+        Assert.NotNull(provider.GetRequiredService<IAdminAuditService>());
+        Assert.NotNull(provider.GetRequiredService<IUserEloService>());
+        Assert.NotNull(provider.GetRequiredService<IPremiumAccessService>());
+        Assert.NotNull(provider.GetRequiredService<IProposalQuestionTimerService>());
+        Assert.NotNull(provider.GetRequiredService<IProposalInterviewReviewService>());
     }
 
     [Theory]

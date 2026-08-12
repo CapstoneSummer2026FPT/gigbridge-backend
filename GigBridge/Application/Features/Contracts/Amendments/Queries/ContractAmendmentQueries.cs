@@ -30,8 +30,8 @@ public sealed class GetContractChangeRequestsQueryHandler : IRequestHandler<GetC
                 item.ClarificationRequestNote, item.ClarificationResponseNote,
                 item.AffectedMilestoneIds, item.AffectedWorkItemIds,
                 item.Status, item.CreatedAt, item.RespondedAt, item.ClarifiedAt,
-                item.RequestedByUserId != query.UserId && item.Status == (int)Domain.Enums.ContractChangeRequestStatus.Pending,
-                item.RequestedByUserId == query.UserId && item.Status == (int)Domain.Enums.ContractChangeRequestStatus.NeedsClarification))
+                item.RequestedByUserId != query.UserId && item.Status == (int)Domain.Enums.Contracts.Amendments.ContractChangeRequestStatus.Pending,
+                item.RequestedByUserId == query.UserId && item.Status == (int)Domain.Enums.Contracts.Amendments.ContractChangeRequestStatus.NeedsClarification))
             .ToListAsync(cancellationToken);
     }
 }

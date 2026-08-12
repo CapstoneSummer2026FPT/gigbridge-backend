@@ -1,10 +1,11 @@
+using Domain.Enums.AiInterviews;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Time;
 using Application.Features.JobPosts.Common;
 using Application.Features.JobPosts.Public.GetAvailableJobPosts.DTOs;
 using Application.Features.JobPosts.Public.GetAvailableJobPosts.Queries;
 using Domain.Entities;
-using Domain.Enums;
+
 using Domain.Services;
 using MediatR;
 using Microsoft.EntityFrameworkCore;

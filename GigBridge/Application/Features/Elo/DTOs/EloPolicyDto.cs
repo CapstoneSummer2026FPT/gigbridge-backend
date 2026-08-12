@@ -1,4 +1,4 @@
-using Domain.Enums;
+using Domain.Enums.Elo;
 
 namespace Application.Features.Elo.DTOs;
 

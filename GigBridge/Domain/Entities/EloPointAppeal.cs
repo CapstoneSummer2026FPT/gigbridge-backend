@@ -1,3 +1,4 @@
+using Domain.Enums.Elo;
 using System;
 
 namespace Domain.Entities;

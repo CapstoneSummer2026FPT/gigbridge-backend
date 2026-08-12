@@ -1,3 +1,4 @@
+using Domain.Enums.Reports;
 using System;
 using System.Collections.Generic;
 

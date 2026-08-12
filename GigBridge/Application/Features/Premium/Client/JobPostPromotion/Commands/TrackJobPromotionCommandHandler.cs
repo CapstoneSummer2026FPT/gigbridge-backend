@@ -1,6 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Caching;
+using Application.Common.Interfaces.Time;
 using Application.Features.Premium.Common;
 using Application.Features.Premium.Client.JobPostPromotion.DTOs;
 using Domain.Entities;
@@ -54,8 +55,8 @@ public sealed class TrackJobPromotionCommandHandler(
                 {
                     PremiumUsageEventId = Guid.NewGuid(),
                     Type = request.Type == JobPromotionInteractionType.Impression
-                        ? Domain.Enums.PremiumUsageEventType.PromotionImpression
-                        : Domain.Enums.PremiumUsageEventType.PromotionClick,
+                        ? Domain.Enums.Premium.PremiumUsageEventType.PromotionImpression
+                        : Domain.Enums.Premium.PremiumUsageEventType.PromotionClick,
                     PromotionId = request.PromotionId,
                     IdempotencyKey = identity.Key,
                     OccurredAt = now

@@ -1,22 +1,25 @@
+using Application.Features.Chat.Common.Models;
 using Application.Common.Exceptions;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Time;
+using Application.Features.Chat.Common.Interfaces;
 using Application.Features.Chat.Common.Messages;
 using Application.Features.Chat.Common.Messages.Send.DTOs;
 using Application.Features.Chat.Common.Schedules;
 using Application.Features.Notifications.Common.DTOs;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Chat;
 using Infrastructure.Persistence;
 using Infrastructure.Services.Email;
+using Test_Gigbridge_Backend.TestSupport;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
-using Test_Gigbridge_Backend.TestSupport;
 
 namespace Test_Gigbridge_Backend.Application.Features.Chat;
 
 public class ScheduleWorkflowTests
 {
-    private static readonly ScheduleEmailRenderer EmailRenderer = new();
+    private static readonly ScheduleEmailRenderer EmailRenderer =
+        new(TestTemplateReader.FromProjectTemplates());
 
     [Fact]
     public async Task Create_PersistsNeutralPermissionsAndPersonalizesRealtimePayloads()

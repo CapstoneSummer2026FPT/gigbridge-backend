@@ -8,7 +8,7 @@ using Application.Features.Premium.Freelancer.Promotions.End;
 using Application.Features.Premium.Freelancer.Promotions.GetDraft;
 using Application.Features.Premium.Freelancer.Promotions.GetManager;
 using Application.Features.Premium.Freelancer.Promotions.UploadPhoto;
-using Domain.Enums;
+using Domain.Enums.Accounts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Project_API.Controllers.Common;

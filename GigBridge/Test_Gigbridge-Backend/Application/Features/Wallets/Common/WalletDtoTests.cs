@@ -1,6 +1,6 @@
 using Application.Features.Wallets.Common.DTOs;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Wallets;
 using Domain.Services.Payments;
 
 namespace Test_Gigbridge_Backend.Application.Features.Wallets.Common;

@@ -1,12 +1,13 @@
 using Application.Common.Exceptions;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Time;
 using Application.Features.Chat.Common.Conversations.MarkAsRead.Commands;
 using Application.Features.Chat.Common.Messages.GetAround;
 using Application.Features.Chat.Common.Messages.GetConversationMessages.Queries;
 using Application.Features.Chat.Common.Messages.Send.Commands;
 using Application.Features.Chat.Common.Messages.Send.DTOs;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Chat;
+using Domain.Enums.Contracts;
 using Test_Gigbridge_Backend.TestSupport;
 
 namespace Test_Gigbridge_Backend.Application.Features.Proposals.Common;

@@ -1,16 +1,22 @@
 using System.Net;
-using System.Reflection;
 using System.Text;
 using System.Text.Json;
+using Application.Common.Interfaces.Templates;
 using Application.Features.Chat.Common.Schedules;
 
 namespace Infrastructure.Services.Email;
 
 public sealed class ScheduleEmailRenderer : IScheduleEmailRenderer
 {
-    private const string LayoutResource = "ScheduleEmailTemplates/ScheduleEmail.html";
-    private static readonly Assembly Assembly = typeof(ScheduleEmailRenderer).Assembly;
+    private const string LayoutTemplate = "Common/Email/NotificationLayout.html";
+    private const string DefinitionRoot = "Chat/Schedules/Email/Definitions";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private readonly ITemplateReader _templateReader;
+
+    public ScheduleEmailRenderer(ITemplateReader templateReader)
+    {
+        _templateReader = templateReader;
+    }
 
     public RenderedScheduleEmail Render(ScheduleNotificationType type, ScheduleEmailModel model)
     {
@@ -25,10 +31,10 @@ public sealed class ScheduleEmailRenderer : IScheduleEmailRenderer
             RenderText(model, copy, actionLabel, actionUrl));
     }
 
-    private static EmailCopy CopyFor(ScheduleNotificationType type, ScheduleEmailModel model)
+    private EmailCopy CopyFor(ScheduleNotificationType type, ScheduleEmailModel model)
     {
         var definition = JsonSerializer.Deserialize<EmailTemplateDefinition>(
-            ReadResource($"ScheduleEmailTemplates/{type}.json"), JsonOptions)
+            _templateReader.ReadText($"{DefinitionRoot}/{type}.json"), JsonOptions)
             ?? throw new InvalidOperationException($"Schedule email template '{type}' is empty.");
         var copy = model.IsActor ? definition.Actor : definition.Recipient;
         return copy with
@@ -38,12 +44,12 @@ public sealed class ScheduleEmailRenderer : IScheduleEmailRenderer
         };
     }
 
-    private static string RenderHtml(ScheduleEmailModel model, EmailCopy copy, string actionLabel, string actionUrl)
+    private string RenderHtml(ScheduleEmailModel model, EmailCopy copy, string actionLabel, string actionUrl)
     {
         var greeting = string.IsNullOrWhiteSpace(model.RecipientName) ? "Hello," : $"Hello {E(model.RecipientName)},";
         var details = Section("Details", model.Details);
         var reason = Section("Reason", model.CancellationReason);
-        return ReadResource(LayoutResource)
+        return _templateReader.ReadText(LayoutTemplate)
             .Replace("{{PREVIEW}}", E(copy.Preview))
             .Replace("{{BADGE_BACKGROUND}}", copy.BadgeBackground)
             .Replace("{{ACCENT}}", copy.Accent)
@@ -86,14 +92,6 @@ public sealed class ScheduleEmailRenderer : IScheduleEmailRenderer
     private static string Expand(string value, ScheduleEmailModel model) => value
         .Replace("{{TITLE}}", model.Title)
         .Replace("{{ACTOR_NAME}}", model.ActorName);
-
-    private static string ReadResource(string name)
-    {
-        using var stream = Assembly.GetManifestResourceStream(name)
-            ?? throw new InvalidOperationException($"Embedded schedule email template '{name}' was not found.");
-        using var reader = new StreamReader(stream, Encoding.UTF8);
-        return reader.ReadToEnd();
-    }
 
     private sealed record EmailTemplateDefinition(EmailCopy Actor, EmailCopy Recipient);
 

@@ -1,10 +1,15 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.InternalServices.Auditing.Interfaces;
+using Application.Common.Interfaces.Time;
+using Application.Features.Premium.Common.Interfaces;
 using Application.Features.Disputes.Common.DTOs;
 using Application.Features.Premium.Client.FastTrackArbitration.Common;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+using Domain.Enums.Auditing;
+using Domain.Enums.Contracts;
+using Domain.Enums.Disputes;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 

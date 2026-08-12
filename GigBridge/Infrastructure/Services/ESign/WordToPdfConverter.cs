@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using System.Text;
-using Application.Common.Interfaces.IService;
+using Application.Features.ESign.Common.Interfaces;
 using Microsoft.Extensions.Configuration;
 
 namespace Infrastructure.Services.ESign;

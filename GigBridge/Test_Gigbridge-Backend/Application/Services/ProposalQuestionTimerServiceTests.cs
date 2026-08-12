@@ -1,9 +1,10 @@
 using Application.Common.Exceptions;
-using Application.Common.Interfaces.IService;
-using Application.Common.Services;
+using Application.Common.Interfaces.Time;
+using Application.Features.Proposals.Common.Services;
 using Application.Features.Proposals.Freelancer.QuestionTimers.DTOs;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+using Domain.Enums.Proposals;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 

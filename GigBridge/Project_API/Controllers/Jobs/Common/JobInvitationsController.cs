@@ -9,7 +9,7 @@ using Application.Features.JobInvitations.Freelancer.ApplyInvitation.Commands;
 using Application.Features.JobInvitations.Freelancer.DeclineInvitation.Commands;
 using Application.Features.JobInvitations.Freelancer.GetMyInvitations.Queries;
 using Application.Features.JobInvitations.Freelancer.ViewInvitation.Commands;
-using Domain.Enums;
+using Domain.Enums.Accounts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 

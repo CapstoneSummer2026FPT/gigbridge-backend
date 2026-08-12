@@ -1,6 +1,6 @@
 using System.Security.Claims;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Time;
 using Domain.Entities;
 using Microsoft.AspNetCore.Http;
 using NSubstitute;

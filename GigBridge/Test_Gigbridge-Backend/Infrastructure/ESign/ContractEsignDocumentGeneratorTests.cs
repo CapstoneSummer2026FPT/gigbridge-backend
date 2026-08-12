@@ -4,6 +4,7 @@ using Application.Features.Contracts.Common.DTOs;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Validation;
 using Infrastructure.Services.ESign;
+using Test_Gigbridge_Backend.TestSupport;
 
 namespace Test_Gigbridge_Backend.Infrastructure.ESign;
 
@@ -15,7 +16,9 @@ public sealed class ContractEsignDocumentGeneratorTests
     [Fact]
     public async Task GenerateAsync_ProducesValidDocxWithoutDeveloperPlaceholders()
     {
-        var generator = new ContractEsignDocumentGenerator(new HttpClient(new SignatureHandler()));
+        var generator = new ContractEsignDocumentGenerator(
+            new HttpClient(new SignatureHandler()),
+            TestTemplateReader.FromProjectTemplates());
         var now = new DateTime(2026, 7, 20, 12, 0, 0, DateTimeKind.Utc);
         var snapshot = CreateSnapshot(now);
 
@@ -60,7 +63,9 @@ public sealed class ContractEsignDocumentGeneratorTests
     [Fact]
     public async Task GenerateAsync_EmbedsEachAvailableSignatureIndependently()
     {
-        var generator = new ContractEsignDocumentGenerator(new HttpClient(new SignatureHandler()));
+        var generator = new ContractEsignDocumentGenerator(
+            new HttpClient(new SignatureHandler()),
+            TestTemplateReader.FromProjectTemplates());
         var now = new DateTime(2026, 8, 6, 12, 0, 0, DateTimeKind.Utc);
         var snapshot = CreateSnapshot(now);
 

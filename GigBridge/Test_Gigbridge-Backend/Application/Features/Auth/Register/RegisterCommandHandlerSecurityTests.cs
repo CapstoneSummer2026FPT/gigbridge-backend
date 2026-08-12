@@ -1,10 +1,12 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Caching;
+using Application.Common.Interfaces.Time;
+using Application.Features.Elo.Common.Interfaces;
 using Application.Features.Auth.Register.Commands;
 using Application.Features.Auth.Register.DTOs;
 using AutoMapper;
-using Domain.Enums;
+using Domain.Enums.Accounts;
 using NSubstitute;
 
 namespace Test_Gigbridge_Backend.Application.Features.Auth.Register;

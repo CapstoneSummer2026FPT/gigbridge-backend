@@ -1,10 +1,18 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.InternalServices.Auditing.Interfaces;
+using Application.Common.Interfaces.Media;
+using Application.Common.Interfaces.Time;
+using Application.Features.Chat.Common.Interfaces;
+using Application.Features.Notifications.Common.Interfaces;
 using Application.Features.ReportContracts.Common.DTOs;
 using Application.Features.ReportContracts.Common.Internal;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+using Domain.Enums.Auditing;
+using Domain.Enums.Contracts;
+using Domain.Enums.Notifications;
+using Domain.Enums.Reports;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -98,7 +106,7 @@ public sealed class CreateReportCommandHandler :
             IssueType = command.IssueType,
             Description = command.Description.Trim(),
             DesiredResolution = command.DesiredResolution.Trim(),
-            Status = (int)Domain.Enums.ContractReportStatus.Pending,
+            Status = (int)Domain.Enums.Reports.ContractReportStatus.Pending,
             ResolutionAction = null,
             Explanation = null,
             ProposedResolution = null,

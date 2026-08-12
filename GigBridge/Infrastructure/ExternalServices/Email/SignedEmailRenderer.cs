@@ -1,15 +1,20 @@
 using System.Net;
-using System.Reflection;
 using System.Text;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Templates;
+using Application.Features.ESign.Common.Interfaces;
 using Application.Features.Contracts.Signing.Common.Sign.DTOs;
 
 namespace Infrastructure.Services.Email;
 
 public sealed class SignedEmailRenderer : ISignedEmailRenderer
 {
-    private const string TemplateResource = "SignedEmailTemplates/SignedEmail.html";
-    private static readonly Assembly Assembly = typeof(SignedEmailRenderer).Assembly;
+    private const string TemplatePath = "Contracts/Signing/Email/SignedEmail.html";
+    private readonly ITemplateReader _templateReader;
+
+    public SignedEmailRenderer(ITemplateReader templateReader)
+    {
+        _templateReader = templateReader;
+    }
 
     public RenderedSignedEmail Render(SignedEmailModel model)
     {
@@ -37,12 +42,8 @@ public sealed class SignedEmailRenderer : ISignedEmailRenderer
 
     private static string E(string? value) => WebUtility.HtmlEncode(value ?? string.Empty);
 
-    private static string ReadTemplate()
+    private string ReadTemplate()
     {
-        using var stream = Assembly.GetManifestResourceStream(TemplateResource)
-            ?? throw new InvalidOperationException(
-                $"Embedded signed email template '{TemplateResource}' was not found.");
-        using var reader = new StreamReader(stream, Encoding.UTF8);
-        return reader.ReadToEnd();
+        return _templateReader.ReadText(TemplatePath);
     }
 }

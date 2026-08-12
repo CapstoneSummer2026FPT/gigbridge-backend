@@ -1,5 +1,5 @@
 using Application.Common.Exceptions;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Time;
 using Application.Features.JobPosts.Client.Questions.CreateBulkJobPostQuestions.Commands;
 using Application.Features.JobPosts.Client.Questions.CreateBulkJobPostQuestions.DTOs;
 using Application.Features.JobPosts.Client.Questions.CreateJobPostQuestion.Commands;

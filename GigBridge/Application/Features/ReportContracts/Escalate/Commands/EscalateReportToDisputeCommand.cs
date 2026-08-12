@@ -1,6 +1,6 @@
 using Application.Features.Disputes.Common.DTOs;
 using Application.Features.Disputes.Common.Internal;
-using Domain.Enums;
+using Domain.Enums.Disputes;
 using MediatR;
 
 namespace Application.Features.ReportContracts.Escalate.Commands;

@@ -1,12 +1,13 @@
+using Domain.Enums.AiInterviews;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Ai;
 using Application.Common.Models.Ai;
 using Application.Features.JobPosts.Common;
 using Application.Features.JobPosts.Freelancer.GetRecommendedJobPosts.DTOs;
 using Application.Features.JobPosts.Public.GetAvailableJobPosts.DTOs;
 using Domain.Entities;
-using Domain.Enums;
+
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 

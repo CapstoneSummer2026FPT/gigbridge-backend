@@ -1,5 +1,5 @@
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Time;
 using Application.Features.ESign.Common.DTOs;
 using Application.Features.ESign.Common.Internal;
 using MediatR;

@@ -1,10 +1,11 @@
+using Domain.Enums.AiInterviews;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Models;
 using Application.Features.Proposals.Common;
 using Application.Features.Proposals.Common.DTOs;
 using Domain.Entities;
-using Domain.Enums;
+
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 

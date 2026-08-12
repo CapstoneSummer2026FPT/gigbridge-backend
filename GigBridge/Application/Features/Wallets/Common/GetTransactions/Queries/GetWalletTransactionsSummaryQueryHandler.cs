@@ -1,6 +1,6 @@
 using Application.Common.Interfaces;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Wallets;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 

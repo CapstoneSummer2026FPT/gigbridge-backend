@@ -7,7 +7,7 @@ using Application.Features.Proposals.Freelancer.Answers.UpdateBulkProposalAnswer
 using Application.Features.Proposals.Freelancer.Answers.UpdateBulkProposalAnswers.DTOs;
 using Application.Features.Proposals.Freelancer.Answers.UpdateProposalAnswer.Commands;
 using Application.Features.Proposals.Freelancer.Answers.UpdateProposalAnswer.DTOs;
-using Domain.Enums;
+using Domain.Enums.Accounts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Project_API.Controllers.Common;

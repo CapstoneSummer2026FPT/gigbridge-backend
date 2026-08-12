@@ -1,11 +1,12 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
-using Application.Common.Services;
+using Application.Common.Interfaces.Media;
+using Application.Common.Interfaces.Time;
+using Application.Features.ESign.Common.Services;
 using Application.Features.ESign.Common.DTOs;
 using Application.Features.ESign.Common.Internal;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.ESign;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 

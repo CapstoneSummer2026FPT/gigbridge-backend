@@ -1,12 +1,15 @@
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Time;
 using Application.Common.Models;
 using Application.Features.Premium.Common;
 using Application.Features.Profiles.FreelancerProfile.Common.DTOs;
 using Application.Features.Profiles.FreelancerProfile.GetFreelancerProfile.DTOs;
 using Application.Features.Profiles.FreelancerProfile.GetFreelancers.DTOs;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+using Domain.Enums.Premium;
+using Domain.Enums.Reviews;
+using Domain.Enums.Subscriptions;
 using Domain.Services;
 using MediatR;
 using Microsoft.EntityFrameworkCore;

@@ -1,4 +1,5 @@
-﻿using Microsoft.EntityFrameworkCore.Migrations;
+using Domain.Enums.Wallets;
+using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 

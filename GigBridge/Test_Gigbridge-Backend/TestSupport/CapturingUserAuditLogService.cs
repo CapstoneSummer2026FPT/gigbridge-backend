@@ -1,5 +1,6 @@
-using Application.Common.Interfaces.IService;
-using Domain.Enums;
+using Application.Common.InternalServices.Auditing.Interfaces;
+using Domain.Enums.Accounts;
+using Domain.Enums.Auditing;
 
 namespace Test_Gigbridge_Backend.TestSupport;
 

@@ -1,6 +1,7 @@
 using Application.Features.Chat.Common.Messages.GetConversationMessages.DTOs;
 using Application.Features.Chat.Common.Schedules;
-using Domain.Enums;
+using Domain.Enums.Chat;
+using Domain.Enums.Disputes;
 
 namespace Application.Features.Chat.Common.Messages.Send.DTOs;
 

@@ -1,9 +1,11 @@
 using Application.Common.Exceptions;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Time;
+using Application.Features.Notifications.Common.Interfaces;
 using Application.Features.Proposals.Common.UpdateProposalStatus.Commands;
 using Application.Features.Proposals.Common.UpdateProposalStatus.Commands.DTOs;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Contracts;
+using Domain.Enums.Notifications;
 using Microsoft.EntityFrameworkCore;
 using Test_Gigbridge_Backend.TestSupport;
 
