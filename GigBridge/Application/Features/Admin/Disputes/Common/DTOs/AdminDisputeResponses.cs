@@ -134,6 +134,20 @@ public sealed record AdminAuditEventResponse(
     string? NewValues,
     DateTime CreatedAt);
 
+public sealed record AdminUserAuditEventResponse(
+    Guid AuditLogUserId,
+    Guid UserId,
+    string? UserName,
+    int Role,
+    int ActionType,
+    Guid ContractId,
+    Guid? MilestoneId,
+    string? MilestoneTitle,
+    Guid? ReportId,
+    Guid? DisputeId,
+    string Description,
+    DateTime CreatedAt);
+
 public sealed record AdminMilestoneDecisionResponse(
     Guid DecisionId,
     Guid MilestoneId,
@@ -199,4 +213,5 @@ public sealed record AdminDisputeDetailResponse(
     IReadOnlyList<AdminAuditEventResponse> AuditTrail,
     IReadOnlyList<AdminMilestoneDecisionResponse> MilestoneDecisions,
     IReadOnlyList<AdminDisputePenaltyResponse> Penalties,
-    Guid? ResolutionAuditId);
+    Guid? ResolutionAuditId,
+    IReadOnlyList<AdminUserAuditEventResponse> UserActionTimeline);

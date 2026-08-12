@@ -16,13 +16,16 @@ public sealed class ApproveMilestoneCommandHandler :
 {
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
+    private readonly IUserAuditLogService _userAuditLog;
 
     public ApproveMilestoneCommandHandler(
         IApplicationDbContext context,
-        IDateTimeService dateTimeService)
+        IDateTimeService dateTimeService,
+        IUserAuditLogService userAuditLog)
     {
         _context = context;
         _dateTimeService = dateTimeService;
+        _userAuditLog = userAuditLog;
     }
 
     public async Task<ContractMilestoneResponse> Handle(
@@ -65,16 +68,7 @@ public sealed class ApproveMilestoneCommandHandler :
         var milestones = await MilestoneWorkflowGuard.OrderMilestones(
                 _context.Set<Milestone>().Where(item => item.ContractsId == contract.ContractsId))
             .ToListAsync(cancellationToken);
-        var next = milestones.FirstOrDefault(candidate =>
-            candidate.Status == (int)MilestoneStatus.Pending &&
-            milestones.Where(previous => (previous.SortOrder ?? 0) < (candidate.SortOrder ?? 0))
-                .All(previous => previous.Status == (int)MilestoneStatus.Approved));
-        if (next is not null)
-        {
-            next.Status = (int)MilestoneStatus.InProgress;
-            next.StartedAt = now;
-            next.UpdatedAt = now;
-        }
+        MilestoneWorkflowGuard.AdvanceNextMilestone(milestones, now);
 
         await ContractConversationEvents.AddSystemMessageAsync(
             _context,
@@ -82,6 +76,14 @@ public sealed class ApproveMilestoneCommandHandler :
             $"Milestone approved: {milestone.Title}.",
             now,
             cancellationToken);
+
+        _userAuditLog.Add(
+            command.UserId,
+            UserRole.Client,
+            AuditUserActionType.MilestoneApproved,
+            contract.ContractsId,
+            $"Approved milestone: {milestone.Title}.",
+            milestoneId: milestone.MilestonesId);
 
         await _context.SaveChangesAsync(cancellationToken);
 

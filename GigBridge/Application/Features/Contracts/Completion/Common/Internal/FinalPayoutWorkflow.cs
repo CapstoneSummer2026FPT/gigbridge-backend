@@ -18,7 +18,7 @@ internal static class FinalPayoutWorkflow
         CancellationToken cancellationToken)
     {
         var remaining = milestones
-            .Select(item => (Milestone: item, Amount: Math.Max(0m, item.Amount - item.ReleasedAmount)))
+            .Select(item => (Milestone: item, Amount: Math.Max(0m, item.Amount - item.RefundedAmount - item.ReleasedAmount)))
             .Where(item => item.Amount > 0m)
             .ToList();
         var releaseVnd = remaining.Sum(item => item.Amount);

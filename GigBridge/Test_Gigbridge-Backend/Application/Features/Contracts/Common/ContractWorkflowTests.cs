@@ -160,11 +160,13 @@ public class ContractWorkflowTests
         Assert.Equal((int)ContractStatus.PendingContractConfirmation, fixture.Contract.Status);
         fixture.AddTemplate();
 
+        var confirmUserAuditLog = new CapturingUserAuditLogService();
         var confirmHandler = new ConfirmContractDetailsCommandHandler(
             fixture.Context,
             new FixedDateTimeService(fixture.Now.AddMinutes(1)),
             new NoopChatRealtimeNotifier(),
-            fixture.DocumentGenerator);
+            fixture.DocumentGenerator,
+            confirmUserAuditLog);
 
         await confirmHandler.Handle(
             new ConfirmContractDetailsCommand(fixture.ContractId, fixture.FreelancerUserId),
@@ -181,6 +183,13 @@ public class ContractWorkflowTests
         Assert.Single(fixture.EsignDocuments.Entities);
         Assert.NotNull(fixture.EsignDocuments.Entities[0].ContractSnapshotJson);
         Assert.Equal((int)ContractStatus.PendingSignature, fixture.Contract.Status);
+
+        // Only the first, successful confirmation should have created an audit log entry.
+        var auditEntry = Assert.Single(confirmUserAuditLog.Entries);
+        Assert.Equal(fixture.FreelancerUserId, auditEntry.UserId);
+        Assert.Equal(UserRole.Freelancer, auditEntry.Role);
+        Assert.Equal(AuditUserActionType.ConfirmedParticipation, auditEntry.ActionType);
+        Assert.Equal(fixture.ContractId, auditEntry.ContractId);
     }
 
     [Fact]
@@ -189,11 +198,13 @@ public class ContractWorkflowTests
         var fixture = new ContractWorkflowFixture();
         fixture.MoveToPendingSignatureWithDocument();
 
+        var fundUserAuditLog = new CapturingUserAuditLogService();
         var handler = new FundContractEscrowCommandHandler(
             fixture.Context,
             new FixedDateTimeService(fixture.Now),
             new NoopNotificationService(),
-            new NoopChatRealtimeNotifier());
+            new NoopChatRealtimeNotifier(),
+            fundUserAuditLog);
 
         await Assert.ThrowsAsync<BadRequestException>(() =>
             handler.Handle(
@@ -245,6 +256,13 @@ public class ContractWorkflowTests
         Assert.Equal(1_000_000m, hold.TokenAmount);
         Assert.Equal(1_000_000m, hold.VndAmount);
         Assert.Single(fixture.EscrowTransactions.Entities);
+
+        // Three prior failed attempts must not have created any audit log entries.
+        var auditEntry = Assert.Single(fundUserAuditLog.Entries);
+        Assert.Equal(fixture.ClientUserId, auditEntry.UserId);
+        Assert.Equal(UserRole.Client, auditEntry.Role);
+        Assert.Equal(AuditUserActionType.EscrowFunded, auditEntry.ActionType);
+        Assert.Equal(fixture.ContractId, auditEntry.ContractId);
     }
 
     [Fact]
@@ -268,7 +286,8 @@ public class ContractWorkflowTests
             fixture.Context,
             new FixedDateTimeService(fixture.Now),
             new NoopNotificationService(),
-            new NoopChatRealtimeNotifier());
+            new NoopChatRealtimeNotifier(),
+            new CapturingUserAuditLogService());
 
         var result = await handler.Handle(
             new FundContractEscrowCommand(fixture.ContractId, fixture.ClientUserId),
@@ -323,7 +342,8 @@ public class ContractWorkflowTests
             fixture.Context,
             new FixedDateTimeService(fixture.Now),
             new NoopNotificationService(),
-            new NoopChatRealtimeNotifier());
+            new NoopChatRealtimeNotifier(),
+            new CapturingUserAuditLogService());
 
         var result = await handler.Handle(
             new FundContractEscrowCommand(fixture.ContractId, fixture.ClientUserId),
@@ -371,7 +391,8 @@ public class ContractWorkflowTests
             fixture.Context,
             new FixedDateTimeService(fixture.Now),
             new NoopNotificationService(),
-            new NoopChatRealtimeNotifier());
+            new NoopChatRealtimeNotifier(),
+            new CapturingUserAuditLogService());
 
         var first = await handler.Handle(
             new FundContractEscrowCommand(fixture.ContractId, fixture.ClientUserId),
@@ -413,7 +434,8 @@ public class ContractWorkflowTests
             fixture.Context,
             new FixedDateTimeService(fixture.Now),
             new NoopNotificationService(),
-            new NoopChatRealtimeNotifier());
+            new NoopChatRealtimeNotifier(),
+            new CapturingUserAuditLogService());
 
         // 600,000 deposited + 400,000 earned = 1,000,000, but the 10,000-token fee pushes it over.
         await Assert.ThrowsAsync<BadRequestException>(() =>
@@ -447,7 +469,8 @@ public class ContractWorkflowTests
             fixture.Context,
             new FixedDateTimeService(fixture.Now),
             new NoopNotificationService(),
-            new NoopChatRealtimeNotifier());
+            new NoopChatRealtimeNotifier(),
+            new CapturingUserAuditLogService());
 
         var result = await handler.Handle(
             new FundContractEscrowCommand(fixture.ContractId, fixture.ClientUserId),
@@ -487,7 +510,8 @@ public class ContractWorkflowTests
             fixture.Context,
             new FixedDateTimeService(fixture.Now),
             new NoopNotificationService(),
-            new NoopChatRealtimeNotifier());
+            new NoopChatRealtimeNotifier(),
+            new CapturingUserAuditLogService());
 
         var exception = await Assert.ThrowsAsync<BadRequestException>(() => handler.Handle(
             new FundContractEscrowCommand(fixture.ContractId, fixture.ClientUserId),
@@ -521,7 +545,8 @@ public class ContractWorkflowTests
             missingFreelancerFixture.Context,
             new FixedDateTimeService(missingFreelancerFixture.Now),
             new NoopNotificationService(),
-            new NoopChatRealtimeNotifier());
+            new NoopChatRealtimeNotifier(),
+            new CapturingUserAuditLogService());
 
         await Assert.ThrowsAsync<BadRequestException>(() =>
             missingFreelancerHandler.Handle(
@@ -536,7 +561,8 @@ public class ContractWorkflowTests
             missingClientFixture.Context,
             new FixedDateTimeService(missingClientFixture.Now),
             new NoopNotificationService(),
-            new NoopChatRealtimeNotifier());
+            new NoopChatRealtimeNotifier(),
+            new CapturingUserAuditLogService());
 
         await Assert.ThrowsAsync<BadRequestException>(() =>
             missingClientHandler.Handle(
@@ -553,18 +579,20 @@ public class ContractWorkflowTests
         var fixture = new ContractWorkflowFixture();
         fixture.MoveToPendingSignatureWithDocument();
 
+        var signUserAuditLog = new CapturingUserAuditLogService();
         var handler = new SignContractCommandHandler(
             fixture.Context,
             new FixedDateTimeService(fixture.Now),
             new NoopChatRealtimeNotifier(),
             fixture.MediaService,
-            fixture.DocumentGenerator);
+            fixture.DocumentGenerator,
+            signUserAuditLog);
 
         await handler.Handle(
             new SignContractCommand(
                 fixture.ContractId,
                 fixture.ClientUserId,
-                new SignContractRequest(SignatureDataUri, 300, 100),
+                new SignContractRequest(SignatureDataUri, 300, 100, true, "Ver 1.0 Gigbridge"),
                 "127.0.0.1",
                 "test"),
             CancellationToken.None);
@@ -584,7 +612,7 @@ public class ContractWorkflowTests
                 new SignContractCommand(
                     fixture.ContractId,
                     fixture.ClientUserId,
-                    new SignContractRequest(SignatureDataUri, null, null),
+                    new SignContractRequest(SignatureDataUri, null, null, true, "Ver 1.0 Gigbridge"),
                     null,
                     null),
                 CancellationToken.None));
@@ -593,7 +621,7 @@ public class ContractWorkflowTests
             new SignContractCommand(
                 fixture.ContractId,
                 fixture.FreelancerUserId,
-                new SignContractRequest(SignatureDataUri, 300, 100),
+                new SignContractRequest(SignatureDataUri, 300, 100, true, "Ver 1.0 Gigbridge"),
                 "127.0.0.1",
                 "test"),
             CancellationToken.None);
@@ -612,6 +640,15 @@ public class ContractWorkflowTests
         Assert.Equal(2, fixture.MediaService.Uploads.Count);
         Assert.Equal(4, fixture.EsignDocuments.Entities[0].FinalizedDocumentContent?.Length);
         Assert.Equal(4L, fixture.EsignDocuments.Entities[0].FinalizedDocumentSizeBytes);
+
+        // Two successful signatures (client, freelancer); the ConflictException retry logs nothing.
+        Assert.Equal(2, signUserAuditLog.Entries.Count);
+        Assert.Equal(fixture.ClientUserId, signUserAuditLog.Entries[0].UserId);
+        Assert.Equal(UserRole.Client, signUserAuditLog.Entries[0].Role);
+        Assert.Equal(AuditUserActionType.SignedEsignContract, signUserAuditLog.Entries[0].ActionType);
+        Assert.Equal(fixture.FreelancerUserId, signUserAuditLog.Entries[1].UserId);
+        Assert.Equal(UserRole.Freelancer, signUserAuditLog.Entries[1].Role);
+        Assert.Equal(AuditUserActionType.SignedEsignContract, signUserAuditLog.Entries[1].ActionType);
         Assert.EndsWith(".docx", fixture.EsignDocuments.Entities[0].FinalizedDocumentFileName);
         Assert.Equal(64, fixture.EsignDocuments.Entities[0].DocumentHash?.Length);
         Assert.Single(fixture.DocumentGenerator.GenerateCalls);
@@ -712,13 +749,14 @@ public class ContractWorkflowTests
             new FixedDateTimeService(fixture.Now),
             new NoopChatRealtimeNotifier(),
             mediaService,
-            fixture.DocumentGenerator);
+            fixture.DocumentGenerator,
+            new CapturingUserAuditLogService());
 
         var result = await handler.Handle(
             new SignContractCommand(
                 fixture.ContractId,
                 fixture.FreelancerUserId,
-                new SignContractRequest(SignatureDataUri, 300, 100),
+                new SignContractRequest(SignatureDataUri, 300, 100, true, "Ver 1.0 Gigbridge"),
                 "127.0.0.1",
                 "test"),
             CancellationToken.None);
@@ -741,6 +779,36 @@ public class ContractWorkflowTests
         Assert.Single(mediaService.Uploads);
     }
 
+    [Theory]
+    [InlineData(false, null)]
+    [InlineData(true, null)]
+    [InlineData(true, "0.9")]
+    public async Task SignContract_RejectsMissingOrWrongPolicyAcceptance(bool accepted, string? version)
+    {
+        var fixture = new ContractWorkflowFixture();
+        fixture.MoveToPendingSignatureWithDocument();
+        var handler = new SignContractCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopChatRealtimeNotifier(),
+            fixture.MediaService,
+            fixture.DocumentGenerator,
+            new CapturingUserAuditLogService());
+
+        await Assert.ThrowsAsync<BadRequestException>(() =>
+            handler.Handle(
+                new SignContractCommand(
+                    fixture.ContractId,
+                    fixture.ClientUserId,
+                    new SignContractRequest(SignatureDataUri, 300, 100, accepted, version),
+                    null,
+                    null),
+                CancellationToken.None));
+
+        Assert.Empty(fixture.MediaService.Uploads);
+        Assert.Empty(fixture.EsignSignatures.Entities);
+    }
+
     [Fact]
     public async Task SignContract_RejectsInvalidSignatureDataUri()
     {
@@ -752,14 +820,15 @@ public class ContractWorkflowTests
             new FixedDateTimeService(fixture.Now),
             new NoopChatRealtimeNotifier(),
             fixture.MediaService,
-            fixture.DocumentGenerator);
+            fixture.DocumentGenerator,
+            new CapturingUserAuditLogService());
 
         await Assert.ThrowsAsync<BadRequestException>(() =>
             handler.Handle(
                 new SignContractCommand(
                     fixture.ContractId,
                     fixture.ClientUserId,
-                    new SignContractRequest("not-base64", null, null),
+                    new SignContractRequest("not-base64", null, null, true, "Ver 1.0 Gigbridge"),
                     null,
                     null),
                 CancellationToken.None));
@@ -858,7 +927,8 @@ public class ContractWorkflowTests
             fixture.Context,
             new FixedDateTimeService(fixture.Now.AddMinutes(2)),
             new NoopChatRealtimeNotifier(),
-            fixture.DocumentGenerator);
+            fixture.DocumentGenerator,
+            new CapturingUserAuditLogService());
         await confirmHandler.Handle(
             new ConfirmContractDetailsCommand(fixture.ContractId, fixture.FreelancerUserId),
             CancellationToken.None);

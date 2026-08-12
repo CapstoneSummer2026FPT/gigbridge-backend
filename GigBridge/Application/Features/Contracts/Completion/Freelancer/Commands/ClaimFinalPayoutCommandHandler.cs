@@ -59,7 +59,7 @@ public sealed class ClaimFinalPayoutCommandHandler : IRequestHandler<ClaimFinalP
             .OrderBy(item => item.SortOrder ?? int.MaxValue)
             .ThenBy(item => item.CreatedAt)
             .ToListAsync(cancellationToken);
-        if (milestones.Count == 0 || milestones.Any(item => item.Status != (int)MilestoneStatus.Approved))
+        if (milestones.Count == 0 || milestones.Any(item => item.Status is not ((int)MilestoneStatus.Approved or (int)MilestoneStatus.Completed)))
             throw new BadRequestException("All milestones must be approved before claiming the final payout.");
 
         var milestoneTotal = milestones.Sum(item => item.Amount);

@@ -141,7 +141,60 @@ public sealed class UpdateAdminDisputeStatusCommandHandler :
 
         dispute.Status = (int)command.Status;
         dispute.UpdatedAt = now;
+
+        // When the dispute is closed, lock the dispute conversation so no party can send
+        // messages anymore. If the contract was terminated during resolution, the workspace
+        // conversation is locked as well. SendMessageCommandHandler rejects any send against
+        // a non-active conversation, so closing the status is the entire enforcement.
+        Message? closeSystemMessage = null;
+        if (command.Status == DisputeStatus.Closed)
+        {
+            var conversations = await _context.Set<Conversation>()
+                .Where(c => c.ContractsId == dispute.ContractsId)
+                .ToListAsync(cancellationToken);
+
+            var contractTerminated = dispute.Contracts.Status == (int)ContractStatus.Cancelled;
+            foreach (var conversation in conversations)
+            {
+                var isDisputeConversation = conversation.DisputesId == dispute.DisputesId;
+                var isWorkspaceConversation =
+                    conversation.ConversationType == (int)ConversationType.ContractWorkroom &&
+                    !conversation.DisputesId.HasValue;
+
+                if (isDisputeConversation || (contractTerminated && isWorkspaceConversation))
+                {
+                    conversation.Status = (int)ConversationStatus.Closed;
+                    conversation.UpdatedAt = now;
+
+                    if (isDisputeConversation)
+                    {
+                        closeSystemMessage = ContractConversationEvents.AddSystemMessage(
+                            _context,
+                            conversation,
+                            "This dispute has been closed. The conversation is locked.",
+                            now);
+                    }
+                }
+            }
+        }
+
         await _context.SaveChangesAsync(cancellationToken);
+
+        if (closeSystemMessage is not null)
+        {
+            try
+            {
+                await _chatRealtimeNotifier.SendConversationEventAsync(
+                    closeSystemMessage.ConversationsId,
+                    "ReceiveMessage",
+                    BuildSystemMessagePayload(closeSystemMessage),
+                    cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "Failed to notify conversation for dispute closure.");
+            }
+        }
 
         // Send notification
         var statusLabel = StatusLabels.GetValueOrDefault(

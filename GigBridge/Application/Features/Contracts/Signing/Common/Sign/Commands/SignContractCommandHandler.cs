@@ -20,6 +20,7 @@ public sealed class SignContractCommandHandler :
     private readonly IChatRealtimeNotifier _chatRealtimeNotifier;
     private readonly IMediaService _mediaService;
     private readonly IContractEsignDocumentGenerator _documentGenerator;
+    private readonly IUserAuditLogService _userAuditLog;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public SignContractCommandHandler(
@@ -27,13 +28,15 @@ public sealed class SignContractCommandHandler :
         IDateTimeService dateTimeService,
         IChatRealtimeNotifier chatRealtimeNotifier,
         IMediaService mediaService,
-        IContractEsignDocumentGenerator documentGenerator)
+        IContractEsignDocumentGenerator documentGenerator,
+        IUserAuditLogService userAuditLog)
     {
         _context = context;
         _dateTimeService = dateTimeService;
         _chatRealtimeNotifier = chatRealtimeNotifier;
         _mediaService = mediaService;
         _documentGenerator = documentGenerator;
+        _userAuditLog = userAuditLog;
     }
 
     public async Task<ContractWorkflowResponse> Handle(
@@ -174,6 +177,15 @@ public sealed class SignContractCommandHandler :
             document.Status = (int)ESignDocumentStatus.PartiallySigned;
             document.UpdatedAt = now;
         }
+
+        _userAuditLog.Add(
+            command.UserId,
+            signerRole == ESignerRole.Client ? UserRole.Client : UserRole.Freelancer,
+            AuditUserActionType.SignedEsignContract,
+            contract.ContractsId,
+            isFullySigned ? "Signed the e-sign contract; both parties have now signed." : "Signed the e-sign contract.",
+            relatedEntityId: document.EsignDocumentsId,
+            relatedEntityType: nameof(EsignDocument));
 
         await _context.SaveChangesAsync(cancellationToken);
 

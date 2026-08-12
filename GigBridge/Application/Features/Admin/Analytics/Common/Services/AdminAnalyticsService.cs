@@ -57,6 +57,14 @@ public sealed class AdminAnalyticsService : IAdminAnalyticsService
             .Select(x => new { x.NetVndAmount, At = x.CompletedAt ?? x.CreatedAt }).ToListAsync(cancellationToken);
         var comparisonTopUps = await SumTopUps(range.ComparisonFromUtc, range.ComparisonToUtc, cancellationToken);
         var comparisonWithdrawals = await SumWithdrawals(range.ComparisonFromUtc, range.ComparisonToUtc, cancellationToken);
+        // Dispute penalties are retained from the client's escrow but never credited to any
+        // wallet or PlatformRevenueEvent (see DisputePenalty.ClientDebitWalletTransactionId
+        // doc comment) — they're tracked here directly from the DisputePenalty ledger so
+        // admins can see how much has been withheld, without conflating it with real revenue.
+        var totalPenaltiesVnd = TokenWalletRules.ToVnd(
+            await SumDisputePenalties(range.CurrentFromUtc, range.CurrentToUtc, cancellationToken));
+        var previousPenaltiesVnd = TokenWalletRules.ToVnd(
+            await SumDisputePenalties(range.ComparisonFromUtc, range.ComparisonToUtc, cancellationToken));
 
         var revenue = current.Sum(x => x.VndEquivalent);
         var previousRevenue = comparison.Sum(x => x.VndEquivalent);
@@ -77,7 +85,8 @@ public sealed class AdminAnalyticsService : IAdminAnalyticsService
             Kpi("contractTakeRate", gmv == 0 ? 0 : contractFees / gmv * 100m,
                 comparisonGmv == 0 ? 0 : previousContractFees / comparisonGmv * 100m, "percent"),
             Kpi("marketplaceGmv", gmv, comparisonGmv, "VND"),
-            Kpi("netCashMovement", cash, previousCash, "VND")
+            Kpi("netCashMovement", cash, previousCash, "VND"),
+            Kpi("totalDisputePenalties", totalPenaltiesVnd, previousPenaltiesVnd, "VND")
         };
 
         var sources = current.GroupBy(x => x.Source).Select(group => new AnalyticsBreakdown(
@@ -618,6 +627,13 @@ public sealed class AdminAnalyticsService : IAdminAnalyticsService
         await _context.Set<WalletWithdrawal>().AsNoTracking()
             .Where(x => x.Status == (int)WithdrawalStatus.Success && (x.CompletedAt ?? x.CreatedAt) >= from && (x.CompletedAt ?? x.CreatedAt) < to)
             .SumAsync(x => (decimal?)x.NetVndAmount, ct) ?? 0m;
+
+    /// <summary>Sum of DisputePenalty.Amount (G-coin) in range — the source of truth for
+    /// admin-imposed dispute penalties, independent of PlatformRevenueEvent.</summary>
+    private async Task<decimal> SumDisputePenalties(DateTime from, DateTime to, CancellationToken ct) =>
+        await _context.Set<DisputePenalty>().AsNoTracking()
+            .Where(x => x.CreatedAt >= from && x.CreatedAt < to)
+            .SumAsync(x => (decimal?)x.Amount, ct) ?? 0m;
 
     private async Task<AnalyticsResponseMeta> BuildMeta(ResolvedAdminAnalyticsRange range, CancellationToken ct)
     {

@@ -16,15 +16,18 @@ public sealed class RequestMilestoneUnlockCommandHandler :
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
     private readonly INotificationService _notificationService;
+    private readonly IUserAuditLogService _userAuditLog;
 
     public RequestMilestoneUnlockCommandHandler(
         IApplicationDbContext context,
         IDateTimeService dateTimeService,
-        INotificationService notificationService)
+        INotificationService notificationService,
+        IUserAuditLogService userAuditLog)
     {
         _context = context;
         _dateTimeService = dateTimeService;
         _notificationService = notificationService;
+        _userAuditLog = userAuditLog;
     }
 
     public async Task Handle(
@@ -111,6 +114,14 @@ public sealed class RequestMilestoneUnlockCommandHandler :
             milestone.MilestonesId,
             "Milestone",
             cancellationToken);
+
+        _userAuditLog.Add(
+            command.UserId,
+            UserRole.Freelancer,
+            AuditUserActionType.RequestedEarlyStart,
+            contract.ContractsId,
+            $"Requested early start on milestone: {milestone.Title}.",
+            milestoneId: milestone.MilestonesId);
 
         await _context.SaveChangesAsync(cancellationToken);
     }
