@@ -188,6 +188,7 @@ public static class DependencyInjection
         services.AddScoped<IWordToPdfConverter, WordToPdfConverter>();
         services.AddScoped<IAuthEmailSender, AuthEmailSender>();
         services.AddSingleton<IScheduleEmailRenderer, ScheduleEmailRenderer>();
+        services.AddSingleton<ISignedEmailRenderer, SignedEmailRenderer>();
         services.AddSingleton<IProposalNegotiationEmailRenderer, ProposalNegotiationEmailRenderer>();
         services.AddSingleton<IJobAcceptanceEmailRenderer, JobAcceptanceEmailRenderer>();
         services.AddSingleton<IJobInvitationEmailRenderer, JobInvitationEmailRenderer>();

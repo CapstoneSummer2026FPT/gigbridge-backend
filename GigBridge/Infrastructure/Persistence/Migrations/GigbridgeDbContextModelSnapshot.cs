@@ -2088,6 +2088,13 @@ namespace Infrastructure.Persistence.Migrations
                         .HasMaxLength(45)
                         .HasColumnType("character varying(45)");
 
+                    b.Property<string>("IdentityOrTaxCode")
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)");
+
+                    b.Property<DateTime?>("DraftSubmittedAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<DateTime?>("PolicyAcceptedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -2120,6 +2127,9 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.Property<string>("UserAgent")
                         .HasColumnType("text");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid")

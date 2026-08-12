@@ -1051,6 +1051,7 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.EsignDocumentsId).HasColumnName("ESignDocumentsId");
             entity.Property(e => e.IpAddress).HasMaxLength(45);
+            entity.Property(e => e.IdentityOrTaxCode).HasMaxLength(12);
             entity.Property(e => e.PolicyVersion).HasMaxLength(50);
             entity.Property(e => e.SignerRole).HasComment("Enum ESignerRole: 0=Client, 1=Freelancer");
             entity.Property(e => e.Status)

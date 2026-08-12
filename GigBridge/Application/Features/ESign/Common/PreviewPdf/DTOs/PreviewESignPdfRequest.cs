@@ -1,6 +1,7 @@
 namespace Application.Features.ESign.Common.PreviewPdf.DTOs;
 
 public sealed record PreviewESignPdfRequest(
-    string SignatureImageUrl,
+    string? SignatureImageUrl,
     int? SignatureWidth,
-    int? SignatureHeight);
+    int? SignatureHeight,
+    string IdentityOrTaxCode);

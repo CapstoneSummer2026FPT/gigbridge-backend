@@ -83,14 +83,13 @@ public static class DependencyInjection
         services.AddScoped<IProposalInterviewReviewService, ProposalInterviewReviewService>();
         services.AddScoped<IAdminAnalyticsService, AdminAnalyticsService>();
         services.AddScoped<IMarketplaceAnalyticsRecorder, MarketplaceAnalyticsRecorder>();
+        services.AddSingleton<DeliveryOutboxService>();
+        services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<DeliveryOutboxService>());
 
         if (BackgroundWorkerOptions.IsEnabled(configuration))
         {
             services.AddSingleton<DeadlineWarningService>();
             services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<DeadlineWarningService>());
-
-            services.AddSingleton<DeliveryOutboxService>();
-            services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<DeliveryOutboxService>());
 
             services.AddSingleton<PayoutOutboxWorker>();
             services.AddSingleton<IHostedService>(sp => sp.GetRequiredService<PayoutOutboxWorker>());

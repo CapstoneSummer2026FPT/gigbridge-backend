@@ -18,6 +18,8 @@ public partial class EsignSignature
 
     public string SignatureImageUrl { get; set; } = null!;
 
+    public string? IdentityOrTaxCode { get; set; }
+
     public int? SignatureWidth { get; set; }
 
     public int? SignatureHeight { get; set; }
@@ -41,7 +43,11 @@ public partial class EsignSignature
 
     public DateTime? PolicyAcceptedAt { get; set; }
 
+    public DateTime? DraftSubmittedAt { get; set; }
+
     public DateTime CreatedAt { get; set; }
+
+    public DateTime? UpdatedAt { get; set; }
 
     public virtual EsignDocument EsignDocuments { get; set; } = null!;
 
