@@ -1,9 +1,9 @@
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Time;
 using Application.Features.Premium.Freelancer.Promotions.DTOs;
 using Application.Features.Premium.Freelancer.Promotions.Common;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Premium;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 namespace Application.Features.Premium.Freelancer.Promotions.Feed;

@@ -1,3 +1,4 @@
+using Domain.Enums.Elo;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;

@@ -1,23 +1,24 @@
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Email;
+using Application.Features.Auth.Common.Interfaces;
+using Application.Common.Interfaces.Templates;
 using Application.Features.Auth.Shared.DTOs;
-using Microsoft.AspNetCore.Hosting;
 
 namespace Infrastructure.Services.Email;
 
 public class AuthEmailSender : IAuthEmailSender
 {
-    private const string OtpEmailTemplate = "OtpEmail.html";
-    private const string ForgotPasswordOtpEmailTemplate = "ForgotPasswordOtpEmail.html";
+    private const string OtpEmailTemplate = "Auth/Email/OtpEmail.html";
+    private const string ForgotPasswordOtpEmailTemplate = "Auth/Email/ForgotPasswordOtpEmail.html";
 
     private readonly IEmailService _emailService;
-    private readonly IWebHostEnvironment _webHostEnvironment;
+    private readonly ITemplateReader _templateReader;
 
     public AuthEmailSender(
         IEmailService emailService,
-        IWebHostEnvironment webHostEnvironment)
+        ITemplateReader templateReader)
     {
         _emailService = emailService;
-        _webHostEnvironment = webHostEnvironment;
+        _templateReader = templateReader;
     }
 
     public async Task SendOtpEmailAsync(string email, string otp, CancellationToken cancellationToken = default)
@@ -52,8 +53,7 @@ public class AuthEmailSender : IAuthEmailSender
         string tokenValue,
         CancellationToken cancellationToken)
     {
-        var path = Path.Combine(_webHostEnvironment.ContentRootPath, "Templates", templateName);
-        var body = await File.ReadAllTextAsync(path, cancellationToken);
+        var body = await _templateReader.ReadTextAsync(templateName, cancellationToken);
         return body.Replace(tokenName, tokenValue);
     }
 }

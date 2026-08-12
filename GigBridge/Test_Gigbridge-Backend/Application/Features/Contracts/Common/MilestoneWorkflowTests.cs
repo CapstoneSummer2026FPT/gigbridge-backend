@@ -1,5 +1,7 @@
 using Application.Common.Exceptions;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Media;
+using Application.Common.Interfaces.Time;
+using Application.Features.Notifications.Common.Interfaces;
 using Application.Features.Contracts.Completion.Client.Commands;
 using Application.Features.Contracts.Completion.Freelancer.Commands;
 using Application.Features.Contracts.Milestones.Client.Approve.Commands;
@@ -12,7 +14,14 @@ using Application.Features.Contracts.Milestones.Freelancer.RequestUnlock.Command
 using Application.Features.Contracts.Milestones.Freelancer.Submit.Commands;
 using Application.Features.Contracts.Milestones.Freelancer.Withdraw.Commands;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+using Domain.Enums.Auditing;
+using Domain.Enums.Chat;
+using Domain.Enums.Contracts;
+using Domain.Enums.Contracts.Escrow;
+using Domain.Enums.Contracts.Milestones;
+using Domain.Enums.Notifications;
+using Domain.Enums.Wallets;
 using NSubstitute;
 using Test_Gigbridge_Backend.TestSupport;
 

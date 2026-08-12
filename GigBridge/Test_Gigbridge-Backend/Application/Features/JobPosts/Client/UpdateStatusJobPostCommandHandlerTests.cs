@@ -1,5 +1,5 @@
 using Application.Common.Exceptions;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Time;
 using Application.Features.JobPosts.Client.UpdateStatusJobPost.Commands;
 using Application.Features.JobPosts.Client.UpdateStatusJobPost.DTOs;
 using Domain.Entities;

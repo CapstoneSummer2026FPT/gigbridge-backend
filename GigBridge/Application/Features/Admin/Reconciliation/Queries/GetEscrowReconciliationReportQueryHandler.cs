@@ -2,7 +2,7 @@ using Application.Common.Interfaces;
 using Application.Features.Admin.Reconciliation.Common.DTOs;
 using Application.Features.Admin.Reconciliation.Common.Internal;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Wallets;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 

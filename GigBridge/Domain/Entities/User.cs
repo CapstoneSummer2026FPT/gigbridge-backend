@@ -1,7 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations.Schema;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+using Domain.Enums.Subscriptions;
 
 namespace Domain.Entities;
 

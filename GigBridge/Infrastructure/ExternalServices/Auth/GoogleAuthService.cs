@@ -1,5 +1,5 @@
 using Application.Common.Exceptions;
-using Application.Common.Interfaces.IService;
+using Application.Features.Auth.Common.Interfaces;
 using Application.Features.Auth.GoogleLogin.DTOs;
 using Google.Apis.Auth;
 using Microsoft.Extensions.Configuration;

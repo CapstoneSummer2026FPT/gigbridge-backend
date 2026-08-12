@@ -1,4 +1,4 @@
-using Domain.Enums;
+using Domain.Enums.Accounts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Routing;

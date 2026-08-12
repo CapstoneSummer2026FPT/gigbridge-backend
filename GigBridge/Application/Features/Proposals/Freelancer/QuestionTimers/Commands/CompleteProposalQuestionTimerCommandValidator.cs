@@ -1,4 +1,4 @@
-using Domain.Enums;
+using Domain.Enums.Proposals;
 using FluentValidation;
 
 namespace Application.Features.Proposals.Freelancer.QuestionTimers.Commands;

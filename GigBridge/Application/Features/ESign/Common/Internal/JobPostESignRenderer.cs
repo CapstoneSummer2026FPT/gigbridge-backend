@@ -6,7 +6,7 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Features.Contracts.Common.Internal;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.ESign;
 using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.ESign.Common.Internal;

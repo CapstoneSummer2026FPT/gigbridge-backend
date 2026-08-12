@@ -1,4 +1,4 @@
-﻿namespace Application.Features.JobPosts.Client.UpdateJobPost.DTOs;
+namespace Application.Features.JobPosts.Client.UpdateJobPost.DTOs;
 
 public record UpdateJobPostRequest(
     string Title,

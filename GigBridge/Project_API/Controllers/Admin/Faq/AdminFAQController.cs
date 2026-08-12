@@ -7,7 +7,7 @@ using Application.Features.Admin.FAQs.ToggleActivity.Commands;
 using Application.Features.Admin.FAQs.Update.Commands;
 using Application.Features.Admin.FAQs.Update.DTOs;
 using Application.Features.FAQs.Shared.DTOs;
-using Domain.Enums;
+using Domain.Enums.Accounts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Project_API.Controllers.Common;

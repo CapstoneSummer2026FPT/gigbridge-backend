@@ -1,5 +1,6 @@
 using Application.Features.Contracts.Signing.Common.Sign.DTOs;
 using Infrastructure.Services.Email;
+using Test_Gigbridge_Backend.TestSupport;
 
 namespace Test_Gigbridge_Backend.Infrastructure.Email;
 
@@ -8,7 +9,7 @@ public sealed class SignedEmailRendererTests
     [Fact]
     public void Render_UsesSignedEmailTemplateAndEncodesDynamicValues()
     {
-        var renderer = new SignedEmailRenderer();
+        var renderer = new SignedEmailRenderer(TestTemplateReader.FromProjectTemplates());
 
         var result = renderer.Render(new SignedEmailModel(
             "Client <Admin>",

@@ -5,7 +5,7 @@ using Application.Features.WorkExperiences.CreateWorkExperience.Commands;
 using Application.Features.WorkExperiences.DeleteWorkExperience.Commands;
 using Application.Features.WorkExperiences.GetWorkExperiences.Queries;
 using Application.Features.WorkExperiences.UpdateWorkExperience.Commands;
-using Domain.Enums;
+using Domain.Enums.Accounts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Project_API.Controllers.Common;

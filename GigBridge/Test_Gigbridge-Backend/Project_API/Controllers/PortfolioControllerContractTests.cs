@@ -1,5 +1,5 @@
 using Application.Features.Portfolios.Common.DTOs;
-using Domain.Enums;
+using Domain.Enums.Accounts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;

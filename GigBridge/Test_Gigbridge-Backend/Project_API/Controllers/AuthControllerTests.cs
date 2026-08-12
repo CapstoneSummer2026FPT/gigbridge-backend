@@ -30,7 +30,7 @@ using NSubstitute;
 using Project_API.Controllers.Auth;
 using Project_API.Security;
 using Xunit;
-using Domain.Enums;
+using Domain.Enums.Accounts;
 
 namespace Test_Gigbridge_Backend.Project_API.Controllers;
 

@@ -10,7 +10,8 @@ using Application.Features.Admin.Elo.Queries.GetEloAppealDetail;
 using Application.Features.Admin.Elo.Queries.GetEloAppeals;
 using Application.Features.Admin.Elo.Queries.GetEloPolicy;
 using Application.Features.Elo.DTOs;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+using Domain.Enums.Elo;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 

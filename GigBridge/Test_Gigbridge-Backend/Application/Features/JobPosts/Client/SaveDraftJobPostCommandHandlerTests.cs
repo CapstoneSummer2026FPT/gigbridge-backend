@@ -1,5 +1,5 @@
 using Application.Common.Exceptions;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Time;
 using Application.Features.JobPosts.Client.SaveDraftJobPost.Commands;
 using Application.Features.JobPosts.Client.SaveDraftJobPost.DTOs;
 using Application.Features.JobPosts.Common.DTOs;

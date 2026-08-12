@@ -6,7 +6,7 @@ using Application.Features.Chat.Common.Conversations.MarkAsRead.Commands;
 using MediatR;
 using Application.Common.Interfaces;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Chat;
 using Microsoft.EntityFrameworkCore;
 
 namespace Project_API.Hubs;

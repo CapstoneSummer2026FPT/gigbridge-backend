@@ -78,7 +78,7 @@ public static class PromotionPolicy
     {
         var campaigns = await context.Set<FreelancerProfilePromotion>()
             .Where(item => item.QueuePosition > 0 ||
-                           (item.Status == Domain.Enums.PromotionStatus.Active &&
+                           (item.Status == Domain.Enums.Premium.PromotionStatus.Active &&
                             item.StartTime <= now &&
                             item.EndTime > now))
             .ToListAsync(cancellationToken);
@@ -98,7 +98,7 @@ public static class PromotionPolicy
         IEnumerable<FreelancerProfilePromotion> campaigns,
         DateTime now) =>
         campaigns
-            .Where(item => item.Status == Domain.Enums.PromotionStatus.Active &&
+            .Where(item => item.Status == Domain.Enums.Premium.PromotionStatus.Active &&
                            item.StartTime <= now &&
                            item.EndTime > now)
             .OrderByDescending(item => item.BoostWeight)

@@ -1,10 +1,12 @@
+using Application.Features.Chat.Common.Models;
 using Application.Common.Exceptions;
-using Application.Common.Interfaces.IService;
+using Application.Features.Chat.Common.Interfaces;
 using Application.Features.Chat.Common.Messages.CreateGoogleMeet;
 using Application.Features.Chat.Common.Messages.Send.Commands;
 using Application.Features.Chat.Common.Messages.Send.DTOs;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+using Domain.Enums.Chat;
 using Infrastructure.Persistence;
 using MediatR;
 using Microsoft.EntityFrameworkCore;

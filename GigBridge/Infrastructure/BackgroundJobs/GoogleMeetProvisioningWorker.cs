@@ -1,10 +1,10 @@
 using System.Globalization;
 using System.Text.Json;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Features.Chat.Common.Interfaces;
 using Application.Features.Chat.Common.Schedules;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Chat;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;

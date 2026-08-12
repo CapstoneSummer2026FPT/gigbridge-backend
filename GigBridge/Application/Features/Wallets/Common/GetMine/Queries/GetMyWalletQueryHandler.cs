@@ -1,5 +1,5 @@
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Time;
 using Application.Features.Wallets.Common;
 using Application.Features.Wallets.Common.DTOs;
 using MediatR;

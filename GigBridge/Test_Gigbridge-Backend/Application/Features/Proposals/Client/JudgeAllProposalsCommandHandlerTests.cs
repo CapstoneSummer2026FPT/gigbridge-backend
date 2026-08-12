@@ -4,7 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Application.Common.Exceptions;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Ai;
 using Application.Common.Models.Ai;
 using Application.Features.Proposals.Client.JudgeAllProposals;
 using Domain.Entities;

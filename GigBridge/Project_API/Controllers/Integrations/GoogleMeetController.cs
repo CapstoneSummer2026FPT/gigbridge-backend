@@ -1,4 +1,4 @@
-using Application.Common.Interfaces.IService;
+using Application.Features.Chat.Common.Interfaces;
 using Application.Common.Models;
 using Application.Features.Chat.Common.Messages.CreateGoogleMeet;
 using Application.Features.Chat.Common.Messages.Send.DTOs;

@@ -10,7 +10,7 @@ using Application.Features.Profiles.ClientProfile.UpdateClientProfile.DTOs;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Project_API.Controllers.Common;
-using Domain.Enums;
+using Domain.Enums.Accounts;
 
 namespace Project_API.Controllers.Profiles.Client;
 

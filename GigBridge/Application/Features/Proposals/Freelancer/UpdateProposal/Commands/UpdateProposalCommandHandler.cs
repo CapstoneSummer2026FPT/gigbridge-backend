@@ -1,6 +1,6 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Time;
 using Application.Features.Proposals.Common;
 using Domain.Entities;
 using MediatR;
@@ -82,7 +82,7 @@ public class UpdateProposalCommandHandler : IRequestHandler<UpdateProposalComman
 
         ProposalModerationGuard.EnsureActive(proposal);
 
-        if (proposal.Status != (int)Domain.Enums.ProposalStatus.Draft)
+        if (proposal.Status != (int)Domain.Enums.Proposals.ProposalStatus.Draft)
         {
             throw new BadRequestException("Only draft proposals can be updated.");
         }

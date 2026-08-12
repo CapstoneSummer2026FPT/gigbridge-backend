@@ -3,7 +3,7 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Features.Elo.DTOs;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Elo;
 using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.Elo.Common;

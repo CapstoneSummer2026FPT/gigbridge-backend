@@ -3,8 +3,9 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
-using Application.Common.Interfaces.IService;
-using Application.Common.Services;
+using Application.Common.Interfaces.Templates;
+using Application.Features.ESign.Common.Interfaces;
+using Application.Features.ESign.Common.Services;
 using Application.Features.Contracts.Common.DTOs;
 using Domain.Services.Payments;
 using DocumentFormat.OpenXml;
@@ -17,9 +18,11 @@ using PIC = DocumentFormat.OpenXml.Drawing.Pictures;
 
 namespace Infrastructure.Services.ESign;
 
-public sealed class ContractEsignDocumentGenerator(HttpClient httpClient) : IContractEsignDocumentGenerator
+public sealed class ContractEsignDocumentGenerator(
+    HttpClient httpClient,
+    ITemplateReader templateReader) : IContractEsignDocumentGenerator
 {
-    private const string ResourceName = "Infrastructure.Templates.ESign.GigBridge_Hop_dong_Esign_Template.docx";
+    private const string TemplatePath = "ESign/Documents/GigBridge_Hop_dong_Esign_Template.docx";
     private const string DocxMimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
     private const int MaxSignatureBytes = 5 * 1024 * 1024;
     private static readonly CultureInfo VietnamCulture = CultureInfo.GetCultureInfo("vi-VN");
@@ -94,14 +97,13 @@ public sealed class ContractEsignDocumentGenerator(HttpClient httpClient) : ICon
             DocxMimeType);
     }
 
-    private static byte[] Render(
+    private byte[] Render(
         ContractDocumentSnapshot snapshot,
         SignatureArtifact? clientSignature,
         SignatureArtifact? freelancerSignature,
         string documentHash)
     {
-        using var template = typeof(ContractEsignDocumentGenerator).Assembly.GetManifestResourceStream(ResourceName)
-            ?? throw new InvalidOperationException($"Embedded ESign template '{ResourceName}' was not found.");
+        using var template = templateReader.OpenRead(TemplatePath);
         using var output = new MemoryStream();
         template.CopyTo(output);
         output.Position = 0;

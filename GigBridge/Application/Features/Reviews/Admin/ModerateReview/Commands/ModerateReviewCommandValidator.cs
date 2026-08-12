@@ -1,4 +1,4 @@
-using Domain.Enums;
+using Domain.Enums.Reviews;
 using FluentValidation;
 
 namespace Application.Features.Reviews.Admin.ModerateReview.Commands;

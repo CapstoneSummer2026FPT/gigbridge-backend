@@ -1,5 +1,5 @@
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Time;
 using Application.Features.Admin.Users.CreateNewUser.DTOs;
 using Application.Features.Admin.Users.Shared.DTOs;
 using AutoMapper;

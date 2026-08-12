@@ -1,6 +1,7 @@
+using Application.Features.Chat.Common.Models;
 using System.Text;
 using System.Text.Json;
-using Application.Common.Interfaces.IService;
+using Application.Features.Chat.Common.Interfaces;
 using Infrastructure.ExternalServices.GoogleMeet;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;

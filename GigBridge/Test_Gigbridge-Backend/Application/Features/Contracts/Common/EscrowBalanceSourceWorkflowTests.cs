@@ -1,7 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Features.Wallets.Common;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Wallets;
 using Test_Gigbridge_Backend.TestSupport;
 
 namespace Test_Gigbridge_Backend.Application.Features.Contracts.Common;

@@ -2,7 +2,7 @@ using System.Net.Http.Json;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using Application.Common.Exceptions;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Ai;
 using Application.Common.Models;
 using Application.Common.Models.Ai;
 using Microsoft.Extensions.Options;

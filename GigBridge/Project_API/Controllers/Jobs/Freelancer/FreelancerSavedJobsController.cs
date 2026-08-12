@@ -1,10 +1,10 @@
-﻿using Application.Common.Models;
+using Application.Common.Models;
 using Application.Features.SavedJobs.Freelancer.CheckSavedJob.Queries;
 using Application.Features.SavedJobs.Freelancer.GetMySavedJobs.DTOs;
 using Application.Features.SavedJobs.Freelancer.GetMySavedJobs.Queries;
 using Application.Features.SavedJobs.Freelancer.SaveJob.Commands;
 using Application.Features.SavedJobs.Freelancer.UnsaveJob.Commands;
-using Domain.Enums;
+using Domain.Enums.Accounts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Project_API.Controllers.Common;

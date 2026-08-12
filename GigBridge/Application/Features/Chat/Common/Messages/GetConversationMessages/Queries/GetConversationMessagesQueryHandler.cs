@@ -3,7 +3,9 @@ using Application.Common.Interfaces;
 using Application.Features.Chat.Common.Messages;
 using Application.Features.Chat.Common.Messages.GetConversationMessages.DTOs;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+using Domain.Enums.Chat;
+using Domain.Enums.Disputes;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -139,7 +141,7 @@ public class GetConversationMessagesQueryHandler
         var isAdmin = await _context.Set<User>()
             .AsNoTracking()
             .AnyAsync(user => user.UserId == request.UserId &&
-                              user.Role == (int)Domain.Enums.UserRole.Admin &&
+                              user.Role == (int)Domain.Enums.Accounts.UserRole.Admin &&
                               user.IsActive,
                 cancellationToken);
         if (!isAdmin)
@@ -158,7 +160,7 @@ public class GetConversationMessagesQueryHandler
             .AnyAsync(conversation => conversation.ConversationsId == request.ConversationId &&
                                       (conversation.DisputesId == request.AdminDisputeId ||
                                        (conversation.ContractsId == disputeContractId &&
-                                        conversation.ConversationType == (int)Domain.Enums.ConversationType.ContractWorkroom)),
+                                        conversation.ConversationType == (int)Domain.Enums.Chat.ConversationType.ContractWorkroom)),
                 cancellationToken);
     }
 

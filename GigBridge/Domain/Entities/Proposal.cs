@@ -1,3 +1,4 @@
+using Domain.Enums.Proposals;
 using System;
 using System.Collections.Generic;
 

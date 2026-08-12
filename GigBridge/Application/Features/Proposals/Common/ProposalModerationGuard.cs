@@ -1,6 +1,7 @@
+using Domain.Enums.Proposals;
 using Application.Common.Exceptions;
 using Domain.Entities;
-using Domain.Enums;
+
 
 namespace Application.Features.Proposals.Common;
 

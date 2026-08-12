@@ -1,6 +1,7 @@
 using Application.Features.Disputes.Common.GetMyDisputes.Queries;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Contracts;
+using Domain.Enums.Disputes;
 using Test_Gigbridge_Backend.TestSupport;
 
 namespace Test_Gigbridge_Backend.Application.Features.Disputes.Common.GetMyDisputes;

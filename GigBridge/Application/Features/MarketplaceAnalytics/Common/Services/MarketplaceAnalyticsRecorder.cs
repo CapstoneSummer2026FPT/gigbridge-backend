@@ -3,9 +3,9 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Time;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.MarketplaceAnalytics;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 

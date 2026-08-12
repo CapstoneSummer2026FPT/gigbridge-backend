@@ -1,8 +1,10 @@
 using Application.Common.Exceptions;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Time;
 using Application.Features.Contracts.JobPostSetup.Complete.Commands;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Contracts;
+using Domain.Enums.Contracts.Milestones;
+using Domain.Enums.ESign;
 using Test_Gigbridge_Backend.TestSupport;
 
 namespace Test_Gigbridge_Backend.Application.Features.Contracts.Common;

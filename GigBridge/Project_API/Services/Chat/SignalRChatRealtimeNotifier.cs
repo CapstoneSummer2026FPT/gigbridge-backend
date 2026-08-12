@@ -1,4 +1,4 @@
-using Application.Common.Interfaces.IService;
+using Application.Features.Chat.Common.Interfaces;
 using Microsoft.AspNetCore.SignalR;
 using Project_API.Hubs;
 

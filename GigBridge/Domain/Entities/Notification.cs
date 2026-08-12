@@ -1,4 +1,5 @@
-﻿using System;
+using Domain.Enums.Notifications;
+using System;
 using System.Collections.Generic;
 
 namespace Domain.Entities;

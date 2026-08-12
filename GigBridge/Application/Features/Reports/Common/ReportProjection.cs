@@ -1,7 +1,8 @@
 using Application.Common.Interfaces;
 using Application.Features.Reports.Common.DTOs;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Reports;
+using Domain.Enums.Subscriptions;
 using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.Reports.Common;

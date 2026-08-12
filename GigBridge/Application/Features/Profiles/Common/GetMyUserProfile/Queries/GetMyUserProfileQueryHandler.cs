@@ -1,9 +1,10 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Identity;
 using Application.Features.Profiles.Common.DTOs;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+using Domain.Enums.Subscriptions;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 

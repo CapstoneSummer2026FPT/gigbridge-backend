@@ -1,5 +1,5 @@
 using Application.Features.Wallets.Common;
-using Domain.Enums;
+using Domain.Enums.Wallets;
 
 namespace Test_Gigbridge_Backend.Application.Features.Wallets.Common;
 

@@ -3,10 +3,10 @@ using System.Text;
 using System.Text.Json;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Features.ESign.Common.Interfaces;
 using Application.Features.Contracts.Common.DTOs;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.ESign;
 using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.Contracts.Common.Internal;

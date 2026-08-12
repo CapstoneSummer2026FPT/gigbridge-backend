@@ -1,5 +1,7 @@
-using Application.Common.Interfaces.IService;
-using Application.Common.Services;
+using Application.Common.Interfaces.Caching;
+using Application.Common.Interfaces.Time;
+using Application.Features.Premium.Common.Services;
+using Application.Features.Wallets.Common.Interfaces;
 using Application.Common.Exceptions;
 using Application.Features.Premium.Client.Subscriptions.GetCurrent;
 using Application.Features.Premium.Client.Subscriptions.Purchase;
@@ -8,7 +10,9 @@ using Application.Features.Subscriptions.Common;
 using Application.Features.Subscriptions.Freelancer.GetCurrent;
 using Application.Features.Subscriptions.Freelancer.Purchase;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+using Domain.Enums.Subscriptions;
+using Domain.Enums.Wallets;
 using Test_Gigbridge_Backend.TestSupport;
 
 namespace Test_Gigbridge_Backend.Application.Features.Subscriptions;

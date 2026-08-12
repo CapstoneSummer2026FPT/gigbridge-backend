@@ -5,7 +5,7 @@ using Application.Features.Proposals.Freelancer.SubmitProposal.Commands;
 using Application.Features.Proposals.Freelancer.SubmitProposal.DTOs;
 using Application.Features.Proposals.Freelancer.UpdateProposal.Commands;
 using Application.Features.Proposals.Freelancer.UpdateProposal.DTOs;
-using Domain.Enums;
+using Domain.Enums.Accounts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Project_API.Controllers.Common;

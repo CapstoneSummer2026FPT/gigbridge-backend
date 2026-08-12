@@ -2,7 +2,8 @@ using Application.Common.Interfaces;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.ESign.Common.DTOs;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+using Domain.Enums.ESign;
 using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.ESign.Common.Internal;

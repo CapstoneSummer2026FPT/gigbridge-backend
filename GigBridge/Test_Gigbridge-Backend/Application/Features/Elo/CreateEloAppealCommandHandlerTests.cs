@@ -1,10 +1,12 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Media;
+using Application.Common.Interfaces.Time;
 using Application.Features.Elo.Commands.CreateEloAppeal;
 using Application.Features.Elo.Common;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+using Domain.Enums.Elo;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Test_Gigbridge_Backend.TestSupport;

@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Identity;
 using MediatR;
 using Microsoft.Extensions.Logging;
 namespace Application.Common.Behaviours;

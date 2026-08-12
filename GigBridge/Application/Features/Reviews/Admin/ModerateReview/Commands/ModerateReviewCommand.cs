@@ -1,5 +1,5 @@
 using Application.Features.Reviews.Common.DTOs;
-using Domain.Enums;
+using Domain.Enums.Reviews;
 using MediatR;
 
 namespace Application.Features.Reviews.Admin.ModerateReview.Commands;

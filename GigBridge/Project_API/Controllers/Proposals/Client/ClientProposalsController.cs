@@ -4,7 +4,7 @@ using Application.Features.Proposals.Client.GetProposalJudgingList;
 using Application.Features.Proposals.Client.GetProposalsByJobPost.Queries;
 using Application.Features.Proposals.Client.JudgeAllProposals;
 using Application.Features.Proposals.Common.DTOs;
-using Domain.Enums;
+using Domain.Enums.Accounts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Project_API.Controllers.Common;

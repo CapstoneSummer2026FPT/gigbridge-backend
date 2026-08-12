@@ -1,14 +1,19 @@
 using System.Net;
-using System.Reflection;
 using System.Text;
+using Application.Common.Interfaces.Templates;
 using Application.Features.Chat.Common.FinalOffers.Shared.Email;
 
 namespace Infrastructure.Services.Email;
 
 public sealed class JobAcceptanceEmailRenderer : IJobAcceptanceEmailRenderer
 {
-    private const string LayoutResource = "ScheduleEmailTemplates/ScheduleEmail.html";
-    private static readonly Assembly Assembly = typeof(ScheduleEmailRenderer).Assembly;
+    private const string LayoutTemplate = "Common/Email/NotificationLayout.html";
+    private readonly ITemplateReader _templateReader;
+
+    public JobAcceptanceEmailRenderer(ITemplateReader templateReader)
+    {
+        _templateReader = templateReader;
+    }
 
     public RenderedJobAcceptanceEmail Render(JobAcceptanceEmailModel model)
     {
@@ -20,7 +25,7 @@ public sealed class JobAcceptanceEmailRenderer : IJobAcceptanceEmailRenderer
             : $"Hello {E(model.FreelancerName)},";
         var introduction = $"Great news! Your application for '{E(model.JobTitle)}' has been accepted and your contract is ready for the next steps.";
 
-        var htmlBody = ReadResource(LayoutResource)
+        var htmlBody = _templateReader.ReadText(LayoutTemplate)
             .Replace("{{PREVIEW}}", E(headline))
             .Replace("{{BADGE_BACKGROUND}}", "#eef2ff")
             .Replace("{{ACCENT}}", "#494be7")
@@ -52,11 +57,4 @@ public sealed class JobAcceptanceEmailRenderer : IJobAcceptanceEmailRenderer
 
     private static string E(string? value) => WebUtility.HtmlEncode(value ?? string.Empty);
 
-    private static string ReadResource(string name)
-    {
-        using var stream = Assembly.GetManifestResourceStream(name)
-            ?? throw new InvalidOperationException($"Embedded email layout '{name}' was not found.");
-        using var reader = new StreamReader(stream, Encoding.UTF8);
-        return reader.ReadToEnd();
-    }
 }

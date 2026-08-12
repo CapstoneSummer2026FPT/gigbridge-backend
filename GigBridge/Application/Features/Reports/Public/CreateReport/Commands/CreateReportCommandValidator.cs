@@ -1,4 +1,4 @@
-using Domain.Enums;
+using Domain.Enums.Reports;
 using FluentValidation;
 
 namespace Application.Features.Reports.Public.CreateReport.Commands;

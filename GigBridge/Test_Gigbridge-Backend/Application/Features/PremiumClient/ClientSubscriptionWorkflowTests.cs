@@ -1,10 +1,12 @@
 using Application.Common.Exceptions;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Caching;
+using Application.Common.Interfaces.Time;
 using Application.Features.Premium.Client.Subscriptions.AutoRenew.Commands;
 using Application.Features.Premium.Client.Subscriptions.Cancel;
 using Application.Features.Premium.Client.Subscriptions.GetHistory;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+using Domain.Enums.Subscriptions;
 using Test_Gigbridge_Backend.TestSupport;
 
 namespace Test_Gigbridge_Backend.Application.Features.PremiumClient;

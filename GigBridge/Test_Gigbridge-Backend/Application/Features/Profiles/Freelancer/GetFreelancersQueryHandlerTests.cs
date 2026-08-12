@@ -1,7 +1,7 @@
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Time;
 using Application.Features.Profiles.FreelancerProfile.GetFreelancers.Queries;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Premium;
 using FluentValidation.TestHelper;
 using Test_Gigbridge_Backend.TestSupport;
 

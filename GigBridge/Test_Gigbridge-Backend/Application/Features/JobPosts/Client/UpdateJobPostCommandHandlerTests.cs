@@ -1,10 +1,12 @@
+using Domain.Enums.AiInterviews;
 using Application.Common.Exceptions;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Ai;
+using Application.Common.Interfaces.Time;
 using Application.Common.Models.Ai;
 using Application.Features.JobPosts.Client.UpdateJobPost.Commands;
 using Application.Features.JobPosts.Client.UpdateJobPost.DTOs;
 using Domain.Entities;
-using Domain.Enums;
+
 using Infrastructure.Services.ContentModerationService;
 using NSubstitute;
 using Test_Gigbridge_Backend.TestSupport;

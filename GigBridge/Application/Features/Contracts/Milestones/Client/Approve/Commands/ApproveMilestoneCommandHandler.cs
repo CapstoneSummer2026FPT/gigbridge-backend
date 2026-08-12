@@ -1,11 +1,14 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.InternalServices.Auditing.Interfaces;
+using Application.Common.Interfaces.Time;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.Contracts.Milestones.Common.DTOs;
 using Application.Features.Contracts.Milestones.Common.Internal;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+using Domain.Enums.Auditing;
+using Domain.Enums.Contracts.Milestones;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 

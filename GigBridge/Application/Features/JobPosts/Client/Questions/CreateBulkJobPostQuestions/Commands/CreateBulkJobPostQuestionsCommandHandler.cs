@@ -1,5 +1,5 @@
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Time;
 using Application.Features.JobPosts.Client.Questions;
 using Application.Features.JobPosts.Common.DTOs;
 using Domain.Entities;

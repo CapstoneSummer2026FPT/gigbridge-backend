@@ -7,7 +7,8 @@ using Application.Features.Contracts.Common.GetContractByJobPost.DTOs;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.Contracts.ProductHandoffs.Common;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+using Domain.Enums.Chat;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 

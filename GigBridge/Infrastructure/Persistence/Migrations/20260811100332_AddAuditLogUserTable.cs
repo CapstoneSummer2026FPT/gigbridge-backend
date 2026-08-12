@@ -1,4 +1,6 @@
-﻿using System;
+using Domain.Enums.Accounts;
+using Domain.Enums.Auditing;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable

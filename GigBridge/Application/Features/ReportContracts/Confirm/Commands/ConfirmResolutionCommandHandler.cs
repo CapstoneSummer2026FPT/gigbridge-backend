@@ -1,10 +1,13 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Time;
+using Application.Features.Chat.Common.Interfaces;
+using Application.Features.Notifications.Common.Interfaces;
 using Application.Features.ReportContracts.Common.DTOs;
 using Application.Features.ReportContracts.Common.Internal;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Notifications;
+using Domain.Enums.Reports;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -65,7 +68,7 @@ public sealed class ConfirmResolutionCommandHandler :
         }
 
         // Only reports waiting for confirmation can be acted upon
-        if (report.Status != (int)Domain.Enums.ContractReportStatus.WaitingReporterConfirmation)
+        if (report.Status != (int)Domain.Enums.Reports.ContractReportStatus.WaitingReporterConfirmation)
         {
             throw new BadRequestException("This report is not waiting for confirmation.");
         }
@@ -75,7 +78,7 @@ public sealed class ConfirmResolutionCommandHandler :
         if (command.IsAccepted)
         {
             // Accept the resolution
-            report.Status = (int)Domain.Enums.ContractReportStatus.Resolved;
+            report.Status = (int)Domain.Enums.Reports.ContractReportStatus.Resolved;
             report.ResolvedBy = command.UserId;
             report.ResolvedAt = now;
             report.UpdatedAt = now;

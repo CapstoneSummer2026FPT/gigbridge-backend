@@ -1,3 +1,4 @@
+using Domain.Enums.Contracts.Escrow;
 using System;
 
 namespace Domain.Entities;

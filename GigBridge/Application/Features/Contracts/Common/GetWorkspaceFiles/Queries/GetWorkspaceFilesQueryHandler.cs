@@ -2,7 +2,8 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Features.Contracts.Common.GetWorkspaceFiles.DTOs;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+using Domain.Enums.Chat;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 

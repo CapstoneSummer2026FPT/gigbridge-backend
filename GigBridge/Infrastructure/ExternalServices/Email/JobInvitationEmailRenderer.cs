@@ -1,19 +1,19 @@
 using System.Net;
 using System.Text;
+using Application.Common.Interfaces.Templates;
 using Application.Features.JobInvitations.Common.Email;
-using Microsoft.AspNetCore.Hosting;
 
 namespace Infrastructure.Services.Email;
 
 public sealed class JobInvitationEmailRenderer : IJobInvitationEmailRenderer
 {
-    private const string TemplateName = "NewJobInvitationTemplate.html";
+    private const string TemplateName = "JobInvitations/Email/NewJobInvitationTemplate.html";
     private const string Subject = "You have received a new job invitation";
-    private readonly IWebHostEnvironment _webHostEnvironment;
+    private readonly ITemplateReader _templateReader;
 
-    public JobInvitationEmailRenderer(IWebHostEnvironment webHostEnvironment)
+    public JobInvitationEmailRenderer(ITemplateReader templateReader)
     {
-        _webHostEnvironment = webHostEnvironment;
+        _templateReader = templateReader;
     }
 
     public RenderedJobInvitationEmail Render(NewJobInvitationTemplate model)
@@ -49,7 +49,6 @@ public sealed class JobInvitationEmailRenderer : IJobInvitationEmailRenderer
 
     private string ReadTemplate()
     {
-        var path = Path.Combine(_webHostEnvironment.ContentRootPath, "Templates", TemplateName);
-        return File.ReadAllText(path, Encoding.UTF8);
+        return _templateReader.ReadText(TemplateName);
     }
 }

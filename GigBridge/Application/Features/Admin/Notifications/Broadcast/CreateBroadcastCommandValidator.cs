@@ -1,4 +1,4 @@
-using Domain.Enums;
+using Domain.Enums.Notifications;
 using FluentValidation;
 
 namespace Application.Features.Admin.Notifications.Broadcast;

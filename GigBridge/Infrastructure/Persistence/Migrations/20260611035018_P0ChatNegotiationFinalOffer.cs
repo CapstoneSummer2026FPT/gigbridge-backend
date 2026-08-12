@@ -1,4 +1,6 @@
-﻿using System;
+using Domain.Enums.Chat;
+using Domain.Enums.Contracts;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable

@@ -1,5 +1,15 @@
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Ai;
+using Application.Common.Interfaces.Email;
+using Application.Common.Interfaces.Media;
+using Application.Common.Interfaces.Templates;
+using Application.Common.Interfaces.Time;
+using Application.Features.Auth.Common.Interfaces;
+using Application.Features.Chat.Common.Interfaces;
+using Application.Features.ESign.Common.Interfaces;
+using Application.Features.JobPosts.Common.ContentModeration;
+using Application.Features.Notifications.Common.Interfaces;
+using Application.Features.Wallets.Common.Interfaces;
 using Application.Common.Models;
 using System.Net;
 using System.Net.Sockets;
@@ -21,6 +31,7 @@ using Infrastructure.Services.ESign;
 using Infrastructure.Services.GoogleMeet;
 using Infrastructure.Services.Media;
 using Infrastructure.Services.Notification;
+using Infrastructure.Services.Templates;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -183,6 +194,7 @@ public static class DependencyInjection
             options.ApiToken = resendApiToken;
         });
         services.AddScoped<IEmailService, EmailService>();
+        services.AddSingleton<ITemplateReader, FileSystemTemplateReader>();
         services.AddHttpClient<IContractEsignDocumentGenerator, ContractEsignDocumentGenerator>(client =>
             client.Timeout = TimeSpan.FromSeconds(15));
         services.AddScoped<IWordToPdfConverter, WordToPdfConverter>();

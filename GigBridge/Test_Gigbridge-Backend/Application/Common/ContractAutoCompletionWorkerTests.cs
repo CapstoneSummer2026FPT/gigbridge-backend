@@ -1,8 +1,9 @@
 using Application.Common.Interfaces;
-using Application.Common.Services;
+using Application.Features.Contracts.Completion.Common.BackgroundJobs;
 using Application.Features.Contracts.Completion.Client.Commands;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Contracts;
+using Domain.Enums.Contracts.Milestones;
 using MediatR;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;

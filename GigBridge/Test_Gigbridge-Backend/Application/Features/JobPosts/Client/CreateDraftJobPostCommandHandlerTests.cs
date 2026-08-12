@@ -1,5 +1,5 @@
 using Application.Common.Exceptions;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Time;
 using Application.Features.JobPosts.Client.CreateDraftJobPost.Commands;
 using Domain.Entities;
 using Test_Gigbridge_Backend.TestSupport;

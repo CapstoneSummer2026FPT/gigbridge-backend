@@ -1,5 +1,5 @@
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Premium;
 
 namespace Application.Features.Premium.Freelancer.Promotions.DTOs;
 

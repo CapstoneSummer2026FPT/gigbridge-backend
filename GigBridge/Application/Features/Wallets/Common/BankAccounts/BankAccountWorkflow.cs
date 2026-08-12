@@ -1,5 +1,6 @@
+using Application.Features.Wallets.Common.Models;
 using Application.Common.Exceptions;
-using Application.Common.Interfaces.IService;
+using Application.Features.Wallets.Common.Interfaces;
 
 namespace Application.Features.Wallets.Common.BankAccounts;
 

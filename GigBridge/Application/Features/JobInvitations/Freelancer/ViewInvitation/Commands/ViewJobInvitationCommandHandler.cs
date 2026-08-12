@@ -1,9 +1,9 @@
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Time;
 using Application.Features.JobInvitations.Common;
 using Application.Features.JobInvitations.Common.DTOs;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.JobInvitations;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 

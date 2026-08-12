@@ -1,5 +1,5 @@
 using Application.Features.Reports.Common.DTOs;
-using Domain.Enums;
+using Domain.Enums.Reports;
 using MediatR;
 
 namespace Application.Features.Admin.Reports.GetReports.Queries;

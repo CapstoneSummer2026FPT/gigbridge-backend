@@ -1,4 +1,4 @@
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Media;
 
 namespace Test_Gigbridge_Backend.TestSupport;
 

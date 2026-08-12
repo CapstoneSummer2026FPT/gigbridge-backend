@@ -5,7 +5,7 @@ using Application.Features.Portfolios.DeletePortfolioItem.Commands;
 using Application.Features.Portfolios.GetPortfolioItems.Queries;
 using Application.Features.Portfolios.UpdatePortfolioItem.Commands;
 using Application.Features.Profiles.FreelancerProfile.GetFreelancerProfile.DTOs;
-using Domain.Enums;
+using Domain.Enums.Accounts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Project_API.Controllers.Common;

@@ -1,4 +1,4 @@
-using Domain.Enums;
+using Domain.Enums.Notifications;
 
 namespace Application.Features.Notifications.Common.DTOs;
 

@@ -5,7 +5,7 @@ using Application.Features.JobPosts.Freelancer.GetRecommendedJobPosts.DTOs;
 using Application.Features.JobPosts.Freelancer.GetRecommendedJobPosts.Queries;
 using Application.Features.JobPosts.Public.GetAvailableJobPosts.DTOs;
 using Application.Features.JobPosts.Public.GetJobPostDetail.DTOs;
-using Domain.Enums;
+using Domain.Enums.Accounts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Project_API.Controllers.Common;

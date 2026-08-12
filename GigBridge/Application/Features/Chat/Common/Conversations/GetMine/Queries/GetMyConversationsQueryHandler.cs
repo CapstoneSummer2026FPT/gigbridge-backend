@@ -4,7 +4,8 @@ using Application.Features.Chat.Common.Messages.GetConversationMessages.DTOs;
 using Application.Features.Chat.Common.Messages.Send.DTOs;
 using Application.Features.JobPosts.Common;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Chat;
+using Domain.Enums.Disputes;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 

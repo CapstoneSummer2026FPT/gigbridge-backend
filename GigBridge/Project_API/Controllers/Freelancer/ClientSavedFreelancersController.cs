@@ -1,10 +1,10 @@
-﻿using Application.Common.Models;
+using Application.Common.Models;
 using Application.Features.SavedFreelancers.Client.CheckSavedFreelancer.Queries;
 using Application.Features.SavedFreelancers.Client.GetMySavedFreelancers.DTOs;
 using Application.Features.SavedFreelancers.Client.GetMySavedFreelancers.Queries;
 using Application.Features.SavedFreelancers.Client.SaveFreelancer.Commands;
 using Application.Features.SavedFreelancers.Client.UnsaveFreelancer.Commands;
-using Domain.Enums;
+using Domain.Enums.Accounts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Project_API.Controllers.Common;

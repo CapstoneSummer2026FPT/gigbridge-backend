@@ -1,6 +1,6 @@
 using Application.Features.Reports.Public.CreateReport.Commands;
 using Application.Features.Reports.Public.CreateReport.DTOs;
-using Domain.Enums;
+using Domain.Enums.Reports;
 
 namespace Test_Gigbridge_Backend.Application.Features.Reports;
 

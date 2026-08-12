@@ -1,3 +1,5 @@
+using Domain.Enums.Accounts;
+using Domain.Enums.Auditing;
 using System;
 
 namespace Domain.Entities;

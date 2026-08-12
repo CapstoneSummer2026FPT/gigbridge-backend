@@ -1,7 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Features.Proposals.Common;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Proposals;
 
 namespace Test_Gigbridge_Backend.Application.Features.Admin.Proposals;
 

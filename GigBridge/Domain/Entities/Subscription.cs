@@ -1,6 +1,6 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
-using Domain.Enums;
+using Domain.Enums.Subscriptions;
 
 namespace Domain.Entities;
 

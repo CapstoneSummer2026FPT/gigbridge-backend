@@ -1,3 +1,4 @@
+using Domain.Enums.Disputes;
 using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 

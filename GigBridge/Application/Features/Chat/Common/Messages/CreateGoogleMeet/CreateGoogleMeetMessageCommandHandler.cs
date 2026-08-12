@@ -1,10 +1,11 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Features.Chat.Common.Interfaces;
 using Application.Features.Chat.Common.Messages.Send.Commands;
 using Application.Features.Chat.Common.Messages.Send.DTOs;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Chat;
+using Domain.Enums.Contracts;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 

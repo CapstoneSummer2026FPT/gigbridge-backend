@@ -1,12 +1,13 @@
 using Application.Common.Exceptions;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Time;
 using Application.Features.ESign.Client.CreateDocumentFromJobPost.Commands;
 using Application.Features.ESign.Client.GetDocumentByJobPost.Queries;
 using Application.Features.ESign.Client.SubmitSignature.Commands;
 using Application.Features.ESign.Client.SubmitSignature.DTOs;
 using Application.Features.ESign.Common.GetMySignedDocuments.Queries;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Contracts;
+using Domain.Enums.ESign;
 using Test_Gigbridge_Backend.TestSupport;
 
 namespace Test_Gigbridge_Backend.Application.Features.ESign;

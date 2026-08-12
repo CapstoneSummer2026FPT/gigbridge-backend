@@ -10,7 +10,7 @@ using Application.Features.ReportContracts.Escalate.Commands;
 using Application.Features.ReportContracts.Respond.Commands;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Domain.Enums;
+using Domain.Enums.Disputes;
 
 namespace Project_API.Controllers.Contracts.Common;
 

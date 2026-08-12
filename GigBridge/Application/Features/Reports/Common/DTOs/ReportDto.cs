@@ -1,4 +1,4 @@
-using Domain.Enums;
+using Domain.Enums.Reports;
 
 namespace Application.Features.Reports.Common.DTOs;
 
