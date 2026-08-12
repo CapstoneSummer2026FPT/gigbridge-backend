@@ -5,7 +5,6 @@ using System.Net;
 using System.Net.Sockets;
 using Application.Features.Chat.Common.Schedules;
 using Application.Features.Chat.Common.FinalOffers.Shared.Email;
-using Application.Features.Contracts.Common.Email;
 using Application.Features.JobInvitations.Common.Email;
 using Application.Features.Proposals.Common.Email;
 using Application.Common.Options;

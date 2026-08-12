@@ -1,4 +1,4 @@
-namespace Application.Features.Contracts.Common.Email;
+namespace Application.Features.Contracts.Signing.Common.Sign.DTOs;
 
 public sealed record SignedEmailModel(
     string RecipientName,

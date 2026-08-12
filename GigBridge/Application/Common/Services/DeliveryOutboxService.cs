@@ -5,7 +5,7 @@ using Application.Common.Options;
 using Application.Features.Auth.Shared.DTOs;
 using Application.Features.Chat.Common.Schedules;
 using Application.Features.Contracts.Common.DTOs;
-using Application.Features.Contracts.Common.Email;
+using Application.Features.Contracts.Signing.Common.Sign.DTOs;
 using Application.Features.ESign.Common.Internal;
 using Application.Features.Notifications.Common.DTOs;
 using Domain.Entities;

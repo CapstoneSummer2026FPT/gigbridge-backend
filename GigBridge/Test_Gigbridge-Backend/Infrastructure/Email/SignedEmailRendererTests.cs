@@ -1,4 +1,4 @@
-using Application.Features.Contracts.Common.Email;
+using Application.Features.Contracts.Signing.Common.Sign.DTOs;
 using Infrastructure.Services.Email;
 
 namespace Test_Gigbridge_Backend.Infrastructure.Email;

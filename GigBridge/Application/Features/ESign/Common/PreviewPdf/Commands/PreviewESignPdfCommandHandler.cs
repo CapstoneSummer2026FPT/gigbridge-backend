@@ -76,7 +76,7 @@ public sealed class PreviewESignPdfCommandHandler(
 
         if (string.IsNullOrWhiteSpace(signatureImageUrl))
         {
-            throw new BadRequestException("Signature image is required for the first draft preview.");
+            throw new BadRequestException("Signature is required for the first draft preview.");
         }
 
         var previewSignature = new ContractSignatureSnapshot(

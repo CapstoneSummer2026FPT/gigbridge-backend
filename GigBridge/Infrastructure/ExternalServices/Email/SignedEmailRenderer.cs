@@ -1,7 +1,8 @@
 using System.Net;
 using System.Reflection;
 using System.Text;
-using Application.Features.Contracts.Common.Email;
+using Application.Common.Interfaces.IService;
+using Application.Features.Contracts.Signing.Common.Sign.DTOs;
 
 namespace Infrastructure.Services.Email;
 
