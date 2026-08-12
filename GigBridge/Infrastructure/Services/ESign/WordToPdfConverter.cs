@@ -40,7 +40,18 @@ public sealed class WordToPdfConverter(IConfiguration configuration) : IWordToPd
             }
             else if (OperatingSystem.IsWindows())
             {
-                await ConvertWithMicrosoftWordAsync(inputPath, outputPath, cancellationToken);
+                try
+                {
+                    await ConvertWithMicrosoftWordAsync(inputPath, outputPath, cancellationToken);
+                }
+                catch (Exception) when (!cancellationToken.IsCancellationRequested)
+                {
+                    // A prior conversion may have left a broken/orphaned WINWORD.EXE behind
+                    // (COM-activated, not a child process, so process-kill on timeout can't
+                    // reach it). Sweep it and retry once before giving up.
+                    KillOrphanedWinword();
+                    await ConvertWithMicrosoftWordAsync(inputPath, outputPath, cancellationToken);
+                }
             }
             else
             {
@@ -127,6 +138,7 @@ public sealed class WordToPdfConverter(IConfiguration configuration) : IWordToPd
         var escapedOutput = outputPath.Replace("'", "''", StringComparison.Ordinal);
         var script = $$"""
             $ErrorActionPreference = 'Stop'
+            Get-Process -Name WINWORD -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
             $word = $null
             $document = $null
             try {
@@ -136,8 +148,9 @@ public sealed class WordToPdfConverter(IConfiguration configuration) : IWordToPd
                 $document = $word.Documents.Open('{{escapedInput}}', $false, $true)
                 $document.ExportAsFixedFormat('{{escapedOutput}}', 17)
             } finally {
-                if ($null -ne $document) { $document.Close($false) }
-                if ($null -ne $word) { $word.Quit() }
+                if ($null -ne $document) { try { $document.Close($false) } catch {} }
+                if ($null -ne $word) { try { $word.Quit() } catch {} }
+                Get-Process -Name WINWORD -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
             }
             """;
         var encodedScript = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
@@ -168,6 +181,7 @@ public sealed class WordToPdfConverter(IConfiguration configuration) : IWordToPd
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
             process.Kill(true);
+            KillOrphanedWinword();
             throw new TimeoutException("PDF conversion exceeded the 60-second limit.");
         }
 
@@ -177,6 +191,43 @@ public sealed class WordToPdfConverter(IConfiguration configuration) : IWordToPd
         {
             throw new InvalidOperationException(
                 $"PDF conversion failed with exit code {process.ExitCode}: {standardError}{standardOutput}");
+        }
+    }
+
+    /// <summary>
+    /// WINWORD.EXE is DCOM-activated, not a child process of powershell.exe, so killing the
+    /// powershell process tree on timeout doesn't reach it. A surviving broken instance can
+    /// poison the next conversion's "New-Object -ComObject Word.Application" (attaches via
+    /// ROT instead of spawning fresh) and its "$word.Quit()" then fails with an RPC error.
+    /// Best-effort cleanup only — never let this mask the real conversion error.
+    /// </summary>
+    private static void KillOrphanedWinword()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        try
+        {
+            foreach (var process in Process.GetProcessesByName("WINWORD"))
+            {
+                using (process)
+                {
+                    try
+                    {
+                        process.Kill();
+                    }
+                    catch (Exception)
+                    {
+                        // Best-effort; nothing more to do if it won't die.
+                    }
+                }
+            }
+        }
+        catch (Exception)
+        {
+            // Best-effort; process enumeration failures shouldn't fail the conversion.
         }
     }
 
