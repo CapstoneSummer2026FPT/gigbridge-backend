@@ -93,7 +93,7 @@ public sealed class AdminOverrideMilestoneCommandHandler :
 
         if (request.Action.Equals("release", StringComparison.OrdinalIgnoreCase))
         {
-            var releasableVnd = milestone.Amount - milestone.ReleasedAmount;
+            var releasableVnd = milestone.Amount - milestone.ReleasedAmount - milestone.RefundedAmount;
             if (releasableVnd <= 0)
             {
                 throw new BadRequestException("This milestone has no remaining releaseable budget.");
@@ -182,7 +182,7 @@ public sealed class AdminOverrideMilestoneCommandHandler :
         }
         else if (request.Action.Equals("refund", StringComparison.OrdinalIgnoreCase))
         {
-            var refundableVnd = milestone.Amount - milestone.ReleasedAmount;
+            var refundableVnd = milestone.Amount - milestone.ReleasedAmount - milestone.RefundedAmount;
             if (refundableVnd <= 0)
             {
                 throw new BadRequestException("This milestone has no remaining refundable budget.");
@@ -207,6 +207,7 @@ public sealed class AdminOverrideMilestoneCommandHandler :
                 now);
 
             milestone.Status = (int)MilestoneStatus.InProgress;
+            milestone.RefundedAmount += refundableVnd;
             milestone.UpdatedAt = now;
 
             escrow.FundedAmount -= refundableVnd;

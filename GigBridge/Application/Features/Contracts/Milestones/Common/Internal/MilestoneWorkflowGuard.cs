@@ -200,4 +200,23 @@ internal static class MilestoneWorkflowGuard
             .ThenBy(milestone => milestone.CreatedAt)
             .ThenBy(milestone => milestone.MilestonesId);
     }
+
+    /// <summary>
+    /// Advances the next consecutive Pending milestone to InProgress once every milestone
+    /// before it (by SortOrder) is Approved or Completed. No-op if no such milestone exists
+    /// (e.g. the contract has no remaining milestones, or the chain is already broken).
+    /// </summary>
+    public static void AdvanceNextMilestone(IReadOnlyList<Milestone> orderedMilestones, DateTime now)
+    {
+        var next = orderedMilestones.FirstOrDefault(candidate =>
+            candidate.Status == (int)MilestoneStatus.Pending &&
+            orderedMilestones.Where(previous => (previous.SortOrder ?? 0) < (candidate.SortOrder ?? 0))
+                .All(previous => previous.Status is (int)MilestoneStatus.Approved or (int)MilestoneStatus.Completed));
+        if (next is not null)
+        {
+            next.Status = (int)MilestoneStatus.InProgress;
+            next.StartedAt = now;
+            next.UpdatedAt = now;
+        }
+    }
 }

@@ -95,6 +95,8 @@ public sealed class WalletDtoTests
         Assert.Equal((int)WalletTransactionType.EscrowHold, response.Type);
         Assert.Equal((int)WalletTransactionStatus.Succeeded, response.Status);
         Assert.Equal("key-1", response.IdempotencyKey);
+        // EscrowHold always debits (locks) the client's balance regardless of BalanceSource.
+        Assert.False(response.IsCredit);
     }
 
     [Fact]
@@ -121,5 +123,31 @@ public sealed class WalletDtoTests
         Assert.Equal((int)WalletBalanceSource.Earned, response.BalanceSource);
         Assert.Null(response.DepositedAmount);
         Assert.Equal(25m, response.EarnedAmount);
+        // EscrowRelease with an Earned source is the freelancer's own credited row.
+        Assert.True(response.IsCredit);
+    }
+
+    [Fact]
+    public void WalletTransactionResponse_EscrowReleaseWithHeldSource_IsTheClientsDebitNotACredit()
+    {
+        // The client's side of the same EscrowRelease event never carries a plain Earned
+        // source (it's Combined/HeldEarned/HeldDeposited) — this is what distinguishes it
+        // from the freelancer's credited row above, without needing a new schema field.
+        var transaction = new WalletTransaction
+        {
+            WalletTransactionsId = Guid.NewGuid(),
+            UserWalletsId = Guid.NewGuid(),
+            UserId = Guid.NewGuid(),
+            TokenAmount = 25m,
+            VndAmount = 25_000m,
+            BalanceSource = (int)WalletBalanceSource.HeldDeposited,
+            Type = (int)WalletTransactionType.EscrowRelease,
+            Status = (int)WalletTransactionStatus.Succeeded,
+            CreatedAt = new DateTime(2026, 6, 12, 9, 0, 0, DateTimeKind.Utc)
+        };
+
+        var response = WalletTransactionResponse.FromEntity(transaction);
+
+        Assert.False(response.IsCredit);
     }
 }

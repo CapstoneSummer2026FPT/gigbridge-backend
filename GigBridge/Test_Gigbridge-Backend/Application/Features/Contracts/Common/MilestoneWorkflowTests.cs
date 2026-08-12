@@ -37,10 +37,12 @@ public class MilestoneWorkflowTests
         var submitHandler = new SubmitMilestoneCommandHandler(
             fixture.Context,
             new FixedDateTimeService(fixture.Now.AddMinutes(1)),
+            new CapturingUserAuditLogService(),
             new TestMediaService());
         var approveHandler = new ApproveMilestoneCommandHandler(
             fixture.Context,
-            new FixedDateTimeService(fixture.Now.AddMinutes(2)));
+            new FixedDateTimeService(fixture.Now.AddMinutes(2)),
+            new CapturingUserAuditLogService());
         var revisionHandler = new RequestMilestoneRevisionCommandHandler(
             fixture.Context,
             new FixedDateTimeService(fixture.Now.AddMinutes(3)));
@@ -164,10 +166,12 @@ public class MilestoneWorkflowTests
     public async Task RequestMilestoneUnlock_PersistsEarlyStartRequestWithoutStartingMilestone()
     {
         var fixture = new MilestoneWorkflowFixture();
+        var userAuditLog = new CapturingUserAuditLogService();
         var handler = new RequestMilestoneUnlockCommandHandler(
             fixture.Context,
             new FixedDateTimeService(fixture.Now.AddMinutes(8)),
-            new NoopNotificationService());
+            new NoopNotificationService(),
+            userAuditLog);
         fixture.FirstMilestone.Status = (int)MilestoneStatus.InProgress;
         fixture.FirstMilestone.StartedAt = fixture.Now;
 
@@ -184,6 +188,54 @@ public class MilestoneWorkflowTests
         Assert.Equal(fixture.SecondMilestoneId, request.MilestonesId);
         Assert.Equal("Begin integration while milestone one is in review.", request.Reason);
         Assert.Equal((int)MilestoneEarlyStartRequestStatus.Pending, request.Status);
+
+        var auditEntry = Assert.Single(userAuditLog.Entries);
+        Assert.Equal(fixture.FreelancerUserId, auditEntry.UserId);
+        Assert.Equal(UserRole.Freelancer, auditEntry.Role);
+        Assert.Equal(AuditUserActionType.RequestedEarlyStart, auditEntry.ActionType);
+        Assert.Equal(fixture.SecondMilestoneId, auditEntry.MilestoneId);
+    }
+
+    [Fact]
+    public async Task ApproveMilestone_CreatesAuditLogForClient()
+    {
+        var fixture = new MilestoneWorkflowFixture();
+        var userAuditLog = new CapturingUserAuditLogService();
+        var handler = new ApproveMilestoneCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now.AddMinutes(2)),
+            userAuditLog);
+        fixture.FirstMilestone.Status = (int)MilestoneStatus.Submitted;
+
+        var response = await handler.Handle(
+            new ApproveMilestoneCommand(fixture.ContractId, fixture.FirstMilestoneId, fixture.ClientUserId),
+            CancellationToken.None);
+
+        Assert.Equal((int)MilestoneStatus.Approved, response.Status);
+        var auditEntry = Assert.Single(userAuditLog.Entries);
+        Assert.Equal(fixture.ClientUserId, auditEntry.UserId);
+        Assert.Equal(UserRole.Client, auditEntry.Role);
+        Assert.Equal(AuditUserActionType.MilestoneApproved, auditEntry.ActionType);
+        Assert.Equal(fixture.FirstMilestoneId, auditEntry.MilestoneId);
+    }
+
+    [Fact]
+    public async Task ApproveMilestone_NoOpReapproval_CreatesNoAuditLog()
+    {
+        var fixture = new MilestoneWorkflowFixture();
+        var userAuditLog = new CapturingUserAuditLogService();
+        var handler = new ApproveMilestoneCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now.AddMinutes(2)),
+            userAuditLog);
+        fixture.FirstMilestone.Status = (int)MilestoneStatus.Approved;
+        fixture.FirstMilestone.ReleasedAmount = fixture.FirstMilestone.Amount;
+
+        await handler.Handle(
+            new ApproveMilestoneCommand(fixture.ContractId, fixture.FirstMilestoneId, fixture.ClientUserId),
+            CancellationToken.None);
+
+        Assert.Empty(userAuditLog.Entries);
     }
 
     [Fact]
@@ -269,17 +321,15 @@ public class MilestoneWorkflowTests
         Assert.Equal((int)ContractEscrowStatus.PartiallyReleased, fixture.Escrow.Status);
         Assert.Equal(680_000m, fixture.ClientWallet.HeldTokens);
         Assert.Equal(0m, fixture.FreelancerWallet.AvailableTokens);
-        Assert.Equal(316_800m, fixture.FreelancerWallet.WithdrawableTokens);
-        Assert.Equal(3, fixture.WalletTransactions.Entities.Count);
+        Assert.Equal(320_000m, fixture.FreelancerWallet.WithdrawableTokens);
+        Assert.Equal(2, fixture.WalletTransactions.Entities.Count);
         Assert.Single(fixture.EscrowTransactions.Entities);
         Assert.Equal(2, fixture.Context.TransactionBeginCount);
         Assert.Equal(2, fixture.Context.TransactionLockCount);
         Assert.Equal(1, fixture.Context.TransactionCommitCount);
 
-        var fee = Assert.Single(fixture.WalletTransactions.Entities.Where(transaction =>
+        Assert.Empty(fixture.WalletTransactions.Entities.Where(transaction =>
             transaction.Type == (int)WalletTransactionType.Adjustment));
-        Assert.Equal(3_200m, fee.TokenAmount);
-        Assert.Equal(3_200m, fee.VndAmount);
         Assert.Contains(
             fixture.Context.Set<Message>().ToList(),
             message => message.Content == "Milestone early withdrawal released: Milestone 1.");
@@ -421,7 +471,7 @@ public class MilestoneWorkflowTests
         Assert.Equal(800_000m, fixture.Escrow.ReleasedAmount);
         Assert.Equal(200_000m, fixture.ClientWallet.HeldTokens);
         Assert.Equal(0m, fixture.FreelancerWallet.AvailableTokens);
-        Assert.Equal(792_000m, fixture.FreelancerWallet.WithdrawableTokens);
+        Assert.Equal(800_000m, fixture.FreelancerWallet.WithdrawableTokens);
 
         var result = await endProjectHandler.Handle(
             new EndProjectCommand(fixture.ContractId, fixture.ClientUserId),
@@ -434,7 +484,7 @@ public class MilestoneWorkflowTests
         Assert.Equal(fixture.Now.AddMinutes(6), fixture.Contract.CompletedAt);
         Assert.Equal(0m, fixture.ClientWallet.HeldTokens);
         Assert.Equal(0m, fixture.ClientWallet.AvailableTokens);
-        Assert.Equal(990_000m, fixture.FreelancerWallet.WithdrawableTokens);
+        Assert.Equal(1_000_000m, fixture.FreelancerWallet.WithdrawableTokens);
 
         var claim = await claimHandler.Handle(
             new ClaimFinalPayoutCommand(fixture.ContractId, fixture.FreelancerUserId),
@@ -446,8 +496,8 @@ public class MilestoneWorkflowTests
         Assert.All(fixture.Milestones.Entities, milestone => Assert.Equal(milestone.Amount, milestone.ReleasedAmount));
         Assert.Equal((int)ContractEscrowStatus.Released, fixture.Escrow.Status);
         Assert.Equal(0m, fixture.ClientWallet.HeldTokens);
-        Assert.Equal(990_000m, fixture.FreelancerWallet.WithdrawableTokens);
-        Assert.Equal(18, fixture.WalletTransactions.Entities.Count);
+        Assert.Equal(1_000_000m, fixture.FreelancerWallet.WithdrawableTokens);
+        Assert.Equal(12, fixture.WalletTransactions.Entities.Count);
         Assert.Equal(6, fixture.EscrowTransactions.Entities.Count);
         Assert.Contains(realtime.ConversationEvents, evt => evt.EventName == "ContractCompleted");
         Assert.Contains(realtime.UsersEvents, evt => evt.EventName == "ContractCompleted");
@@ -495,10 +545,10 @@ public class MilestoneWorkflowTests
         Assert.Equal(0m, retry.ReleasedAmountVnd);
         Assert.Equal(walletTransactionCount, fixture.WalletTransactions.Entities.Count);
         Assert.Equal(escrowTransactionCount, fixture.EscrowTransactions.Entities.Count);
-        Assert.Equal(9, fixture.WalletTransactions.Entities.Count);
+        Assert.Equal(6, fixture.WalletTransactions.Entities.Count);
         Assert.Equal(0m, fixture.ClientWallet.AvailableTokens);
         Assert.Equal(0m, fixture.ClientWallet.HeldTokens);
-        Assert.Equal(990_000m, fixture.FreelancerWallet.WithdrawableTokens);
+        Assert.Equal(1_000_000m, fixture.FreelancerWallet.WithdrawableTokens);
 
         await claimHandler.Handle(
             new ClaimFinalPayoutCommand(fixture.ContractId, fixture.FreelancerUserId),
@@ -509,7 +559,7 @@ public class MilestoneWorkflowTests
         Assert.True(claimRetry.AlreadyClaimed);
         Assert.Equal(0m, claimRetry.ReleasedAmountVnd);
         Assert.Equal(0m, fixture.ClientWallet.HeldTokens);
-        Assert.Equal(990_000m, fixture.FreelancerWallet.WithdrawableTokens);
+        Assert.Equal(1_000_000m, fixture.FreelancerWallet.WithdrawableTokens);
     }
 
     [Fact]
@@ -569,7 +619,7 @@ public class MilestoneWorkflowTests
             CancellationToken.None));
 
         Assert.Equal(0m, fixture.ClientWallet.HeldTokens);
-        Assert.Equal(9, fixture.WalletTransactions.Entities.Count);
+        Assert.Equal(6, fixture.WalletTransactions.Entities.Count);
         Assert.Equal(0m, fixture.ClientWallet.AvailableTokens);
     }
 
@@ -743,7 +793,8 @@ public class MilestoneWorkflowTests
         {
             var handler = new ApproveMilestoneCommandHandler(
                 Context,
-                new FixedDateTimeService(Now.AddMinutes(2)));
+                new FixedDateTimeService(Now.AddMinutes(2)),
+                new CapturingUserAuditLogService());
 
             foreach (var milestone in milestones)
             {
@@ -879,9 +930,11 @@ public class MilestoneWorkflowTests
     {
         var fixture = new MilestoneWorkflowFixture();
         var mediaService = new TestMediaService();
+        var userAuditLog = new CapturingUserAuditLogService();
         var submitHandler = new SubmitMilestoneCommandHandler(
             fixture.Context,
             new FixedDateTimeService(fixture.Now),
+            userAuditLog,
             mediaService);
 
         fixture.FirstMilestone.Status = (int)MilestoneStatus.InProgress;
@@ -900,6 +953,12 @@ public class MilestoneWorkflowTests
         var response = await submitHandler.Handle(command, CancellationToken.None);
 
         Assert.Equal((int)MilestoneStatus.Submitted, response.Status);
+        var auditEntry = Assert.Single(userAuditLog.Entries);
+        Assert.Equal(fixture.FreelancerUserId, auditEntry.UserId);
+        Assert.Equal(UserRole.Freelancer, auditEntry.Role);
+        Assert.Equal(AuditUserActionType.MilestoneSubmitted, auditEntry.ActionType);
+        Assert.Equal(fixture.ContractId, auditEntry.ContractId);
+        Assert.Equal(fixture.FirstMilestoneId, auditEntry.MilestoneId);
         Assert.Equal("Completed the deliverable.", fixture.FirstMilestone.SubmissionDescription);
         Assert.Single(response.Attachments);
         Assert.Equal((int)MilestoneSubmissionSourceType.File, response.Attachments[0].SourceType);
@@ -919,12 +978,39 @@ public class MilestoneWorkflowTests
     }
 
     [Fact]
+    public async Task SubmitMilestone_WrongStatus_ThrowsAndCreatesNoAuditLog()
+    {
+        var fixture = new MilestoneWorkflowFixture();
+        var userAuditLog = new CapturingUserAuditLogService();
+        var submitHandler = new SubmitMilestoneCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            userAuditLog,
+            new TestMediaService());
+
+        fixture.FirstMilestone.Status = (int)MilestoneStatus.Approved;
+
+        await Assert.ThrowsAsync<BadRequestException>(() => submitHandler.Handle(
+            new SubmitMilestoneCommand(
+                fixture.ContractId,
+                fixture.FirstMilestoneId,
+                fixture.FreelancerUserId,
+                "Completed.",
+                new SubmitMilestoneFile(
+                    new MemoryStream(ValidPdfContent), "testfile.pdf", "application/pdf", ValidPdfContent.Length)),
+            CancellationToken.None));
+
+        Assert.Empty(userAuditLog.Entries);
+    }
+
+    [Fact]
     public async Task SubmitMilestone_DoesNotAutoStartPendingMilestone()
     {
         var fixture = new MilestoneWorkflowFixture();
         var submitHandler = new SubmitMilestoneCommandHandler(
             fixture.Context,
-            new FixedDateTimeService(fixture.Now.AddMinutes(4)));
+            new FixedDateTimeService(fixture.Now.AddMinutes(4)),
+            new CapturingUserAuditLogService());
 
         fixture.ApproveMilestone(fixture.FirstMilestone);
 
@@ -951,6 +1037,7 @@ public class MilestoneWorkflowTests
         var submitHandler = new SubmitMilestoneCommandHandler(
             fixture.Context,
             new FixedDateTimeService(fixture.Now),
+            new CapturingUserAuditLogService(),
             mediaService);
 
         fixture.FirstMilestone.Status = (int)MilestoneStatus.InProgress;
@@ -984,6 +1071,7 @@ public class MilestoneWorkflowTests
         var submitHandler = new SubmitMilestoneCommandHandler(
             fixture.Context,
             new FixedDateTimeService(fixture.Now),
+            new CapturingUserAuditLogService(),
             mediaService);
 
         fixture.FirstMilestone.Status = (int)MilestoneStatus.InProgress;
@@ -1015,6 +1103,7 @@ public class MilestoneWorkflowTests
         var submitHandler = new SubmitMilestoneCommandHandler(
             fixture.Context,
             new FixedDateTimeService(fixture.Now),
+            new CapturingUserAuditLogService(),
             mediaService);
 
         fixture.FirstMilestone.Status = (int)MilestoneStatus.InProgress;
@@ -1043,6 +1132,7 @@ public class MilestoneWorkflowTests
         var submitHandler = new SubmitMilestoneCommandHandler(
             fixture.Context,
             new FixedDateTimeService(fixture.Now),
+            new CapturingUserAuditLogService(),
             mediaService);
 
         fixture.FirstMilestone.Status = (int)MilestoneStatus.InProgress;
@@ -1101,6 +1191,7 @@ public class MilestoneWorkflowTests
         var submitHandler = new SubmitMilestoneCommandHandler(
             fixture.Context,
             new FixedDateTimeService(fixture.Now),
+            new CapturingUserAuditLogService(),
             mediaService);
         byte[] content = [.. ValidPdfContent, 0x01, 0x02, 0x03];
 

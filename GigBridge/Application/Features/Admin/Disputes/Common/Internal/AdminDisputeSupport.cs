@@ -100,7 +100,7 @@ internal static class AdminDisputeSupport
 
         var conversations = await context.Set<Conversation>()
             .AsNoTracking()
-            .Where(item => item.ContractsId == contract.ContractsId)
+            .Where(item => item.ContractsId == contract.ContractsId && item.DeletedAt == null)
             .Select(item => new { item.ConversationsId, item.ConversationType, item.DisputesId })
             .ToListAsync(cancellationToken);
 
@@ -184,7 +184,8 @@ internal static class AdminDisputeSupport
             ? "Client"
             : freelancer?.UserId == dispute.InitiatorId ? "Freelancer" : null;
 
-        var approvedCount = milestones.Count(item => item.Status == (int)MilestoneStatus.Approved);
+        var approvedCount = milestones.Count(item =>
+            item.Status is (int)MilestoneStatus.Approved or (int)MilestoneStatus.Completed);
         var progress = milestones.Count == 0
             ? 0
             : (int)Math.Round(approvedCount * 100m / milestones.Count, MidpointRounding.AwayFromZero);
@@ -371,7 +372,8 @@ internal static class AdminDisputeSupport
             auditTrail,
             decisions,
             penalties,
-            auditTrail.FirstOrDefault(item => item.Action == "Dispute.FinalResolution")?.AuditId);
+            auditTrail.FirstOrDefault(item => item.Action == "Dispute.FinalResolution")?.AuditId,
+            await UserAuditLogQueries.GetForContractAsync(context, contract.ContractsId, cancellationToken));
     }
 
     public static async Task NotifyParticipantsAsync(

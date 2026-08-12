@@ -52,7 +52,8 @@ public sealed class ContractAutoCompletionWorker : BackgroundService
                 contract.Status == (int)ContractStatus.Active &&
                 contract.Milestones.Any() &&
                 !contract.Milestones.Any(milestone =>
-                    milestone.Status != (int)MilestoneStatus.Approved ||
+                    milestone.Status != (int)MilestoneStatus.Approved &&
+                    milestone.Status != (int)MilestoneStatus.Completed ||
                     !milestone.ApprovedAt.HasValue ||
                     milestone.ApprovedAt.Value > cutoff) &&
                 !contract.Disputes.Any(dispute =>

@@ -22,6 +22,7 @@ public sealed class CreateReportCommandHandler :
     private readonly INotificationService _notificationService;
     private readonly IChatRealtimeNotifier _chatRealtimeNotifier;
     private readonly ILogger<CreateReportCommandHandler> _logger;
+    private readonly IUserAuditLogService _userAuditLog;
 
     public CreateReportCommandHandler(
         IApplicationDbContext context,
@@ -29,7 +30,8 @@ public sealed class CreateReportCommandHandler :
         IMediaService mediaService,
         INotificationService notificationService,
         IChatRealtimeNotifier chatRealtimeNotifier,
-        ILogger<CreateReportCommandHandler> logger)
+        ILogger<CreateReportCommandHandler> logger,
+        IUserAuditLogService userAuditLog)
     {
         _context = context;
         _dateTimeService = dateTimeService;
@@ -37,6 +39,7 @@ public sealed class CreateReportCommandHandler :
         _notificationService = notificationService;
         _chatRealtimeNotifier = chatRealtimeNotifier;
         _logger = logger;
+        _userAuditLog = userAuditLog;
     }
 
     public async Task<ReportContractResponse> Handle(
@@ -151,6 +154,15 @@ public sealed class CreateReportCommandHandler :
             reporterRole,
             now,
             cancellationToken);
+
+        _userAuditLog.Add(
+            command.UserId,
+            reporterRole == "Client" ? UserRole.Client : UserRole.Freelancer,
+            AuditUserActionType.ReportCreated,
+            command.ContractId,
+            $"Reported an issue: {command.IssueType}.",
+            milestoneId: report.MilestoneId,
+            reportId: report.ReportContractId);
 
         await _context.SaveChangesAsync(cancellationToken);
 

@@ -61,7 +61,7 @@ public class GetContractByIdQueryHandler : IRequestHandler<GetContractByIdQuery,
 
         var conversationId = await _context.Set<Conversation>()
             .AsNoTracking()
-            .Where(c => c.ContractsId == contract.ContractsId)
+            .Where(c => c.ContractsId == contract.ContractsId && c.ConversationType != (int)ConversationType.Dispute)
             .OrderByDescending(c => c.CreatedAt)
             .Select(c => (Guid?)c.ConversationsId)
             .FirstOrDefaultAsync(cancellationToken);

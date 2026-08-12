@@ -52,7 +52,8 @@ public sealed class SendAdminDisputeMessageCommandHandler : IRequestHandler<Send
         var validConversation = await _context.Set<Conversation>().AsNoTracking().AnyAsync(item =>
             item.ConversationsId == command.ConversationId &&
             item.DisputesId == command.DisputeId &&
-            item.ConversationType == (int)ConversationType.Dispute,
+            item.ConversationType == (int)ConversationType.Dispute &&
+            item.DeletedAt == null,
             cancellationToken);
         if (!validConversation)
             throw new BadRequestException("The selected conversation is not this dispute's conversation.");
