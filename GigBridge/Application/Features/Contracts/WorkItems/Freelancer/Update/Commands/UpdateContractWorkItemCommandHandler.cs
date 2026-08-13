@@ -1,6 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.Time;
+using Application.Features.Chat.Common.Interfaces;
 using Application.Features.Contracts.Milestones.Common.DTOs;
 using Application.Features.Contracts.Milestones.Common.Internal;
 using Domain.Entities;
@@ -16,11 +17,14 @@ public sealed class UpdateContractWorkItemCommandHandler
 {
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _clock;
+    private readonly IChatRealtimeNotifier? _realtimeNotifier;
 
-    public UpdateContractWorkItemCommandHandler(IApplicationDbContext context, IDateTimeService clock)
+    public UpdateContractWorkItemCommandHandler(
+        IApplicationDbContext context, IDateTimeService clock, IChatRealtimeNotifier? realtimeNotifier = null)
     {
         _context = context;
         _clock = clock;
+        _realtimeNotifier = realtimeNotifier;
     }
 
     public async Task<ContractWorkItemResponse> Handle(UpdateContractWorkItemCommand command, CancellationToken cancellationToken)
@@ -77,6 +81,20 @@ public sealed class UpdateContractWorkItemCommandHandler
         milestone.UpdatedAt = now;
         contract.UpdatedAt = now;
         await _context.SaveChangesAsync(cancellationToken);
+
+        if (_realtimeNotifier is not null)
+        {
+            var participantIds = await MilestoneWorkflowGuard.GetParticipantUserIdsAsync(_context, contract, cancellationToken);
+            await _realtimeNotifier.SendUsersEventAsync(
+                participantIds,
+                "WorkItemUpdated",
+                new
+                {
+                    contractId = contract.ContractsId, milestoneId = milestone.MilestonesId,
+                    workItemId = item.ContractWorkItemId, status = item.Status, milestoneStatus = milestone.Status
+                },
+                cancellationToken);
+        }
 
         return new ContractWorkItemResponse(item.ContractWorkItemId, item.MilestonesId, item.Title, item.Description,
             item.Deliverables, item.EstimatedDuration, item.OrderIndex, item.Status, item.ProgressNote,
