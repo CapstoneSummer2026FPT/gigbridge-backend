@@ -1,5 +1,6 @@
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+using Domain.Enums.Subscriptions;
 
 namespace Application.Features.Subscriptions.Common;
 

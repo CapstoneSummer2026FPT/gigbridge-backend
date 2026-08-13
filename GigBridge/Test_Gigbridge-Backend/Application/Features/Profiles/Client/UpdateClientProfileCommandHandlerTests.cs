@@ -1,10 +1,10 @@
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Identity;
 using Application.Common.Mappings;
 using Application.Features.Profiles.ClientProfile.UpdateClientProfile.Commands;
 using Application.Features.Profiles.ClientProfile.UpdateClientProfile.DTOs;
 using AutoMapper;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
 using Microsoft.Extensions.Logging.Abstractions;
 using Test_Gigbridge_Backend.TestSupport;
 

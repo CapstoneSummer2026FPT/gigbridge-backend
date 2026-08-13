@@ -1,9 +1,13 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Time;
 using Application.Features.Wallets.Common;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Contracts;
+using Domain.Enums.Contracts.Amendments;
+using Domain.Enums.Contracts.Escrow;
+using Domain.Enums.Contracts.Milestones;
+using Domain.Enums.Wallets;
 using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.Contracts.Amendments.Common;

@@ -3,7 +3,9 @@ using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Templates;
+using Application.Features.ESign.Common.Interfaces;
+using Application.Features.ESign.Common.Services;
 using Application.Features.Contracts.Common.DTOs;
 using Domain.Services.Payments;
 using DocumentFormat.OpenXml;
@@ -16,12 +18,17 @@ using PIC = DocumentFormat.OpenXml.Drawing.Pictures;
 
 namespace Infrastructure.Services.ESign;
 
-public sealed class ContractEsignDocumentGenerator(HttpClient httpClient) : IContractEsignDocumentGenerator
+public sealed class ContractEsignDocumentGenerator(
+    HttpClient httpClient,
+    ITemplateReader templateReader) : IContractEsignDocumentGenerator
 {
-    private const string ResourceName = "Infrastructure.Templates.ESign.GigBridge_Hop_dong_Esign_Template.docx";
+    private const string TemplatePath = "ESign/Documents/GigBridge_Hop_dong_Esign_Template.docx";
     private const string DocxMimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
     private const int MaxSignatureBytes = 5 * 1024 * 1024;
     private static readonly CultureInfo VietnamCulture = CultureInfo.GetCultureInfo("vi-VN");
+    private static readonly Regex ProposalEditorUrl = new(
+        @"(?:https?://[^\s/]+)?/proposals/create/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(?:/questions)?(?:[?#][^\s]*)?",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     public string RenderPreview(ContractDocumentSnapshot snapshot)
     {
@@ -90,14 +97,13 @@ public sealed class ContractEsignDocumentGenerator(HttpClient httpClient) : ICon
             DocxMimeType);
     }
 
-    private static byte[] Render(
+    private byte[] Render(
         ContractDocumentSnapshot snapshot,
         SignatureArtifact? clientSignature,
         SignatureArtifact? freelancerSignature,
         string documentHash)
     {
-        using var template = typeof(ContractEsignDocumentGenerator).Assembly.GetManifestResourceStream(ResourceName)
-            ?? throw new InvalidOperationException($"Embedded ESign template '{ResourceName}' was not found.");
+        using var template = templateReader.OpenRead(TemplatePath);
         using var output = new MemoryStream();
         template.CopyTo(output);
         output.Position = 0;
@@ -110,8 +116,16 @@ public sealed class ContractEsignDocumentGenerator(HttpClient httpClient) : ICon
                 ?? throw new InvalidOperationException("The ESign template has no document body.");
 
             RemoveDeveloperAppendix(body);
+            NormalizeCoverPageBreak(body);
+            RemoveAdjacentDuplicateParagraphs(body);
             NormalizeTemplateMarkup(body);
             ExpandMilestones(body, snapshot.Milestones);
+
+            if (clientSignature?.Signature.IsFinalized == false ||
+                freelancerSignature?.Signature.IsFinalized == false)
+            {
+                AddPreviewNotice(body);
+            }
 
             if (clientSignature is not null)
             {
@@ -149,6 +163,103 @@ public sealed class ContractEsignDocumentGenerator(HttpClient httpClient) : ICon
         return output.ToArray();
     }
 
+    private static void AddPreviewNotice(Body body)
+    {
+        var pageStart = body.Elements<Paragraph>()
+            .FirstOrDefault(item => item.ParagraphProperties?.PageBreakBefore is not null);
+        var paragraphProperties = new ParagraphProperties();
+        if (pageStart is not null)
+        {
+            paragraphProperties.Append(new PageBreakBefore());
+        }
+        paragraphProperties.Append(
+            new SpacingBetweenLines { Before = "0", After = "160" },
+            new Justification { Val = JustificationValues.Center });
+        var paragraph = new Paragraph(
+            paragraphProperties,
+            new Run(
+                new RunProperties(
+                    new Bold(),
+                    new Color { Val = "C2410C" },
+                    new FontSize { Val = "24" }),
+                new Text("BẢN XEM TRƯỚC – CHƯA CÓ HIỆU LỰC")));
+
+        if (pageStart is null)
+        {
+            body.InsertAt(paragraph, 0);
+            return;
+        }
+
+        pageStart.ParagraphProperties!.PageBreakBefore!.Remove();
+        pageStart.InsertBeforeSelf(paragraph);
+    }
+
+    private static void NormalizeCoverPageBreak(Body body)
+    {
+        var manualBreakParagraph = body.Elements<Paragraph>()
+            .FirstOrDefault(item => item.Descendants<Break>()
+                .Any(lineBreak => lineBreak.Type?.Value == BreakValues.Page));
+        if (manualBreakParagraph is null)
+        {
+            return;
+        }
+
+        var children = body.ChildElements.ToList();
+        var breakIndex = children.IndexOf(manualBreakParagraph);
+        var pageStart = children.Skip(breakIndex + 1).OfType<Paragraph>().FirstOrDefault()
+            ?? throw new InvalidOperationException("The ESign template page break has no following paragraph.");
+
+        manualBreakParagraph.Remove();
+        SetPageBreakBefore(pageStart);
+    }
+
+    private static void SetPageBreakBefore(Paragraph paragraph)
+    {
+        paragraph.ParagraphProperties ??= new ParagraphProperties();
+        var properties = paragraph.ParagraphProperties;
+        properties.PageBreakBefore?.Remove();
+
+        var pageBreak = new PageBreakBefore();
+        var keepLines = properties.GetFirstChild<KeepLines>();
+        var keepNext = properties.GetFirstChild<KeepNext>();
+        if (keepLines is not null)
+        {
+            keepLines.InsertAfterSelf(pageBreak);
+        }
+        else if (keepNext is not null)
+        {
+            keepNext.InsertAfterSelf(pageBreak);
+        }
+        else
+        {
+            properties.PrependChild(pageBreak);
+        }
+    }
+
+    private static void RemoveAdjacentDuplicateParagraphs(Body body)
+    {
+        Paragraph? previousParagraph = null;
+        foreach (var element in body.ChildElements.ToArray())
+        {
+            if (element is not Paragraph paragraph)
+            {
+                previousParagraph = null;
+                continue;
+            }
+
+            var text = paragraph.InnerText.Trim();
+            if (text.Length > 0 &&
+                previousParagraph is not null &&
+                string.Equals(text, previousParagraph.InnerText.Trim(), StringComparison.Ordinal))
+            {
+                paragraph.Remove();
+                continue;
+            }
+
+            previousParagraph = paragraph;
+        }
+    }
+
     private static void RemoveDeveloperAppendix(Body body)
     {
         var marker = body.Descendants<Paragraph>()
@@ -180,13 +291,17 @@ public sealed class ContractEsignDocumentGenerator(HttpClient httpClient) : ICon
             var shading = properties.GetFirstChild<Shading>();
             var margins = properties.GetFirstChild<TableCellMargin>();
             var alignment = properties.GetFirstChild<TableCellVerticalAlignment>();
+            var hideMark = properties.GetFirstChild<HideMark>();
 
             if (shading is not null)
             {
                 shading.Val ??= ShadingPatternValues.Clear;
             }
 
-            foreach (var element in new OpenXmlElement?[] { shading, margins, alignment })
+            // CT_TcPr requires these elements in schema order. Move w:hideMark
+            // together with the preceding tail; otherwise moving only shd/tcMar/
+            // vAlign would leave hideMark before them and invalidate cloned rows.
+            foreach (var element in new OpenXmlElement?[] { shading, margins, alignment, hideMark })
             {
                 if (element is null) continue;
                 element.Remove();
@@ -233,22 +348,33 @@ public sealed class ContractEsignDocumentGenerator(HttpClient httpClient) : ICon
         templateRow.Remove();
     }
 
-    private static Dictionary<string, string> BuildMilestoneReplacements(ContractMilestoneSnapshot milestone) => new(StringComparer.Ordinal)
+    private static Dictionary<string, string> BuildMilestoneReplacements(ContractMilestoneSnapshot milestone)
     {
-        ["{{#Milestones}}"] = string.Empty,
-        ["{{/Milestones}}"] = string.Empty,
-        ["{{MilestoneNo}}"] = milestone.Number.ToString(VietnamCulture),
-        ["{{MilestoneTitle}}"] = milestone.Title,
-        ["{{MilestoneDescription}}"] = ValueOr(milestone.Description, "Không áp dụng"),
-        ["{{MilestoneDeliverable}}"] = ValueOr(milestone.Deliverable, "Không áp dụng"),
-        ["{{MilestoneAcceptanceCriteria}}"] = ValueOr(milestone.AcceptanceCriteria, "Không áp dụng"),
-        ["{{MilestoneStartDate}}"] = FormatDate(milestone.StartDate),
-        ["{{MilestoneDueDate}}"] = FormatDate(milestone.DueDate),
-        ["{{MilestoneRevisionLimit}}"] = ValueOr(milestone.RevisionLimit, "Không áp dụng"),
-        // Snapshot amounts are G-coin: the VND column converts to VND, the G-coin column renders the value directly.
-        ["{{MilestoneValueVND}}"] = FormatNumber(TokenWalletRules.ToVnd(milestone.ValueVnd)),
-        ["{{MilestoneValueGigCoin}}"] = FormatNumber(milestone.ValueVnd)
-    };
+        var title = ValueOr(RemoveProposalEditorUrls(milestone.Title), $"Milestone {milestone.Number}");
+        var deliverable = ValueOr(
+            RemoveProposalEditorUrls(milestone.Deliverable),
+            $"Hoàn thành hạng mục “{title}”");
+        var acceptanceCriteria = ValueOr(
+            RemoveProposalEditorUrls(milestone.AcceptanceCriteria),
+            $"Hoàn thành đầy đủ hạng mục “{title}” và được Bên A nghiệm thu.");
+
+        return new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["{{#Milestones}}"] = string.Empty,
+            ["{{/Milestones}}"] = string.Empty,
+            ["{{MilestoneNo}}"] = milestone.Number.ToString(VietnamCulture),
+            ["{{MilestoneTitle}}"] = title,
+            ["{{MilestoneDescription}}"] = ValueOr(milestone.Description, "Không áp dụng"),
+            ["{{MilestoneDeliverable}}"] = deliverable,
+            ["{{MilestoneAcceptanceCriteria}}"] = acceptanceCriteria,
+            ["{{MilestoneStartDate}}"] = FormatDate(milestone.StartDate),
+            ["{{MilestoneDueDate}}"] = FormatDate(milestone.DueDate),
+            ["{{MilestoneRevisionLimit}}"] = ValueOr(milestone.RevisionLimit, "Không áp dụng"),
+            // Snapshot amounts are G-coin: the VND column converts to VND, the G-coin column renders the value directly.
+            ["{{MilestoneValueVND}}"] = FormatNumber(TokenWalletRules.ToVnd(milestone.ValueVnd)),
+            ["{{MilestoneValueGigCoin}}"] = FormatNumber(milestone.ValueVnd)
+        };
+    }
 
     private static Dictionary<string, string> BuildReplacements(
         ContractDocumentSnapshot snapshot,
@@ -259,7 +385,7 @@ public sealed class ContractEsignDocumentGenerator(HttpClient httpClient) : ICon
         var clientFee = snapshot.TotalContractValueVnd * 0.01m;
         var initialRelease = snapshot.TotalContractValueVnd * 0.80m;
         var retention = snapshot.TotalContractValueVnd - initialRelease;
-        var effectiveAt = clientSignature is not null && freelancerSignature is not null
+        var effectiveAt = clientSignature is { IsFinalized: true } && freelancerSignature is { IsFinalized: true }
             ? new[] { clientSignature.SignedAtUtc, freelancerSignature.SignedAtUtc }.Max()
             : (DateTime?)null;
 
@@ -331,12 +457,17 @@ public sealed class ContractEsignDocumentGenerator(HttpClient httpClient) : ICon
         replacements[$"{{{{{prefix}Phone}}}}"] = ValueOr(party.Phone, "Không cung cấp");
         replacements[$"{{{{{prefix}Address}}}}"] = ValueOr(party.Address, "Không cung cấp");
         replacements[$"{{{{{prefix}IdentityOrTaxCode}}}}"] = ValueOr(party.IdentityOrTaxCode, "Không cung cấp");
-        replacements[$"{{{{{prefix}SignStatus}}}}"] = signature is null ? "Chưa ký" : "Đã ký";
+        var signatureStatus = signature is null
+            ? "Chưa ký"
+            : signature.IsFinalized
+                ? "Đã ký"
+                : "Bản tạm – chưa có hiệu lực";
+        replacements[$"{{{{{prefix}SignStatus}}}}"] = signatureStatus;
         replacements[$"{{{{{prefix}SignedAt}}}}"] = signature is null ? "Chưa ký" : FormatVietnamTime(signature.SignedAtUtc, true);
         replacements[$"{{{{{prefix}SignMethod}}}}"] = signature is null ? "Chưa ký" : "Xác nhận điện tử trên GigBridge";
         replacements[$"{{{{{prefix}SignIp}}}}"] = signature is null ? "Chưa ký" : ValueOr(signature.IpAddress, "Không ghi nhận");
         replacements[$"{{{{{prefix}UserAgent}}}}"] = signature is null ? "Chưa ký" : ValueOr(signature.UserAgent, "Không ghi nhận");
-        replacements[$"{{{{{prefix}ConsentVersion}}}}"] = signature is null ? "Chưa ký" : "1.0-DATN";
+        replacements[$"{{{{{prefix}ConsentVersion}}}}"] = signature is null ? "Chưa ký" : ValueOr(signature.PolicyVersion, "Không ghi nhận");
         replacements[$"{{{{{prefix}SignatureImage}}}}"] = signature is null ? "Chưa ký" : string.Empty;
 
         if (prefix == "Client")
@@ -446,14 +577,34 @@ public sealed class ContractEsignDocumentGenerator(HttpClient httpClient) : ICon
             ?? throw new InvalidOperationException($"Signature placeholder '{placeholder}' was not found.");
         ReplaceText(paragraph, placeholder, string.Empty);
 
+        paragraph.ParagraphProperties ??= new ParagraphProperties();
+        paragraph.ParagraphProperties.Justification = new Justification
+        {
+            Val = JustificationValues.Center
+        };
+        paragraph.ParagraphProperties.SpacingBetweenLines = new SpacingBetweenLines
+        {
+            Before = "0",
+            After = "0"
+        };
+
         var imagePart = mainPart.AddImagePart(artifact.ContentType);
         using (var image = new MemoryStream(artifact.Content, writable: false))
         {
             imagePart.FeedData(image);
         }
 
-        var width = Math.Clamp(artifact.Signature.SignatureWidth ?? 300, 100, 600);
-        var height = Math.Clamp(artifact.Signature.SignatureHeight ?? 100, 40, 250);
+        const int maxFieldWidth = 220;
+        const int maxFieldHeight = 80;
+        var requestedWidth = Math.Clamp(artifact.Signature.SignatureWidth ?? maxFieldWidth, 1, 1200);
+        var requestedHeight = Math.Clamp(artifact.Signature.SignatureHeight ?? maxFieldHeight, 1, 500);
+        var fitScale = Math.Min(
+            1d,
+            Math.Min(
+                (double)maxFieldWidth / requestedWidth,
+                (double)maxFieldHeight / requestedHeight));
+        var width = Math.Max(1, (int)Math.Round(requestedWidth * fitScale));
+        var height = Math.Max(1, (int)Math.Round(requestedHeight * fitScale));
         var cx = width * 9525L;
         var cy = height * 9525L;
         var relationshipId = mainPart.GetIdOfPart(imagePart);
@@ -491,6 +642,12 @@ public sealed class ContractEsignDocumentGenerator(HttpClient httpClient) : ICon
 
     private async Task<DownloadedImage> DownloadSignatureAsync(string imageUrl, CancellationToken cancellationToken)
     {
+        if (imageUrl.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
+        {
+            var parsed = SignatureImageStorage.ParseImageDataUri(imageUrl);
+            return new DownloadedImage(parsed.Bytes, parsed.ContentType);
+        }
+
         if (!Uri.TryCreate(imageUrl, UriKind.Absolute, out var uri) ||
             uri.Scheme != Uri.UriSchemeHttps ||
             !(uri.Host.Equals("res.cloudinary.com", StringComparison.OrdinalIgnoreCase) ||
@@ -546,6 +703,16 @@ public sealed class ContractEsignDocumentGenerator(HttpClient httpClient) : ICon
     }
 
     private static string ValueOr(string? value, string fallback) => string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
+
+    private static string? RemoveProposalEditorUrls(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+
+        var sanitized = ProposalEditorUrl.Replace(value, string.Empty)
+            .Trim()
+            .Trim(' ', '\t', '\r', '\n', '.', ',', ';', ':', '-');
+        return string.IsNullOrWhiteSpace(sanitized) ? null : sanitized;
+    }
 
     private sealed record DownloadedImage(byte[] Content, string ContentType);
     private sealed record SignatureArtifact(ContractSignatureSnapshot Signature, byte[] Content, string ContentType);

@@ -1,13 +1,24 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
-using Application.Common.Services;
+using Application.Common.InternalServices.Auditing.Interfaces;
+using Application.Common.Interfaces.Media;
+using Application.Common.Interfaces.Time;
+using Application.Features.Admin.AuditLogs.Common.Interfaces;
+using Application.Features.Admin.AuditLogs.Common.Services;
+using Application.Features.Chat.Common.Interfaces;
+using Application.Features.Notifications.Common.Interfaces;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.Disputes.Common.DTOs;
 using Application.Features.Disputes.Common.Internal;
 using Application.Features.ReportContracts.Common.Internal;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+using Domain.Enums.Auditing;
+using Domain.Enums.Chat;
+using Domain.Enums.Contracts;
+using Domain.Enums.Disputes;
+using Domain.Enums.Notifications;
+using Domain.Enums.Reports;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -24,6 +35,7 @@ public sealed class EscalateReportToDisputeCommandHandler :
     private readonly IChatRealtimeNotifier _chatRealtimeNotifier;
     private readonly ILogger<EscalateReportToDisputeCommandHandler> _logger;
     private readonly IAdminAuditService? _audit;
+    private readonly IUserAuditLogService _userAuditLog;
 
     public EscalateReportToDisputeCommandHandler(
         IApplicationDbContext context,
@@ -32,6 +44,7 @@ public sealed class EscalateReportToDisputeCommandHandler :
         INotificationService notificationService,
         IChatRealtimeNotifier chatRealtimeNotifier,
         ILogger<EscalateReportToDisputeCommandHandler> logger,
+        IUserAuditLogService userAuditLog,
         IAdminAuditService? audit = null)
     {
         _context = context;
@@ -40,6 +53,7 @@ public sealed class EscalateReportToDisputeCommandHandler :
         _notificationService = notificationService;
         _chatRealtimeNotifier = chatRealtimeNotifier;
         _logger = logger;
+        _userAuditLog = userAuditLog;
         _audit = audit;
     }
 
@@ -181,7 +195,7 @@ public sealed class EscalateReportToDisputeCommandHandler :
             ClaimedAmount = command.ClaimedAmount,
             RequestedResolution = command.RequestedResolution.Trim(),
             Urgency = (int)command.Urgency.Value,
-            Status = (int)DisputeStatus.Open,
+            Status = (int)DisputeStatus.WaitingAdmin,
             Resolution = null,
             ResolutionNote = null,
             ResolvedByAdminId = null,
@@ -266,9 +280,26 @@ public sealed class EscalateReportToDisputeCommandHandler :
             now);
 
         if (isAdminEscalation)
+        {
             _audit?.Add(command.AdminActorId!.Value, AdminAuditActions.ContractReportEscalated, nameof(ReportContract), report.ReportContractId,
                 new { status = (int)ContractReportStatus.WaitingReporterConfirmation, adminReviewStatus = (int)ContractReportAdminStatus.UnderReview },
                 new { report.Status, report.AdminReviewStatus, disputeId = dispute.DisputesId, report.ContractId, report.ReporterId, report.RespondentId, reason = command.AdminReason });
+        }
+        else
+        {
+            // Admin-driven escalations are attributed to the admin via IAdminAuditService above,
+            // not to a Client/Freelancer actor.
+            var escalatorRole = participants.GetRole(command.UserId);
+            _userAuditLog.Add(
+                command.UserId,
+                escalatorRole == "Client" ? UserRole.Client : UserRole.Freelancer,
+                AuditUserActionType.DisputeEscalated,
+                command.ContractId,
+                "Escalated a report to a dispute.",
+                milestoneId: report.MilestoneId,
+                reportId: report.ReportContractId,
+                disputeId: dispute.DisputesId);
+        }
 
         await _context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);

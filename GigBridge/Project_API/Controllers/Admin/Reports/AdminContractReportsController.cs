@@ -1,7 +1,8 @@
 using Application.Common.Models;
 using Application.Features.Admin.ContractReports;
 using Application.Features.ReportContracts.Escalate.Commands;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+using Domain.Enums.Disputes;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 

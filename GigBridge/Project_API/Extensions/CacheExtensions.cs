@@ -1,7 +1,7 @@
 using Infrastructure.Services.Caching;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Configuration;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Caching;
 namespace Project_API.Extensions;
 
 

@@ -1,8 +1,14 @@
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Caching;
+using Application.Features.Notifications.Common.Interfaces;
+using Application.Features.Wallets.Common.Interfaces;
 using Domain.Services.Payments;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+using Domain.Enums.Notifications;
+using Domain.Enums.Premium;
+using Domain.Enums.Subscriptions;
+using Domain.Enums.Wallets;
 using Application.Features.Premium.Freelancer.Promotions.Common;
 using Application.Features.Subscriptions.Common;
 using System.Text.Json;

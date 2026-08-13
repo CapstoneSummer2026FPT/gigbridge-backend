@@ -1,12 +1,13 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Time;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.Contracts.Milestones.Common.DTOs;
 using Application.Features.Contracts.Milestones.Common.Internal;
 using Application.Features.Wallets.Common;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Contracts.Escrow;
+using Domain.Enums.Contracts.Milestones;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -59,7 +60,7 @@ public sealed class WithdrawMilestoneCommandHandler :
         }
 
         var releaseCapVnd = decimal.Round(
-            milestone.Amount * NormalFreelancerReleasePercentage,
+            (milestone.Amount - milestone.RefundedAmount) * NormalFreelancerReleasePercentage,
             2,
             MidpointRounding.AwayFromZero);
         var releasableVnd = releaseCapVnd - milestone.ReleasedAmount;
@@ -72,7 +73,8 @@ public sealed class WithdrawMilestoneCommandHandler :
             .Where(item => item.ContractsId == contract.ContractsId)
             .ToListAsync(cancellationToken);
         var requiredApprovedCount = (int)Math.Ceiling(milestones.Count * 0.5m);
-        var approvedCount = milestones.Count(item => item.Status == (int)MilestoneStatus.Approved);
+        var approvedCount = milestones.Count(item =>
+            item.Status is (int)MilestoneStatus.Approved or (int)MilestoneStatus.Completed);
         if (approvedCount < requiredApprovedCount)
         {
             throw new BadRequestException("At least 50% of contract milestones must be approved before withdrawal.");

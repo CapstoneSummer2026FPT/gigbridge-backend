@@ -10,6 +10,8 @@ using Application.Features.ESign.Common.GetDocuments.Queries;
 using Application.Features.ESign.Common.GetMySignedDocuments.Queries;
 using Application.Features.ESign.Common.GeneratePdf.Commands;
 using Application.Features.ESign.Common.SavePdf.Commands;
+using Application.Features.ESign.Common.PreviewPdf.Commands;
+using Application.Features.ESign.Common.PreviewPdf.DTOs;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -123,6 +125,28 @@ public sealed class ESignController : BaseApiController
 
         var result = await Mediator.Send(new GenerateESignPdfCommand(documentId, userId));
         return Ok(ApiResponse<ESignPdfArtifactResponse>.Ok(result, "PDF prepared from the contract template"));
+    }
+
+    [HttpPost("documents/{documentId:guid}/pdf/preview-signature")]
+    [RequestSizeLimit(8 * 1024 * 1024)]
+    public async Task<IActionResult> PreviewSignaturePdf(
+        Guid documentId,
+        [FromBody] PreviewESignPdfRequest request)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return InvalidTokenResponse();
+        }
+
+        var result = await Mediator.Send(new PreviewESignPdfCommand(
+            documentId,
+            userId,
+            request,
+            HttpContext.Connection.RemoteIpAddress?.ToString(),
+            Request.Headers.UserAgent.ToString()));
+        Response.Headers.CacheControl = "private, no-store";
+        Response.Headers.Pragma = "no-cache";
+        return File(result.Content, result.ContentType, result.FileName);
     }
 
     [HttpPost("documents/{documentId:guid}/pdf/upload")]

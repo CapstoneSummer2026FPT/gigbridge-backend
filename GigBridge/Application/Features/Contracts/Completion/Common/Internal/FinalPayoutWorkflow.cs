@@ -2,7 +2,7 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Features.Wallets.Common;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Contracts.Escrow;
 using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.Contracts.Completion.Common.Internal;
@@ -18,7 +18,7 @@ internal static class FinalPayoutWorkflow
         CancellationToken cancellationToken)
     {
         var remaining = milestones
-            .Select(item => (Milestone: item, Amount: Math.Max(0m, item.Amount - item.ReleasedAmount)))
+            .Select(item => (Milestone: item, Amount: Math.Max(0m, item.Amount - item.RefundedAmount - item.ReleasedAmount)))
             .Where(item => item.Amount > 0m)
             .ToList();
         var releaseVnd = remaining.Sum(item => item.Amount);

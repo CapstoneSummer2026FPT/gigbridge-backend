@@ -1,5 +1,5 @@
 using Application.Features.Admin.Notifications.Common.DTOs;
-using Domain.Enums;
+using Domain.Enums.Notifications;
 using MediatR;
 
 namespace Application.Features.Admin.Notifications.Broadcast;

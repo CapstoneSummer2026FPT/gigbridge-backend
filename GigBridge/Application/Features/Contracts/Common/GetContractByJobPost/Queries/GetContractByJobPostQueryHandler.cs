@@ -4,7 +4,8 @@ using Application.Features.Contracts.Common.GetContractByJobPost.DTOs;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.Contracts.ProductHandoffs.Common;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+using Domain.Enums.Chat;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -65,7 +66,7 @@ public class GetContractByJobPostQueryHandler
 
         var conversationId = await _context.Set<Conversation>()
             .AsNoTracking()
-            .Where(c => c.ContractsId == contract.ContractsId)
+            .Where(c => c.ContractsId == contract.ContractsId && c.ConversationType != (int)ConversationType.Dispute)
             .OrderByDescending(c => c.CreatedAt)
             .Select(c => (Guid?)c.ConversationsId)
             .FirstOrDefaultAsync(cancellationToken);

@@ -1,6 +1,7 @@
+using Domain.Enums.AiInterviews;
 using Application.Common.Interfaces;
 using Domain.Entities;
-using Domain.Enums;
+
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 

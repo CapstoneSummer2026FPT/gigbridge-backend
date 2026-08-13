@@ -2,7 +2,9 @@ using Application.Common.Exceptions;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.Contracts.Common.GetContractByJobPost.Queries;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+using Domain.Enums.Contracts;
+using Domain.Enums.Contracts.Escrow;
 using Test_Gigbridge_Backend.TestSupport;
 
 namespace Test_Gigbridge_Backend.Application.Features.Contracts.Common;

@@ -1,7 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Features.Elo.Common;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Elo;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 

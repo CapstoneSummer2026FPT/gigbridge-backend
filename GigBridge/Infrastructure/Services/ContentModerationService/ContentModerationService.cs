@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
-using Application.Common.Interfaces.IService;
+using Application.Features.JobPosts.Common.ContentModeration;
 
 namespace Infrastructure.Services.ContentModerationService;
 
@@ -234,26 +234,82 @@ public class ContentModerationService : IContentModerationService
         return phrases.Count(phrase => ContainsPhrase(normalized, phrase));
     }
 
-    private static bool ContainsPhrase(NormalizedContent normalized, string phrase)
+    private static bool ContainsPhrase(
+    NormalizedContent normalized,
+    string phrase)
     {
         var normalizedPhrase = Normalize(phrase);
 
         if (string.IsNullOrWhiteSpace(normalizedPhrase.NormalizedText))
-        {
             return false;
-        }
 
         var paddedText = $" {normalized.NormalizedText} ";
         var paddedPhrase = $" {normalizedPhrase.NormalizedText} ";
 
-        if (paddedText.Contains(paddedPhrase, StringComparison.Ordinal))
+        if (paddedText.Contains(
+                paddedPhrase,
+                StringComparison.Ordinal))
         {
             return true;
         }
 
-        // Compact matching catches simple obfuscation like "m.a-t_u/y" without fuzzy matching.
-        return normalizedPhrase.CompactText.Length >= 4 &&
-               normalized.CompactText.Contains(normalizedPhrase.CompactText, StringComparison.Ordinal);
+        var phraseTokens = normalizedPhrase.NormalizedText
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+        var textTokens = normalized.NormalizedText
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+        if (phraseTokens.Length == 0 || textTokens.Length == 0)
+            return false;
+
+        if (phraseTokens.Length == 1)
+        {
+            var target = phraseTokens[0];
+
+            foreach (var token in textTokens)
+            {
+                if (string.Equals(
+                        token,
+                        target,
+                        StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            for (var i = 0; i < textTokens.Length; i++)
+            {
+                var compactBuilder = new StringBuilder();
+
+                for (var j = i; j < textTokens.Length; j++)
+                {
+                    var currentToken = textTokens[j];
+
+                    if (currentToken.Length > 2)
+                        break;
+
+                    compactBuilder.Append(currentToken);
+
+                    var compactCandidate = compactBuilder.ToString();
+
+                    if (string.Equals(
+                            compactCandidate,
+                            target,
+                            StringComparison.Ordinal))
+                    {
+                        if (j > i)
+                            return true;
+                    }
+
+                    if (compactCandidate.Length >= target.Length)
+                        break;
+                }
+            }
+
+            return false;
+        }
+
+        return false;
     }
 
     private static NormalizedContent Normalize(string text)

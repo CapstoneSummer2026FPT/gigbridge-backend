@@ -1,7 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Features.Wallets.Common;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Wallets;
 using Test_Gigbridge_Backend.TestSupport;
 
 namespace Test_Gigbridge_Backend.Application.Features.Contracts.Common;
@@ -15,7 +15,7 @@ public sealed class EscrowBalanceSourceWorkflowTests
     private static readonly DateTime Now = new(2026, 6, 12, 9, 0, 0, DateTimeKind.Utc);
 
     [Fact]
-    public void Release_CreditsEntireNetToFreelancerWithdrawableTokensRegardlessOfClientFundingSource()
+    public void Release_CreditsEntireGrossToFreelancerWithdrawableTokensRegardlessOfClientFundingSource()
     {
         var context = new InMemoryApplicationDbContext();
         var transactions = context.AddSet<WalletTransaction>();
@@ -48,11 +48,11 @@ public sealed class EscrowBalanceSourceWorkflowTests
             100m, "release-1", "InternalTokenWallet", "Milestone release", Now);
 
         Assert.Equal(100m, result.GrossTokens);
-        Assert.Equal(1m, result.FeeTokens);
-        Assert.Equal(99m, result.NetTokens);
+        Assert.Equal(0m, result.FeeTokens);
+        Assert.Equal(100m, result.NetTokens);
         Assert.Equal(0m, client.HeldTokens);
         Assert.Equal(0m, freelancer.AvailableTokens);
-        Assert.Equal(99m, freelancer.WithdrawableTokens);
+        Assert.Equal(100m, freelancer.WithdrawableTokens);
         Assert.Equal(0m, escrow.DepositedTokens);
         Assert.Equal(0m, escrow.EarnedTokens);
 
@@ -68,12 +68,10 @@ public sealed class EscrowBalanceSourceWorkflowTests
             transaction.UserId == freelancer.UserId));
         Assert.Equal((int)WalletBalanceSource.Earned, freelancerRelease.BalanceSource);
         Assert.Null(freelancerRelease.DepositedAmount);
-        Assert.Equal(99m, freelancerRelease.EarnedAmount);
+        Assert.Equal(100m, freelancerRelease.EarnedAmount);
 
-        var fee = Assert.Single(transactions.Entities.Where(transaction =>
+        Assert.Empty(transactions.Entities.Where(transaction =>
             transaction.Type == (int)WalletTransactionType.Adjustment));
-        Assert.Equal((int)WalletBalanceSource.Earned, fee.BalanceSource);
-        Assert.Equal(1m, fee.EarnedAmount);
     }
 
     [Fact]
@@ -256,14 +254,14 @@ public sealed class EscrowBalanceSourceWorkflowTests
         ContractEscrowWalletWorkflow.Release(
             context, client, freelancer, escrow, contractId, null,
             100m, "release-dup", "InternalTokenWallet", "First release", Now);
-        Assert.Equal(99m, freelancer.WithdrawableTokens);
+        Assert.Equal(100m, freelancer.WithdrawableTokens);
 
         Assert.Throws<BadRequestException>(() =>
             ContractEscrowWalletWorkflow.Release(
                 context, client, freelancer, escrow, contractId, null,
                 100m, "release-dup-2", "InternalTokenWallet", "Duplicate release", Now));
 
-        Assert.Equal(99m, freelancer.WithdrawableTokens);
+        Assert.Equal(100m, freelancer.WithdrawableTokens);
         Assert.Equal(0m, client.HeldTokens);
     }
 
@@ -305,7 +303,7 @@ public sealed class EscrowBalanceSourceWorkflowTests
     }
 
     [Fact]
-    public void Release_MixedEscrowCompositionSplitsProportionallyAndCreditsNetEarned()
+    public void Release_MixedEscrowCompositionSplitsProportionallyAndCreditsFullEarned()
     {
         var context = new InMemoryApplicationDbContext();
         var transactions = context.AddSet<WalletTransaction>();
@@ -342,9 +340,9 @@ public sealed class EscrowBalanceSourceWorkflowTests
         Assert.Equal(60m, client.HeldTokens);
         Assert.Equal(45m, escrow.DepositedTokens);
         Assert.Equal(15m, escrow.EarnedTokens);
-        // The freelancer always receives the net as earned GigCoin.
+        // The freelancer always receives the full gross amount as earned GigCoin.
         Assert.Equal(0m, freelancer.AvailableTokens);
-        Assert.Equal(39.6m, freelancer.WithdrawableTokens);
+        Assert.Equal(40m, freelancer.WithdrawableTokens);
 
         var clientRelease = Assert.Single(transactions.Entities.Where(transaction =>
             transaction.Type == (int)WalletTransactionType.EscrowRelease &&

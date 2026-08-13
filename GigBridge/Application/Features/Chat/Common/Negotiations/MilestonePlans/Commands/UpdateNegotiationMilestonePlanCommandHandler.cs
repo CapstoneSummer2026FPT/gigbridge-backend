@@ -1,11 +1,11 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Time;
 using Application.Features.Chat.Common.Negotiations.MilestonePlans.DTOs;
 using Application.Features.JobPosts.Common;
 using Application.Features.Proposals.Common;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Chat;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 

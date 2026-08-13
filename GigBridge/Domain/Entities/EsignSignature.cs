@@ -1,4 +1,5 @@
-﻿using System;
+using Domain.Enums.ESign;
+using System;
 using System.Collections.Generic;
 
 namespace Domain.Entities;
@@ -17,6 +18,8 @@ public partial class EsignSignature
     public int SignerRole { get; set; }
 
     public string SignatureImageUrl { get; set; } = null!;
+
+    public string? IdentityOrTaxCode { get; set; }
 
     public int? SignatureWidth { get; set; }
 
@@ -41,7 +44,11 @@ public partial class EsignSignature
 
     public DateTime? PolicyAcceptedAt { get; set; }
 
+    public DateTime? DraftSubmittedAt { get; set; }
+
     public DateTime CreatedAt { get; set; }
+
+    public DateTime? UpdatedAt { get; set; }
 
     public virtual EsignDocument EsignDocuments { get; set; } = null!;
 

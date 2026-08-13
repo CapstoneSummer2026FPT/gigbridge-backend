@@ -56,7 +56,8 @@ public sealed record ContractSignatureSnapshot(
     string? IpAddress,
     string? UserAgent,
     string? PolicyVersion,
-    DateTime? PolicyAcceptedAtUtc);
+    DateTime? PolicyAcceptedAtUtc,
+    bool IsFinalized = true);
 
 public sealed record GeneratedContractDocument(byte[] Content, string FileName, string MimeType);
 

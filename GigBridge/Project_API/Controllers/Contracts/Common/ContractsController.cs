@@ -8,7 +8,7 @@ using Application.Features.Contracts.Common.GetWorkspaceFiles.DTOs;
 using Application.Features.Contracts.Common.GetWorkspaceFiles.Queries;
 using Application.Features.Contracts.Freelancer.GetMyCompletedProjects.DTOs;
 using Application.Features.Contracts.Freelancer.GetMyCompletedProjects.Queries;
-using Domain.Enums;
+using Domain.Enums.Accounts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 

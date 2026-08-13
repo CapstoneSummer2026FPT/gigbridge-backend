@@ -1,10 +1,15 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.InternalServices.Auditing.Interfaces;
+using Application.Common.Interfaces.Time;
+using Application.Features.Premium.Common.Interfaces;
 using Application.Features.Disputes.Common.DTOs;
 using Application.Features.Premium.Client.FastTrackArbitration.Common;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+using Domain.Enums.Auditing;
+using Domain.Enums.Contracts;
+using Domain.Enums.Disputes;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -13,7 +18,8 @@ namespace Application.Features.Disputes.Client.Create.Commands;
 public sealed class CreateDisputeCommandHandler(
     IApplicationDbContext context,
     IPremiumAccessService premiumAccess,
-    IDateTimeService clock) : IRequestHandler<CreateDisputeCommand, DisputeDto>
+    IDateTimeService clock,
+    IUserAuditLogService userAuditLog) : IRequestHandler<CreateDisputeCommand, DisputeDto>
 {
     public async Task<DisputeDto> Handle(CreateDisputeCommand command, CancellationToken cancellationToken)
     {
@@ -43,7 +49,7 @@ public sealed class CreateDisputeCommandHandler(
             InitiatorId = command.UserId,
             MilestonesId = command.Request.MilestoneId,
             Reason = command.Request.Reason.Trim(),
-            Status = 0,
+            Status = (int)DisputeStatus.WaitingAdmin,
             IsVipPriority = fastTrack.IsVipPriority,
             ResolutionTargetAt = fastTrack.ResolutionTargetAt,
             AiAnalysisStatus = fastTrack.AiAnalysisStatus,
@@ -52,6 +58,16 @@ public sealed class CreateDisputeCommandHandler(
         contract.Status = (int)ContractStatus.Disputed;
         contract.UpdatedAt = now;
         context.Set<Dispute>().Add(dispute);
+
+        userAuditLog.Add(
+            command.UserId,
+            UserRole.Client,
+            AuditUserActionType.DisputeCreated,
+            contract.ContractsId,
+            "Created a dispute.",
+            milestoneId: dispute.MilestonesId,
+            disputeId: dispute.DisputesId);
+
         await context.SaveChangesAsync(cancellationToken);
         return Map(dispute);
     }

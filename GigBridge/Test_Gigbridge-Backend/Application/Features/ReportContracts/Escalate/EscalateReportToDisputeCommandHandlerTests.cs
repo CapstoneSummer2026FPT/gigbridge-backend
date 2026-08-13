@@ -1,8 +1,15 @@
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Media;
+using Application.Common.Interfaces.Time;
+using Application.Features.Chat.Common.Interfaces;
 using Application.Features.Disputes.Common.Internal;
 using Application.Features.ReportContracts.Escalate.Commands;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+using Domain.Enums.Auditing;
+using Domain.Enums.Chat;
+using Domain.Enums.Contracts;
+using Domain.Enums.Disputes;
+using Domain.Enums.Reports;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Test_Gigbridge_Backend.TestSupport;
@@ -69,13 +76,15 @@ public sealed class EscalateReportToDisputeCommandHandlerTests
         var disputes = context.AddSet<Dispute>();
         var conversations = context.AddSet<Conversation>();
 
+        var userAuditLog = new CapturingUserAuditLogService();
         var handler = new EscalateReportToDisputeCommandHandler(
             context,
             new FixedDateTimeService(now),
             Substitute.For<IMediaService>(),
             new NoopNotificationService(),
             Substitute.For<IChatRealtimeNotifier>(),
-            Substitute.For<ILogger<EscalateReportToDisputeCommandHandler>>());
+            Substitute.For<ILogger<EscalateReportToDisputeCommandHandler>>(),
+            userAuditLog);
 
         var exception = await Assert.ThrowsAsync<global::Application.Common.Exceptions.BadRequestException>(() => handler.Handle(
             new EscalateReportToDisputeCommand(
@@ -95,6 +104,7 @@ public sealed class EscalateReportToDisputeCommandHandlerTests
         Assert.Empty(disputes.Entities);
         Assert.Empty(conversations.Entities);
         Assert.Equal(0, context.SaveChangesCount);
+        Assert.Empty(userAuditLog.Entries);
     }
 
     [Fact]
@@ -192,13 +202,15 @@ public sealed class EscalateReportToDisputeCommandHandlerTests
                 Arg.Any<CancellationToken>()))
             .Do(_ => realtimeSaveCounts.Add(context.SaveChangesCount));
 
+        var userAuditLog = new CapturingUserAuditLogService();
         var handler = new EscalateReportToDisputeCommandHandler(
             context,
             new FixedDateTimeService(now),
             mediaService,
             new NoopNotificationService(),
             realtimeNotifier,
-            Substitute.For<ILogger<EscalateReportToDisputeCommandHandler>>());
+            Substitute.For<ILogger<EscalateReportToDisputeCommandHandler>>(),
+            userAuditLog);
 
         var result = await handler.Handle(
             new EscalateReportToDisputeCommand(
@@ -244,6 +256,13 @@ public sealed class EscalateReportToDisputeCommandHandlerTests
         Assert.Equal(2, context.SaveChangesCount);
         Assert.Equal(1, context.TransactionBeginCount);
         Assert.Equal(1, context.TransactionCommitCount);
+
+        var auditEntry = Assert.Single(userAuditLog.Entries);
+        Assert.Equal(clientUserId, auditEntry.UserId);
+        Assert.Equal(UserRole.Client, auditEntry.Role);
+        Assert.Equal(AuditUserActionType.DisputeEscalated, auditEntry.ActionType);
+        Assert.Equal(reportId, auditEntry.ReportId);
+        Assert.Equal(dispute.DisputesId, auditEntry.DisputeId);
         Assert.Equal(systemMessage.MessagesId, conversation.LastMessageId);
         Assert.Equal(conversation.ConversationsId, systemMessage.ConversationsId);
         Assert.Equal("A dispute has been opened.", systemMessage.Content);

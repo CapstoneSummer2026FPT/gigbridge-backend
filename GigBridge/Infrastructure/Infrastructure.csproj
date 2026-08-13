@@ -17,15 +17,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <EmbeddedResource Include="Templates\Schedules\*.*">
-      <LogicalName>ScheduleEmailTemplates/%(Filename)%(Extension)</LogicalName>
-    </EmbeddedResource>
-    <EmbeddedResource Include="Templates\ESign\GigBridge_Hop_dong_Esign_Template.docx">
-      <LogicalName>Infrastructure.Templates.ESign.GigBridge_Hop_dong_Esign_Template.docx</LogicalName>
-    </EmbeddedResource>
-  </ItemGroup>
-
-  <ItemGroup>
     <PackageReference Include="BCrypt.Net-Next" Version="4.2.0" />
     <PackageReference Include="Microsoft.AspNetCore.DataProtection.Extensions" Version="8.0.29" />
     <PackageReference Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="8.0.29" />

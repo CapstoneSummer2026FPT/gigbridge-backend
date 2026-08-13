@@ -1,10 +1,16 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.InternalServices.Auditing.Interfaces;
+using Application.Common.Interfaces.Time;
+using Application.Features.Chat.Common.Interfaces;
+using Application.Features.ESign.Common.Interfaces;
 using Application.Features.Contracts.Common.DTOs;
 using Application.Features.Contracts.Common.Internal;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+using Domain.Enums.Auditing;
+using Domain.Enums.Contracts;
+using Domain.Enums.Contracts.Escrow;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -17,17 +23,20 @@ public sealed class ConfirmContractDetailsCommandHandler :
     private readonly IDateTimeService _dateTimeService;
     private readonly IChatRealtimeNotifier _chatRealtimeNotifier;
     private readonly IContractEsignDocumentGenerator _documentGenerator;
+    private readonly IUserAuditLogService _userAuditLog;
 
     public ConfirmContractDetailsCommandHandler(
         IApplicationDbContext context,
         IDateTimeService dateTimeService,
         IChatRealtimeNotifier chatRealtimeNotifier,
-        IContractEsignDocumentGenerator documentGenerator)
+        IContractEsignDocumentGenerator documentGenerator,
+        IUserAuditLogService userAuditLog)
     {
         _context = context;
         _dateTimeService = dateTimeService;
         _chatRealtimeNotifier = chatRealtimeNotifier;
         _documentGenerator = documentGenerator;
+        _userAuditLog = userAuditLog;
     }
 
     public async Task<ContractWorkflowResponse> Handle(
@@ -87,6 +96,13 @@ public sealed class ConfirmContractDetailsCommandHandler :
             "Contract details confirmed. Contract is ready for signatures.",
             now,
             cancellationToken);
+
+        _userAuditLog.Add(
+            command.UserId,
+            UserRole.Freelancer,
+            AuditUserActionType.ConfirmedParticipation,
+            contract.ContractsId,
+            "Freelancer confirmed participation in the project.");
 
         await _context.SaveChangesAsync(cancellationToken);
 

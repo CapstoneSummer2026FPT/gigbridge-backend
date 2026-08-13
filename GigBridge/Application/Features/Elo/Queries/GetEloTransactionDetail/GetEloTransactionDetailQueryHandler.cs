@@ -28,8 +28,8 @@ public sealed class GetEloTransactionDetailQueryHandler :
         var activeAppeal = await _context.Set<EloPointAppeal>()
             .AsNoTracking()
             .Where(x => x.EloPointTransactionId == query.TransactionId &&
-                        (x.Status == (int)Domain.Enums.EloPointAppealStatus.Pending ||
-                         x.Status == (int)Domain.Enums.EloPointAppealStatus.UnderReview))
+                        (x.Status == (int)Domain.Enums.Elo.EloPointAppealStatus.Pending ||
+                         x.Status == (int)Domain.Enums.Elo.EloPointAppealStatus.UnderReview))
             .Select(x => new EloAppealDto(
                 x.EloPointAppealId, x.UserId, x.EloPointTransactionId, x.Status, x.Resolution,
                 x.Reason, x.ResolutionNote, x.CorrectedDelta, x.AppliedTransactionId,

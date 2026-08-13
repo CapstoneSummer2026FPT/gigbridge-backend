@@ -1,6 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Ai;
+using Application.Features.Premium.Common.Interfaces;
 using Application.Common.Models.Ai;
 using Application.Features.Premium.Client.SmartTalentMatching.GetMatches.DTOs;
 using Domain.Entities;

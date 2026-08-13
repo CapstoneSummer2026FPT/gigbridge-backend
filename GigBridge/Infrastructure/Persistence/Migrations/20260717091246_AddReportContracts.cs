@@ -1,4 +1,5 @@
-﻿using System;
+using Domain.Enums.Reports;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable

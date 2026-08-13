@@ -2,7 +2,7 @@ using Application.Common.Interfaces;
 using Application.Features.Premium.Client.Subscriptions.DTOs;
 using Application.Features.Subscriptions.Freelancer.DTOs;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 

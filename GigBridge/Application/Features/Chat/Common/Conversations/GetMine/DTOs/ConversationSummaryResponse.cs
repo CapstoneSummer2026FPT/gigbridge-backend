@@ -1,3 +1,4 @@
+using Domain.Enums.Chat;
 using Application.Features.Chat.Common.Messages.Send.DTOs;
 
 namespace Application.Features.Chat.Common.Conversations.GetMine.DTOs;

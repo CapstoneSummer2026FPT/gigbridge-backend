@@ -1,4 +1,4 @@
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Email;
 using Application.Features.Auth.Shared.DTOs;
 using Microsoft.Extensions.Configuration;
 using Resend;

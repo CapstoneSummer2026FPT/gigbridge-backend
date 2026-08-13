@@ -1,4 +1,14 @@
-﻿using System;
+using Domain.Enums.Accounts;
+using Domain.Enums.Chat;
+using Domain.Enums.Contracts;
+using Domain.Enums.Contracts.Milestones;
+using Domain.Enums.Disputes;
+using Domain.Enums.ESign;
+using Domain.Enums.Notifications;
+using Domain.Enums.Proposals;
+using Domain.Enums.Reports;
+using Domain.Enums.Subscriptions;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable

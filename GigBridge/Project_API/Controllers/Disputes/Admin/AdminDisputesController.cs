@@ -12,7 +12,8 @@ using Application.Features.Disputes.Common.DTOs;
 using Application.Features.Chat.Common.Messages.GetConversationMessages.DTOs;
 using Application.Features.Chat.Common.Messages.GetConversationMessages.Queries;
 using Application.Features.Chat.Common.Messages.Send.DTOs;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+using Domain.Enums.Disputes;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 

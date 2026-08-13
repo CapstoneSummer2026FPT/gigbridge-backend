@@ -1,6 +1,6 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Media;
 using Application.Features.Portfolios.Common;
 using Domain.Entities;
 using MediatR;

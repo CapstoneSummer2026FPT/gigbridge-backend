@@ -1,10 +1,13 @@
+using Domain.Enums.AiInterviews;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Ai;
+using Application.Common.Interfaces.Time;
+using Application.Features.Premium.Common.Interfaces;
 using Application.Common.Models.Ai;
 using Application.Features.Premium.Client.AiInterviews.DTOs;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Premium;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 

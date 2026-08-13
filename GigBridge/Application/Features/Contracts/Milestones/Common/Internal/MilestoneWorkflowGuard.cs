@@ -2,7 +2,8 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Features.Contracts.Milestones.Common.DTOs;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Contracts;
+using Domain.Enums.Contracts.Milestones;
 using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.Contracts.Milestones.Common.Internal;
@@ -193,11 +194,58 @@ internal static class MilestoneWorkflowGuard
             workItems);
     }
 
+    /// <summary>
+    /// The contract's Client + (if assigned) Freelancer user ids — the exact recipient set
+    /// for workspace realtime events, never broadcast beyond these two participants.
+    /// </summary>
+    public static async Task<IReadOnlyList<Guid>> GetParticipantUserIdsAsync(
+        IApplicationDbContext context,
+        Contract contract,
+        CancellationToken cancellationToken)
+    {
+        var userIds = new List<Guid>();
+        var clientUserId = await context.Set<ClientProfile>()
+            .Where(profile => profile.ClientProfilesId == contract.ClientProfilesId)
+            .Select(profile => profile.UserId)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (clientUserId != Guid.Empty) userIds.Add(clientUserId);
+
+        if (contract.FreelancerProfilesId.HasValue)
+        {
+            var freelancerUserId = await context.Set<FreelancerProfile>()
+                .Where(profile => profile.FreelancerProfilesId == contract.FreelancerProfilesId.Value)
+                .Select(profile => profile.UserId)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (freelancerUserId != Guid.Empty) userIds.Add(freelancerUserId);
+        }
+
+        return userIds;
+    }
+
     public static IOrderedQueryable<Milestone> OrderMilestones(IQueryable<Milestone> milestones)
     {
         return milestones
             .OrderBy(milestone => milestone.SortOrder ?? int.MaxValue)
             .ThenBy(milestone => milestone.CreatedAt)
             .ThenBy(milestone => milestone.MilestonesId);
+    }
+
+    /// <summary>
+    /// Advances the next consecutive Pending milestone to InProgress once every milestone
+    /// before it (by SortOrder) is Approved or Completed. No-op if no such milestone exists
+    /// (e.g. the contract has no remaining milestones, or the chain is already broken).
+    /// </summary>
+    public static void AdvanceNextMilestone(IReadOnlyList<Milestone> orderedMilestones, DateTime now)
+    {
+        var next = orderedMilestones.FirstOrDefault(candidate =>
+            candidate.Status == (int)MilestoneStatus.Pending &&
+            orderedMilestones.Where(previous => (previous.SortOrder ?? 0) < (candidate.SortOrder ?? 0))
+                .All(previous => previous.Status is (int)MilestoneStatus.Approved or (int)MilestoneStatus.Completed));
+        if (next is not null)
+        {
+            next.Status = (int)MilestoneStatus.InProgress;
+            next.StartedAt = now;
+            next.UpdatedAt = now;
+        }
     }
 }

@@ -1,11 +1,13 @@
 using System.Text.Json;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Time;
+using Application.Features.Premium.Common.Interfaces;
+using Application.Features.Wallets.Common.Interfaces;
 using Application.Features.Premium.Client.JobPostPromotion.Common;
 using Application.Features.Premium.Client.JobPostPromotion.DTOs;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Wallets;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using JobPostPromotionEntity = Domain.Entities.JobPostPromotion;

@@ -1,4 +1,4 @@
-using Domain.Enums;
+using Domain.Enums.Premium;
 
 namespace Domain.Entities;
 

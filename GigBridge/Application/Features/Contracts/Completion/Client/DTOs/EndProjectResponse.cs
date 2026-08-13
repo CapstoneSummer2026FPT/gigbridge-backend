@@ -1,3 +1,4 @@
+using Domain.Enums.Contracts;
 namespace Application.Features.Contracts.Completion.Client.DTOs;
 
 public sealed record EndProjectResponse(

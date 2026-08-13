@@ -1,3 +1,4 @@
+using Domain.Enums.Proposals;
 namespace Application.Features.Proposals.Common.DTOs;
 
 public class ProposalDetailDto

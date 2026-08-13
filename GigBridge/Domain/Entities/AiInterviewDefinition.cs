@@ -1,4 +1,5 @@
-using Domain.Enums;
+using Domain.Enums.AiInterviews;
+
 
 namespace Domain.Entities;
 

@@ -1,6 +1,6 @@
 using System.Text.Json;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Wallets;
 
 namespace Application.Features.Wallets.Common;
 

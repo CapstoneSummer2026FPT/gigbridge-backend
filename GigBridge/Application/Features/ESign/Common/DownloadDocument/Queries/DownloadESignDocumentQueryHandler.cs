@@ -3,7 +3,7 @@ using Application.Common.Interfaces;
 using Application.Features.ESign.Common.DTOs;
 using Application.Features.ESign.Common.Internal;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.ESign;
 using Microsoft.EntityFrameworkCore;
 using MediatR;
 

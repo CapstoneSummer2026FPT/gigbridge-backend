@@ -1,6 +1,6 @@
 using Application.Common.Models;
 using Application.Features.Admin.Premium;
-using Domain.Enums;
+using Domain.Enums.Accounts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Project_API.Controllers.Common;

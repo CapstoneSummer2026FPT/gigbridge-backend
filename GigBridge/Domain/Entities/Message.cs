@@ -1,7 +1,8 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 
-using Domain.Enums;
+using Domain.Enums.Chat;
+using Domain.Enums.Disputes;
 
 namespace Domain.Entities;
 

@@ -1,8 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Domain.Entities;
-using Domain.Enums;
-using Domain.Services.Payments;
+using Domain.Enums.Wallets;
 
 namespace Application.Features.Wallets.Common;
 
@@ -19,22 +18,18 @@ internal static class ContractEscrowWalletWorkflow
         string transactionCode,
         string provider,
         string note,
-        DateTime now,
-        bool chargeFreelancerFee = true)
+        DateTime now)
     {
         if (amountVnd <= 0m)
         {
             return default;
         }
 
-        // Contract/escrow amounts are G-coin: the gross transfer and its 1% fee are
-        // expressed directly in G-coin tokens (no VND -> token division).
+        // Contract/escrow amounts are G-coin: the freelancer's release-time fee was
+        // removed (the freelancer already pays the 1% service fee once, at job
+        // acceptance via ServiceFeeWorkflow) — every release now credits the full
+        // gross amount.
         var grossTokens = amountVnd;
-        var feeTokens = chargeFreelancerFee
-            ? decimal.Round(amountVnd * ServiceFeeWorkflow.ServiceFeeRate, 4, MidpointRounding.AwayFromZero)
-            : 0m;
-        var feeVnd = feeTokens;
-        var netTokens = grossTokens - feeTokens;
 
         if (clientWallet.HeldTokens < grossTokens)
         {
@@ -45,12 +40,12 @@ internal static class ContractEscrowWalletWorkflow
         var freelancerBefore = Snapshot(freelancerWallet);
 
         // The released funds leave the client's held escrow; the escrow's source
-        // composition shrinks proportionally. The freelancer is credited the net
-        // amount as EARNED GigCoin regardless of how the client funded the escrow.
+        // composition shrinks proportionally. The freelancer is credited the full
+        // gross amount as EARNED GigCoin regardless of how the client funded the escrow.
         var heldSplit = SplitByEscrowComposition(escrow, grossTokens);
         clientWallet.HeldTokens -= grossTokens;
         clientWallet.UpdatedAt = now;
-        WalletWorkflow.CreditWithdrawable(freelancerWallet, netTokens, now);
+        WalletWorkflow.CreditWithdrawable(freelancerWallet, grossTokens, now);
         ConsumeEscrowSource(escrow, heldSplit);
 
         var clientSource = ToHeldSource(heldSplit);
@@ -80,8 +75,8 @@ internal static class ContractEscrowWalletWorkflow
                 contractId,
                 escrow.ContractEscrowId,
                 milestoneId,
-                netTokens,
-                amountVnd - feeVnd,
+                grossTokens,
+                amountVnd,
                 WalletTransactionType.EscrowRelease,
                 transactionCode,
                 provider,
@@ -89,50 +84,11 @@ internal static class ContractEscrowWalletWorkflow
                 now,
                 WalletBalanceSource.Earned,
                 null,
-                netTokens,
+                grossTokens,
                 WalletBalanceAudit.EnrichMetadata(
-                    null, 0m, netTokens, freelancerBefore, freelancerWallet)));
+                    null, 0m, grossTokens, freelancerBefore, freelancerWallet)));
 
-        if (feeTokens > 0m)
-        {
-            var feeCode = $"{ServiceFeeWorkflow.FreelancerReleaseFeePrefix}{transactionCode}";
-            var feeTransaction = CreateTransaction(
-                freelancerWallet,
-                contractId,
-                escrow.ContractEscrowId,
-                milestoneId,
-                feeTokens,
-                feeVnd,
-                WalletTransactionType.Adjustment,
-                feeCode,
-                "InternalTokenWallet",
-                "1% freelancer service fee withheld from escrow release.",
-                now,
-                WalletBalanceSource.Earned,
-                null,
-                feeTokens,
-                null);
-            context.Set<WalletTransaction>().Add(feeTransaction);
-            context.Set<PlatformRevenueEvent>().Add(new PlatformRevenueEvent
-            {
-                PlatformRevenueEventId = Guid.NewGuid(),
-                Source = PlatformRevenueSource.ContractReleaseFee,
-                WalletTransactionId = feeTransaction.WalletTransactionsId,
-                PayerUserId = freelancerWallet.UserId,
-                ContractId = contractId,
-                SourceEntityType = nameof(WalletTransaction),
-                SourceEntityId = feeTransaction.WalletTransactionsId,
-                SourceReference = feeCode,
-                GigCoinAmount = feeTokens,
-                VndEquivalent = TokenWalletRules.ToVnd(feeTokens),
-                VndPerGigCoin = TokenWalletRules.VndPerToken,
-                OccurredAt = now,
-                RecordedAt = now,
-                Metadata = "{\"rate\":0.01,\"capture\":\"atomic\"}"
-            });
-        }
-
-        return new EscrowTransferResult(amountVnd, grossTokens, feeVnd, feeTokens, netTokens);
+        return new EscrowTransferResult(amountVnd, grossTokens, 0m, 0m, grossTokens);
     }
 
     public static decimal Refund(

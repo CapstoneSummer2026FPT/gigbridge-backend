@@ -3,7 +3,9 @@ using Application.Common.Interfaces;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.Wallets.Common;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+using Domain.Enums.Contracts.Escrow;
+using Domain.Enums.Contracts.Milestones;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -93,7 +95,7 @@ public sealed class AdminOverrideMilestoneCommandHandler :
 
         if (request.Action.Equals("release", StringComparison.OrdinalIgnoreCase))
         {
-            var releasableVnd = milestone.Amount - milestone.ReleasedAmount;
+            var releasableVnd = milestone.Amount - milestone.ReleasedAmount - milestone.RefundedAmount;
             if (releasableVnd <= 0)
             {
                 throw new BadRequestException("This milestone has no remaining releaseable budget.");
@@ -182,7 +184,7 @@ public sealed class AdminOverrideMilestoneCommandHandler :
         }
         else if (request.Action.Equals("refund", StringComparison.OrdinalIgnoreCase))
         {
-            var refundableVnd = milestone.Amount - milestone.ReleasedAmount;
+            var refundableVnd = milestone.Amount - milestone.ReleasedAmount - milestone.RefundedAmount;
             if (refundableVnd <= 0)
             {
                 throw new BadRequestException("This milestone has no remaining refundable budget.");
@@ -207,6 +209,7 @@ public sealed class AdminOverrideMilestoneCommandHandler :
                 now);
 
             milestone.Status = (int)MilestoneStatus.InProgress;
+            milestone.RefundedAmount += refundableVnd;
             milestone.UpdatedAt = now;
 
             escrow.FundedAmount -= refundableVnd;

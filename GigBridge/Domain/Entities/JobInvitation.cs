@@ -1,4 +1,5 @@
-﻿namespace Domain.Entities;
+using Domain.Enums.JobInvitations;
+namespace Domain.Entities;
 
 public partial class JobInvitation
 {

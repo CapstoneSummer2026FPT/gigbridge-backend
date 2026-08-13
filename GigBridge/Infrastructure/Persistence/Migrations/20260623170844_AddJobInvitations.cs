@@ -1,4 +1,5 @@
-﻿using System;
+using Domain.Enums.JobInvitations;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable

@@ -1,11 +1,17 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.InternalServices.Auditing.Interfaces;
+using Application.Common.Interfaces.Media;
+using Application.Common.Interfaces.Time;
+using Application.Features.Chat.Common.Interfaces;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.Contracts.Milestones.Common.DTOs;
 using Application.Features.Contracts.Milestones.Common.Internal;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+using Domain.Enums.Auditing;
+using Domain.Enums.Contracts;
+using Domain.Enums.Contracts.Milestones;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -16,16 +22,22 @@ public sealed class SubmitMilestoneCommandHandler :
 {
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
+    private readonly IUserAuditLogService _userAuditLog;
     private readonly IMediaService? _mediaService;
+    private readonly IChatRealtimeNotifier? _realtimeNotifier;
 
     public SubmitMilestoneCommandHandler(
         IApplicationDbContext context,
         IDateTimeService dateTimeService,
-        IMediaService? mediaService = null)
+        IUserAuditLogService userAuditLog,
+        IMediaService? mediaService = null,
+        IChatRealtimeNotifier? realtimeNotifier = null)
     {
         _context = context;
         _dateTimeService = dateTimeService;
+        _userAuditLog = userAuditLog;
         _mediaService = mediaService;
+        _realtimeNotifier = realtimeNotifier;
     }
 
     public async Task<ContractMilestoneResponse> Handle(
@@ -90,14 +102,36 @@ public sealed class SubmitMilestoneCommandHandler :
         milestone.UpdatedAt = now;
         contract.UpdatedAt = now;
 
-        await ContractConversationEvents.AddSystemMessageAsync(
+        var systemMessage = await ContractConversationEvents.AddSystemMessageAsync(
             _context,
             contract.ContractsId,
             $"Milestone submitted: {milestone.Title}.",
             now,
             cancellationToken);
 
+        _userAuditLog.Add(
+            command.UserId,
+            UserRole.Freelancer,
+            AuditUserActionType.MilestoneSubmitted,
+            contract.ContractsId,
+            $"Submitted milestone: {milestone.Title}.",
+            milestoneId: milestone.MilestonesId);
+
         await _context.SaveChangesAsync(cancellationToken);
+
+        if (_realtimeNotifier is not null)
+        {
+            var participantIds = await MilestoneWorkflowGuard.GetParticipantUserIdsAsync(_context, contract, cancellationToken);
+            await _realtimeNotifier.SendUsersEventAsync(
+                participantIds,
+                "DeliverableSubmitted",
+                new { contractId = contract.ContractsId, milestoneId = milestone.MilestonesId, status = milestone.Status },
+                cancellationToken);
+            if (systemMessage is not null)
+                await _realtimeNotifier.SendConversationEventAsync(
+                    systemMessage.ConversationsId, "ReceiveMessage",
+                    ContractConversationEvents.ToRealtimePayload(systemMessage), cancellationToken);
+        }
 
         return MilestoneWorkflowGuard.ToResponse(milestone);
     }

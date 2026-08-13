@@ -1,5 +1,6 @@
+using Application.Common.InternalServices.Accounts.Models;
 using Application.Common.Models;
-using Application.Common.Interfaces.IService;
+using Application.Common.InternalServices.Accounts.Interfaces;
 using Application.Features.Admin.Users.ClearUserSuspension.Commands;
 using Application.Features.Admin.Users.ClearUserSuspension.DTOs;
 using Application.Features.Admin.Users.CreateNewUser.Commands;
@@ -17,7 +18,7 @@ using Application.Features.Admin.Users.SuspendUser.DTOs;
 using Application.Features.Admin.Users.ToggleUserActivity.Commands;
 using Application.Features.Admin.Users.UpdateUser.Commands;
 using Application.Features.Admin.Users.UpdateUser.DTOs;
-using Domain.Enums;
+using Domain.Enums.Accounts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Application.Features.Admin.Users.Detail;

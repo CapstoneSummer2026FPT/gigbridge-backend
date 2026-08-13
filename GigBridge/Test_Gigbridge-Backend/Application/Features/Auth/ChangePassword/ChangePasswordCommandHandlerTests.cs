@@ -1,5 +1,5 @@
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Identity;
 using Application.Features.Auth.ChangePassword.Commands;
 using Application.Features.Auth.ChangePassword.DTOs;
 using Domain.Entities;

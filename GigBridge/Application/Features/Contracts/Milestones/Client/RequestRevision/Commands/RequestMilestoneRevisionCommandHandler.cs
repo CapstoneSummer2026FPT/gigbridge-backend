@@ -1,10 +1,12 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Time;
+using Application.Features.Chat.Common.Interfaces;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.Contracts.Milestones.Common.DTOs;
 using Application.Features.Contracts.Milestones.Common.Internal;
-using Domain.Enums;
+using Domain.Enums.Contracts;
+using Domain.Enums.Contracts.Milestones;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -15,13 +17,16 @@ public sealed class RequestMilestoneRevisionCommandHandler :
 {
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
+    private readonly IChatRealtimeNotifier? _realtimeNotifier;
 
     public RequestMilestoneRevisionCommandHandler(
         IApplicationDbContext context,
-        IDateTimeService dateTimeService)
+        IDateTimeService dateTimeService,
+        IChatRealtimeNotifier? realtimeNotifier = null)
     {
         _context = context;
         _dateTimeService = dateTimeService;
+        _realtimeNotifier = realtimeNotifier;
     }
 
     public async Task<ContractMilestoneResponse> Handle(
@@ -76,7 +81,7 @@ public sealed class RequestMilestoneRevisionCommandHandler :
             item.UpdatedAt = now;
         }
 
-        await ContractConversationEvents.AddSystemMessageAsync(
+        var systemMessage = await ContractConversationEvents.AddSystemMessageAsync(
             _context,
             contract.ContractsId,
             $"Milestone revision requested: {milestone.Title}. {command.Request.Reason.Trim()}",
@@ -84,6 +89,20 @@ public sealed class RequestMilestoneRevisionCommandHandler :
             cancellationToken);
 
         await _context.SaveChangesAsync(cancellationToken);
+
+        if (_realtimeNotifier is not null)
+        {
+            var participantIds = await MilestoneWorkflowGuard.GetParticipantUserIdsAsync(_context, contract, cancellationToken);
+            await _realtimeNotifier.SendUsersEventAsync(
+                participantIds,
+                "MilestoneStatusChanged",
+                new { contractId = contract.ContractsId, milestoneId = milestone.MilestonesId, status = milestone.Status },
+                cancellationToken);
+            if (systemMessage is not null)
+                await _realtimeNotifier.SendConversationEventAsync(
+                    systemMessage.ConversationsId, "ReceiveMessage",
+                    ContractConversationEvents.ToRealtimePayload(systemMessage), cancellationToken);
+        }
 
         return MilestoneWorkflowGuard.ToResponse(milestone);
     }

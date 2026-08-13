@@ -1,10 +1,11 @@
+using Application.Features.Chat.Common.Models;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Features.Chat.Common.Interfaces;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Chat;
 using Infrastructure.ExternalServices.GoogleMeet;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;

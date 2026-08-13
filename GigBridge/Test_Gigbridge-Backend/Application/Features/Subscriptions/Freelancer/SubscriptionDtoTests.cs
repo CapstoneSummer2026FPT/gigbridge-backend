@@ -1,6 +1,6 @@
 using Application.Features.Subscriptions.Freelancer.DTOs;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Subscriptions;
 
 namespace Test_Gigbridge_Backend.Application.Features.Subscriptions.Freelancer;
 

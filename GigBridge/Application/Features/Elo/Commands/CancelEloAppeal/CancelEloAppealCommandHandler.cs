@@ -1,10 +1,10 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Time;
 using Application.Features.Elo.Common;
 using Application.Features.Elo.DTOs;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Elo;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 

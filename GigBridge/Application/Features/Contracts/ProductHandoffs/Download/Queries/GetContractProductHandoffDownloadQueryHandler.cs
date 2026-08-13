@@ -3,7 +3,7 @@ using Application.Common.Interfaces;
 using Application.Features.Contracts.ProductHandoffs.Common;
 using Application.Features.Contracts.ProductHandoffs.Common.DTOs;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Contracts;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 

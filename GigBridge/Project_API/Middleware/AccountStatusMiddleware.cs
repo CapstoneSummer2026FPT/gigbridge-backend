@@ -1,8 +1,8 @@
 using System.Security.Claims;
 using System.Text.Json;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
-using Application.Common.Services;
+using Application.Common.InternalServices.Accounts.Services;
+using Application.Common.Interfaces.Time;
 using Application.Common.Models;
 using Domain.Entities;
 using Microsoft.EntityFrameworkCore;
@@ -61,13 +61,13 @@ public class AccountStatusMiddleware
         if (UserAccountEnforcement.NormalizeExpiredSuspension(user, dateTimeService.UtcNow))
             await dbContext.SaveChangesAsync(context.RequestAborted);
 
-        if (!user.IsActive || user.AccountStatus == (int)Domain.Enums.AccountStatus.Banned)
+        if (!user.IsActive || user.AccountStatus == (int)Domain.Enums.Accounts.AccountStatus.Banned)
         {
             await WriteUnauthorizedAsync(context, "Your account has been permanently banned.");
             return;
         }
 
-        if (user.AccountStatus == (int)Domain.Enums.AccountStatus.Suspended &&
+        if (user.AccountStatus == (int)Domain.Enums.Accounts.AccountStatus.Suspended &&
             user.SuspendedUntil.HasValue && user.SuspendedUntil.Value > dateTimeService.UtcNow)
         {
             await WriteUnauthorizedAsync(context, $"Your account is suspended until {user.SuspendedUntil.Value:O}");

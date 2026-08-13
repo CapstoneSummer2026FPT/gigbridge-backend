@@ -1,5 +1,6 @@
 using Application.Features.Admin.Disputes.Common.DTOs;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+using Domain.Enums.Disputes;
 using MediatR;
 
 namespace Application.Features.Admin.Disputes.Resolve.Commands;

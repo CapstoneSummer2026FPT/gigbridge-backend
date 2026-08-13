@@ -1,6 +1,6 @@
 using System.Data;
 using Application.Common.Interfaces;
-using Domain.Enums;
+using Domain.Enums.Chat;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;

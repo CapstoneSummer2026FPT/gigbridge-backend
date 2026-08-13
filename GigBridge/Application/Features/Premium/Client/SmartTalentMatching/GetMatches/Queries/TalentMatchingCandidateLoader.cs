@@ -2,7 +2,8 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Features.Premium.Client.SmartTalentMatching.GetMatches.DTOs;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Contracts;
+using Domain.Enums.Reviews;
 using Domain.Services;
 using Microsoft.EntityFrameworkCore;
 

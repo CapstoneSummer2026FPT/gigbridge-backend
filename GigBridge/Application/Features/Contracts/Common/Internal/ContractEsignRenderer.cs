@@ -3,10 +3,10 @@ using System.Text;
 using System.Text.Json;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Features.ESign.Common.Interfaces;
 using Application.Features.Contracts.Common.DTOs;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.ESign;
 using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.Contracts.Common.Internal;
@@ -14,7 +14,7 @@ namespace Application.Features.Contracts.Common.Internal;
 internal static class ContractEsignRenderer
 {
     public const string FixedPriceTemplateCode = "CONTRACT_FIXED_PRICE";
-    public const string PolicyVersion = "1.0-DATN";
+    public const string PolicyVersion = "Ver 1.0 Gigbridge";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public static async Task<EsignDocument> EnsureDocumentAsync(
@@ -164,8 +164,40 @@ internal static class ContractEsignRenderer
             signature.IpAddress,
             signature.UserAgent,
             signature.PolicyVersion,
-            signature.PolicyAcceptedAt);
+            signature.PolicyAcceptedAt,
+            true);
     }
+
+    public static ContractSignatureSnapshot ToDraftSignatureSnapshot(EsignSignature signature)
+    {
+        if (!signature.DraftSubmittedAt.HasValue || string.IsNullOrWhiteSpace(signature.SignatureImageUrl))
+        {
+            throw new BadRequestException("A contract signature draft is missing required evidence.");
+        }
+
+        return new ContractSignatureSnapshot(
+            signature.UserId,
+            signature.SignerRole,
+            signature.SignatureImageUrl,
+            signature.SignatureWidth,
+            signature.SignatureHeight,
+            signature.DraftSubmittedAt.Value,
+            signature.IpAddress,
+            signature.UserAgent,
+            signature.PolicyVersion,
+            signature.PolicyAcceptedAt,
+            false);
+    }
+
+    public static ContractDocumentSnapshot WithIdentityCodes(
+        ContractDocumentSnapshot snapshot,
+        string? clientIdentityOrTaxCode,
+        string? freelancerIdentityOrTaxCode) =>
+        snapshot with
+        {
+            Client = snapshot.Client with { IdentityOrTaxCode = clientIdentityOrTaxCode },
+            Freelancer = snapshot.Freelancer with { IdentityOrTaxCode = freelancerIdentityOrTaxCode }
+        };
 
     public static string ComputeFinalHash(
         EsignDocument document,

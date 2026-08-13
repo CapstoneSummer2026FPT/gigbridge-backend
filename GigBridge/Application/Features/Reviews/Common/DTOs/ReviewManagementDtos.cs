@@ -1,4 +1,4 @@
-using Domain.Enums;
+using Domain.Enums.Reviews;
 
 namespace Application.Features.Reviews.Common.DTOs;
 

@@ -2,7 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Application.Common.Exceptions;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Identity;
 using Application.Features.Profiles.ClientProfile.GetClientProfile.DTOs;
 using Application.Features.Profiles.ClientProfile.GetClientProfile.Queries;
 using MediatR;

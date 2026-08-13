@@ -1,4 +1,4 @@
-using Application.Common.Interfaces.IService;
+using Application.Features.Proposals.Common.Interfaces;
 using Application.Features.Proposals.Freelancer.QuestionTimers.DTOs;
 using MediatR;
 

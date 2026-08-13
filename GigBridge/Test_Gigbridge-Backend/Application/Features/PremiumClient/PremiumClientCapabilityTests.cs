@@ -1,7 +1,12 @@
+using Domain.Enums.AiInterviews;
 using Application.Common.Exceptions;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Ai;
+using Application.Common.Interfaces.Caching;
+using Application.Common.Interfaces.Time;
+using Application.Features.Premium.Common.Interfaces;
+using Application.Features.Premium.Common.Services;
+using Application.Features.Wallets.Common.Interfaces;
 using Application.Common.Models.Ai;
-using Application.Common.Services;
 using Application.Features.AiInterviews.Freelancer.Start.Commands;
 using Application.Features.Premium.Client.AiInterviews.Create.Commands;
 using Application.Features.Premium.Client.AiInterviews.DTOs;
@@ -11,7 +16,13 @@ using Application.Features.Premium.Client.JobPostPromotion.Commands;
 using Application.Features.Premium.Client.JobPostPromotion.DTOs;
 using Application.Features.Premium.Client.SmartTalentMatching.GetMatches.Queries;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+using Domain.Enums.Auditing;
+using Domain.Enums.Contracts;
+using Domain.Enums.Disputes;
+using Domain.Enums.Premium;
+using Domain.Enums.Subscriptions;
+using Domain.Enums.Wallets;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -312,7 +323,8 @@ public sealed class PremiumClientCapabilityTests
             Title = "Contract"
         });
         var disputes = context.AddSet<Dispute>();
-        var handler = new CreateDisputeCommandHandler(context, new Premium(true), new Clock(now));
+        var userAuditLog = new CapturingUserAuditLogService();
+        var handler = new CreateDisputeCommandHandler(context, new Premium(true), new Clock(now), userAuditLog);
 
         var result = await handler.Handle(new CreateDisputeCommand(
             userId, new CreateDisputeRequest(contractId, null, "Delivery does not match requirements")),
@@ -322,6 +334,13 @@ public sealed class PremiumClientCapabilityTests
         Assert.Equal(now.AddHours(24), result.ResolutionTargetAt);
         Assert.Equal(DisputeAiAnalysisStatus.Unavailable.ToString(), result.AiAnalysisStatus);
         Assert.Single(disputes.Entities);
+
+        var auditEntry = Assert.Single(userAuditLog.Entries);
+        Assert.Equal(userId, auditEntry.UserId);
+        Assert.Equal(UserRole.Client, auditEntry.Role);
+        Assert.Equal(AuditUserActionType.DisputeCreated, auditEntry.ActionType);
+        Assert.Equal(contractId, auditEntry.ContractId);
+        Assert.Equal(disputes.Entities[0].DisputesId, auditEntry.DisputeId);
     }
 
     [Fact]

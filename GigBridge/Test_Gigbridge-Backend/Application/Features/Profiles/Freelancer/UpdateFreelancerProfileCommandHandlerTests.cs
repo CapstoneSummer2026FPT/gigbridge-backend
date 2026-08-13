@@ -1,11 +1,11 @@
 using Application.Common.Exceptions;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Identity;
 using Application.Common.Mappings;
 using Application.Features.Profiles.FreelancerProfile.UpdateFreelancerProfile.Commands;
 using Application.Features.Profiles.FreelancerProfile.UpdateFreelancerProfile.DTOs;
 using AutoMapper;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Test_Gigbridge_Backend.TestSupport;

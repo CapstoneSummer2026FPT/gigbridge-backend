@@ -1,5 +1,5 @@
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Caching;
 using Application.Features.Auth.Common;
 using Domain.Entities;
 using MediatR;

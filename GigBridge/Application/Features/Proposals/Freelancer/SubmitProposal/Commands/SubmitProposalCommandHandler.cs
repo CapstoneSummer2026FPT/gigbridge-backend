@@ -1,6 +1,6 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Time;
 using Application.Features.JobPosts.Common;
 using Application.Features.Proposals.Common;
 using Application.Features.Proposals.Common.DTOs;

@@ -1,3 +1,4 @@
+using Domain.Enums.Contracts;
 namespace Application.Features.Chat.Common.FinalOffers.Respond.DTOs;
 
 public sealed record RespondFinalOfferResponse(

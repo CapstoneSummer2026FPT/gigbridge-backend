@@ -1,12 +1,15 @@
 using System.Text.Json;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Media;
+using Application.Features.Notifications.Common.Interfaces;
 using Application.Features.Admin.Disputes.Common.Internal;
 using Application.Features.Chat.Common.Messages.Send.Commands;
 using Application.Features.Chat.Common.Messages.Send.DTOs;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Chat;
+using Domain.Enums.Disputes;
+using Domain.Enums.Notifications;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -52,7 +55,8 @@ public sealed class SendAdminDisputeMessageCommandHandler : IRequestHandler<Send
         var validConversation = await _context.Set<Conversation>().AsNoTracking().AnyAsync(item =>
             item.ConversationsId == command.ConversationId &&
             item.DisputesId == command.DisputeId &&
-            item.ConversationType == (int)ConversationType.Dispute,
+            item.ConversationType == (int)ConversationType.Dispute &&
+            item.DeletedAt == null,
             cancellationToken);
         if (!validConversation)
             throw new BadRequestException("The selected conversation is not this dispute's conversation.");

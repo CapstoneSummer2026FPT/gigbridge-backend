@@ -1,9 +1,11 @@
 using Application.Common.Models;
 using Application.Features.JobPosts.Freelancer.GetMyAppliedJobPostDetail.Queries;
 using Application.Features.JobPosts.Freelancer.GetMyAppliedJobPosts.Queries;
+using Application.Features.JobPosts.Freelancer.GetRecommendedJobPosts.DTOs;
+using Application.Features.JobPosts.Freelancer.GetRecommendedJobPosts.Queries;
 using Application.Features.JobPosts.Public.GetAvailableJobPosts.DTOs;
 using Application.Features.JobPosts.Public.GetJobPostDetail.DTOs;
-using Domain.Enums;
+using Domain.Enums.Accounts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Project_API.Controllers.Common;
@@ -15,6 +17,18 @@ namespace Project_API.Controllers.Jobs.Freelancer;
 [Authorize(Roles = nameof(UserRole.Freelancer))]
 public class FreelancerJobPostsController : BaseApiController
 {
+    [HttpGet("recommended")]
+    public async Task<IActionResult> GetRecommendedJobPosts([FromQuery] int topK = 20)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return InvalidTokenResponse();
+        }
+
+        var result = await Mediator.Send(new GetRecommendedJobPostsQuery(userId, topK));
+        return Ok(ApiResponse<List<RecommendedJobPostDto>>.Ok(result, "Success"));
+    }
+
     [HttpGet("my-applications")]
     public async Task<IActionResult> GetMyAppliedJobPosts([FromQuery] int pageIndex = 1, int pageSize = 10)
     {

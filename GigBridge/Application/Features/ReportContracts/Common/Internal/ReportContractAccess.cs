@@ -1,7 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Domain.Entities;
-using Domain.Enums;
+
 using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.ReportContracts.Common.Internal;

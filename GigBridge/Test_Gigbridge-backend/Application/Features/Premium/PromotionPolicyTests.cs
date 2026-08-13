@@ -1,7 +1,7 @@
 using Application.Features.Premium.Freelancer.Promotions.Common;
 using Application.Features.Premium.Freelancer.Promotions.DTOs;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Premium;
 
 namespace Test_Gigbridge_backend.Application.Features.Premium;
 

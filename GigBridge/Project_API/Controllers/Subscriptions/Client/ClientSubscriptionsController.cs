@@ -8,7 +8,7 @@ using Application.Features.Premium.Client.Subscriptions.AutoRenew.Commands;
 using Application.Features.Premium.Client.Subscriptions.AutoRenew.DTOs;
 using Application.Features.Subscriptions.Freelancer.DTOs;
 using Application.Features.Subscriptions.Freelancer.Purchase;
-using Domain.Enums;
+using Domain.Enums.Accounts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Project_API.Controllers.Common;

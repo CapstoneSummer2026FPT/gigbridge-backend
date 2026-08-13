@@ -56,7 +56,7 @@ public sealed record WithdrawalResponse(
             withdrawal.ProcessingStartedAt,
             withdrawal.LastSyncedAt,
             withdrawal.CompletedAt,
-            withdrawal.Status == (int)Domain.Enums.WithdrawalStatus.SyncRequired &&
+            withdrawal.Status == (int)Domain.Enums.Wallets.WithdrawalStatus.SyncRequired &&
                 string.IsNullOrWhiteSpace(withdrawal.ProviderPayoutId));
     }
 }

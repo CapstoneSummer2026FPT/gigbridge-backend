@@ -1,6 +1,9 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Caching;
+using Application.Common.Interfaces.Time;
+using Application.Features.Auth.Common.Interfaces;
+using Application.Features.Elo.Common.Interfaces;
 using Application.Features.Auth.GoogleLogin.Commands;
 using Application.Features.Auth.GoogleLogin.DTOs;
 using Application.Features.Auth.Common;
@@ -14,7 +17,7 @@ using Application.Features.Auth.VerifyOtp.Commands;
 using Application.Features.Auth.VerifyOtp.DTOs;
 using AutoMapper;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
 using NSubstitute;
 using Test_Gigbridge_Backend.TestSupport;
 

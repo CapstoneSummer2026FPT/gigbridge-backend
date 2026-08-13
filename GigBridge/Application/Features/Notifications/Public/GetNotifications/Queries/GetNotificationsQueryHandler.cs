@@ -2,7 +2,7 @@ using Application.Common.Interfaces;
 using Application.Common.Models;
 using Application.Features.Notifications.Common.DTOs;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Notifications;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 

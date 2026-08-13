@@ -1,7 +1,7 @@
 using System.Text.Json;
 using Application.Features.Chat.Common.Schedules;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Chat;
 
 namespace Application.Features.Chat.Common.Messages;
 

@@ -1,5 +1,5 @@
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Caching;
 using Application.Common.Exceptions;
 using Application.Features.Auth.ResetPassword.Commands;
 using Application.Features.Auth.ResetPassword.DTOs;

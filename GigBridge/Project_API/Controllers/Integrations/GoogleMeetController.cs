@@ -1,5 +1,7 @@
-using Application.Common.Interfaces.IService;
+using Application.Features.Chat.Common.Interfaces;
 using Application.Common.Models;
+using Application.Features.Chat.Common.Messages.CreateGoogleMeet;
+using Application.Features.Chat.Common.Messages.Send.DTOs;
 using Application.Features.Chat.Common.Schedules;
 using Infrastructure.ExternalServices.GoogleMeet;
 using MediatR;
@@ -95,6 +97,21 @@ public class GoogleMeetController : BaseApiController
             connectedAt = status.ConnectedAt,
             needsReconnect = status.NeedsReconnect
         }, "Success"));
+    }
+
+    [HttpPost("rooms")]
+    [Authorize]
+    public async Task<IActionResult> CreateRoomAndSendMessage(
+        [FromBody] CreateGoogleMeetMessageRequest request)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+            return InvalidTokenResponse();
+
+        var message = await Mediator.Send(
+            new CreateGoogleMeetMessageCommand(userId, request),
+            HttpContext.RequestAborted);
+
+        return Ok(ApiResponse<MessageResponse>.Ok(message, "Google Meet room created and sent"));
     }
 
     [HttpDelete]

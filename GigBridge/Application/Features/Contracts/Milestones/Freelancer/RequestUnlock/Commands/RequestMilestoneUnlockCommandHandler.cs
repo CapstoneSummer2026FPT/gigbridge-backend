@@ -1,10 +1,15 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.InternalServices.Auditing.Interfaces;
+using Application.Common.Interfaces.Time;
+using Application.Features.Notifications.Common.Interfaces;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.Contracts.Milestones.Common.Internal;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+using Domain.Enums.Auditing;
+using Domain.Enums.Contracts.Milestones;
+using Domain.Enums.Notifications;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -16,15 +21,18 @@ public sealed class RequestMilestoneUnlockCommandHandler :
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
     private readonly INotificationService _notificationService;
+    private readonly IUserAuditLogService _userAuditLog;
 
     public RequestMilestoneUnlockCommandHandler(
         IApplicationDbContext context,
         IDateTimeService dateTimeService,
-        INotificationService notificationService)
+        INotificationService notificationService,
+        IUserAuditLogService userAuditLog)
     {
         _context = context;
         _dateTimeService = dateTimeService;
         _notificationService = notificationService;
+        _userAuditLog = userAuditLog;
     }
 
     public async Task Handle(
@@ -111,6 +119,14 @@ public sealed class RequestMilestoneUnlockCommandHandler :
             milestone.MilestonesId,
             "Milestone",
             cancellationToken);
+
+        _userAuditLog.Add(
+            command.UserId,
+            UserRole.Freelancer,
+            AuditUserActionType.RequestedEarlyStart,
+            contract.ContractsId,
+            $"Requested early start on milestone: {milestone.Title}.",
+            milestoneId: milestone.MilestonesId);
 
         await _context.SaveChangesAsync(cancellationToken);
     }

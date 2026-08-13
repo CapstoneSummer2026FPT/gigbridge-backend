@@ -1,11 +1,15 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.InternalServices.Auditing.Interfaces;
+using Application.Common.Interfaces.Time;
+using Application.Features.Chat.Common.Interfaces;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.Contracts.Milestones.Common.DTOs;
 using Application.Features.Contracts.Milestones.Common.Internal;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+using Domain.Enums.Auditing;
+using Domain.Enums.Contracts.Milestones;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -16,13 +20,19 @@ public sealed class ApproveMilestoneCommandHandler :
 {
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
+    private readonly IUserAuditLogService _userAuditLog;
+    private readonly IChatRealtimeNotifier? _realtimeNotifier;
 
     public ApproveMilestoneCommandHandler(
         IApplicationDbContext context,
-        IDateTimeService dateTimeService)
+        IDateTimeService dateTimeService,
+        IUserAuditLogService userAuditLog,
+        IChatRealtimeNotifier? realtimeNotifier = null)
     {
         _context = context;
         _dateTimeService = dateTimeService;
+        _userAuditLog = userAuditLog;
+        _realtimeNotifier = realtimeNotifier;
     }
 
     public async Task<ContractMilestoneResponse> Handle(
@@ -65,25 +75,38 @@ public sealed class ApproveMilestoneCommandHandler :
         var milestones = await MilestoneWorkflowGuard.OrderMilestones(
                 _context.Set<Milestone>().Where(item => item.ContractsId == contract.ContractsId))
             .ToListAsync(cancellationToken);
-        var next = milestones.FirstOrDefault(candidate =>
-            candidate.Status == (int)MilestoneStatus.Pending &&
-            milestones.Where(previous => (previous.SortOrder ?? 0) < (candidate.SortOrder ?? 0))
-                .All(previous => previous.Status == (int)MilestoneStatus.Approved));
-        if (next is not null)
-        {
-            next.Status = (int)MilestoneStatus.InProgress;
-            next.StartedAt = now;
-            next.UpdatedAt = now;
-        }
+        MilestoneWorkflowGuard.AdvanceNextMilestone(milestones, now);
 
-        await ContractConversationEvents.AddSystemMessageAsync(
+        var systemMessage = await ContractConversationEvents.AddSystemMessageAsync(
             _context,
             contract.ContractsId,
             $"Milestone approved: {milestone.Title}.",
             now,
             cancellationToken);
 
+        _userAuditLog.Add(
+            command.UserId,
+            UserRole.Client,
+            AuditUserActionType.MilestoneApproved,
+            contract.ContractsId,
+            $"Approved milestone: {milestone.Title}.",
+            milestoneId: milestone.MilestonesId);
+
         await _context.SaveChangesAsync(cancellationToken);
+
+        if (_realtimeNotifier is not null)
+        {
+            var participantIds = await MilestoneWorkflowGuard.GetParticipantUserIdsAsync(_context, contract, cancellationToken);
+            await _realtimeNotifier.SendUsersEventAsync(
+                participantIds,
+                "MilestoneStatusChanged",
+                new { contractId = contract.ContractsId, milestoneId = milestone.MilestonesId, status = milestone.Status },
+                cancellationToken);
+            if (systemMessage is not null)
+                await _realtimeNotifier.SendConversationEventAsync(
+                    systemMessage.ConversationsId, "ReceiveMessage",
+                    ContractConversationEvents.ToRealtimePayload(systemMessage), cancellationToken);
+        }
 
         return MilestoneWorkflowGuard.ToResponse(milestone);
     }

@@ -1,5 +1,6 @@
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Ai;
+using Application.Common.Interfaces.Time;
 using Application.Common.Models.Ai;
 using Domain.Entities;
 using MediatR;

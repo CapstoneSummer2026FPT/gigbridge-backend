@@ -1,11 +1,21 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.InternalServices.Auditing.Interfaces;
+using Application.Common.Interfaces.Time;
+using Application.Features.Chat.Common.Interfaces;
+using Application.Features.Notifications.Common.Interfaces;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.Contracts.Escrow.Client.Fund.DTOs;
 using Application.Features.Wallets.Common;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+using Domain.Enums.Auditing;
+using Domain.Enums.Chat;
+using Domain.Enums.Contracts;
+using Domain.Enums.Contracts.Escrow;
+using Domain.Enums.Contracts.Milestones;
+using Domain.Enums.Notifications;
+using Domain.Enums.Wallets;
 using Domain.Services;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -19,17 +29,20 @@ public sealed class FundContractEscrowCommandHandler :
     private readonly IDateTimeService _dateTimeService;
     private readonly INotificationService _notificationService;
     private readonly IChatRealtimeNotifier _chatRealtimeNotifier;
+    private readonly IUserAuditLogService _userAuditLog;
 
     public FundContractEscrowCommandHandler(
         IApplicationDbContext context,
         IDateTimeService dateTimeService,
         INotificationService notificationService,
-        IChatRealtimeNotifier chatRealtimeNotifier)
+        IChatRealtimeNotifier chatRealtimeNotifier,
+        IUserAuditLogService userAuditLog)
     {
         _context = context;
         _dateTimeService = dateTimeService;
         _notificationService = notificationService;
         _chatRealtimeNotifier = chatRealtimeNotifier;
+        _userAuditLog = userAuditLog;
     }
 
     public async Task<FundContractEscrowResponse> Handle(
@@ -235,6 +248,15 @@ public sealed class FundContractEscrowCommandHandler :
             "Escrow funded. Contract is now active.",
             now,
             cancellationToken);
+
+        _userAuditLog.Add(
+            command.UserId,
+            UserRole.Client,
+            AuditUserActionType.EscrowFunded,
+            contract.ContractsId,
+            $"Funded contract escrow: {requiredAmount:N2} GigCoin.",
+            relatedEntityId: escrow.ContractEscrowId,
+            relatedEntityType: nameof(ContractEscrow));
 
         // Fetch UserIds to create persistent notifications
         var clientProfile = await _context.Set<ClientProfile>()

@@ -1,11 +1,15 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Time;
+using Application.Features.Chat.Common.Interfaces;
+using Application.Features.Notifications.Common.Interfaces;
 using Application.Features.Admin.Disputes.Common.DTOs;
 using Application.Features.Admin.Disputes.Common.Internal;
 using Application.Features.Contracts.Common.Internal;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Chat;
+using Domain.Enums.Contracts;
+using Domain.Enums.Disputes;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -17,24 +21,17 @@ public sealed class UpdateAdminDisputeStatusCommandHandler :
 {
     private static readonly HashSet<(int, int)> AllowedTransitions =
     [
-        ((int)DisputeStatus.Open, (int)DisputeStatus.WaitingAdmin),
-        ((int)DisputeStatus.Open, (int)DisputeStatus.UnderReview),
-        ((int)DisputeStatus.WaitingAdmin, (int)DisputeStatus.UnderReview),
-        ((int)DisputeStatus.UnderReview, (int)DisputeStatus.WaitingAdmin),
-        ((int)DisputeStatus.UnderReview, (int)DisputeStatus.WaitingEvidence),
-        ((int)DisputeStatus.UnderReview, (int)DisputeStatus.DecisionPending),
-        ((int)DisputeStatus.WaitingEvidence, (int)DisputeStatus.UnderReview),
-        ((int)DisputeStatus.DecisionPending, (int)DisputeStatus.UnderReview),
-        ((int)DisputeStatus.Resolved, (int)DisputeStatus.Closed),
+        ((int)DisputeStatus.WaitingAdmin, (int)DisputeStatus.InProgress),
+        ((int)DisputeStatus.InProgress,   (int)DisputeStatus.WaitingAdmin),
+        ((int)DisputeStatus.Resolved,     (int)DisputeStatus.Closed),
     ];
 
     private static readonly Dictionary<int, string> StatusLabels = new()
     {
         [(int)DisputeStatus.WaitingAdmin] = "waiting for admin",
-        [(int)DisputeStatus.UnderReview] = "in progress",
-        [(int)DisputeStatus.WaitingEvidence] = "in progress",
-        [(int)DisputeStatus.DecisionPending] = "in progress",
-        [(int)DisputeStatus.Closed] = "closed",
+        [(int)DisputeStatus.InProgress]   = "in progress",
+        [(int)DisputeStatus.Resolved]     = "resolved",
+        [(int)DisputeStatus.Closed]       = "closed",
     };
 
     private readonly IApplicationDbContext _context;
@@ -89,8 +86,8 @@ public sealed class UpdateAdminDisputeStatusCommandHandler :
             .Select(u => u.FullName)
             .FirstOrDefaultAsync(cancellationToken);
 
-        // Auto-assign admin if transitioning to UnderReview
-        if (command.Status == DisputeStatus.UnderReview)
+        // Auto-assign admin when moving to InProgress
+        if (command.Status == DisputeStatus.InProgress)
         {
             dispute.AssignedAdminId ??= command.AdminId;
             dispute.AssignedAt ??= now;
@@ -148,7 +145,60 @@ public sealed class UpdateAdminDisputeStatusCommandHandler :
 
         dispute.Status = (int)command.Status;
         dispute.UpdatedAt = now;
+
+        // When the dispute is closed, lock the dispute conversation so no party can send
+        // messages anymore. If the contract was terminated during resolution, the workspace
+        // conversation is locked as well. SendMessageCommandHandler rejects any send against
+        // a non-active conversation, so closing the status is the entire enforcement.
+        Message? closeSystemMessage = null;
+        if (command.Status == DisputeStatus.Closed)
+        {
+            var conversations = await _context.Set<Conversation>()
+                .Where(c => c.ContractsId == dispute.ContractsId)
+                .ToListAsync(cancellationToken);
+
+            var contractTerminated = dispute.Contracts.Status == (int)ContractStatus.Cancelled;
+            foreach (var conversation in conversations)
+            {
+                var isDisputeConversation = conversation.DisputesId == dispute.DisputesId;
+                var isWorkspaceConversation =
+                    conversation.ConversationType == (int)ConversationType.ContractWorkroom &&
+                    !conversation.DisputesId.HasValue;
+
+                if (isDisputeConversation || (contractTerminated && isWorkspaceConversation))
+                {
+                    conversation.Status = (int)ConversationStatus.Closed;
+                    conversation.UpdatedAt = now;
+
+                    if (isDisputeConversation)
+                    {
+                        closeSystemMessage = ContractConversationEvents.AddSystemMessage(
+                            _context,
+                            conversation,
+                            "This dispute has been closed. The conversation is locked.",
+                            now);
+                    }
+                }
+            }
+        }
+
         await _context.SaveChangesAsync(cancellationToken);
+
+        if (closeSystemMessage is not null)
+        {
+            try
+            {
+                await _chatRealtimeNotifier.SendConversationEventAsync(
+                    closeSystemMessage.ConversationsId,
+                    "ReceiveMessage",
+                    BuildSystemMessagePayload(closeSystemMessage),
+                    cancellationToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "Failed to notify conversation for dispute closure.");
+            }
+        }
 
         // Send notification
         var statusLabel = StatusLabels.GetValueOrDefault(

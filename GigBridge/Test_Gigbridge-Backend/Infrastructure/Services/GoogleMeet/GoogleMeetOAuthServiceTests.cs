@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Chat;
 using Infrastructure.ExternalServices.GoogleMeet;
 using Infrastructure.Persistence;
 using Infrastructure.Services.GoogleMeet;

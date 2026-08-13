@@ -3,7 +3,7 @@ using Application.Common.Interfaces;
 using Application.Features.Wallets.Common;
 using Application.Features.Wallets.Common.DTOs;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 

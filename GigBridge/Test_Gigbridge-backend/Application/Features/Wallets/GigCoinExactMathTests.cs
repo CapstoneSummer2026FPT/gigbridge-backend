@@ -1,7 +1,7 @@
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.Wallets.Common;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Wallets;
 using Test_Gigbridge_Backend.TestSupport;
 
 namespace Test_Gigbridge_Backend.Application.Features.Wallets;
@@ -9,10 +9,11 @@ namespace Test_Gigbridge_Backend.Application.Features.Wallets;
 /// <summary>
 /// Locks in the exact G-coin math for the contract economy after the unit-boundary fix:
 /// contract, milestone and escrow amounts are G-coin directly (never divided by 1000),
-/// and the 1% service fee is charged once on the G-coin amount. These are the regression
-/// cases from the audit: funding 200 G-coin debits 202 (200 + 2 fee) and holds 200; the
-/// 80% release of a 200 G-coin milestone credits 158.4 net (160 - 1.6); funding 500
-/// debits 502; refunds restore the G-coin amount directly.
+/// and the 1% service fee is charged once on the G-coin amount, at funding (client) or
+/// job acceptance (freelancer) only. These are the regression cases from the audit:
+/// funding 200 G-coin debits 202 (200 + 2 fee) and holds 200; the 80% release of a 200
+/// G-coin milestone credits the full 160 to the freelancer with no further fee; funding
+/// 500 debits 502; refunds restore the G-coin amount directly.
 /// </summary>
 public sealed class GigCoinExactMathTests
 {
@@ -52,7 +53,7 @@ public sealed class GigCoinExactMathTests
     }
 
     [Fact]
-    public void Release_EightyPercentOf200CoinMilestone_Credits158Dot4Net()
+    public void Release_EightyPercentOf200CoinMilestone_CreditsFull160NoFee()
     {
         var context = new InMemoryApplicationDbContext();
         var transactions = context.AddSet<WalletTransaction>();
@@ -81,16 +82,16 @@ public sealed class GigCoinExactMathTests
             EarnedTokens = 60m
         };
 
-        // 80% cap of a 200 G-coin milestone = 160 G-coin released.
+        // 80% cap of a 200 G-coin milestone = 160 G-coin released, credited in full.
         var result = ContractEscrowWalletWorkflow.Release(
             context, client, freelancer, escrow, contractId, milestoneId,
             160m, "ESCROW-RELEASE-EXACT", "InternalTokenWallet", "Milestone early withdrawal", Now);
 
         Assert.Equal(160m, result.GrossTokens);
-        Assert.Equal(1.6m, result.FeeTokens);
-        Assert.Equal(158.4m, result.NetTokens);
+        Assert.Equal(0m, result.FeeTokens);
+        Assert.Equal(160m, result.NetTokens);
         Assert.Equal(0m, client.HeldTokens);
-        Assert.Equal(158.4m, freelancer.WithdrawableTokens);
+        Assert.Equal(160m, freelancer.WithdrawableTokens);
         Assert.Equal(0m, escrow.DepositedTokens);
         Assert.Equal(0m, escrow.EarnedTokens);
 
@@ -103,23 +104,16 @@ public sealed class GigCoinExactMathTests
         var freelancerRelease = Assert.Single(transactions.Entities.Where(transaction =>
             transaction.Type == (int)WalletTransactionType.EscrowRelease &&
             transaction.UserId == freelancer.UserId));
-        Assert.Equal(158.4m, freelancerRelease.TokenAmount);
+        Assert.Equal(160m, freelancerRelease.TokenAmount);
         Assert.Equal((int)WalletBalanceSource.Earned, freelancerRelease.BalanceSource);
 
-        var fee = Assert.Single(transactions.Entities.Where(transaction =>
+        Assert.Empty(transactions.Entities.Where(transaction =>
             transaction.Type == (int)WalletTransactionType.Adjustment));
-        Assert.Equal(1.6m, fee.TokenAmount);
-        Assert.Equal(1.6m, fee.VndAmount);
-        Assert.Equal((int)WalletBalanceSource.Earned, fee.BalanceSource);
-
-        var feeRevenue = Assert.Single(revenue.Entities);
-        Assert.Equal(PlatformRevenueSource.ContractReleaseFee, feeRevenue.Source);
-        Assert.Equal(1.6m, feeRevenue.GigCoinAmount);
-        Assert.Equal(1_600m, feeRevenue.VndEquivalent);
+        Assert.Empty(revenue.Entities);
     }
 
     [Fact]
-    public void Release_FractionalAmount_FeeRoundsToFourDecimals()
+    public void Release_FractionalAmount_CreditsFullGrossNoFee()
     {
         var context = new InMemoryApplicationDbContext();
         context.AddSet<WalletTransaction>();
@@ -138,8 +132,8 @@ public sealed class GigCoinExactMathTests
             160.5m, "release-fractional", "InternalTokenWallet", "Release", Now);
 
         Assert.Equal(160.5m, result.GrossTokens);
-        Assert.Equal(1.605m, result.FeeTokens);
-        Assert.Equal(158.895m, result.NetTokens);
+        Assert.Equal(0m, result.FeeTokens);
+        Assert.Equal(160.5m, result.NetTokens);
         Assert.Equal(0m, client.HeldTokens);
     }
 

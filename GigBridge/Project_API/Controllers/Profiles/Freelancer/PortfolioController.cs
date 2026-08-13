@@ -5,11 +5,10 @@ using Application.Features.Portfolios.DeletePortfolioItem.Commands;
 using Application.Features.Portfolios.GetPortfolioItems.Queries;
 using Application.Features.Portfolios.UpdatePortfolioItem.Commands;
 using Application.Features.Profiles.FreelancerProfile.GetFreelancerProfile.DTOs;
-using Domain.Enums;
+using Domain.Enums.Accounts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Project_API.Controllers.Common;
-using Project_API.Models.Portfolios;
 
 namespace Project_API.Controllers.Profiles.Freelancer;
 
@@ -43,7 +42,8 @@ public sealed class PortfolioController : BaseApiController
     [Consumes("multipart/form-data")]
     [RequestSizeLimit(6 * 1024 * 1024)]
     public async Task<IActionResult> CreatePortfolioItem(
-        [FromForm] PortfolioItemFormRequest request,
+        [FromForm] PortfolioItemInputDto request,
+        IFormFile? image,
         CancellationToken cancellationToken)
     {
         if (!TryGetCurrentUserId(out var userId))
@@ -51,16 +51,16 @@ public sealed class PortfolioController : BaseApiController
             return InvalidTokenResponse();
         }
 
-        await using var imageStream = request.Image?.OpenReadStream();
-        var image = request.Image is null || imageStream is null
+        await using var imageStream = image?.OpenReadStream();
+        var imageUpload = image is null || imageStream is null
             ? null
             : new PortfolioImageUpload(
                 imageStream,
-                request.Image.FileName,
-                request.Image.ContentType,
-                request.Image.Length);
+                image.FileName,
+                image.ContentType,
+                image.Length);
         var result = await Mediator.Send(
-            new CreatePortfolioItemCommand(userId, request.ToInputDto(), image),
+            new CreatePortfolioItemCommand(userId, request, imageUpload),
             cancellationToken);
         return Ok(ApiResponse<PortfolioItemDto>.Ok(result, "Portfolio item created successfully"));
     }
@@ -71,7 +71,9 @@ public sealed class PortfolioController : BaseApiController
     [RequestSizeLimit(6 * 1024 * 1024)]
     public async Task<IActionResult> UpdatePortfolioItem(
         Guid portfolioItemId,
-        [FromForm] UpdatePortfolioItemFormRequest request,
+        [FromForm] PortfolioItemInputDto request,
+        IFormFile? image,
+        [FromForm] bool removeImage,
         CancellationToken cancellationToken)
     {
         if (!TryGetCurrentUserId(out var userId))
@@ -79,22 +81,22 @@ public sealed class PortfolioController : BaseApiController
             return InvalidTokenResponse();
         }
 
-        await using var imageStream = request.Image?.OpenReadStream();
-        var image = request.Image is null || imageStream is null
+        await using var imageStream = image?.OpenReadStream();
+        var imageUpload = image is null || imageStream is null
             ? null
             : new PortfolioImageUpload(
                 imageStream,
-                request.Image.FileName,
-                request.Image.ContentType,
-                request.Image.Length);
+                image.FileName,
+                image.ContentType,
+                image.Length);
         var result = await Mediator.Send(
             new UpdatePortfolioItemCommand(
                 userId,
                 portfolioItemId,
-                request.ToInputDto(),
-                image,
-                request.RemoveImage,
-                PreserveExistingImage: image is null && !request.RemoveImage),
+                request,
+                imageUpload,
+                removeImage,
+                PreserveExistingImage: image is null && !removeImage),
             cancellationToken);
         return Ok(ApiResponse<PortfolioItemDto>.Ok(result, "Portfolio item updated successfully"));
     }

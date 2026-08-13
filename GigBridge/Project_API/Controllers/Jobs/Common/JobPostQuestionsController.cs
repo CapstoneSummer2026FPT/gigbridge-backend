@@ -12,7 +12,7 @@ using Application.Features.JobPosts.Client.Questions.UpdateJobPostQuestionRequir
 using Application.Features.JobPosts.Client.Questions.UpdateJobPostQuestionRequired.DTOs;
 using Application.Features.JobPosts.Common.DTOs;
 using Application.Features.JobPosts.Common.Questions.GetJobPostQuestions.Queries;
-using Domain.Enums;
+using Domain.Enums.Accounts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Project_API.Controllers.Common;

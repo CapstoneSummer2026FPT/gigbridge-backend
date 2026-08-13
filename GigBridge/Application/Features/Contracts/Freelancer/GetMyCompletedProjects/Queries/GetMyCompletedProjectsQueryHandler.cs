@@ -1,3 +1,4 @@
+using Domain.Enums.AiInterviews;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -8,7 +9,7 @@ using Application.Common.Interfaces;
 using Application.Features.Contracts.Freelancer.GetMyCompletedProjects.DTOs;
 using Application.Features.JobPosts.Common;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Contracts;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 

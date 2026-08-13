@@ -1,8 +1,13 @@
 using Application.Common.Exceptions;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Time;
+using Application.Features.Admin.AuditLogs.Common.Interfaces;
+using Application.Features.Notifications.Common.Interfaces;
 using Application.Features.Admin.ContractReports;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+using Domain.Enums.Contracts;
+using Domain.Enums.Disputes;
+using Domain.Enums.Reports;
 using MediatR;
 using NSubstitute;
 using Test_Gigbridge_Backend.TestSupport;
@@ -19,7 +24,7 @@ public sealed class AdminContractReportMutationTests
         Assert.Equal(admin.UserId, report.AssignedAdminId);
         Assert.Equal((int)ContractReportAdminStatus.UnderReview, report.AdminReviewStatus);
         Assert.Equal(1, context.TransactionCommitCount);
-        audit.Received(1).Add(admin.UserId, global::Application.Common.Services.AdminAuditActions.ContractReportAssigned, nameof(ReportContract), report.ReportContractId, Arg.Any<object>(), Arg.Any<object>());
+        audit.Received(1).Add(admin.UserId, global::Application.Features.Admin.AuditLogs.Common.Services.AdminAuditActions.ContractReportAssigned, nameof(ReportContract), report.ReportContractId, Arg.Any<object>(), Arg.Any<object>());
     }
 
     [Fact]
@@ -35,7 +40,7 @@ public sealed class AdminContractReportMutationTests
         Assert.Contains(rows.Entities, x => x.TargetUserId == respondent.UserId);
         Assert.Single(audit.ReceivedCalls().Where(call =>
             call.GetMethodInfo().Name == nameof(IAdminAuditService.Add) &&
-            Equals(call.GetArguments()[1], global::Application.Common.Services.AdminAuditActions.ContractReportInformationRequested)));
+            Equals(call.GetArguments()[1], global::Application.Features.Admin.AuditLogs.Common.Services.AdminAuditActions.ContractReportInformationRequested)));
     }
 
     [Fact]
@@ -54,7 +59,7 @@ public sealed class AdminContractReportMutationTests
     public async Task LinkDispute_RejectsDifferentContract()
     {
         var (handler, context, _, _, report, admin, _) = Create();
-        var dispute = new Dispute { DisputesId = Guid.NewGuid(), ContractsId = Guid.NewGuid(), Status = (int)DisputeStatus.Open };
+        var dispute = new Dispute { DisputesId = Guid.NewGuid(), ContractsId = Guid.NewGuid(), Status = (int)DisputeStatus.WaitingAdmin };
         context.AddSet(dispute);
         await Assert.ThrowsAsync<BadRequestException>(() => handler.Handle(new LinkContractReportDisputeCommand(admin.UserId, report.ReportContractId, new(dispute.DisputesId, "Same issue.")), default));
         Assert.Null(dispute.RelatedReportId);

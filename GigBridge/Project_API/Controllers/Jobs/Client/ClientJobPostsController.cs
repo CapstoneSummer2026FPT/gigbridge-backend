@@ -18,7 +18,7 @@ using Application.Features.JobPosts.Client.UpdateStatusJobPost.Commands;
 using Application.Features.JobPosts.Client.UpdateStatusJobPost.DTOs;
 using Application.Features.JobPosts.Client.UpdateVisibilityJobPost.Commands;
 using Application.Features.JobPosts.Client.UpdateVisibilityJobPost.DTOs;
-using Domain.Enums;
+using Domain.Enums.Accounts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Project_API.Controllers.Common;

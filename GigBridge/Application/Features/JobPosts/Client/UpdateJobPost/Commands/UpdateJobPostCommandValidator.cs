@@ -1,4 +1,4 @@
-using Application.Common.Interfaces.IService;
+using Application.Features.JobPosts.Common.ContentModeration;
 using FluentValidation;
 
 namespace Application.Features.JobPosts.Client.UpdateJobPost.Commands;

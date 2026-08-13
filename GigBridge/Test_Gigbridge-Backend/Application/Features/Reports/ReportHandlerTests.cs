@@ -1,5 +1,5 @@
 using Application.Common.Exceptions;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Time;
 using Application.Features.Admin.Reports.ResolveReport.Commands;
 using Application.Features.Reviews.Common.Moderation;
 using Application.Features.Admin.Reports.ResolveReport.DTOs;
@@ -11,7 +11,9 @@ using Application.Features.Reports.Public.CreateReport.Commands;
 using Application.Features.Reports.Public.CreateReport.DTOs;
 using Application.Features.Reports.Public.GetReportDetail.Queries;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+using Domain.Enums.Reports;
+using Domain.Enums.Reviews;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using NSubstitute;

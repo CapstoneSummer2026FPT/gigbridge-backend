@@ -1,7 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Wallets;
 using Domain.Services.Payments;
 using Microsoft.EntityFrameworkCore;
 
@@ -10,7 +10,6 @@ namespace Application.Features.Wallets.Common;
 internal static class ServiceFeeWorkflow
 {
     internal const string AcceptJobFeePrefix = "SERVICE-FEE-ACCEPT-";
-    internal const string EndProjectFeePrefix = "SERVICE-FEE-END-";
     internal const string ClientFundingFeePrefix = "SERVICE-FEE-FUND-";
     internal const string FreelancerReleaseFeePrefix = "SERVICE-FEE-RELEASE-";
     internal const decimal ServiceFeeRate = 0.01m;

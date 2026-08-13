@@ -1,7 +1,7 @@
 using System.Text.Json;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Features.Premium.Common.Interfaces;
 using Application.Features.Premium.Client.AiInterviews.DTOs;
 using Domain.Entities;
 using MediatR;

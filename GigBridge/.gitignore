@@ -89,4 +89,6 @@ Domain/Enums/.gitkeep
 .DS_Store
 Thumbs.db
 *.md
+!Project_API/Policies/
+!Project_API/Policies/GigBridge_Policy_VN.md
 *.sql

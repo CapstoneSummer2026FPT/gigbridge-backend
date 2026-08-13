@@ -1,6 +1,6 @@
 using System.Globalization;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Time;
 using Application.Features.Premium.Client.JobPostPromotion.Common;
 using Application.Features.Premium.Client.JobPostPromotion.DTOs;
 using Domain.Entities;

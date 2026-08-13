@@ -1,6 +1,6 @@
 using Application.Common.Interfaces;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Chat;
 using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.Contracts.Common.Internal;
@@ -52,5 +52,42 @@ internal static class ContractConversationEvents
         conversation.UpdatedAt = now;
 
         return message;
+    }
+
+    /// <summary>
+    /// Payload shape for pushing a system message live over SignalR, matching what
+    /// MessagesController/SendMessageCommandHandler already emit for "ReceiveMessage" so
+    /// the frontend's existing chat listener renders it without any special-casing.
+    /// </summary>
+    public static object ToRealtimePayload(Message message) => new
+    {
+        messagesId = message.MessagesId, conversationsId = message.ConversationsId,
+        senderUserId = (Guid?)null, messageType = message.MessageType, content = message.Content,
+        sentAt = message.SentAt, attachments = Array.Empty<object>()
+    };
+
+    /// <summary>
+    /// Locks the workspace and dispute conversations of a contract so neither party can
+    /// send messages anymore. Used when a contract is completed or terminated.
+    /// </summary>
+    public static async Task CloseContractConversationsAsync(
+        IApplicationDbContext context,
+        Guid contractId,
+        DateTime now,
+        CancellationToken cancellationToken)
+    {
+        var conversations = await context.Set<Conversation>()
+            .Where(conversation =>
+                conversation.ContractsId == contractId &&
+                conversation.DeletedAt == null &&
+                (conversation.ConversationType == (int)ConversationType.ContractWorkroom ||
+                 conversation.ConversationType == (int)ConversationType.Dispute))
+            .ToListAsync(cancellationToken);
+
+        foreach (var conversation in conversations)
+        {
+            conversation.Status = (int)ConversationStatus.Closed;
+            conversation.UpdatedAt = now;
+        }
     }
 }

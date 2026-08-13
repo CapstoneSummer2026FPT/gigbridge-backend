@@ -5,7 +5,9 @@ using Application.Features.ESign.Common.GetDocument.Queries;
 using Application.Features.ESign.Common.GetDocuments.Queries;
 using Application.Features.ESign.Common.SavePdf.Commands;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+using Domain.Enums.Contracts;
+using Domain.Enums.ESign;
 using Test_Gigbridge_Backend.TestSupport;
 
 namespace Test_Gigbridge_Backend.Application.Features.ESign;
@@ -242,7 +244,7 @@ public sealed class ESignDocumentManagementTests
                     FinalizedDocumentSizeBytes = FinalizedContent.Length,
                     PdfDocumentContent = PdfContent,
                     PdfDocumentFileName = "GB-CONTRACT-FINAL.pdf",
-                    PdfDocumentHash = "final-hash:contract-template-pdf-v1",
+                    PdfDocumentHash = "final-hash:contract-template-pdf-v2",
                     PdfSignatureCount = 2,
                     CreatedAt = Now.AddDays(-1)
                 });

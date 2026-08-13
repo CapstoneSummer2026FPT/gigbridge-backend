@@ -1,8 +1,10 @@
+using Application.Features.Wallets.Common.Models;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Time;
+using Application.Features.Wallets.Common.Interfaces;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Wallets;
 using Domain.Services.Payments;
 using Microsoft.EntityFrameworkCore;
 

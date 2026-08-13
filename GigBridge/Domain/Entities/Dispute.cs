@@ -1,4 +1,5 @@
-﻿using System;
+using Domain.Enums.Disputes;
+using System;
 using System.Collections.Generic;
 
 namespace Domain.Entities;
@@ -45,7 +46,7 @@ public partial class Dispute
     public int Urgency { get; set; }
 
     /// <summary>
-    /// Enum DisputeStatus: 0=Open, 1=UnderReview, 2=Resolved, 3=Closed
+    /// Enum DisputeStatus: 0=WaitingAdmin, 1=InProgress, 2=Resolved, 3=Closed
     /// </summary>
     public int Status { get; set; }
 

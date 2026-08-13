@@ -1,3 +1,4 @@
+using Domain.Enums.Reports;
 namespace Domain.Entities;
 
 public sealed class ReportContractInformationRequest

@@ -1,3 +1,5 @@
+using Domain.Enums.Accounts;
+using Domain.Enums.Contracts.Escrow;
 using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 

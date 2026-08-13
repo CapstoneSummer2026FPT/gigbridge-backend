@@ -2,7 +2,7 @@ using Application.Common.Models;
 using Application.Features.Admin.Notifications.Broadcast;
 using Application.Features.Admin.Notifications.Common.DTOs;
 using Application.Features.Admin.Notifications.Delete;
-using Domain.Enums;
+using Domain.Enums.Accounts;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;

@@ -1,7 +1,8 @@
 using System;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Time;
+using Application.Features.JobPosts.Common.ContentModeration;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.JobPosts.Client.Common;
 using Domain.Entities;

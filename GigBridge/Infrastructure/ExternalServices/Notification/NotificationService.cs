@@ -1,9 +1,11 @@
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Email;
+using Application.Features.Notifications.Common.Interfaces;
 using Application.Features.Auth.Shared.DTOs;
 using Application.Features.Notifications.Common.DTOs;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+using Domain.Enums.Notifications;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 

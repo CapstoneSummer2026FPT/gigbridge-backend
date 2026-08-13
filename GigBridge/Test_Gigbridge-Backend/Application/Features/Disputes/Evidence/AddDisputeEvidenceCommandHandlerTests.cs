@@ -1,9 +1,11 @@
 using Application.Common.Exceptions;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Media;
+using Application.Common.Interfaces.Time;
 using Application.Features.Disputes.Common.Internal;
 using Application.Features.Disputes.Evidence.Add.Commands;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Contracts;
+using Domain.Enums.Disputes;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Test_Gigbridge_Backend.TestSupport;
@@ -17,7 +19,7 @@ public sealed class AddDisputeEvidenceCommandHandlerTests
     [InlineData(false)]
     public async Task Handle_AllowsEitherContractPartyAndPersistsEvidence(bool uploadAsClient)
     {
-        var fixture = CreateFixture((int)DisputeStatus.Open);
+        var fixture = CreateFixture((int)DisputeStatus.WaitingAdmin);
         var uploaderId = uploadAsClient ? fixture.ClientUserId : fixture.FreelancerUserId;
 
         var result = await fixture.Handler.Handle(

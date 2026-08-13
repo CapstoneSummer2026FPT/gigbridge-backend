@@ -1,3 +1,4 @@
+using Domain.Enums.Contracts.Milestones;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable

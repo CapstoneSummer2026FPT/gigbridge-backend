@@ -1,4 +1,5 @@
-using Application.Common.Interfaces.IService;
+using Application.Features.Wallets.Common.Models;
+using Application.Features.Wallets.Common.Interfaces;
 using Microsoft.Extensions.Options;
 
 namespace Infrastructure.ExternalServices.Payments;

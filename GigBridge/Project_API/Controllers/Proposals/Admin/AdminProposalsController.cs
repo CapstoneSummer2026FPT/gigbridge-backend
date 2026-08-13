@@ -2,7 +2,7 @@ using Application.Common.Models;
 using Application.Features.Admin.Proposals;
 using Application.Features.Admin.Proposals.GetAllProposals.Queries;
 using Application.Features.Proposals.Common.DTOs;
-using Domain.Enums;
+using Domain.Enums.Accounts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Project_API.Controllers.Common;

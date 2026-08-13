@@ -1,13 +1,17 @@
 using System.Text.Json;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Time;
+using Application.Features.Chat.Common.Interfaces;
+using Application.Features.Notifications.Common.Interfaces;
 using Application.Features.Admin.Disputes.Common.DTOs;
 using Application.Features.Admin.Disputes.Common.Internal;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.Notifications.Common.DTOs;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Chat;
+using Domain.Enums.Disputes;
+using Domain.Enums.Notifications;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -103,7 +107,7 @@ public sealed class RequestEvidenceCommandHandler :
 
         await using var transaction = await _context.BeginTransactionAsync(cancellationToken);
         _context.Set<DisputeEvidence>().AddRange(placeholders);
-        dispute.Status = (int)DisputeStatus.UnderReview;
+        dispute.Status = (int)DisputeStatus.InProgress;
         dispute.UpdatedAt = now;
 
         var targetLabel = command.Target switch

@@ -2,7 +2,8 @@ using Application.Features.JobPosts.Client.Common;
 using Application.Common.Exceptions;
 using Application.Features.JobPosts.Client.GetMyJobPostDetail.Queries;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Contracts;
+using Domain.Enums.ESign;
 using Test_Gigbridge_Backend.TestSupport;
 
 namespace Test_Gigbridge_Backend.Application.Features.JobPosts.Client;

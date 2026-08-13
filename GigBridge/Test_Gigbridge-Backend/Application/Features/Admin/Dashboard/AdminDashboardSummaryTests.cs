@@ -1,10 +1,15 @@
 using Application.Common.Exceptions;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Time;
 using Application.Features.Admin.Analytics.Common.DTOs;
 using Application.Features.Admin.Analytics.Common.Interfaces;
 using Application.Features.Admin.Dashboard.GetSummary.Queries;
 using Domain.Entities;
-using Domain.Enums;
+using Domain.Enums.Accounts;
+using Domain.Enums.Contracts;
+using Domain.Enums.Disputes;
+using Domain.Enums.Proposals;
+using Domain.Enums.Reports;
+using Domain.Enums.Wallets;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using NSubstitute;
@@ -53,7 +58,7 @@ public sealed class AdminDashboardSummaryTests
             ContractReport(ContractReportAdminStatus.AwaitingInformation),
             ContractReport(ContractReportAdminStatus.Closed));
         context.Disputes.AddRange(
-            Dispute(DisputeStatus.DecisionPending),
+            Dispute(DisputeStatus.InProgress),
             Dispute(DisputeStatus.Resolved));
         context.WalletWithdrawals.AddRange(
             Withdrawal(WithdrawalStatus.SyncRequired),

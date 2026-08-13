@@ -2,7 +2,7 @@ using Application.Common.Models;
 using Application.Features.Wallets.Common.DTOs;
 using Application.Features.Wallets.Common.Withdrawals.Admin;
 using Application.Features.Wallets.Common.Withdrawals.Sync;
-using Domain.Enums;
+using Domain.Enums.Accounts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Project_API.Controllers.Common;
