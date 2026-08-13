@@ -1,5 +1,6 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
+using Application.Features.Disputes.Common.DTOs;
 using Application.Features.Disputes.Common.Internal;
 using Domain.Entities;
 using Domain.Enums.Disputes;

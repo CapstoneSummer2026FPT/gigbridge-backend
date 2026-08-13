@@ -1,3 +1,4 @@
+using Application.Features.Disputes.Common.DTOs;
 using MediatR;
 
 namespace Application.Features.Disputes.Client.RemainingJobPostPlan.Queries;
