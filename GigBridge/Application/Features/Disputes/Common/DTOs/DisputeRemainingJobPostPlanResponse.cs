@@ -1,4 +1,4 @@
-namespace Application.Features.Disputes.Client.RemainingJobPostPlan.Queries;
+namespace Application.Features.Disputes.Common.DTOs;
 
 public sealed record DisputeRemainingMilestonePlanResponse(
     string Title,
