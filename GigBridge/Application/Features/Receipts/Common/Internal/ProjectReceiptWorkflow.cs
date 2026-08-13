@@ -105,9 +105,11 @@ public static class ProjectReceiptWorkflow
                 item.Status == (int)EscrowTransactionStatus.Succeeded &&
                 item.MilestonesId.HasValue)
             .ToListAsync(cancellationToken);
-        var releaseLedger = successfulReleaseLedger
-            .Where(item => IsEarlyRelease(item) || IsFinalRelease(item))
-            .ToList();
+        // Transaction type/status are the source of truth. Release codes also include
+        // admin and dispute variants, so filtering by a small set of prefixes would
+        // incorrectly discard valid releases and make an otherwise completed contract
+        // fail reconciliation.
+        var releaseLedger = successfulReleaseLedger;
         if (Math.Abs(releaseLedger.Sum(item => item.Amount) - escrow.ReleasedAmount) >= BalanceTolerance)
         {
             throw new ConflictException("The escrow release ledger does not reconcile with the completed contract.");
@@ -138,7 +140,18 @@ public static class ProjectReceiptWorkflow
                 item.IdempotencyKey != null &&
                 item.IdempotencyKey.StartsWith(ServiceFeeWorkflow.ClientFundingFeePrefix))
             .Sum(item => item.TokenAmount);
-        var releaseFeeTransactions = walletTransactions
+        var acceptanceFee = walletTransactions
+            .Where(item =>
+                item.UserId == freelancerUser.UserId &&
+                item.Type == (int)WalletTransactionType.Adjustment &&
+                string.Equals(
+                    item.IdempotencyKey,
+                    $"{ServiceFeeWorkflow.AcceptJobFeePrefix}{contractId:N}",
+                    StringComparison.Ordinal))
+            .Sum(item => item.TokenAmount);
+        // Retain legacy release fees so receipts for contracts created before the fee
+        // moved to job acceptance still reflect the actual wallet ledger.
+        var legacyReleaseFeeTransactions = walletTransactions
             .Where(item =>
                 item.UserId == freelancerUser.UserId &&
                 item.Type == (int)WalletTransactionType.Adjustment &&
@@ -146,9 +159,14 @@ public static class ProjectReceiptWorkflow
                 item.IdempotencyKey.StartsWith(ServiceFeeWorkflow.FreelancerReleaseFeePrefix) &&
                 item.MilestonesId.HasValue)
             .ToList();
-        var releaseFees = releaseFeeTransactions
+        var legacyReleaseFees = legacyReleaseFeeTransactions
             .GroupBy(item => item.MilestonesId!.Value)
             .ToDictionary(group => group.Key, group => group.Sum(item => item.TokenAmount));
+        var acceptanceFees = AllocateFeeByMilestone(milestones, acceptanceFee);
+        var milestoneFees = milestones.ToDictionary(
+            milestone => milestone.MilestonesId,
+            milestone => acceptanceFees.GetValueOrDefault(milestone.MilestonesId) +
+                legacyReleaseFees.GetValueOrDefault(milestone.MilestonesId));
 
         var finalReleases = releaseLedger.Where(IsFinalRelease).ToList();
         var earlyReleases = releaseLedger.Where(item => !IsFinalRelease(item)).ToList();
@@ -161,7 +179,7 @@ public static class ProjectReceiptWorkflow
                 .Where(item => item.MilestonesId == milestone.MilestonesId)
                 .Sum(item => item.Amount);
             var total = early + final;
-            var fee = releaseFees.GetValueOrDefault(milestone.MilestonesId);
+            var fee = milestoneFees.GetValueOrDefault(milestone.MilestonesId);
             return new ProjectReceiptMilestoneSnapshot(
                 index + 1,
                 milestone.MilestonesId,
@@ -196,14 +214,30 @@ public static class ProjectReceiptWorkflow
         var totalEarly = earlyReleases.Sum(item => item.Amount);
         var totalFinal = finalReleases.Sum(item => item.Amount);
         var totalReleased = releaseLedger.Sum(item => item.Amount);
-        var freelancerFee = releaseFees.Values.Sum();
+        var freelancerFee = acceptanceFee + legacyReleaseFees.Values.Sum();
         var finalFeeKeys = finalReleases
             .Where(item => !string.IsNullOrWhiteSpace(item.GatewayTransactionCode))
             .Select(item => $"{ServiceFeeWorkflow.FreelancerReleaseFeePrefix}{item.GatewayTransactionCode}")
             .ToHashSet(StringComparer.Ordinal);
-        var finalFee = releaseFeeTransactions
+        var legacyFinalFee = legacyReleaseFeeTransactions
             .Where(item => item.IdempotencyKey != null && finalFeeKeys.Contains(item.IdempotencyKey))
             .Sum(item => item.TokenAmount);
+        var acceptanceFinalFee = milestones.Sum(milestone =>
+        {
+            var total = releaseLedger
+                .Where(item => item.MilestonesId == milestone.MilestonesId)
+                .Sum(item => item.Amount);
+            var final = finalReleases
+                .Where(item => item.MilestonesId == milestone.MilestonesId)
+                .Sum(item => item.Amount);
+            var fee = acceptanceFees.GetValueOrDefault(milestone.MilestonesId);
+            return total <= 0m || final <= 0m
+                ? 0m
+                : final >= total
+                    ? fee
+                    : decimal.Round(fee * final / total, 4, MidpointRounding.AwayFromZero);
+        });
+        var finalFee = legacyFinalFee + acceptanceFinalFee;
         var earlyFee = freelancerFee - finalFee;
 
         var clientIdentityCode = await ResolveIdentityCodeAsync(
@@ -280,6 +314,7 @@ public static class ProjectReceiptWorkflow
                 SnapshotHashSha256 = ComputeSha256(json),
                 GenerationStatus = (int)ProjectReceiptGenerationStatus.Pending,
                 NextGenerationAttemptAt = now,
+                NextNotificationAttemptAt = now,
                 EmailStatus = (int)ProjectReceiptEmailStatus.Pending,
                 NextEmailAttemptAt = now,
                 CreatedAt = now
@@ -298,11 +333,37 @@ public static class ProjectReceiptWorkflow
     private static bool IsFinalRelease(EscrowTransaction transaction) =>
         transaction.GatewayTransactionCode?.StartsWith("ESCROW-FINAL-", StringComparison.Ordinal) == true;
 
-    private static bool IsEarlyRelease(EscrowTransaction transaction) =>
-        transaction.GatewayTransactionCode?.StartsWith("ESCROW-RELEASE-", StringComparison.Ordinal) == true;
-
     private static string ValueOrPersonal(string? value) =>
         string.IsNullOrWhiteSpace(value) ? PersonalCompanyName : value.Trim();
+
+    private static IReadOnlyDictionary<Guid, decimal> AllocateFeeByMilestone(
+        IReadOnlyList<Milestone> milestones,
+        decimal totalFee)
+    {
+        var allocations = milestones.ToDictionary(item => item.MilestonesId, _ => 0m);
+        var totalAmount = milestones.Sum(item => item.Amount);
+        if (totalFee <= 0m || totalAmount <= 0m || milestones.Count == 0)
+        {
+            return allocations;
+        }
+
+        var remainingFee = totalFee;
+        for (var index = 0; index < milestones.Count; index++)
+        {
+            var milestone = milestones[index];
+            var allocation = index == milestones.Count - 1
+                ? remainingFee
+                : decimal.Round(
+                    totalFee * milestone.Amount / totalAmount,
+                    4,
+                    MidpointRounding.AwayFromZero);
+            allocation = Math.Min(allocation, remainingFee);
+            allocations[milestone.MilestonesId] = allocation;
+            remainingFee -= allocation;
+        }
+
+        return allocations;
+    }
 
     private static void QueueTemplateRegeneration(ProjectReceipt receipt, DateTime now)
     {
@@ -319,6 +380,10 @@ public static class ProjectReceiptWorkflow
         receipt.PdfSizeBytes = null;
         receipt.PdfHashSha256 = null;
         receipt.GeneratedAt = null;
+        receipt.NotificationAttemptCount = 0;
+        receipt.NextNotificationAttemptAt = now;
+        receipt.NotificationLastError = null;
+        receipt.DeliveryLeaseExpiresAt = null;
         receipt.EmailStatus = (int)ProjectReceiptEmailStatus.Pending;
         receipt.EmailAttemptCount = 0;
         receipt.NextEmailAttemptAt = now;

@@ -25,5 +25,15 @@ public sealed class ProjectReceiptPersistenceModelTests
                 nameof(ProjectReceipt.ContractsId),
                 nameof(ProjectReceipt.ReceiptType)
             ]));
+        Assert.Contains(entity.GetIndexes(), index =>
+            index.Properties.Select(property => property.Name).SequenceEqual([
+                nameof(ProjectReceipt.NotificationId),
+                nameof(ProjectReceipt.NextNotificationAttemptAt)
+            ]));
+        Assert.Contains(entity.GetIndexes(), index =>
+            index.Properties.Select(property => property.Name).SequenceEqual([
+                nameof(ProjectReceipt.GenerationStatus),
+                nameof(ProjectReceipt.DeliveryLeaseExpiresAt)
+            ]));
     }
 }

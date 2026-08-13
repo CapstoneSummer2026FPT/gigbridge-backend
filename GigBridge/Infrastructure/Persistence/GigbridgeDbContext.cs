@@ -444,6 +444,10 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
             entity.HasIndex(e => new { e.EmailStatus, e.NextEmailAttemptAt });
 
+            entity.HasIndex(e => new { e.NotificationId, e.NextNotificationAttemptAt });
+
+            entity.HasIndex(e => new { e.GenerationStatus, e.DeliveryLeaseExpiresAt });
+
             entity.HasIndex(e => new { e.OwnerUserId, e.IssuedAt })
                 .IsDescending(false, true);
 
@@ -480,6 +484,10 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
                 .HasComment("Enum ProjectReceiptEmailStatus: 0=Pending, 1=Delivered, 2=Failed");
             entity.Property(e => e.EmailLastError)
                 .HasMaxLength(2000);
+            entity.Property(e => e.NotificationLastError)
+                .HasMaxLength(2000);
+            entity.Property(e => e.NextNotificationAttemptAt)
+                .HasDefaultValueSql("now()");
             entity.Property(e => e.CreatedAt)
                 .HasDefaultValueSql("now()");
 

@@ -28,6 +28,11 @@ public sealed class ProjectReceipt
 
     public Guid? NotificationId { get; set; }
     public DateTime? NotifiedAt { get; set; }
+    public int NotificationAttemptCount { get; set; }
+    public DateTime NextNotificationAttemptAt { get; set; }
+    public string? NotificationLastError { get; set; }
+
+    public DateTime? DeliveryLeaseExpiresAt { get; set; }
 
     public int EmailStatus { get; set; }
     public int EmailAttemptCount { get; set; }

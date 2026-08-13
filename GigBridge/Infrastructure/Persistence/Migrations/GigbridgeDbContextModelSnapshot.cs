@@ -4430,6 +4430,9 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasDefaultValueSql("now()");
 
+                    b.Property<DateTime?>("DeliveryLeaseExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<int>("EmailAttemptCount")
                         .HasColumnType("integer");
 
@@ -4474,8 +4477,20 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<DateTime>("NextGenerationAttemptAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTime>("NextNotificationAttemptAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<int>("NotificationAttemptCount")
+                        .HasColumnType("integer");
+
                     b.Property<Guid?>("NotificationId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("NotificationLastError")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
 
                     b.Property<DateTime?>("NotifiedAt")
                         .HasColumnType("timestamp with time zone");
@@ -4538,6 +4553,10 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex("EmailStatus", "NextEmailAttemptAt");
 
                     b.HasIndex("GenerationStatus", "NextGenerationAttemptAt");
+
+                    b.HasIndex("GenerationStatus", "DeliveryLeaseExpiresAt");
+
+                    b.HasIndex("NotificationId", "NextNotificationAttemptAt");
 
                     b.HasIndex("OwnerUserId", "IssuedAt")
                         .IsDescending(false, true);

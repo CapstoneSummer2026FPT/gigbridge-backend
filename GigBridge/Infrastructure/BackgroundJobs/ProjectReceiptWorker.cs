@@ -60,11 +60,15 @@ public sealed class ProjectReceiptWorker : BackgroundService
         if (claim is not null)
         {
             await GenerateAsync(claim, cancellationToken);
-            await DeliverReadyAsync(claim.ReceiptId, cancellationToken);
+            var generatedDeliveryId = await ClaimDeliveryAsync(cancellationToken);
+            if (generatedDeliveryId.HasValue)
+            {
+                await DeliverReadyAsync(generatedDeliveryId.Value, cancellationToken);
+            }
             return true;
         }
 
-        var deliveryId = await FindDueDeliveryAsync(cancellationToken);
+        var deliveryId = await ClaimDeliveryAsync(cancellationToken);
         if (deliveryId.HasValue)
         {
             await DeliverReadyAsync(deliveryId.Value, cancellationToken);
@@ -205,28 +209,52 @@ public sealed class ProjectReceiptWorker : BackgroundService
         _logger.LogWarning(exception, "Receipt {ReceiptId} PDF generation failed.", claim.ReceiptId);
     }
 
-    private async Task<Guid?> FindDueDeliveryAsync(CancellationToken cancellationToken)
+    private async Task<Guid?> ClaimDeliveryAsync(CancellationToken cancellationToken)
     {
         using var scope = _scopeFactory.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
+        await using var transaction = await context.BeginTransactionAsync(cancellationToken);
+        await transaction.AcquireTransactionLockAsync(WorkerLock, cancellationToken);
         var now = DateTime.UtcNow;
-        return await context.Set<ProjectReceipt>()
-            .AsNoTracking()
+        var receipt = await context.Set<ProjectReceipt>()
             .Where(item =>
                 item.GenerationStatus == (int)ProjectReceiptGenerationStatus.Ready &&
-                (item.NotificationId == null ||
+                (item.DeliveryLeaseExpiresAt == null || item.DeliveryLeaseExpiresAt <= now) &&
+                ((item.NotificationId == null &&
+                  item.NotificationAttemptCount < MaxAttempts &&
+                  item.NextNotificationAttemptAt <= now) ||
                  (item.EmailStatus != (int)ProjectReceiptEmailStatus.Delivered &&
                   item.EmailAttemptCount < MaxAttempts &&
                   item.NextEmailAttemptAt <= now)))
-            .OrderBy(item => item.GeneratedAt)
-            .Select(item => (Guid?)item.ProjectReceiptId)
+            .OrderBy(item => item.CreatedAt)
             .FirstOrDefaultAsync(cancellationToken);
+        if (receipt is null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return null;
+        }
+
+        // The advisory lock serializes claims. The persisted lease prevents another
+        // application instance from selecting the same receipt after this transaction
+        // commits; a crashed worker becomes eligible again when the lease expires.
+        receipt.DeliveryLeaseExpiresAt = now.Add(LeaseDuration);
+        receipt.UpdatedAt = now;
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return receipt.ProjectReceiptId;
     }
 
     private async Task DeliverReadyAsync(Guid receiptId, CancellationToken cancellationToken)
     {
-        await EnsureNotificationAsync(receiptId, cancellationToken);
-        await SendEmailAsync(receiptId, cancellationToken);
+        try
+        {
+            await EnsureNotificationAsync(receiptId, cancellationToken);
+            await SendEmailAsync(receiptId, cancellationToken);
+        }
+        finally
+        {
+            await ReleaseDeliveryLeaseAsync(receiptId, cancellationToken);
+        }
     }
 
     private async Task EnsureNotificationAsync(Guid receiptId, CancellationToken cancellationToken)
@@ -236,8 +264,10 @@ public sealed class ProjectReceiptWorker : BackgroundService
         var receipt = await context.Set<ProjectReceipt>()
             .Include(item => item.Contract)
             .FirstOrDefaultAsync(item => item.ProjectReceiptId == receiptId, cancellationToken);
+        var now = DateTime.UtcNow;
         if (receipt is null || receipt.GenerationStatus != (int)ProjectReceiptGenerationStatus.Ready ||
-            receipt.NotificationId.HasValue)
+            receipt.NotificationId.HasValue || receipt.NotificationAttemptCount >= MaxAttempts ||
+            receipt.NextNotificationAttemptAt > now)
         {
             return;
         }
@@ -250,6 +280,8 @@ public sealed class ProjectReceiptWorker : BackgroundService
                 cancellationToken);
         if (existing is null)
         {
+            receipt.NotificationAttemptCount++;
+            await context.SaveChangesAsync(cancellationToken);
             try
             {
                 var notifications = scope.ServiceProvider.GetRequiredService<INotificationService>();
@@ -264,7 +296,13 @@ public sealed class ProjectReceiptWorker : BackgroundService
             }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
+                receipt.NotificationLastError = LimitError(exception.Message);
+                receipt.NextNotificationAttemptAt = DateTime.UtcNow.Add(
+                    RetryDelay(receipt.NotificationAttemptCount));
+                receipt.UpdatedAt = DateTime.UtcNow;
+                await context.SaveChangesAsync(cancellationToken);
                 _logger.LogWarning(exception, "Receipt {ReceiptId} notification delivery failed.", receiptId);
+                return;
             }
             existing = await context.Set<Notification>()
                 .FirstOrDefaultAsync(item =>
@@ -273,9 +311,18 @@ public sealed class ProjectReceiptWorker : BackgroundService
                     item.ReferenceType == nameof(ProjectReceipt),
                     cancellationToken);
         }
-        if (existing is null) return;
+        if (existing is null)
+        {
+            receipt.NotificationLastError = "Notification service completed without creating a notification.";
+            receipt.NextNotificationAttemptAt = DateTime.UtcNow.Add(
+                RetryDelay(receipt.NotificationAttemptCount));
+            receipt.UpdatedAt = DateTime.UtcNow;
+            await context.SaveChangesAsync(cancellationToken);
+            return;
+        }
         receipt.NotificationId = existing.NotificationsId;
         receipt.NotifiedAt = existing.CreatedAt;
+        receipt.NotificationLastError = null;
         receipt.UpdatedAt = DateTime.UtcNow;
         await context.SaveChangesAsync(cancellationToken);
     }
@@ -284,14 +331,14 @@ public sealed class ProjectReceiptWorker : BackgroundService
     {
         using var scope = _scopeFactory.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
-        var now = DateTime.UtcNow;
         var receipt = await context.Set<ProjectReceipt>()
             .Include(item => item.OwnerUser)
             .Include(item => item.Contract)
             .FirstOrDefaultAsync(item => item.ProjectReceiptId == receiptId, cancellationToken);
         if (receipt is null || receipt.GenerationStatus != (int)ProjectReceiptGenerationStatus.Ready ||
             receipt.EmailStatus == (int)ProjectReceiptEmailStatus.Delivered ||
-            receipt.EmailAttemptCount >= MaxAttempts || receipt.NextEmailAttemptAt > now ||
+            receipt.EmailAttemptCount >= MaxAttempts ||
+            receipt.NextEmailAttemptAt > DateTime.UtcNow ||
             receipt.PdfContent is not { Length: > 0 } || string.IsNullOrWhiteSpace(receipt.PdfFileName))
         {
             return;
@@ -338,6 +385,18 @@ public sealed class ProjectReceiptWorker : BackgroundService
             receipt.NextEmailAttemptAt = DateTime.UtcNow.Add(RetryDelay(receipt.EmailAttemptCount));
             _logger.LogWarning(exception, "Receipt {ReceiptId} email delivery failed.", receiptId);
         }
+        receipt.UpdatedAt = DateTime.UtcNow;
+        await context.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task ReleaseDeliveryLeaseAsync(Guid receiptId, CancellationToken cancellationToken)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
+        var receipt = await context.Set<ProjectReceipt>()
+            .FirstOrDefaultAsync(item => item.ProjectReceiptId == receiptId, cancellationToken);
+        if (receipt is null) return;
+        receipt.DeliveryLeaseExpiresAt = null;
         receipt.UpdatedAt = DateTime.UtcNow;
         await context.SaveChangesAsync(cancellationToken);
     }
