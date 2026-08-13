@@ -61,14 +61,12 @@ public class GetWorkspaceFilesQueryHandler
 
         // 3. Fetch all MessageAttachments from messages in this conversation
         //    Only include messages that have not been deleted for everyone
-        var attachments = await _context.Set<MessageAttachment>()
+        var messageAttachments = await _context.Set<MessageAttachment>()
             .AsNoTracking()
             .Where(attachment =>
                 attachment.Messages.ConversationsId == workspaceConversationId &&
                 attachment.Messages.DeletedForEveryoneAt == null)
-            .OrderByDescending(attachment => attachment.CreatedAt)
-            .Select(attachment => new
-            {
+            .Select(attachment => new WorkspaceFileSource(
                 attachment.MessageAttachmentsId,
                 attachment.MessagesId,
                 attachment.FileName,
@@ -77,45 +75,128 @@ public class GetWorkspaceFilesQueryHandler
                 attachment.FileExtension,
                 attachment.FileSizeBytes,
                 attachment.CreatedAt,
-                SenderUserId = attachment.Messages.SenderUserId,
-            })
+                attachment.Messages.SenderUserId,
+                0,
+                null,
+                null,
+                null,
+                "message",
+                null,
+                null))
             .ToListAsync(cancellationToken);
 
-        if (attachments.Count == 0)
+        // 4. Fetch product handoffs ("Send Work Materials") for this contract
+        var handoffs = await _context.Set<ContractProductHandoff>()
+            .AsNoTracking()
+            .Where(handoff => handoff.ContractsId == request.ContractId)
+            .Select(handoff => new WorkspaceFileSource(
+                handoff.ContractProductHandoffId,
+                null,
+                handoff.FileName ?? handoff.ExternalUrl ?? "Link",
+                handoff.FileUrl ?? handoff.ExternalUrl ?? string.Empty,
+                handoff.MimeType ?? "application/octet-stream",
+                null,
+                handoff.FileSizeBytes ?? 0,
+                handoff.CreatedAt,
+                handoff.SubmittedByUserId,
+                handoff.SourceType,
+                handoff.ExternalUrl,
+                handoff.Note,
+                handoff.Version,
+                "handoff",
+                null,
+                null))
+            .ToListAsync(cancellationToken);
+
+        // 5. Fetch milestone deliverable attachments for this contract
+        var milestoneAttachments = await _context.Set<MilestoneAttachment>()
+            .AsNoTracking()
+            .Where(attachment => attachment.Milestones.ContractsId == request.ContractId)
+            .Select(attachment => new WorkspaceFileSource(
+                attachment.MilestoneAttachmentsId,
+                null,
+                attachment.FileName,
+                attachment.FileUrl,
+                attachment.MimeType ?? "application/octet-stream",
+                null,
+                attachment.FileSize ?? 0,
+                attachment.CreatedAt,
+                attachment.UploadedByUserId,
+                0,
+                null,
+                null,
+                null,
+                "milestone",
+                attachment.MilestonesId,
+                attachment.Milestones.Title))
+            .ToListAsync(cancellationToken);
+
+        var allFiles = messageAttachments
+            .Concat(handoffs)
+            .Concat(milestoneAttachments)
+            .OrderByDescending(file => file.CreatedAt)
+            .ToList();
+
+        if (allFiles.Count == 0)
             return [];
 
-        // 4. Fetch sender info for all uploaders
-        var senderIds = attachments
-            .Where(a => a.SenderUserId.HasValue)
-            .Select(a => a.SenderUserId!.Value)
+        // 6. Fetch uploader info for all uploaders across every source
+        var uploaderIds = allFiles
+            .Where(f => f.UploaderUserId.HasValue)
+            .Select(f => f.UploaderUserId!.Value)
             .ToHashSet();
 
-        var senders = await _context.Set<User>()
+        var uploaders = await _context.Set<User>()
             .AsNoTracking()
-            .Where(user => senderIds.Contains(user.UserId))
+            .Where(user => uploaderIds.Contains(user.UserId))
             .ToDictionaryAsync(user => user.UserId, cancellationToken);
 
-        // 5. Map to response
-        return attachments
-            .Select(attachment =>
+        // 7. Map to response
+        return allFiles
+            .Select(file =>
             {
-                User? sender = attachment.SenderUserId.HasValue
-                    ? senders.GetValueOrDefault(attachment.SenderUserId.Value)
+                User? uploader = file.UploaderUserId.HasValue
+                    ? uploaders.GetValueOrDefault(file.UploaderUserId.Value)
                     : null;
 
                 return new WorkspaceFileResponse(
-                    attachment.MessageAttachmentsId,
-                    attachment.MessagesId,
-                    attachment.FileName,
-                    attachment.FileUrl,
-                    attachment.MimeType,
-                    attachment.FileExtension,
-                    attachment.FileSizeBytes,
-                    attachment.CreatedAt,
-                    attachment.SenderUserId,
-                    sender?.FullName,
-                    sender?.Avatar);
+                    file.FileId,
+                    file.MessageId,
+                    file.FileName,
+                    file.FileUrl,
+                    file.MimeType,
+                    file.FileExtension,
+                    file.FileSizeBytes,
+                    file.CreatedAt,
+                    file.UploaderUserId,
+                    uploader?.FullName,
+                    uploader?.Avatar,
+                    file.SourceType,
+                    file.ExternalUrl,
+                    file.Note,
+                    file.Version,
+                    file.Context,
+                    file.MilestoneId,
+                    file.MilestoneTitle);
             })
             .ToList();
     }
+
+    private sealed record WorkspaceFileSource(
+        Guid FileId,
+        Guid? MessageId,
+        string FileName,
+        string FileUrl,
+        string MimeType,
+        string? FileExtension,
+        long FileSizeBytes,
+        DateTime CreatedAt,
+        Guid? UploaderUserId,
+        int SourceType,
+        string? ExternalUrl,
+        string? Note,
+        int? Version,
+        string Context,
+        Guid? MilestoneId,
+        string? MilestoneTitle);
 }

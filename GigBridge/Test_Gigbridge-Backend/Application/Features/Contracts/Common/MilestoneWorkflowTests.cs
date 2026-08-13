@@ -13,6 +13,8 @@ using Application.Features.Contracts.Milestones.Common.List.Queries;
 using Application.Features.Contracts.Milestones.Freelancer.RequestUnlock.Commands;
 using Application.Features.Contracts.Milestones.Freelancer.Submit.Commands;
 using Application.Features.Contracts.Milestones.Freelancer.Withdraw.Commands;
+using Application.Features.Contracts.WorkItems.Freelancer.Update.Commands;
+using Application.Features.Contracts.WorkItems.Freelancer.Update.DTOs;
 using Domain.Entities;
 using Domain.Enums.Accounts;
 using Domain.Enums.Auditing;
@@ -658,6 +660,108 @@ public class MilestoneWorkflowTests
         Assert.Empty(fixture.EscrowTransactions.Entities);
         Assert.Equal(0m, fixture.FreelancerWallet.AvailableTokens);
     }
+
+    // ---------------------------------------------------------------------
+    // Workspace realtime sync: Start/Complete work item, Submit, Approve, and
+    // Request Revision must all push a live SignalR event to both contract
+    // participants so neither side has to refresh to see the other's action.
+    // ---------------------------------------------------------------------
+
+    [Fact]
+    public async Task UpdateWorkItem_StartingItSendsWorkItemUpdatedToBothParticipants()
+    {
+        var fixture = new MilestoneWorkflowFixture();
+        fixture.FirstMilestone.Status = (int)MilestoneStatus.InProgress;
+        fixture.FirstMilestone.StartedAt = fixture.Now;
+        fixture.FirstWorkItem.Status = (int)ContractWorkItemStatus.Todo;
+        var realtime = new CapturingChatRealtimeNotifier();
+        var handler = new UpdateContractWorkItemCommandHandler(
+            fixture.Context, new FixedDateTimeService(fixture.Now), realtime);
+
+        await handler.Handle(
+            new UpdateContractWorkItemCommand(
+                fixture.ContractId, fixture.FirstMilestoneId, fixture.FirstWorkItem.ContractWorkItemId, fixture.FreelancerUserId,
+                new UpdateContractWorkItemRequest((int)ContractWorkItemStatus.InProgress, null)),
+            CancellationToken.None);
+
+        var evt = Assert.Single(realtime.UsersEvents);
+        Assert.Equal("WorkItemUpdated", evt.EventName);
+        Assert.Equal(new[] { fixture.ClientUserId, fixture.FreelancerUserId }, evt.UserIds.OrderBy(id => id == fixture.ClientUserId ? 0 : 1));
+    }
+
+    [Fact]
+    public async Task SubmitMilestone_SendsDeliverableSubmittedAndLiveSystemMessage()
+    {
+        var fixture = new MilestoneWorkflowFixture();
+        fixture.FirstMilestone.Status = (int)MilestoneStatus.InProgress;
+        var realtime = new CapturingChatRealtimeNotifier();
+        var handler = new SubmitMilestoneCommandHandler(
+            fixture.Context, new FixedDateTimeService(fixture.Now), new CapturingUserAuditLogService(),
+            new TestMediaService(), realtime);
+
+        await handler.Handle(
+            new SubmitMilestoneCommand(
+                fixture.ContractId, fixture.FirstMilestoneId, fixture.FreelancerUserId,
+                "Done.", CreateSubmissionFile("deliverable.zip")),
+            CancellationToken.None);
+
+        var usersEvent = Assert.Single(realtime.UsersEvents);
+        Assert.Equal("DeliverableSubmitted", usersEvent.EventName);
+        Assert.Contains(fixture.ClientUserId, usersEvent.UserIds);
+        Assert.Contains(fixture.FreelancerUserId, usersEvent.UserIds);
+
+        var conversationEvent = Assert.Single(realtime.ConversationEvents);
+        Assert.Equal("ReceiveMessage", conversationEvent.EventName);
+    }
+
+    [Fact]
+    public async Task ApproveMilestone_SendsMilestoneStatusChangedAndLiveSystemMessage()
+    {
+        var fixture = new MilestoneWorkflowFixture();
+        fixture.FirstMilestone.Status = (int)MilestoneStatus.Submitted;
+        fixture.FirstMilestone.SubmittedAt = fixture.Now;
+        var realtime = new CapturingChatRealtimeNotifier();
+        var handler = new ApproveMilestoneCommandHandler(
+            fixture.Context, new FixedDateTimeService(fixture.Now.AddMinutes(1)),
+            new CapturingUserAuditLogService(), realtime);
+
+        await handler.Handle(
+            new ApproveMilestoneCommand(fixture.ContractId, fixture.FirstMilestoneId, fixture.ClientUserId),
+            CancellationToken.None);
+
+        var usersEvent = Assert.Single(realtime.UsersEvents);
+        Assert.Equal("MilestoneStatusChanged", usersEvent.EventName);
+        Assert.Contains(fixture.ClientUserId, usersEvent.UserIds);
+        Assert.Contains(fixture.FreelancerUserId, usersEvent.UserIds);
+        Assert.Single(realtime.ConversationEvents);
+    }
+
+    [Fact]
+    public async Task RequestMilestoneRevision_SendsMilestoneStatusChangedAndLiveSystemMessage()
+    {
+        var fixture = new MilestoneWorkflowFixture();
+        fixture.FirstMilestone.Status = (int)MilestoneStatus.Submitted;
+        fixture.FirstMilestone.SubmittedAt = fixture.Now;
+        var realtime = new CapturingChatRealtimeNotifier();
+        var handler = new RequestMilestoneRevisionCommandHandler(
+            fixture.Context, new FixedDateTimeService(fixture.Now.AddMinutes(1)), realtime);
+
+        await handler.Handle(
+            new RequestMilestoneRevisionCommand(
+                fixture.ContractId, fixture.FirstMilestoneId, fixture.ClientUserId,
+                new RequestMilestoneRevisionRequest("Needs fixes.", [fixture.FirstWorkItem.ContractWorkItemId])),
+            CancellationToken.None);
+
+        var usersEvent = Assert.Single(realtime.UsersEvents);
+        Assert.Equal("MilestoneStatusChanged", usersEvent.EventName);
+        Assert.Contains(fixture.ClientUserId, usersEvent.UserIds);
+        Assert.Contains(fixture.FreelancerUserId, usersEvent.UserIds);
+        Assert.Single(realtime.ConversationEvents);
+    }
+
+    // Existing call sites that construct these handlers WITHOUT a realtime notifier (the
+    // optional trailing parameter defaults to null) must keep compiling and behaving
+    // exactly as before — proven implicitly by every other test in this file still passing.
 
     private sealed class MilestoneWorkflowFixture
     {

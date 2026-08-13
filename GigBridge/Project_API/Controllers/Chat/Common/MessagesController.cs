@@ -4,6 +4,7 @@ using Application.Features.Chat.Common.Messages.GetConversationMessages.Queries;
 using Application.Features.Chat.Common.Messages.GetAround;
 using Application.Features.Chat.Common.Messages.Send.Commands;
 using Application.Features.Chat.Common.Messages.Send.DTOs;
+using Application.Features.Chat.Common.Messages.SendWithAttachments.Commands;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -14,6 +15,8 @@ namespace Project_API.Controllers.Chat.Common;
 [Authorize]
 public class MessagesController : BaseApiController
 {
+    private const long MaxRequestSizeBytes = 100 * 1024 * 1024;
+
     [HttpPost]
     public async Task<IActionResult> SendMessage([FromBody] SendMessageRequest request)
     {
@@ -25,6 +28,49 @@ public class MessagesController : BaseApiController
         var result = await Mediator.Send(new SendMessageCommand(userId, request));
 
         return Ok(ApiResponse<MessageResponse>.Ok(result, "Message sent"));
+    }
+
+    [HttpPost("attachments")]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(MaxRequestSizeBytes)]
+    public async Task<IActionResult> SendMessageWithAttachments(
+        [FromForm] Guid conversationId,
+        [FromForm] string clientMessageId,
+        [FromForm] string? content,
+        [FromForm] List<IFormFile>? attachments)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return InvalidTokenResponse();
+        }
+
+        var streams = new List<Stream>();
+        try
+        {
+            var files = new List<ChatMessageFile>();
+            foreach (var file in attachments ?? [])
+            {
+                var stream = file.OpenReadStream();
+                streams.Add(stream);
+                files.Add(new ChatMessageFile(stream, file.FileName, file.ContentType, file.Length));
+            }
+
+            var result = await Mediator.Send(new SendMessageWithAttachmentsCommand(
+                conversationId,
+                userId,
+                clientMessageId,
+                content,
+                files));
+
+            return Ok(ApiResponse<MessageResponse>.Ok(result, "Message sent"));
+        }
+        finally
+        {
+            foreach (var stream in streams)
+            {
+                await stream.DisposeAsync();
+            }
+        }
     }
 
     [HttpGet("conversation/{conversationId}")]

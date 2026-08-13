@@ -1,5 +1,6 @@
 using Application.Common.Interfaces;
 using Application.Features.Disputes.Common.DTOs;
+using Application.Features.Disputes.Common.Internal;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -38,6 +39,7 @@ public sealed class GetMyDisputesQueryHandler : IRequestHandler<GetMyDisputesQue
         var query = _context.Set<Dispute>()
             .AsNoTracking()
             .Include(dispute => dispute.Contracts).ThenInclude(contract => contract.JobPosts)
+            .Include(dispute => dispute.Contracts).ThenInclude(contract => contract.Milestones)
             .Include(dispute => dispute.Milestones)
             .Where(dispute =>
                 (clientProfile != null && dispute.Contracts.ClientProfilesId == clientProfile.ClientProfilesId) ||
@@ -58,7 +60,9 @@ public sealed class GetMyDisputesQueryHandler : IRequestHandler<GetMyDisputesQue
             dispute.CreatedAt,
             dispute.Status,
             dispute.MilestonesId,
-            dispute.Milestones?.Title)).ToList();
+            dispute.Milestones?.Title,
+            dispute.Status == (int)Domain.Enums.Disputes.DisputeStatus.Resolved &&
+                DisputeJobPostRecreationSupport.IsEligible(dispute.Contracts.Status, dispute.Contracts.Milestones))).ToList();
 
         return new MyDisputesResponse(items, page, pageSize, total);
     }
