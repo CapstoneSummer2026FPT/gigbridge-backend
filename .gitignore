@@ -47,3 +47,4 @@ repomix-output.xml
 /docs/reviews/review-esign.md
 database/migrations/20260720-add-esign-docx-artifacts.sql
 *.ps1
+/supabase
