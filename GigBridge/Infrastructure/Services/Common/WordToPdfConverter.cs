@@ -1,9 +1,9 @@
 using System.Diagnostics;
 using System.Text;
-using Application.Features.ESign.Common.Interfaces;
+using Application.Common.Interfaces.Documents;
 using Microsoft.Extensions.Configuration;
 
-namespace Infrastructure.Services.ESign;
+namespace Infrastructure.Services.Common;
 
 public sealed class WordToPdfConverter(IConfiguration configuration) : IWordToPdfConverter
 {

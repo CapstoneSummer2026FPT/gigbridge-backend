@@ -73,9 +73,9 @@ public sealed class DependencyInjectionConfigurationTests
 
     [Theory]
     [InlineData("Development", null, 0)]
-    [InlineData("Production", null, 3)]
+    [InlineData("Production", null, 4)]
     [InlineData("Production", "false", 0)]
-    [InlineData("Development", "true", 3)]
+    [InlineData("Development", "true", 4)]
     public void InfrastructureWorkers_RespectEnvironmentAndExplicitOverride(
         string environment,
         string? enabled,
@@ -91,7 +91,8 @@ public sealed class DependencyInjectionConfigurationTests
         [
             typeof(GoogleMeetProvisioningWorker),
             typeof(PremiumExpiryWorker),
-            typeof(AnalyticsMaintenanceWorker)
+            typeof(AnalyticsMaintenanceWorker),
+            typeof(ProjectReceiptWorker)
         ];
         Assert.Equal(
             expectedHostedServices,

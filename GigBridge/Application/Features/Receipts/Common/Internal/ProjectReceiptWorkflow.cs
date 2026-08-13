@@ -1,0 +1,365 @@
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using Application.Common.Exceptions;
+using Application.Common.Interfaces;
+using Application.Features.Contracts.Common.Internal;
+using Application.Features.Receipts.Common.DTOs;
+using Application.Features.Wallets.Common;
+using Domain.Entities;
+using Domain.Enums;
+using Domain.Enums.Contracts;
+using Domain.Enums.Contracts.Escrow;
+using Domain.Enums.Contracts.Milestones;
+using Domain.Enums.ESign;
+using Domain.Enums.Wallets;
+using Domain.Services.Payments;
+using Microsoft.EntityFrameworkCore;
+
+namespace Application.Features.Receipts.Common.Internal;
+
+public static class ProjectReceiptWorkflow
+{
+    private const decimal BalanceTolerance = 0.01m;
+    private const int CurrentTemplateVersion = 2;
+    private const string PersonalCompanyName = "Null";
+    private static readonly JsonSerializerOptions SnapshotJsonOptions = new(JsonSerializerDefaults.Web);
+
+    public static async Task<IReadOnlyList<ProjectReceipt>> EnsurePairAsync(
+        IApplicationDbContext context,
+        Guid contractId,
+        DateTime issuedAt,
+        CancellationToken cancellationToken)
+    {
+        var existing = await context.Set<ProjectReceipt>()
+            .Where(receipt => receipt.ContractsId == contractId)
+            .OrderBy(receipt => receipt.ReceiptType)
+            .ToListAsync(cancellationToken);
+        if (existing.Count == 2)
+        {
+            foreach (var receipt in existing.Where(item => item.TemplateVersion < CurrentTemplateVersion))
+            {
+                QueueTemplateRegeneration(receipt, DateTime.UtcNow);
+            }
+            return existing;
+        }
+
+        var contract = await context.Set<Contract>()
+            .FirstOrDefaultAsync(item => item.ContractsId == contractId, cancellationToken)
+            ?? throw new NotFoundException("Contract does not exist.");
+
+        if (contract.Status != (int)ContractStatus.Completed || !contract.CompletedAt.HasValue)
+        {
+            throw new BadRequestException("Receipts are available only after the contract is completed.");
+        }
+        if (!contract.FreelancerProfilesId.HasValue)
+        {
+            throw new BadRequestException("The completed contract does not have a freelancer.");
+        }
+
+        var clientProfile = await context.Set<ClientProfile>()
+            .FirstOrDefaultAsync(item => item.ClientProfilesId == contract.ClientProfilesId, cancellationToken)
+            ?? throw new NotFoundException("Contract client profile does not exist.");
+        var freelancerProfile = await context.Set<FreelancerProfile>()
+            .FirstOrDefaultAsync(
+                item => item.FreelancerProfilesId == contract.FreelancerProfilesId.Value,
+                cancellationToken)
+            ?? throw new NotFoundException("Contract freelancer profile does not exist.");
+        var clientUser = await context.Set<User>()
+            .FirstOrDefaultAsync(item => item.UserId == clientProfile.UserId, cancellationToken)
+            ?? throw new NotFoundException("Contract client user does not exist.");
+        var freelancerUser = await context.Set<User>()
+            .FirstOrDefaultAsync(item => item.UserId == freelancerProfile.UserId, cancellationToken)
+            ?? throw new NotFoundException("Contract freelancer user does not exist.");
+
+        var escrow = await context.Set<ContractEscrow>()
+            .FirstOrDefaultAsync(item => item.ContractsId == contractId, cancellationToken)
+            ?? throw new NotFoundException("Contract escrow does not exist.");
+        var remaining = Math.Max(0m, escrow.FundedAmount - escrow.ReleasedAmount);
+        if (escrow.Status != (int)ContractEscrowStatus.Released || remaining >= BalanceTolerance)
+        {
+            throw new ConflictException("The completed contract escrow has not been fully released.");
+        }
+
+        var milestones = (await context.Set<Milestone>()
+            .Where(item => item.ContractsId == contractId)
+            .ToListAsync(cancellationToken))
+            .OrderBy(item => item.SortOrder ?? int.MaxValue)
+            .ThenBy(item => item.CreatedAt)
+            .ToList();
+        if (milestones.Count == 0 || milestones.Any(item => item.Status != (int)MilestoneStatus.Approved))
+        {
+            throw new ConflictException("The completed contract milestone ledger is incomplete.");
+        }
+        if (Math.Abs(escrow.RequiredAmount - escrow.FundedAmount) >= BalanceTolerance ||
+            Math.Abs(milestones.Sum(item => item.Amount) - escrow.RequiredAmount) >= BalanceTolerance)
+        {
+            throw new ConflictException("The completed contract funding does not reconcile with its milestones.");
+        }
+
+        var successfulReleaseLedger = await context.Set<EscrowTransaction>()
+            .AsNoTracking()
+            .Where(item =>
+                item.ContractEscrowId == escrow.ContractEscrowId &&
+                item.Type == (int)EscrowTransactionType.ReleaseToFreelancer &&
+                item.Status == (int)EscrowTransactionStatus.Succeeded &&
+                item.MilestonesId.HasValue)
+            .ToListAsync(cancellationToken);
+        var releaseLedger = successfulReleaseLedger
+            .Where(item => IsEarlyRelease(item) || IsFinalRelease(item))
+            .ToList();
+        if (Math.Abs(releaseLedger.Sum(item => item.Amount) - escrow.ReleasedAmount) >= BalanceTolerance)
+        {
+            throw new ConflictException("The escrow release ledger does not reconcile with the completed contract.");
+        }
+        foreach (var milestone in milestones)
+        {
+            var released = releaseLedger
+                .Where(item => item.MilestonesId == milestone.MilestonesId)
+                .Sum(item => item.Amount);
+            if (Math.Abs(released - milestone.Amount) >= BalanceTolerance ||
+                Math.Abs(milestone.ReleasedAmount - milestone.Amount) >= BalanceTolerance)
+            {
+                throw new ConflictException("The completed contract release ledger does not reconcile by milestone.");
+            }
+        }
+
+        var walletTransactions = await context.Set<WalletTransaction>()
+            .AsNoTracking()
+            .Where(item =>
+                item.ContractsId == contractId &&
+                item.Status == (int)WalletTransactionStatus.Succeeded)
+            .ToListAsync(cancellationToken);
+
+        var clientFee = walletTransactions
+            .Where(item =>
+                item.UserId == clientUser.UserId &&
+                item.Type == (int)WalletTransactionType.Adjustment &&
+                item.IdempotencyKey != null &&
+                item.IdempotencyKey.StartsWith(ServiceFeeWorkflow.ClientFundingFeePrefix))
+            .Sum(item => item.TokenAmount);
+        var releaseFeeTransactions = walletTransactions
+            .Where(item =>
+                item.UserId == freelancerUser.UserId &&
+                item.Type == (int)WalletTransactionType.Adjustment &&
+                item.IdempotencyKey != null &&
+                item.IdempotencyKey.StartsWith(ServiceFeeWorkflow.FreelancerReleaseFeePrefix) &&
+                item.MilestonesId.HasValue)
+            .ToList();
+        var releaseFees = releaseFeeTransactions
+            .GroupBy(item => item.MilestonesId!.Value)
+            .ToDictionary(group => group.Key, group => group.Sum(item => item.TokenAmount));
+
+        var finalReleases = releaseLedger.Where(IsFinalRelease).ToList();
+        var earlyReleases = releaseLedger.Where(item => !IsFinalRelease(item)).ToList();
+        var milestoneSnapshots = milestones.Select((milestone, index) =>
+        {
+            var early = earlyReleases
+                .Where(item => item.MilestonesId == milestone.MilestonesId)
+                .Sum(item => item.Amount);
+            var final = finalReleases
+                .Where(item => item.MilestonesId == milestone.MilestonesId)
+                .Sum(item => item.Amount);
+            var total = early + final;
+            var fee = releaseFees.GetValueOrDefault(milestone.MilestonesId);
+            return new ProjectReceiptMilestoneSnapshot(
+                index + 1,
+                milestone.MilestonesId,
+                milestone.Title,
+                milestone.ApprovedAt,
+                milestone.Amount,
+                early,
+                final,
+                total,
+                fee,
+                total - fee);
+        }).ToList();
+
+        var contractCode = (await context.Set<EsignDocument>()
+            .Where(item => item.ContractsId == contractId)
+            .ToListAsync(cancellationToken))
+            .Where(item => item.Status == (int)ESignDocumentStatus.FullySigned)
+            .OrderByDescending(item => item.FinalizedAt ?? item.CreatedAt)
+            .Select(item => item.DocumentCode)
+            .FirstOrDefault();
+        if (string.IsNullOrWhiteSpace(contractCode))
+        {
+            contractCode = $"GB-CTR-{contract.ContractsId:N}".ToUpperInvariant();
+        }
+
+        var finalReference = releaseLedger
+            .OrderByDescending(item => IsFinalRelease(item))
+            .ThenByDescending(item => item.CompletedAt ?? item.CreatedAt)
+            .Select(item => item.GatewayTransactionCode)
+            .FirstOrDefault(item => !string.IsNullOrWhiteSpace(item))
+            ?? "Không có";
+        var totalEarly = earlyReleases.Sum(item => item.Amount);
+        var totalFinal = finalReleases.Sum(item => item.Amount);
+        var totalReleased = releaseLedger.Sum(item => item.Amount);
+        var freelancerFee = releaseFees.Values.Sum();
+        var finalFeeKeys = finalReleases
+            .Where(item => !string.IsNullOrWhiteSpace(item.GatewayTransactionCode))
+            .Select(item => $"{ServiceFeeWorkflow.FreelancerReleaseFeePrefix}{item.GatewayTransactionCode}")
+            .ToHashSet(StringComparer.Ordinal);
+        var finalFee = releaseFeeTransactions
+            .Where(item => item.IdempotencyKey != null && finalFeeKeys.Contains(item.IdempotencyKey))
+            .Sum(item => item.TokenAmount);
+        var earlyFee = freelancerFee - finalFee;
+
+        var clientIdentityCode = await ResolveIdentityCodeAsync(
+            context, contractId, clientUser, cancellationToken);
+        var freelancerIdentityCode = await ResolveIdentityCodeAsync(
+            context, contractId, freelancerUser, cancellationToken);
+
+        var clientParty = new ProjectReceiptPartySnapshot(
+            clientUser.UserId,
+            clientUser.FullName,
+            ValueOrPersonal(clientProfile.CompanyName),
+            clientUser.Email,
+            clientIdentityCode);
+        var freelancerParty = new ProjectReceiptPartySnapshot(
+            freelancerUser.UserId,
+            freelancerUser.FullName,
+            PersonalCompanyName,
+            freelancerUser.Email,
+            freelancerIdentityCode);
+
+        var created = new List<ProjectReceipt>(2);
+        foreach (var receiptType in new[] { ProjectReceiptType.Client, ProjectReceiptType.Freelancer })
+        {
+            if (existing.Any(item => item.ReceiptType == (int)receiptType))
+            {
+                continue;
+            }
+
+            var receiptId = Guid.NewGuid();
+            var receiptNumber = BuildReceiptNumber(receiptId, receiptType, issuedAt);
+            var snapshot = new ProjectReceiptSnapshot(
+                receiptId,
+                receiptNumber,
+                (int)receiptType,
+                issuedAt,
+                "Hoàn tất / Completed",
+                clientParty,
+                freelancerParty,
+                contractCode,
+                contract.ContractsId,
+                contract.Title,
+                contract.StartDate,
+                contract.EndDate,
+                contract.CompletedAt.Value,
+                escrow.RequiredAmount,
+                clientFee,
+                escrow.RequiredAmount + clientFee,
+                totalEarly,
+                totalFinal,
+                totalReleased,
+                remaining,
+                freelancerFee,
+                totalReleased,
+                totalEarly - earlyFee,
+                totalFinal - finalFee,
+                totalReleased - freelancerFee,
+                finalReference,
+                TokenWalletRules.VndPerToken,
+                milestoneSnapshots);
+            var json = JsonSerializer.Serialize(snapshot, SnapshotJsonOptions);
+            var now = DateTime.UtcNow;
+            var receipt = new ProjectReceipt
+            {
+                ProjectReceiptId = receiptId,
+                ContractsId = contract.ContractsId,
+                OwnerUserId = receiptType == ProjectReceiptType.Client
+                    ? clientUser.UserId
+                    : freelancerUser.UserId,
+                ReceiptType = (int)receiptType,
+                ReceiptNumber = receiptNumber,
+                TemplateVersion = CurrentTemplateVersion,
+                IssuedAt = issuedAt,
+                SnapshotJson = json,
+                SnapshotHashSha256 = ComputeSha256(json),
+                GenerationStatus = (int)ProjectReceiptGenerationStatus.Pending,
+                NextGenerationAttemptAt = now,
+                EmailStatus = (int)ProjectReceiptEmailStatus.Pending,
+                NextEmailAttemptAt = now,
+                CreatedAt = now
+            };
+            context.Set<ProjectReceipt>().Add(receipt);
+            created.Add(receipt);
+        }
+
+        return existing.Concat(created).OrderBy(item => item.ReceiptType).ToList();
+    }
+
+    public static ProjectReceiptSnapshot DeserializeSnapshot(ProjectReceipt receipt) =>
+        JsonSerializer.Deserialize<ProjectReceiptSnapshot>(receipt.SnapshotJson, SnapshotJsonOptions)
+        ?? throw new InvalidOperationException($"Receipt {receipt.ProjectReceiptId} has an invalid snapshot.");
+
+    private static bool IsFinalRelease(EscrowTransaction transaction) =>
+        transaction.GatewayTransactionCode?.StartsWith("ESCROW-FINAL-", StringComparison.Ordinal) == true;
+
+    private static bool IsEarlyRelease(EscrowTransaction transaction) =>
+        transaction.GatewayTransactionCode?.StartsWith("ESCROW-RELEASE-", StringComparison.Ordinal) == true;
+
+    private static string ValueOrPersonal(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? PersonalCompanyName : value.Trim();
+
+    private static void QueueTemplateRegeneration(ProjectReceipt receipt, DateTime now)
+    {
+        receipt.TemplateVersion = CurrentTemplateVersion;
+        receipt.GenerationStatus = (int)ProjectReceiptGenerationStatus.Pending;
+        receipt.GenerationAttemptCount = 0;
+        receipt.NextGenerationAttemptAt = now;
+        receipt.GenerationLeaseToken = null;
+        receipt.GenerationLeaseExpiresAt = null;
+        receipt.GenerationLastError = null;
+        receipt.PdfContent = null;
+        receipt.PdfFileName = null;
+        receipt.PdfContentType = null;
+        receipt.PdfSizeBytes = null;
+        receipt.PdfHashSha256 = null;
+        receipt.GeneratedAt = null;
+        receipt.EmailStatus = (int)ProjectReceiptEmailStatus.Pending;
+        receipt.EmailAttemptCount = 0;
+        receipt.NextEmailAttemptAt = now;
+        receipt.EmailLastError = null;
+        receipt.EmailedAt = null;
+        receipt.UpdatedAt = now;
+    }
+
+    private static async Task<string?> ResolveIdentityCodeAsync(
+        IApplicationDbContext context,
+        Guid contractId,
+        User user,
+        CancellationToken cancellationToken)
+    {
+        var signatureIdentityCode = await context.Set<EsignSignature>()
+            .AsNoTracking()
+            .Where(signature =>
+                signature.UserId == user.UserId &&
+                signature.EsignDocuments.ContractsId == contractId &&
+                signature.IdentityOrTaxCode != null)
+            .OrderByDescending(signature =>
+                signature.SignedAt ?? signature.DraftSubmittedAt ?? signature.UpdatedAt ?? signature.CreatedAt)
+            .Select(signature => signature.IdentityOrTaxCode)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (ContractIdentityCode.IsValid(signatureIdentityCode))
+        {
+            return ContractIdentityCode.Normalize(signatureIdentityCode);
+        }
+
+        return ContractIdentityCode.IsValid(user.IdentityOrTaxCode)
+            ? ContractIdentityCode.Normalize(user.IdentityOrTaxCode)
+            : null;
+    }
+
+    private static string BuildReceiptNumber(Guid receiptId, ProjectReceiptType type, DateTime issuedAt)
+    {
+        var role = type == ProjectReceiptType.Client ? "CL" : "FL";
+        return $"GB-RC-{issuedAt:yyyyMMdd}-{receiptId:N}-{role}".ToUpperInvariant();
+    }
+
+    private static string ComputeSha256(string value) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
+}

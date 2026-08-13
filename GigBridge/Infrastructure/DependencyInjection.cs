@@ -1,6 +1,8 @@
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.Ai;
+using Application.Common.Interfaces.Documents;
 using Application.Common.Interfaces.Email;
+using Application.Common.Interfaces.IService;
 using Application.Common.Interfaces.Media;
 using Application.Common.Interfaces.Templates;
 using Application.Common.Interfaces.Time;
@@ -31,6 +33,7 @@ using Infrastructure.Services.ESign;
 using Infrastructure.Services.GoogleMeet;
 using Infrastructure.Services.Media;
 using Infrastructure.Services.Notification;
+using Infrastructure.Services.Receipts;
 using Infrastructure.Services.Templates;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -195,6 +198,7 @@ public static class DependencyInjection
         });
         services.AddScoped<IEmailService, EmailService>();
         services.AddSingleton<ITemplateReader, FileSystemTemplateReader>();
+        services.AddScoped<IProjectReceiptDocumentGenerator, ProjectReceiptDocumentGenerator>();
         services.AddHttpClient<IContractEsignDocumentGenerator, ContractEsignDocumentGenerator>(client =>
             client.Timeout = TimeSpan.FromSeconds(15));
         services.AddScoped<IWordToPdfConverter, WordToPdfConverter>();
@@ -325,6 +329,7 @@ public static class DependencyInjection
             services.AddHostedService<GoogleMeetProvisioningWorker>();
             services.AddHostedService<PremiumExpiryWorker>();
             services.AddHostedService<AnalyticsMaintenanceWorker>();
+            services.AddHostedService<ProjectReceiptWorker>();
         }
 
         // Data Protection for encrypted tokens

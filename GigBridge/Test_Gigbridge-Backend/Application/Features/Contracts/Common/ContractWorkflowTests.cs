@@ -595,13 +595,14 @@ public class ContractWorkflowTests
             new NoopChatRealtimeNotifier(),
             fixture.MediaService,
             fixture.DocumentGenerator,
+            fixture.PdfConverter,
             signUserAuditLog);
 
         await handler.Handle(
             new SignContractCommand(
                 fixture.ContractId,
                 fixture.ClientUserId,
-                new SignContractRequest(SignatureDataUri, 300, 100, true, "Ver 1.0 Gigbridge"),
+                new SignContractRequest(SignatureDataUri, 300, 100, "012345678901", true, "Ver 1.0 Gigbridge"),
                 "127.0.0.1",
                 "test"),
             CancellationToken.None);
@@ -612,6 +613,9 @@ public class ContractWorkflowTests
         Assert.Equal("esign/signatures", fixture.MediaService.Uploads[0].Folder);
         Assert.Equal("image/png", fixture.MediaService.Uploads[0].ContentType);
         Assert.Equal("Ver 1.0 Gigbridge", fixture.EsignSignatures.Entities[0].PolicyVersion);
+        Assert.Equal(
+            "012345678901",
+            fixture.Context.Set<User>().Single(user => user.UserId == fixture.ClientUserId).IdentityOrTaxCode);
         Assert.Equal(fixture.Now, fixture.EsignSignatures.Entities[0].PolicyAcceptedAt);
         Assert.Null(fixture.EsignDocuments.Entities[0].FinalizedDocumentContent);
         Assert.Empty(fixture.DeliveryOutboxes.Entities);
@@ -621,7 +625,7 @@ public class ContractWorkflowTests
                 new SignContractCommand(
                     fixture.ContractId,
                     fixture.ClientUserId,
-                    new SignContractRequest(SignatureDataUri, null, null, true, "Ver 1.0 Gigbridge"),
+                    new SignContractRequest(SignatureDataUri, null, null, "012345678901", true, "Ver 1.0 Gigbridge"),
                     null,
                     null),
                 CancellationToken.None));
@@ -630,7 +634,7 @@ public class ContractWorkflowTests
             new SignContractCommand(
                 fixture.ContractId,
                 fixture.FreelancerUserId,
-                new SignContractRequest(SignatureDataUri, 300, 100, true, "Ver 1.0 Gigbridge"),
+                new SignContractRequest(SignatureDataUri, 300, 100, "012345678901", true, "Ver 1.0 Gigbridge"),
                 "127.0.0.1",
                 "test"),
             CancellationToken.None);
@@ -646,6 +650,9 @@ public class ContractWorkflowTests
         Assert.Equal((int)ConversationType.JobNegotiation, fixture.Conversation.ConversationType);
         Assert.Equal(2, fixture.EsignSignatures.Entities.Count);
         Assert.Equal(fixture.FreelancerSignatureUrl, fixture.EsignSignatures.Entities[1].SignatureImageUrl);
+        Assert.Equal(
+            "012345678901",
+            fixture.Context.Set<User>().Single(user => user.UserId == fixture.FreelancerUserId).IdentityOrTaxCode);
         Assert.Equal(2, fixture.MediaService.Uploads.Count);
         Assert.Equal(4, fixture.EsignDocuments.Entities[0].FinalizedDocumentContent?.Length);
         Assert.Equal(4L, fixture.EsignDocuments.Entities[0].FinalizedDocumentSizeBytes);
@@ -675,6 +682,38 @@ public class ContractWorkflowTests
             Assert.Equal((int)DeliveryChannel.Email, delivery.Channel);
             Assert.Equal((int)DeliveryOutboxStatus.Pending, delivery.Status);
         });
+    }
+
+    [Fact]
+    public async Task SignContract_UsesExistingProfileIdentityInsteadOfSubmittedIdentity()
+    {
+        var fixture = new ContractWorkflowFixture();
+        fixture.MoveToPendingSignatureWithDocument();
+        var client = fixture.Context.Set<User>()
+            .Single(user => user.UserId == fixture.ClientUserId);
+        client.IdentityOrTaxCode = "001234567890";
+
+        var handler = new SignContractCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopChatRealtimeNotifier(),
+            fixture.MediaService,
+            fixture.DocumentGenerator,
+            fixture.PdfConverter,
+            new CapturingUserAuditLogService());
+
+        await handler.Handle(
+            new SignContractCommand(
+                fixture.ContractId,
+                fixture.ClientUserId,
+                new SignContractRequest(SignatureDataUri, 300, 100, "123456789", true, "Ver 1.0 Gigbridge"),
+                null,
+                null),
+            CancellationToken.None);
+
+        var signature = Assert.Single(fixture.EsignSignatures.Entities);
+        Assert.Equal("001234567890", signature.IdentityOrTaxCode);
+        Assert.Equal("001234567890", client.IdentityOrTaxCode);
     }
 
     [Fact]
@@ -759,13 +798,14 @@ public class ContractWorkflowTests
             new NoopChatRealtimeNotifier(),
             mediaService,
             fixture.DocumentGenerator,
+            fixture.PdfConverter,
             new CapturingUserAuditLogService());
 
         var result = await handler.Handle(
             new SignContractCommand(
                 fixture.ContractId,
                 fixture.FreelancerUserId,
-                new SignContractRequest(SignatureDataUri, 300, 100, true, "Ver 1.0 Gigbridge"),
+                new SignContractRequest(SignatureDataUri, 300, 100, "012345678901", true, "Ver 1.0 Gigbridge"),
                 "127.0.0.1",
                 "test"),
             CancellationToken.None);
@@ -802,6 +842,7 @@ public class ContractWorkflowTests
             new NoopChatRealtimeNotifier(),
             fixture.MediaService,
             fixture.DocumentGenerator,
+            fixture.PdfConverter,
             new CapturingUserAuditLogService());
 
         await Assert.ThrowsAsync<BadRequestException>(() =>
@@ -809,7 +850,7 @@ public class ContractWorkflowTests
                 new SignContractCommand(
                     fixture.ContractId,
                     fixture.ClientUserId,
-                    new SignContractRequest(SignatureDataUri, 300, 100, accepted, version),
+                    new SignContractRequest(SignatureDataUri, 300, 100, "012345678901", accepted, version),
                     null,
                     null),
                 CancellationToken.None));
@@ -830,6 +871,7 @@ public class ContractWorkflowTests
             new NoopChatRealtimeNotifier(),
             fixture.MediaService,
             fixture.DocumentGenerator,
+            fixture.PdfConverter,
             new CapturingUserAuditLogService());
 
         await Assert.ThrowsAsync<BadRequestException>(() =>
@@ -837,7 +879,7 @@ public class ContractWorkflowTests
                 new SignContractCommand(
                     fixture.ContractId,
                     fixture.ClientUserId,
-                    new SignContractRequest("not-base64", null, null, true, "Ver 1.0 Gigbridge"),
+                    new SignContractRequest("not-base64", null, null, "012345678901", true, "Ver 1.0 Gigbridge"),
                     null,
                     null),
                 CancellationToken.None));
@@ -1023,6 +1065,7 @@ public class ContractWorkflowTests
             "https://res.cloudinary.com/gigbridge/esign/signatures/client.png",
             "https://res.cloudinary.com/gigbridge/esign/signatures/freelancer.png");
         public FakeContractEsignDocumentGenerator DocumentGenerator { get; } = new();
+        public FakeWordToPdfConverter PdfConverter { get; } = new();
         public Contract Contract { get; }
         public Conversation Conversation { get; }
         public TestDbSet<Milestone> Milestones { get; }

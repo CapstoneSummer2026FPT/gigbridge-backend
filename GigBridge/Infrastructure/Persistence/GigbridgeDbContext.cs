@@ -68,6 +68,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
     public virtual DbSet<ContractProductHandoff> ContractProductHandoffs { get; set; }
 
+    public virtual DbSet<ProjectReceipt> ProjectReceipts { get; set; }
+
     public virtual DbSet<Conversation> Conversations { get; set; }
 
     public virtual DbSet<ConversationParticipant> ConversationParticipants { get; set; }
@@ -424,6 +426,77 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.HasOne(d => d.Proposals).WithOne(p => p.Contract)
                 .HasForeignKey<Contract>(d => d.ProposalsId)
                 .HasConstraintName("Contracts_propo_ProposalsId_fkey");
+        });
+
+        modelBuilder.Entity<ProjectReceipt>(entity =>
+        {
+            entity.ToTable("ProjectReceipts");
+
+            entity.HasKey(e => e.ProjectReceiptId);
+
+            entity.HasIndex(e => e.ReceiptNumber)
+                .IsUnique();
+
+            entity.HasIndex(e => new { e.ContractsId, e.ReceiptType })
+                .IsUnique();
+
+            entity.HasIndex(e => new { e.GenerationStatus, e.NextGenerationAttemptAt });
+
+            entity.HasIndex(e => new { e.EmailStatus, e.NextEmailAttemptAt });
+
+            entity.HasIndex(e => new { e.OwnerUserId, e.IssuedAt })
+                .IsDescending(false, true);
+
+            entity.HasIndex(e => e.NotificationId);
+
+            entity.Property(e => e.ProjectReceiptId)
+                .HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.ReceiptNumber)
+                .HasMaxLength(100)
+                .IsRequired();
+            entity.Property(e => e.ReceiptType)
+                .HasComment("Enum ProjectReceiptType: 0=Client, 1=Freelancer");
+            entity.Property(e => e.SnapshotJson)
+                .HasColumnType("jsonb")
+                .IsRequired();
+            entity.Property(e => e.SnapshotHashSha256)
+                .HasMaxLength(64)
+                .IsRequired();
+            entity.Property(e => e.GenerationStatus)
+                .HasComment("Enum ProjectReceiptGenerationStatus: 0=Pending, 1=Processing, 2=Ready, 3=Failed");
+            entity.Property(e => e.GenerationLeaseToken)
+                .IsConcurrencyToken();
+            entity.Property(e => e.GenerationLastError)
+                .HasMaxLength(2000);
+            entity.Property(e => e.PdfContent)
+                .HasColumnType("bytea");
+            entity.Property(e => e.PdfFileName)
+                .HasMaxLength(255);
+            entity.Property(e => e.PdfContentType)
+                .HasMaxLength(100);
+            entity.Property(e => e.PdfHashSha256)
+                .HasMaxLength(64);
+            entity.Property(e => e.EmailStatus)
+                .HasComment("Enum ProjectReceiptEmailStatus: 0=Pending, 1=Delivered, 2=Failed");
+            entity.Property(e => e.EmailLastError)
+                .HasMaxLength(2000);
+            entity.Property(e => e.CreatedAt)
+                .HasDefaultValueSql("now()");
+
+            entity.HasOne(e => e.Contract)
+                .WithMany()
+                .HasForeignKey(e => e.ContractsId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(e => e.OwnerUser)
+                .WithMany()
+                .HasForeignKey(e => e.OwnerUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(e => e.Notification)
+                .WithMany()
+                .HasForeignKey(e => e.NotificationId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<ContractWorkItem>(entity =>
@@ -2887,6 +2960,7 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.Property(e => e.IsActive).HasDefaultValue(true);
             entity.Property(e => e.IsEmailVerified).HasDefaultValue(false);
             entity.Property(e => e.PhoneNumber).HasMaxLength(20);
+            entity.Property(e => e.IdentityOrTaxCode).HasMaxLength(12);
             entity.Property(e => e.SuspensionReason).HasMaxLength(500);
             entity.Property(e => e.ViolationCount).HasDefaultValue(0);
             entity.Property(e => e.IsFlagged).HasDefaultValue(false);

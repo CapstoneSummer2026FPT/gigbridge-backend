@@ -38,6 +38,7 @@ public sealed class UpdateUserProfileCommandHandlerTests
                 Email = " OLD@example.com ",
                 Avatar = " https://cdn.example.com/new.png ",
                 PhoneNumber = " +84987654321 ",
+                IdentityOrTaxCode = "001 234 567 890",
                 PreferredLanguage = " EN "
             }),
             CancellationToken.None);
@@ -48,6 +49,8 @@ public sealed class UpdateUserProfileCommandHandlerTests
         Assert.Equal("old@example.com", user.Email);
         Assert.Equal("https://cdn.example.com/new.png", user.Avatar);
         Assert.Equal("+84987654321", user.PhoneNumber);
+        Assert.Equal("001234567890", user.IdentityOrTaxCode);
+        Assert.Equal("001234567890", result.IdentityOrTaxCode);
         Assert.Equal("en", user.PreferredLanguage);
         Assert.True(user.IsEmailVerified);
         Assert.Equal(UpdatedAt, user.UpdatedAt);
@@ -65,6 +68,7 @@ public sealed class UpdateUserProfileCommandHandlerTests
             Email = "verified@example.com",
             Avatar = "avatar",
             PhoneNumber = "phone",
+            IdentityOrTaxCode = "123456789",
             PreferredLanguage = "vi",
             Role = (int)UserRole.Freelancer,
             IsEmailVerified = true
@@ -85,6 +89,7 @@ public sealed class UpdateUserProfileCommandHandlerTests
 
         Assert.Null(user.Avatar);
         Assert.Null(user.PhoneNumber);
+        Assert.Equal("123456789", user.IdentityOrTaxCode);
         Assert.Null(user.PreferredLanguage);
         Assert.True(user.IsEmailVerified);
     }

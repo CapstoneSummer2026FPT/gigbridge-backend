@@ -3,6 +3,7 @@ using Application.Common.Interfaces;
 using Application.Common.Interfaces.Identity;
 using Application.Common.Interfaces.Time;
 using Application.Features.Profiles.Common.DTOs;
+using Application.Features.Contracts.Common.Internal;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -55,6 +56,10 @@ public sealed class UpdateUserProfileCommandHandler
         user.FullName = request.Dto.FullName.Trim();
         user.Avatar = NormalizeOptional(request.Dto.Avatar);
         user.PhoneNumber = NormalizeOptional(request.Dto.PhoneNumber);
+        if (request.Dto.IdentityOrTaxCode is not null)
+        {
+            user.IdentityOrTaxCode = NormalizeIdentityCode(request.Dto.IdentityOrTaxCode);
+        }
         user.PreferredLanguage = NormalizeOptional(request.Dto.PreferredLanguage)?.ToLowerInvariant();
         user.UpdatedAt = _dateTimeService.UtcNow;
 
@@ -67,6 +72,7 @@ public sealed class UpdateUserProfileCommandHandler
             Email = user.Email,
             Avatar = user.Avatar,
             PhoneNumber = user.PhoneNumber,
+            IdentityOrTaxCode = user.IdentityOrTaxCode,
             PreferredLanguage = user.PreferredLanguage,
             Role = user.Role,
             IsPremium = user.IsPremium
@@ -76,5 +82,10 @@ public sealed class UpdateUserProfileCommandHandler
     private static string? NormalizeOptional(string? value)
     {
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private static string? NormalizeIdentityCode(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : ContractIdentityCode.Normalize(value);
     }
 }

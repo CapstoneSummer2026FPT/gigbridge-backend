@@ -1,11 +1,11 @@
 using Domain.Enums.Chat;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
+using Application.Common.Interfaces.Documents;
 using Application.Common.InternalServices.Auditing.Interfaces;
 using Application.Common.Interfaces.Media;
 using Application.Common.Interfaces.Time;
 using Application.Features.Chat.Common.Interfaces;
-using Application.Features.ESign.Common.Interfaces;
 using Application.Features.ESign.Common.Services;
 using Application.Features.Contracts.Common.DTOs;
 using Application.Features.Contracts.Common.Internal;
@@ -18,6 +18,7 @@ using Domain.Enums.ESign;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
+using Application.Features.ESign.Common.Interfaces;
 
 namespace Application.Features.Contracts.Signing.Common.Sign.Commands;
 
@@ -91,8 +92,21 @@ public sealed class SignContractCommandHandler :
             throw new BadRequestException("The current E-sign policy must be accepted before submitting a signature draft.");
         }
 
-        var identityOrTaxCode = ContractIdentityCode.Normalize(
+        var signer = await _context.Set<User>()
+            .FirstOrDefaultAsync(user => user.UserId == command.UserId, cancellationToken)
+            ?? throw new NotFoundException("Signer user does not exist.");
+        var submittedIdentityCode = ContractIdentityCode.Normalize(
             command.Request.IdentityOrTaxCode);
+        var hasStoredIdentityCode = ContractIdentityCode.IsValid(signer.IdentityOrTaxCode);
+        var identityOrTaxCode = hasStoredIdentityCode
+            ? ContractIdentityCode.Normalize(signer.IdentityOrTaxCode)
+            : submittedIdentityCode;
+
+        if (!hasStoredIdentityCode)
+        {
+            signer.IdentityOrTaxCode = identityOrTaxCode;
+            signer.UpdatedAt = now;
+        }
 
         var existingSignature = await _context.Set<EsignSignature>()
             .FirstOrDefaultAsync(
