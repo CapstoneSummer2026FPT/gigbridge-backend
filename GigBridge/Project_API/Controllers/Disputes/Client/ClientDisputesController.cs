@@ -1,5 +1,6 @@
 using Application.Common.Models;
 using Application.Features.Disputes.Client.Create.Commands;
+using Application.Features.Disputes.Client.RemainingJobPostPlan.Queries;
 using Application.Features.Disputes.Common.DTOs;
 using Domain.Enums.Accounts;
 using Microsoft.AspNetCore.Authorization;
@@ -22,5 +23,15 @@ public sealed class ClientDisputesController : BaseApiController
         var result = await Mediator.Send(new CreateDisputeCommand(userId, request), cancellationToken);
         return StatusCode(StatusCodes.Status201Created,
             ApiResponse<DisputeDto>.CreatedAt(result, "Dispute created successfully"));
+    }
+
+    [HttpGet("{disputeId:guid}/remaining-job-post-plan")]
+    public async Task<IActionResult> GetRemainingJobPostPlan(
+        [FromRoute] Guid disputeId,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetCurrentUserId(out var userId)) return InvalidTokenResponse();
+        var result = await Mediator.Send(new GetDisputeRemainingJobPostPlanQuery(disputeId, userId), cancellationToken);
+        return Ok(ApiResponse<DisputeRemainingJobPostPlanResponse>.Ok(result, "Success"));
     }
 }

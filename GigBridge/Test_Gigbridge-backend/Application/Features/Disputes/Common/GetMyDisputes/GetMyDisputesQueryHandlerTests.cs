@@ -1,6 +1,7 @@
 using Application.Features.Disputes.Common.GetMyDisputes.Queries;
 using Domain.Entities;
 using Domain.Enums.Contracts;
+using Domain.Enums.Contracts.Milestones;
 using Domain.Enums.Disputes;
 using Test_Gigbridge_Backend.TestSupport;
 
@@ -99,6 +100,76 @@ public sealed class GetMyDisputesQueryHandlerTests
         Assert.Equal("Project 1", page1.Items[1].ProjectName);
         Assert.Equal(2, page2.Items.Count);
         Assert.Equal("Project 2", page2.Items[0].ProjectName);
+    }
+
+    [Fact]
+    public async Task Handle_TerminatedContractWithUnfinishedMilestone_FlagsRecreationEligible()
+    {
+        var context = new InMemoryApplicationDbContext();
+        var clientUserId = Guid.NewGuid();
+
+        var (contract, dispute) = BuildContractWithDispute("Website Development", clientUserId: clientUserId, createdAt: Now);
+        contract.Status = (int)ContractStatus.Cancelled;
+        contract.Milestones = new List<Milestone>
+        {
+            new() { MilestonesId = Guid.NewGuid(), ContractsId = contract.ContractsId, Title = "M1", Amount = 100, Status = (int)MilestoneStatus.Approved, CreatedAt = Now },
+            new() { MilestonesId = Guid.NewGuid(), ContractsId = contract.ContractsId, Title = "M2", Amount = 100, Status = (int)MilestoneStatus.Cancelled, CreatedAt = Now },
+        };
+        dispute.Status = (int)DisputeStatus.Resolved;
+
+        Seed(context, contract, dispute);
+
+        var handler = new GetMyDisputesQueryHandler(context);
+        var response = await handler.Handle(new GetMyDisputesQuery(clientUserId), CancellationToken.None);
+
+        var item = Assert.Single(response.Items);
+        Assert.True(item.CanCreateJobPostFromRemainingMilestones);
+    }
+
+    [Fact]
+    public async Task Handle_AllMilestonesApproved_FlagsRecreationNotEligible()
+    {
+        var context = new InMemoryApplicationDbContext();
+        var clientUserId = Guid.NewGuid();
+
+        var (contract, dispute) = BuildContractWithDispute("Website Development", clientUserId: clientUserId, createdAt: Now);
+        contract.Status = (int)ContractStatus.Cancelled;
+        contract.Milestones = new List<Milestone>
+        {
+            new() { MilestonesId = Guid.NewGuid(), ContractsId = contract.ContractsId, Title = "M1", Amount = 100, Status = (int)MilestoneStatus.Completed, CreatedAt = Now },
+        };
+        dispute.Status = (int)DisputeStatus.Resolved;
+
+        Seed(context, contract, dispute);
+
+        var handler = new GetMyDisputesQueryHandler(context);
+        var response = await handler.Handle(new GetMyDisputesQuery(clientUserId), CancellationToken.None);
+
+        var item = Assert.Single(response.Items);
+        Assert.False(item.CanCreateJobPostFromRemainingMilestones);
+    }
+
+    [Fact]
+    public async Task Handle_TerminatedContractWithUnfinishedMilestone_ButNotResolvedYet_FlagsRecreationNotEligible()
+    {
+        var context = new InMemoryApplicationDbContext();
+        var clientUserId = Guid.NewGuid();
+
+        var (contract, dispute) = BuildContractWithDispute("Website Development", clientUserId: clientUserId, createdAt: Now);
+        contract.Status = (int)ContractStatus.Cancelled;
+        contract.Milestones = new List<Milestone>
+        {
+            new() { MilestonesId = Guid.NewGuid(), ContractsId = contract.ContractsId, Title = "M1", Amount = 100, Status = (int)MilestoneStatus.InProgress, CreatedAt = Now },
+        };
+        dispute.Status = (int)DisputeStatus.InProgress;
+
+        Seed(context, contract, dispute);
+
+        var handler = new GetMyDisputesQueryHandler(context);
+        var response = await handler.Handle(new GetMyDisputesQuery(clientUserId), CancellationToken.None);
+
+        var item = Assert.Single(response.Items);
+        Assert.False(item.CanCreateJobPostFromRemainingMilestones);
     }
 
     private static void Seed(InMemoryApplicationDbContext context, params object[] entities)
