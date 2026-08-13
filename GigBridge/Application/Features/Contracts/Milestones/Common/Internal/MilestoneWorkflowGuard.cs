@@ -194,6 +194,34 @@ internal static class MilestoneWorkflowGuard
             workItems);
     }
 
+    /// <summary>
+    /// The contract's Client + (if assigned) Freelancer user ids — the exact recipient set
+    /// for workspace realtime events, never broadcast beyond these two participants.
+    /// </summary>
+    public static async Task<IReadOnlyList<Guid>> GetParticipantUserIdsAsync(
+        IApplicationDbContext context,
+        Contract contract,
+        CancellationToken cancellationToken)
+    {
+        var userIds = new List<Guid>();
+        var clientUserId = await context.Set<ClientProfile>()
+            .Where(profile => profile.ClientProfilesId == contract.ClientProfilesId)
+            .Select(profile => profile.UserId)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (clientUserId != Guid.Empty) userIds.Add(clientUserId);
+
+        if (contract.FreelancerProfilesId.HasValue)
+        {
+            var freelancerUserId = await context.Set<FreelancerProfile>()
+                .Where(profile => profile.FreelancerProfilesId == contract.FreelancerProfilesId.Value)
+                .Select(profile => profile.UserId)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (freelancerUserId != Guid.Empty) userIds.Add(freelancerUserId);
+        }
+
+        return userIds;
+    }
+
     public static IOrderedQueryable<Milestone> OrderMilestones(IQueryable<Milestone> milestones)
     {
         return milestones

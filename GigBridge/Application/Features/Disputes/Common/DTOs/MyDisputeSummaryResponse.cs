@@ -8,7 +8,8 @@ public sealed record MyDisputeSummaryResponse(
     DateTime CreatedAt,
     int Status,
     Guid? MilestoneId,
-    string? MilestoneTitle);
+    string? MilestoneTitle,
+    bool CanCreateJobPostFromRemainingMilestones);
 
 public sealed record MyDisputesResponse(
     IReadOnlyList<MyDisputeSummaryResponse> Items,

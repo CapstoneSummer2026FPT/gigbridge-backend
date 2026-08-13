@@ -55,6 +55,18 @@ internal static class ContractConversationEvents
     }
 
     /// <summary>
+    /// Payload shape for pushing a system message live over SignalR, matching what
+    /// MessagesController/SendMessageCommandHandler already emit for "ReceiveMessage" so
+    /// the frontend's existing chat listener renders it without any special-casing.
+    /// </summary>
+    public static object ToRealtimePayload(Message message) => new
+    {
+        messagesId = message.MessagesId, conversationsId = message.ConversationsId,
+        senderUserId = (Guid?)null, messageType = message.MessageType, content = message.Content,
+        sentAt = message.SentAt, attachments = Array.Empty<object>()
+    };
+
+    /// <summary>
     /// Locks the workspace and dispute conversations of a contract so neither party can
     /// send messages anymore. Used when a contract is completed or terminated.
     /// </summary>
