@@ -11,4 +11,5 @@ public sealed record GetFreelancersQuery(
     List<string>? Skills = null,
     string? AvailabilityStatus = null,
     double? MinRating = null,
-    string? Sort = null) : IRequest<PaginatedList<FreelancerSummaryDto>>;
+    string? Sort = null,
+    bool SearchEngineVisibleOnly = false) : IRequest<PaginatedList<FreelancerSummaryDto>>;

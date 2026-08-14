@@ -12,6 +12,7 @@ public class UpdateFreelancerProfileDto
     public IReadOnlyCollection<Guid> CategoryIds { get; set; } = Array.Empty<Guid>();
     public IReadOnlyCollection<Guid>? SkillIds { get; set; }
     public IReadOnlyCollection<UpdatePortfolioItemDto>? PortfolioItems { get; set; }
+    public bool AllowSearchEngineIndexing { get; set; }
 }
 
 public sealed class UpdatePortfolioItemDto : PortfolioItemInputDto

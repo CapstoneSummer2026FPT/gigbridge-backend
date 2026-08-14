@@ -11,6 +11,7 @@ public sealed class FreelancerProfileResponseDto
     public int? Availability { get; set; }
     public string? Location { get; set; }
     public int? ProfileCompletionScore { get; set; }
+    public bool AllowSearchEngineIndexing { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
     public Guid? MajorId { get; set; }

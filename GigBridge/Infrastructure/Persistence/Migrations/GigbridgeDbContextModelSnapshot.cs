@@ -2345,6 +2345,11 @@ namespace Infrastructure.Persistence.Migrations
                         .HasDefaultValue(0)
                         .HasComment("Enum Availability: 0=FullTime, 1=PartTime, 2=NotAvailable");
 
+                    b.Property<bool>("AllowSearchEngineIndexing")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<string>("Bio")
                         .HasColumnType("text");
 
@@ -2382,6 +2387,8 @@ namespace Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.HasIndex(new[] { "Availability" }, "IX_FreelancerProfiles_Availability");
+
+                    b.HasIndex(new[] { "AllowSearchEngineIndexing" }, "IX_FreelancerProfiles_AllowSearchEngineIndexing");
 
                     b.HasIndex(new[] { "MajorId" }, "IX_FreelancerProfiles_MajorId");
 

@@ -81,6 +81,7 @@ public class UpdateFreelancerProfileCommandHandler
         freelancerProfile.Bio = request.Dto.Bio?.Trim();
         freelancerProfile.Availability = request.Dto.Availability;
         freelancerProfile.Location = request.Dto.Location?.Trim();
+        freelancerProfile.AllowSearchEngineIndexing = request.Dto.AllowSearchEngineIndexing;
         freelancerProfile.UpdatedAt = now;
 
         var taxonomyMappings = await FreelancerProfileTaxonomy.ValidateAndLoadAsync(
