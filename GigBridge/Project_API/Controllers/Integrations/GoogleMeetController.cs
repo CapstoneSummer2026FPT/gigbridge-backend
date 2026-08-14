@@ -3,7 +3,7 @@ using Application.Common.Models;
 using Application.Features.Chat.Common.Messages.CreateGoogleMeet;
 using Application.Features.Chat.Common.Messages.Send.DTOs;
 using Application.Features.Chat.Common.Schedules;
-using Infrastructure.ExternalServices.GoogleMeet;
+using Infrastructure.ExternalServices.Google.Meet;
 using MediatR;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
