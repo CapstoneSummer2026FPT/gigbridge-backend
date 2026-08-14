@@ -25,7 +25,7 @@ public sealed class ProjectReceiptDocumentGenerator(ITemplateReader templateRead
 
     public GeneratedProjectReceiptDocument Generate(
         ProjectReceiptSnapshot snapshot,
-        string documentHashSha256)
+        string _)
     {
         var templatePath = snapshot.ReceiptType == (int)ProjectReceiptType.Client
             ? ClientTemplatePath
@@ -40,8 +40,7 @@ public sealed class ProjectReceiptDocumentGenerator(ITemplateReader templateRead
             var body = document.MainDocumentPart?.Document?.Body
                 ?? throw new InvalidOperationException("The receipt template has no document body.");
             ExpandMilestones(body, snapshot.Milestones);
-            AddIdentityParagraphs(body, snapshot);
-            ReplaceAll(body, BuildReplacements(snapshot, documentHashSha256));
+            ReplaceAll(body, BuildReplacements(snapshot));
             if (body.InnerText.Contains("{{", StringComparison.Ordinal))
             {
                 throw new InvalidOperationException("The generated receipt contains unresolved placeholders.");
@@ -82,7 +81,12 @@ public sealed class ProjectReceiptDocumentGenerator(ITemplateReader templateRead
                 ["{{/Milestones}}"] = string.Empty,
                 ["{{MilestoneNo}}"] = milestone.Number.ToString(VietnamCulture),
                 ["{{MilestoneTitle}}"] = milestone.Title,
+                ["{{MilestoneStartedAt}}"] = FormatVietnamTime(milestone.StartedAtUtc),
+                ["{{MilestoneDueDate}}"] = FormatDate(milestone.DueDate),
                 ["{{MilestoneApprovedAt}}"] = FormatVietnamTime(milestone.ApprovedAtUtc),
+                ["{{MilestoneDuration}}"] = FormatDuration(
+                    milestone.StartedAtUtc,
+                    milestone.ApprovedAtUtc),
                 ["{{MilestoneValueGigCoin}}"] = FormatGigCoin(milestone.ValueGigCoin),
                 ["{{MilestoneReleasedBeforeCompletionGigCoin}}"] = FormatGigCoin(milestone.ReleasedBeforeCompletionGigCoin),
                 ["{{MilestoneFinalReleaseGigCoin}}"] = FormatGigCoin(milestone.FinalReleaseGigCoin),
@@ -97,8 +101,7 @@ public sealed class ProjectReceiptDocumentGenerator(ITemplateReader templateRead
     }
 
     private static Dictionary<string, string> BuildReplacements(
-        ProjectReceiptSnapshot snapshot,
-        string documentHashSha256) => new(StringComparer.Ordinal)
+        ProjectReceiptSnapshot snapshot) => new(StringComparer.Ordinal)
     {
         ["{{#Milestones}}"] = string.Empty,
         ["{{/Milestones}}"] = string.Empty,
@@ -108,17 +111,15 @@ public sealed class ProjectReceiptDocumentGenerator(ITemplateReader templateRead
         ["{{ClientFullName}}"] = snapshot.Client.FullName,
         ["{{ClientCompanyName}}"] = snapshot.Client.CompanyName,
         ["{{ClientEmail}}"] = snapshot.Client.Email,
-        ["{{ClientUserId}}"] = snapshot.Client.UserId.ToString("D"),
+        ["{{ClientIdentityOrTaxCode}}"] = ValueOrUnavailable(snapshot.Client.IdentityOrTaxCode),
         ["{{FreelancerFullName}}"] = snapshot.Freelancer.FullName,
         ["{{FreelancerCompanyName}}"] = snapshot.Freelancer.CompanyName,
         ["{{FreelancerEmail}}"] = snapshot.Freelancer.Email,
-        ["{{FreelancerUserId}}"] = snapshot.Freelancer.UserId.ToString("D"),
-        ["{{ContractCode}}"] = snapshot.ContractCode,
-        ["{{ContractId}}"] = snapshot.ContractId.ToString("D"),
+        ["{{FreelancerIdentityOrTaxCode}}"] = ValueOrUnavailable(snapshot.Freelancer.IdentityOrTaxCode),
         ["{{ProjectTitle}}"] = snapshot.ProjectTitle,
-        ["{{ContractStartDate}}"] = FormatDate(snapshot.ContractStartDate),
-        ["{{ContractEndDate}}"] = FormatDate(snapshot.ContractEndDate),
-        ["{{CompletedAt}}"] = FormatVietnamTime(snapshot.CompletedAtUtc),
+        ["{{ProjectStartedAt}}"] = FormatProjectStart(snapshot),
+        ["{{ProjectCompletedAt}}"] = FormatVietnamTime(snapshot.CompletedAtUtc),
+        ["{{ProjectDuration}}"] = FormatDuration(snapshot.ProjectStartedAtUtc, snapshot.CompletedAtUtc),
         ["{{ContractValueGigCoin}}"] = FormatGigCoin(snapshot.ContractValueGigCoin),
         ["{{ContractValueVnd}}"] = FormatVnd(snapshot.ContractValueGigCoin),
         ["{{ClientServiceFeeGigCoin}}"] = FormatGigCoin(snapshot.ClientServiceFeeGigCoin),
@@ -143,47 +144,17 @@ public sealed class ProjectReceiptDocumentGenerator(ITemplateReader templateRead
         ["{{FinalNetReceivedVnd}}"] = FormatVnd(snapshot.FinalNetReceivedGigCoin),
         ["{{FreelancerNetReceivedGigCoin}}"] = FormatGigCoin(snapshot.FreelancerNetReceivedGigCoin),
         ["{{FreelancerNetReceivedVnd}}"] = FormatVnd(snapshot.FreelancerNetReceivedGigCoin),
-        ["{{FinalTransactionReference}}"] = snapshot.FinalTransactionReference,
-        ["{{VndPerGigCoin}}"] = snapshot.VndPerGigCoin.ToString("N0", VietnamCulture),
-        ["{{DocumentHashSHA256}}"] = documentHashSha256
+        ["{{VndPerGigCoin}}"] = snapshot.VndPerGigCoin.ToString("N0", VietnamCulture)
     };
 
-    private static void AddIdentityParagraphs(Body body, ProjectReceiptSnapshot snapshot)
+    private static string FormatProjectStart(ProjectReceiptSnapshot snapshot)
     {
-        AddIdentityParagraphs(body, "{{ClientUserId}}", snapshot.Client.IdentityOrTaxCode);
-        AddIdentityParagraphs(body, "{{FreelancerUserId}}", snapshot.Freelancer.IdentityOrTaxCode);
-    }
-
-    private static void AddIdentityParagraphs(
-        Body body,
-        string userIdPlaceholder,
-        string? identityCode)
-    {
-        var userIdValueParagraph = body.Descendants<Paragraph>()
-            .FirstOrDefault(paragraph =>
-                paragraph.InnerText.Contains(userIdPlaceholder, StringComparison.Ordinal))
-            ?? throw new InvalidOperationException(
-                $"The receipt template paragraph containing '{userIdPlaceholder}' was not found.");
-        var cell = userIdValueParagraph.Ancestors<TableCell>().FirstOrDefault()
-            ?? throw new InvalidOperationException(
-                $"The receipt template value '{userIdPlaceholder}' is not inside a table cell.");
-        var paragraphs = cell.Elements<Paragraph>().ToList();
-        var valueIndex = paragraphs.IndexOf(userIdValueParagraph);
-        var userIdLabelParagraph = valueIndex > 0 ? paragraphs[valueIndex - 1] : null;
-        if (userIdLabelParagraph is null ||
-            !userIdLabelParagraph.InnerText.Contains("USER ID", StringComparison.Ordinal))
+        if (snapshot.ProjectStartedAtUtc.HasValue)
         {
-            throw new InvalidOperationException(
-                $"The USER ID label before '{userIdPlaceholder}' was not found.");
+            return FormatVietnamTime(snapshot.ProjectStartedAtUtc);
         }
 
-        var identityLabelParagraph = (Paragraph)userIdLabelParagraph.CloneNode(true);
-        var identityValueParagraph = (Paragraph)userIdValueParagraph.CloneNode(true);
-        ReplaceText(identityLabelParagraph, "USER ID", "MÃ ĐỊNH DANH / ID NUMBER");
-        ReplaceText(identityValueParagraph, userIdPlaceholder, ValueOrUnavailable(identityCode));
-
-        userIdValueParagraph.InsertAfterSelf(identityLabelParagraph);
-        identityLabelParagraph.InsertAfterSelf(identityValueParagraph);
+        return FormatDate(snapshot.ContractStartDate);
     }
 
     private static void ReplaceAll(OpenXmlElement root, IReadOnlyDictionary<string, string> replacements)
@@ -264,6 +235,22 @@ public sealed class ProjectReceiptDocumentGenerator(ITemplateReader templateRead
     private static string FormatGigCoin(decimal value) => value.ToString("0.####", VietnamCulture);
     private static string FormatVnd(decimal gigCoin) =>
         TokenWalletRules.ToVnd(gigCoin).ToString("N0", VietnamCulture);
+
+    private static string FormatDuration(DateTime? startedAtUtc, DateTime? completedAtUtc)
+    {
+        if (!startedAtUtc.HasValue || !completedAtUtc.HasValue || completedAtUtc < startedAtUtc)
+        {
+            return "Không áp dụng";
+        }
+
+        var duration = completedAtUtc.Value - startedAtUtc.Value;
+        var parts = new List<string>(4);
+        if (duration.Days > 0) parts.Add($"{duration.Days} ngày");
+        if (duration.Hours > 0) parts.Add($"{duration.Hours} giờ");
+        if (duration.Minutes > 0) parts.Add($"{duration.Minutes} phút");
+        if (duration.Seconds > 0 || parts.Count == 0) parts.Add($"{duration.Seconds} giây");
+        return string.Join(" ", parts);
+    }
 
     private static TimeZoneInfo ResolveVietnamTimeZone()
     {

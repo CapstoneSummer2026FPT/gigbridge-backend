@@ -157,29 +157,113 @@ public sealed class ProjectReceiptWorkflowTests
     }
 
     [Fact]
-    public async Task EnsurePair_QueuesVersionOneReceiptsForCorrectedTemplateRegeneration()
+    public async Task EnsurePair_RebuildsStaleSnapshotsAndQueuesTimelineTemplateRegeneration()
     {
+        var now = DateTime.UtcNow;
         var contractId = Guid.NewGuid();
+        var clientProfileId = Guid.NewGuid();
+        var freelancerProfileId = Guid.NewGuid();
+        var client = new User
+        {
+            UserId = Guid.NewGuid(),
+            FullName = "Client",
+            Email = "client@example.com"
+        };
+        var freelancer = new User
+        {
+            UserId = Guid.NewGuid(),
+            FullName = "Freelancer",
+            Email = "freelancer@example.com"
+        };
+        var milestoneId = Guid.NewGuid();
+        var escrowId = Guid.NewGuid();
+        var startedAt = now.AddDays(-2);
+        var dueDate = DateOnly.FromDateTime(now.AddDays(-1));
         var context = new InMemoryApplicationDbContext();
         var receipts = context.AddSet(
             CreateReadyReceipt(contractId, ProjectReceiptType.Client),
             CreateReadyReceipt(contractId, ProjectReceiptType.Freelancer));
+        context.AddSet(new Contract
+        {
+            ContractsId = contractId,
+            ClientProfilesId = clientProfileId,
+            FreelancerProfilesId = freelancerProfileId,
+            Title = "Timeline project",
+            TotalBudget = 100m,
+            Status = (int)ContractStatus.Completed,
+            CompletedAt = now,
+            CreatedAt = startedAt
+        });
+        context.AddSet(new ClientProfile
+        {
+            ClientProfilesId = clientProfileId,
+            UserId = client.UserId,
+            CompanyName = "Client company"
+        });
+        context.AddSet(new FreelancerProfile
+        {
+            FreelancerProfilesId = freelancerProfileId,
+            UserId = freelancer.UserId
+        });
+        context.AddSet(client, freelancer);
+        context.AddSet(new ContractEscrow
+        {
+            ContractEscrowId = escrowId,
+            ContractsId = contractId,
+            RequiredAmount = 100m,
+            FundedAmount = 100m,
+            ReleasedAmount = 100m,
+            Status = (int)ContractEscrowStatus.Released
+        });
+        context.AddSet(new Milestone
+        {
+            MilestonesId = milestoneId,
+            ContractsId = contractId,
+            Title = "Delivery",
+            Amount = 100m,
+            ReleasedAmount = 100m,
+            Status = (int)MilestoneStatus.Approved,
+            SortOrder = 1,
+            StartedAt = startedAt,
+            DueDate = dueDate,
+            ApprovedAt = now.AddHours(-1),
+            CreatedAt = startedAt
+        });
+        context.AddSet(new EscrowTransaction
+        {
+            EscrowTransactionId = Guid.NewGuid(),
+            ContractEscrowId = escrowId,
+            MilestonesId = milestoneId,
+            Amount = 100m,
+            Type = (int)EscrowTransactionType.ReleaseToFreelancer,
+            Status = (int)EscrowTransactionStatus.Succeeded,
+            GatewayTransactionCode = $"ESCROW-FINAL-{contractId:N}-{milestoneId:N}",
+            CreatedAt = now,
+            CompletedAt = now
+        });
 
         var result = await ProjectReceiptWorkflow.EnsurePairAsync(
             context,
             contractId,
-            DateTime.UtcNow,
+            now,
             CancellationToken.None);
 
         Assert.Equal(2, result.Count);
         Assert.All(receipts.Entities, receipt =>
         {
-            Assert.Equal(2, receipt.TemplateVersion);
+            Assert.Equal(4, receipt.TemplateVersion);
             Assert.Equal((int)ProjectReceiptGenerationStatus.Pending, receipt.GenerationStatus);
             Assert.Equal((int)ProjectReceiptEmailStatus.Pending, receipt.EmailStatus);
+            Assert.NotEqual("{}", receipt.SnapshotJson);
             Assert.Null(receipt.PdfContent);
             Assert.Null(receipt.GeneratedAt);
             Assert.Null(receipt.EmailedAt);
+
+            var snapshot = ProjectReceiptWorkflow.DeserializeSnapshot(receipt);
+            Assert.Equal(startedAt, snapshot.ProjectStartedAtUtc);
+            var milestone = Assert.Single(snapshot.Milestones);
+            Assert.Equal(startedAt, milestone.StartedAtUtc);
+            Assert.Equal(dueDate, milestone.DueDate);
         });
     }
 

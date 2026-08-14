@@ -32,10 +32,31 @@ public sealed class ProjectReceiptDocumentGeneratorTests
         Assert.Contains("Cá nhân", text);
         Assert.Contains("001234567890", text);
         Assert.Contains("123456789", text);
+        Assert.Contains("BẮT ĐẦU THỰC TẾ", text);
+        Assert.Contains("KẾT THÚC THỰC TẾ", text);
+        Assert.Contains("TỔNG THỜI GIAN", text);
+        Assert.Contains("HẠNG MỤC / TIẾN ĐỘ", text);
+        Assert.Contains("22/07/2026 15:30:00", text);
+        Assert.Contains("11/08/2026 14:30:00", text);
+        Assert.Contains("19 ngày 23 giờ", text);
+        Assert.Contains("Bắt đầu: ", text);
+        Assert.Contains("Hạn dự kiến: ", text);
+        Assert.Contains("Hoàn tất: ", text);
+        Assert.Contains("Thời lượng: ", text);
+        Assert.Contains("5 ngày", text);
         Assert.Equal(
             2,
             text.Split("MÃ ĐỊNH DANH / ID NUMBER", StringSplitOptions.None).Length - 1);
-        Assert.Contains(documentHash, text);
+        Assert.Contains("THÔNG TIN QUY ĐỔI", text);
+        Assert.DoesNotContain("USER ID", text);
+        Assert.DoesNotContain(snapshot.Client.UserId.ToString("D"), text);
+        Assert.DoesNotContain(snapshot.Freelancer.UserId.ToString("D"), text);
+        Assert.DoesNotContain(snapshot.ContractCode, text);
+        Assert.DoesNotContain(snapshot.ContractId.ToString("D"), text);
+        Assert.DoesNotContain(snapshot.FinalTransactionReference, text);
+        Assert.DoesNotContain("MÃ GIAO DỊCH CUỐI", text);
+        Assert.DoesNotContain("SHA-256", text);
+        Assert.DoesNotContain(documentHash, text);
         Assert.True(
             text.IndexOf("Thiết kế giao diện", StringComparison.Ordinal) <
             text.IndexOf("Bàn giao hệ thống", StringComparison.Ordinal));
@@ -79,10 +100,13 @@ public sealed class ProjectReceiptDocumentGeneratorTests
             [
                 new ProjectReceiptMilestoneSnapshot(
                     1, Guid.NewGuid(), "Thiết kế giao diện", now.AddDays(-10),
-                    400m, 400m, 0m, 400m, 40m, 360m),
+                    400m, 400m, 0m, 400m, 40m, 360m,
+                    now.AddDays(-15), new DateOnly(2026, 8, 1)),
                 new ProjectReceiptMilestoneSnapshot(
                     2, Guid.NewGuid(), "Bàn giao hệ thống", now.AddDays(-1),
-                    600m, 400m, 200m, 600m, 60m, 540m)
-            ]);
+                    600m, 400m, 200m, 600m, 60m, 540m,
+                    now.AddDays(-9), new DateOnly(2026, 8, 10))
+            ],
+            now.AddDays(-20));
     }
 }

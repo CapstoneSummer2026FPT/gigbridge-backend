@@ -21,7 +21,7 @@ namespace Application.Features.Receipts.Common.Internal;
 public static class ProjectReceiptWorkflow
 {
     private const decimal BalanceTolerance = 0.01m;
-    private const int CurrentTemplateVersion = 2;
+    private const int CurrentTemplateVersion = 4;
     private const string PersonalCompanyName = "Null";
     private static readonly JsonSerializerOptions SnapshotJsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -35,12 +35,8 @@ public static class ProjectReceiptWorkflow
             .Where(receipt => receipt.ContractsId == contractId)
             .OrderBy(receipt => receipt.ReceiptType)
             .ToListAsync(cancellationToken);
-        if (existing.Count == 2)
+        if (existing.Count == 2 && existing.All(item => item.TemplateVersion >= CurrentTemplateVersion))
         {
-            foreach (var receipt in existing.Where(item => item.TemplateVersion < CurrentTemplateVersion))
-            {
-                QueueTemplateRegeneration(receipt, DateTime.UtcNow);
-            }
             return existing;
         }
 
@@ -96,6 +92,10 @@ public static class ProjectReceiptWorkflow
         {
             throw new ConflictException("The completed contract funding does not reconcile with its milestones.");
         }
+
+        var projectStartedAt = milestones
+            .Select(ResolveMilestoneStartedAt)
+            .Min();
 
         var successfulReleaseLedger = await context.Set<EscrowTransaction>()
             .AsNoTracking()
@@ -190,7 +190,9 @@ public static class ProjectReceiptWorkflow
                 final,
                 total,
                 fee,
-                total - fee);
+                total - fee,
+                ResolveMilestoneStartedAt(milestone),
+                milestone.DueDate);
         }).ToList();
 
         var contractCode = (await context.Set<EsignDocument>()
@@ -261,18 +263,16 @@ public static class ProjectReceiptWorkflow
         var created = new List<ProjectReceipt>(2);
         foreach (var receiptType in new[] { ProjectReceiptType.Client, ProjectReceiptType.Freelancer })
         {
-            if (existing.Any(item => item.ReceiptType == (int)receiptType))
-            {
-                continue;
-            }
-
-            var receiptId = Guid.NewGuid();
-            var receiptNumber = BuildReceiptNumber(receiptId, receiptType, issuedAt);
+            var existingReceipt = existing.FirstOrDefault(item => item.ReceiptType == (int)receiptType);
+            var receiptId = existingReceipt?.ProjectReceiptId ?? Guid.NewGuid();
+            var effectiveIssuedAt = existingReceipt?.IssuedAt ?? issuedAt;
+            var receiptNumber = existingReceipt?.ReceiptNumber
+                ?? BuildReceiptNumber(receiptId, receiptType, effectiveIssuedAt);
             var snapshot = new ProjectReceiptSnapshot(
                 receiptId,
                 receiptNumber,
                 (int)receiptType,
-                issuedAt,
+                effectiveIssuedAt,
                 "Hoàn tất / Completed",
                 clientParty,
                 freelancerParty,
@@ -296,9 +296,23 @@ public static class ProjectReceiptWorkflow
                 totalReleased - freelancerFee,
                 finalReference,
                 TokenWalletRules.VndPerToken,
-                milestoneSnapshots);
+                milestoneSnapshots,
+                projectStartedAt);
             var json = JsonSerializer.Serialize(snapshot, SnapshotJsonOptions);
             var now = DateTime.UtcNow;
+
+            if (existingReceipt is not null)
+            {
+                if (existingReceipt.TemplateVersion < CurrentTemplateVersion)
+                {
+                    existingReceipt.SnapshotJson = json;
+                    existingReceipt.SnapshotHashSha256 = ComputeSha256(json);
+                    QueueTemplateRegeneration(existingReceipt, now);
+                }
+
+                continue;
+            }
+
             var receipt = new ProjectReceipt
             {
                 ProjectReceiptId = receiptId,
@@ -332,6 +346,9 @@ public static class ProjectReceiptWorkflow
 
     private static bool IsFinalRelease(EscrowTransaction transaction) =>
         transaction.GatewayTransactionCode?.StartsWith("ESCROW-FINAL-", StringComparison.Ordinal) == true;
+
+    private static DateTime? ResolveMilestoneStartedAt(Milestone milestone) =>
+        milestone.StartedAt ?? milestone.SubmittedAt ?? milestone.ApprovedAt;
 
     private static string ValueOrPersonal(string? value) =>
         string.IsNullOrWhiteSpace(value) ? PersonalCompanyName : value.Trim();

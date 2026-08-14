@@ -28,7 +28,8 @@ public sealed record ProjectReceiptSnapshot(
     decimal FreelancerNetReceivedGigCoin,
     string FinalTransactionReference,
     decimal VndPerGigCoin,
-    IReadOnlyList<ProjectReceiptMilestoneSnapshot> Milestones);
+    IReadOnlyList<ProjectReceiptMilestoneSnapshot> Milestones,
+    DateTime? ProjectStartedAtUtc = null);
 
 public sealed record ProjectReceiptPartySnapshot(
     Guid UserId,
@@ -47,4 +48,6 @@ public sealed record ProjectReceiptMilestoneSnapshot(
     decimal FinalReleaseGigCoin,
     decimal TotalReleasedGigCoin,
     decimal ServiceFeeGigCoin,
-    decimal NetReceivedGigCoin);
+    decimal NetReceivedGigCoin,
+    DateTime? StartedAtUtc = null,
+    DateOnly? DueDate = null);
