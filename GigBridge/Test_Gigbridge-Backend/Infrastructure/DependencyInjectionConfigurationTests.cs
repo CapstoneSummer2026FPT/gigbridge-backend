@@ -1,15 +1,45 @@
 using Application;
 using Application.Common.InternalServices.Accounts.Interfaces;
 using Application.Common.InternalServices.Auditing.Interfaces;
+using Application.Common.InternalServices.Delivery.Interfaces;
 using Application.Common.Interfaces;
+using Application.Common.Interfaces.Ai;
 using Application.Common.Interfaces.Caching;
+using Application.Common.Interfaces.Email;
+using Application.Common.Interfaces.Media;
+using Application.Common.Interfaces.Templates;
 using Application.Common.Interfaces.Time;
 using Application.Features.Admin.AuditLogs.Common.Interfaces;
+using Application.Features.Admin.Analytics.Common.BackgroundJobs;
+using Application.Features.Auth.Common.Interfaces;
+using Application.Features.Chat.Common.FinalOffers.Shared.Email;
+using Application.Features.Chat.Common.Interfaces;
+using Application.Features.Chat.Common.Schedules;
+using Application.Features.Chat.Common.Schedules.BackgroundJobs;
 using Application.Features.Elo.Common.Interfaces;
+using Application.Features.ESign.Common.Interfaces;
+using Application.Features.JobInvitations.Common.Email;
+using Application.Features.JobPosts.Common.ContentModeration;
+using Application.Features.Notifications.Common.Interfaces;
 using Application.Features.Premium.Common.Interfaces;
+using Application.Features.Premium.Common.BackgroundJobs;
+using Application.Features.Proposals.Common.Email;
 using Application.Features.Proposals.Common.Interfaces;
-using Infrastructure.BackgroundJobs;
+using Application.Features.Wallets.Common.Interfaces;
+using Infrastructure.Adapters.Caching;
+using Infrastructure.Adapters.Security.Auth;
+using Infrastructure.Adapters.Security.Wallets;
+using Infrastructure.Adapters.Templates;
+using Infrastructure.Adapters.Time;
+using Infrastructure.ExternalServices.Ai;
+using Infrastructure.ExternalServices.Banking.VietQr;
+using Infrastructure.ExternalServices.Email.Resend;
+using Infrastructure.ExternalServices.Google.Meet;
+using Infrastructure.ExternalServices.Media.Cloudinary;
+using Infrastructure.ExternalServices.Payments.PayOs;
 using Infrastructure.Persistence;
+using Infrastructure.Persistence.Delivery;
+using Infrastructure.Persistence.Wallets;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -22,9 +52,9 @@ public sealed class DependencyInjectionConfigurationTests
 {
     [Theory]
     [InlineData("Development", null, 1)]
-    [InlineData("Production", null, 4)]
+    [InlineData("Production", null, 7)]
     [InlineData("Production", "false", 1)]
-    [InlineData("Development", "true", 4)]
+    [InlineData("Development", "true", 7)]
     public void ApplicationWorkers_RespectEnvironmentAndExplicitOverride(
         string environment,
         string? enabled,
@@ -47,7 +77,7 @@ public sealed class DependencyInjectionConfigurationTests
         services.AddApplicationServices(new ConfigurationBuilder().Build());
 
         Assert.Equal(
-            4,
+            7,
             services.Count(descriptor => descriptor.ServiceType == typeof(IHostedService)));
     }
 
@@ -58,7 +88,11 @@ public sealed class DependencyInjectionConfigurationTests
         services.AddSingleton(Substitute.For<IApplicationDbContext>());
         services.AddSingleton(Substitute.For<IDateTimeService>());
         services.AddSingleton(Substitute.For<ICacheService>());
+        services.AddSingleton(Substitute.For<IEmailService>());
+        services.AddSingleton(Substitute.For<ITemplateReader>());
+        services.AddSingleton(Substitute.For<INotificationSender>());
         services.AddSingleton(Substitute.For<IRequestMetadataAccessor>());
+        services.AddLogging();
         services.AddApplicationServices(Configuration("Development"));
         using var provider = services.BuildServiceProvider();
 
@@ -69,23 +103,24 @@ public sealed class DependencyInjectionConfigurationTests
         Assert.NotNull(provider.GetRequiredService<IPremiumAccessService>());
         Assert.NotNull(provider.GetRequiredService<IProposalQuestionTimerService>());
         Assert.NotNull(provider.GetRequiredService<IProposalInterviewReviewService>());
+        Assert.NotNull(provider.GetRequiredService<IAuthEmailSender>());
+        Assert.NotNull(provider.GetRequiredService<INotificationService>());
+        Assert.NotNull(provider.GetRequiredService<IContentModerationService>());
+        Assert.NotNull(provider.GetRequiredService<IScheduleEmailRenderer>());
+        Assert.NotNull(provider.GetRequiredService<IJobAcceptanceEmailRenderer>());
+        Assert.NotNull(provider.GetRequiredService<ISignedEmailRenderer>());
+        Assert.NotNull(provider.GetRequiredService<IProposalNegotiationEmailRenderer>());
+        Assert.NotNull(provider.GetRequiredService<IJobInvitationEmailRenderer>());
     }
 
-    [Theory]
-    [InlineData("Development", null, 0)]
-    [InlineData("Production", null, 3)]
-    [InlineData("Production", "false", 0)]
-    [InlineData("Development", "true", 3)]
-    public void InfrastructureWorkers_RespectEnvironmentAndExplicitOverride(
-        string environment,
-        string? enabled,
-        int expectedHostedServices)
+    [Fact]
+    public void Infrastructure_DoesNotRegisterApplicationWorkers()
     {
         var services = new ServiceCollection();
 
         global::Infrastructure.DependencyInjection.AddInfrastructureServices(
             services,
-            Configuration(environment, enabled));
+            Configuration("Production"));
 
         Type[] gigBridgeWorkerTypes =
         [
@@ -93,12 +128,63 @@ public sealed class DependencyInjectionConfigurationTests
             typeof(PremiumExpiryWorker),
             typeof(AnalyticsMaintenanceWorker)
         ];
-        Assert.Equal(
-            expectedHostedServices,
-            services.Count(descriptor =>
+        Assert.DoesNotContain(
+            services,
+            descriptor =>
                 descriptor.ServiceType == typeof(IHostedService) &&
                 descriptor.ImplementationType is not null &&
-                gigBridgeWorkerTypes.Contains(descriptor.ImplementationType)));
+                gigBridgeWorkerTypes.Contains(descriptor.ImplementationType));
+    }
+
+    [Fact]
+    public void Infrastructure_RegistersDeliveryAndAdaptersWithOriginalLifetimes()
+    {
+        var services = new ServiceCollection();
+
+        global::Infrastructure.DependencyInjection.AddInfrastructureServices(
+            services,
+            Configuration("Development"));
+
+        AssertRegistration<IDeliveryOutboxStore, DeliveryOutboxStore>(
+            services,
+            ServiceLifetime.Scoped);
+        AssertRegistration<ICacheService, HybridCacheService>(
+            services,
+            ServiceLifetime.Singleton);
+        AssertRegistration<ITemplateReader, FileSystemTemplateReader>(
+            services,
+            ServiceLifetime.Singleton);
+        AssertRegistration<IDateTimeService, DateTimeService>(
+            services,
+            ServiceLifetime.Transient);
+        AssertRegistration<IPasswordHasher, BCryptPasswordHasher>(
+            services,
+            ServiceLifetime.Scoped);
+        AssertRegistration<IJwtService, JwtService>(
+            services,
+            ServiceLifetime.Scoped);
+        AssertRegistration<IBankAccountProtector, BankAccountProtector>(
+            services,
+            ServiceLifetime.Scoped);
+        AssertRegistration<IWalletLedgerService, WalletLedgerService>(
+            services,
+            ServiceLifetime.Scoped);
+        AssertRegistration<IEmailService, EmailService>(
+            services,
+            ServiceLifetime.Scoped);
+        AssertRegistration<IMediaService, MediaService>(
+            services,
+            ServiceLifetime.Scoped);
+        AssertRegistration<IWalletTopUpPaymentService, PayOsWalletTopUpPaymentService>(
+            services,
+            ServiceLifetime.Scoped);
+        AssertRegistration<IGoogleMeetOAuthService, GoogleMeetOAuthService>(
+            services,
+            ServiceLifetime.Scoped);
+        AssertFactoryRegistration<IAiServiceClient>(services, ServiceLifetime.Transient);
+        AssertFactoryRegistration<IGoogleMeetApiClient>(services, ServiceLifetime.Transient);
+        AssertFactoryRegistration<ISupportedBankDirectory>(services, ServiceLifetime.Transient);
+        Assert.Single(services.Where(descriptor => descriptor.ServiceType == typeof(ICacheService)));
     }
 
     [Fact]
@@ -179,5 +265,25 @@ public sealed class DependencyInjectionConfigurationTests
         return new ConfigurationBuilder()
             .AddInMemoryCollection(values)
             .Build();
+    }
+
+    private static void AssertRegistration<TService, TImplementation>(
+        IServiceCollection services,
+        ServiceLifetime lifetime)
+    {
+        var descriptor = Assert.Single(
+            services.Where(candidate => candidate.ServiceType == typeof(TService)));
+        Assert.Equal(typeof(TImplementation), descriptor.ImplementationType);
+        Assert.Equal(lifetime, descriptor.Lifetime);
+    }
+
+    private static void AssertFactoryRegistration<TService>(
+        IServiceCollection services,
+        ServiceLifetime lifetime)
+    {
+        var descriptor = Assert.Single(
+            services.Where(candidate => candidate.ServiceType == typeof(TService)));
+        Assert.NotNull(descriptor.ImplementationFactory);
+        Assert.Equal(lifetime, descriptor.Lifetime);
     }
 }
