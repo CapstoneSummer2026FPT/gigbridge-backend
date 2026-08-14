@@ -116,10 +116,13 @@ public sealed class SubmitContractProductHandoffCommandHandler :
         _context.Set<ContractProductHandoff>().Add(handoff);
         contract.UpdatedAt = now;
 
-        await ContractConversationEvents.AddSystemMessageAsync(
+        var materialLabel = handoff.SourceType == (int)ContractProductHandoffSourceType.File
+            ? handoff.FileName
+            : handoff.ExternalUrl;
+        var systemMessage = await ContractConversationEvents.AddSystemMessageAsync(
             _context,
             contract.ContractsId,
-            "Client sent product materials.",
+            $"Client sent product materials: {materialLabel}.",
             now,
             cancellationToken);
 
@@ -138,6 +141,15 @@ public sealed class SubmitContractProductHandoffCommandHandler :
                 participantUserIds,
                 "ProductHandoffUpdated",
                 ContractProductHandoffMapper.ToResponse(handoff),
+                cancellationToken);
+        }
+
+        if (systemMessage is not null)
+        {
+            await _chatRealtimeNotifier.SendConversationEventAsync(
+                systemMessage.ConversationsId,
+                "ReceiveMessage",
+                ContractConversationEvents.ToRealtimePayload(systemMessage),
                 cancellationToken);
         }
 
