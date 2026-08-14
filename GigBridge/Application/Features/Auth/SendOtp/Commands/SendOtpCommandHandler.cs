@@ -67,7 +67,17 @@ public class SendOtpCommandHandler : IRequestHandler<SendOtpCommand, Unit>
             true,
             OtpSecurity.ResendCooldown,
             cancellationToken);
-        await _authEmailSender.SendOtpEmailAsync(email, otp, cancellationToken);
+        if (purpose == OtpPurpose.IdentityVerification)
+        {
+            await _authEmailSender.SendIdentityVerificationOtpEmailAsync(
+                email,
+                otp,
+                cancellationToken);
+        }
+        else
+        {
+            await _authEmailSender.SendOtpEmailAsync(email, otp, cancellationToken);
+        }
 
         return Unit.Value;
     }

@@ -320,6 +320,42 @@ public class AuthEmailCanonicalizationTests
     }
 
     [Fact]
+    public async Task SendOtp_IdentityVerificationUsesDedicatedEmailTemplate()
+    {
+        var cache = Substitute.For<ICacheService>();
+        var emailSender = Substitute.For<IAuthEmailSender>();
+        var currentUser = Substitute.For<ICurrentUserService>();
+        currentUser.Email.Returns(CanonicalEmail);
+        var handler = new SendOtpCommandHandler(cache, emailSender, currentUser);
+
+        await handler.Handle(
+            new SendOtpCommand(new SendOtpRequest
+            {
+                Email = MixedEmail,
+                Purpose = OtpPurposeNames.IdentityVerification
+            }),
+            CancellationToken.None);
+
+        var challengeKey = OtpSecurity.ChallengeKey(
+            OtpPurpose.IdentityVerification,
+            CanonicalEmail);
+        var setCall = Assert.Single(
+            cache.ReceivedCalls(),
+            call => call.GetMethodInfo().Name == nameof(ICacheService.SetAsync)
+                && Equals(call.GetArguments()[0], challengeKey));
+        var challenge = Assert.IsType<OtpChallengeState>(setCall.GetArguments()[1]);
+
+        await emailSender.Received(1).SendIdentityVerificationOtpEmailAsync(
+            CanonicalEmail,
+            challenge.Otp,
+            CancellationToken.None);
+        await emailSender.DidNotReceiveWithAnyArgs().SendOtpEmailAsync(
+            default!,
+            default!,
+            default);
+    }
+
+    [Fact]
     public async Task IdentityVerification_RejectsAnotherAccountEmail()
     {
         var currentUser = Substitute.For<ICurrentUserService>();
