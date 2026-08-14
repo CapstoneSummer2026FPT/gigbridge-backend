@@ -104,7 +104,7 @@ public sealed class SaveDraftJobPostCommandValidator
                     milestone.RuleFor(x => x.EstimatedDuration)
                         .Must(duration => MilestonePlanDeadlineCalculator.TryParseDurationDays(duration, out _))
                         .When(x => !string.IsNullOrWhiteSpace(x.EstimatedDuration))
-                        .WithMessage("EstimatedDuration must be a number followed by day(s), week(s), month(s), or year(s).");
+                        .WithMessage("EstimatedDuration must be a number followed by week(s), month(s), or year(s).");
                     milestone.RuleForEach(x => x.WorkItems).ChildRules(item =>
                     {
                         item.RuleFor(x => x.OrderIndex).GreaterThanOrEqualTo(0);
