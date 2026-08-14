@@ -1,6 +1,6 @@
 using Application.Features.JobPosts.Client.SaveDraftJobPost.Commands;
 using Application.Features.JobPosts.Client.SaveDraftJobPost.DTOs;
-using Infrastructure.Services.ContentModerationService;
+using Application.Features.JobPosts.Common.ContentModeration.Services;
 using System;
 using System.Collections.Generic;
 using Xunit;

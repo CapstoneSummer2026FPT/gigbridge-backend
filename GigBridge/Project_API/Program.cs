@@ -43,8 +43,6 @@ builder.Services.AddSignalR();
 builder.Services.AddSingleton<SystemTrackingStore>();
 builder.Services.AddSingleton<ISystemTrackingReader>(provider => provider.GetRequiredService<SystemTrackingStore>());
 
-builder.Services.AddHybridCache(builder.Configuration);
-
 var app = builder.Build();
 
 await app.EnsureLocalESignTemplatesAsync();

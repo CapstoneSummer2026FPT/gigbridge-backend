@@ -9,7 +9,6 @@ using Application.Features.Notifications.Common.DTOs;
 using Domain.Entities;
 using Domain.Enums.Chat;
 using Infrastructure.Persistence;
-using Infrastructure.Services.Email;
 using Test_Gigbridge_Backend.TestSupport;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
