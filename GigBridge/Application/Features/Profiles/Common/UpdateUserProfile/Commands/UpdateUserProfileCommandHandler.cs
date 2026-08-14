@@ -3,6 +3,9 @@ using Application.Common.Interfaces;
 using Application.Common.Interfaces.Identity;
 using Application.Common.Interfaces.Time;
 using Application.Features.Profiles.Common.DTOs;
+using Application.Features.Contracts.Common.Internal;
+using Application.Common.Interfaces.Caching;
+using Application.Features.Auth.Common;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -15,15 +18,18 @@ public sealed class UpdateUserProfileCommandHandler
     private readonly IApplicationDbContext _context;
     private readonly ICurrentUserService _currentUserService;
     private readonly IDateTimeService _dateTimeService;
+    private readonly ICacheService _cacheService;
 
     public UpdateUserProfileCommandHandler(
         IApplicationDbContext context,
         ICurrentUserService currentUserService,
-        IDateTimeService dateTimeService)
+        IDateTimeService dateTimeService,
+        ICacheService cacheService)
     {
         _context = context;
         _currentUserService = currentUserService;
         _dateTimeService = dateTimeService;
+        _cacheService = cacheService;
     }
 
     public async Task<UserProfileDto> Handle(
@@ -55,6 +61,20 @@ public sealed class UpdateUserProfileCommandHandler
         user.FullName = request.Dto.FullName.Trim();
         user.Avatar = NormalizeOptional(request.Dto.Avatar);
         user.PhoneNumber = NormalizeOptional(request.Dto.PhoneNumber);
+        if (request.Dto.IdentityOrTaxCode is not null)
+        {
+            var requestedIdentityCode = NormalizeIdentityCode(request.Dto.IdentityOrTaxCode);
+            var storedIdentityCode = NormalizeIdentityCode(user.IdentityOrTaxCode);
+            if (!string.Equals(requestedIdentityCode, storedIdentityCode, StringComparison.Ordinal))
+            {
+                await ConsumeIdentityVerificationAsync(
+                    user.Email,
+                    requestedIdentityCode,
+                    request.Dto.IdentityVerificationTicket,
+                    cancellationToken);
+                user.IdentityOrTaxCode = requestedIdentityCode;
+            }
+        }
         user.PreferredLanguage = NormalizeOptional(request.Dto.PreferredLanguage)?.ToLowerInvariant();
         user.UpdatedAt = _dateTimeService.UtcNow;
 
@@ -67,6 +87,7 @@ public sealed class UpdateUserProfileCommandHandler
             Email = user.Email,
             Avatar = user.Avatar,
             PhoneNumber = user.PhoneNumber,
+            IdentityOrTaxCode = user.IdentityOrTaxCode,
             PreferredLanguage = user.PreferredLanguage,
             Role = user.Role,
             IsPremium = user.IsPremium
@@ -76,5 +97,38 @@ public sealed class UpdateUserProfileCommandHandler
     private static string? NormalizeOptional(string? value)
     {
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private static string? NormalizeIdentityCode(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : ContractIdentityCode.Normalize(value);
+    }
+
+    private async Task ConsumeIdentityVerificationAsync(
+        string email,
+        string? identityCode,
+        string? verificationTicket,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(identityCode) ||
+            string.IsNullOrWhiteSpace(verificationTicket))
+        {
+            throw new BadRequestException(
+                "Verify the identity code through your account email before saving it.");
+        }
+
+        var verificationKey = OtpSecurity.VerifiedKey(
+            OtpPurpose.IdentityVerification,
+            EmailCanonicalizer.Canonicalize(email),
+            verificationTicket,
+            identityCode);
+        var isVerified = await _cacheService.GetAndRemoveAsync<bool>(
+            verificationKey,
+            cancellationToken);
+        if (!isVerified)
+        {
+            throw new BadRequestException(
+                "Identity verification is invalid or has expired. Please verify your email again.");
+        }
     }
 }

@@ -1,5 +1,5 @@
 using Application.Features.Chat.Common.Interfaces;
-using Infrastructure.ExternalServices.GoogleMeet;
+using Infrastructure.ExternalServices.Google.Meet;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;

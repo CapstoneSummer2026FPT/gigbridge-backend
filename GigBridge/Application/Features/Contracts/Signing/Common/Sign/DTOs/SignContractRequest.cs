@@ -6,4 +6,5 @@ public sealed record SignContractRequest(
     int? SignatureHeight,
     string IdentityOrTaxCode,
     bool PolicyAccepted,
-    string? PolicyVersion);
+    string? PolicyVersion,
+    string? IdentityVerificationTicket = null);

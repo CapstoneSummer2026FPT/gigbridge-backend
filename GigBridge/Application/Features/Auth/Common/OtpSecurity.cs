@@ -6,13 +6,15 @@ namespace Application.Features.Auth.Common;
 internal enum OtpPurpose
 {
     Signup,
-    PasswordReset
+    PasswordReset,
+    IdentityVerification
 }
 
 internal static class OtpPurposeNames
 {
     public const string Signup = "signup";
     public const string PasswordReset = "password_reset";
+    public const string IdentityVerification = "identity_verification";
 
     public static bool TryParse(string? value, out OtpPurpose purpose)
     {
@@ -20,10 +22,11 @@ internal static class OtpPurposeNames
         {
             Signup => OtpPurpose.Signup,
             PasswordReset => OtpPurpose.PasswordReset,
+            IdentityVerification => OtpPurpose.IdentityVerification,
             _ => default
         };
 
-        return value?.Trim().ToLowerInvariant() is Signup or PasswordReset;
+        return value?.Trim().ToLowerInvariant() is Signup or PasswordReset or IdentityVerification;
     }
 }
 
@@ -51,8 +54,10 @@ internal static class OtpSecurity
     public static string VerifiedKey(
         OtpPurpose purpose,
         string canonicalEmail,
-        string proof) =>
-        $"auth:otp:{ToSegment(purpose)}:verified:{Hash(canonicalEmail)}:{Hash(proof)}";
+        string proof,
+        string? context = null) =>
+        $"auth:otp:{ToSegment(purpose)}:verified:{Hash(canonicalEmail)}:{Hash(proof)}" +
+        (context is null ? string.Empty : $":{Hash(context)}");
 
     public static bool Matches(string expected, string actual)
     {
@@ -62,8 +67,13 @@ internal static class OtpSecurity
             && CryptographicOperations.FixedTimeEquals(expectedBytes, actualBytes);
     }
 
-    private static string ToSegment(OtpPurpose purpose) =>
-        purpose == OtpPurpose.Signup ? OtpPurposeNames.Signup : OtpPurposeNames.PasswordReset;
+    private static string ToSegment(OtpPurpose purpose) => purpose switch
+    {
+        OtpPurpose.Signup => OtpPurposeNames.Signup,
+        OtpPurpose.PasswordReset => OtpPurposeNames.PasswordReset,
+        OtpPurpose.IdentityVerification => OtpPurposeNames.IdentityVerification,
+        _ => throw new ArgumentOutOfRangeException(nameof(purpose))
+    };
 
     private static string Hash(string value) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)))

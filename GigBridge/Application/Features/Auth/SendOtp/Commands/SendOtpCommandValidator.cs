@@ -14,7 +14,7 @@ public sealed class SendOtpCommandValidator : AbstractValidator<SendOtpCommand>
         RuleFor(command => command.SendOtpRequest.Purpose)
             .Must(value =>
                 OtpPurposeNames.TryParse(value, out var purpose)
-                && purpose == OtpPurpose.Signup)
-            .WithMessage("Purpose must be 'signup'.");
+                && purpose is OtpPurpose.Signup or OtpPurpose.IdentityVerification)
+            .WithMessage("Purpose must be 'signup' or 'identity_verification'.");
     }
 }

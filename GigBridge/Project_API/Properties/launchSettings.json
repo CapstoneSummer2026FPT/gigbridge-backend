@@ -5,7 +5,9 @@
             "launchBrowser": true,
             "launchUrl": "swagger",
             "environmentVariables": {
-                "ASPNETCORE_ENVIRONMENT": "Development"
+                "ASPNETCORE_ENVIRONMENT": "Development",
+                "BackgroundWorkers__Enabled": "true"
+
             },
             "dotnetRunMessages": true,
             "applicationUrl": "http://localhost:5222"
@@ -15,7 +17,9 @@
             "launchBrowser": true,
             "launchUrl": "swagger",
             "environmentVariables": {
-                "ASPNETCORE_ENVIRONMENT": "Development"
+                "ASPNETCORE_ENVIRONMENT": "Development",
+                "BackgroundWorkers__Enabled": "true"
+
             },
             "dotnetRunMessages": true,
             "applicationUrl": "https://localhost:7094;http://localhost:5222"
