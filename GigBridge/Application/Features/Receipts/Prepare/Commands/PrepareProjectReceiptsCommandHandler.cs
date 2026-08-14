@@ -1,10 +1,9 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.Interfaces.IService;
+using Application.Common.InternalServices.Receipts.Services;
 using Application.Common.Interfaces.Time;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.Receipts.Common.DTOs;
-using Application.Features.Receipts.Common.Internal;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;

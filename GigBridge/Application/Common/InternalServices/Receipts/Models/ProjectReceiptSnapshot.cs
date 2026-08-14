@@ -1,4 +1,4 @@
-namespace Application.Features.Receipts.Common.DTOs;
+namespace Application.Common.InternalServices.Receipts.Models;
 
 public sealed record ProjectReceiptSnapshot(
     Guid ReceiptId,

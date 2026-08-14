@@ -1,7 +1,7 @@
 using System.Globalization;
-using Application.Common.Interfaces.IService;
+using Application.Common.Interfaces.Documents;
+using Application.Common.InternalServices.Receipts.Models;
 using Application.Common.Interfaces.Templates;
-using Application.Features.Receipts.Common.DTOs;
 using Domain.Enums;
 using Domain.Services.Payments;
 using DocumentFormat.OpenXml;
@@ -9,7 +9,7 @@ using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Validation;
 using DocumentFormat.OpenXml.Wordprocessing;
 
-namespace Infrastructure.Services.Receipts;
+namespace Infrastructure.Adapters.Documents.Receipts;
 
 public sealed class ProjectReceiptDocumentGenerator(ITemplateReader templateReader)
     : IProjectReceiptDocumentGenerator

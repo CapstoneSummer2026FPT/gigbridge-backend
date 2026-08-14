@@ -3,8 +3,8 @@ using System.Text;
 using System.Text.Json;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
+using Application.Common.InternalServices.Receipts.Models;
 using Application.Features.Contracts.Common.Internal;
-using Application.Features.Receipts.Common.DTOs;
 using Application.Features.Wallets.Common;
 using Domain.Entities;
 using Domain.Enums;
@@ -16,7 +16,7 @@ using Domain.Enums.Wallets;
 using Domain.Services.Payments;
 using Microsoft.EntityFrameworkCore;
 
-namespace Application.Features.Receipts.Common.Internal;
+namespace Application.Common.InternalServices.Receipts.Services;
 
 public static class ProjectReceiptWorkflow
 {

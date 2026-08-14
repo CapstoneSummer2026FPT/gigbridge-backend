@@ -1,4 +1,4 @@
-using Application.Features.Receipts.Common.Internal;
+using Application.Common.InternalServices.Receipts.Services;
 using Application.Features.Wallets.Common;
 using Domain.Entities;
 using Domain.Enums;

@@ -2,10 +2,10 @@ using System.Security.Cryptography;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.Documents;
 using Application.Common.Interfaces.Email;
-using Application.Common.Interfaces.IService;
+using Application.Common.InternalServices.Receipts.Models;
+using Application.Common.InternalServices.Receipts.Services;
 using Application.Features.Auth.Shared.DTOs;
 using Application.Features.Notifications.Common.Interfaces;
-using Application.Features.Receipts.Common.Internal;
 using Domain.Entities;
 using Domain.Enums;
 using Domain.Enums.Notifications;
@@ -14,7 +14,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-namespace Infrastructure.BackgroundJobs;
+namespace Application.Common.InternalServices.Receipts.BackgroundJobs;
 
 public sealed class ProjectReceiptWorker : BackgroundService
 {
@@ -140,8 +140,7 @@ public sealed class ProjectReceiptWorker : BackgroundService
             var generator = generationScope.ServiceProvider
                 .GetRequiredService<IProjectReceiptDocumentGenerator>();
             var converter = generationScope.ServiceProvider.GetRequiredService<IWordToPdfConverter>();
-            var snapshot = System.Text.Json.JsonSerializer.Deserialize<
-                Application.Features.Receipts.Common.DTOs.ProjectReceiptSnapshot>(
+            var snapshot = System.Text.Json.JsonSerializer.Deserialize<ProjectReceiptSnapshot>(
                     claim.SnapshotJson,
                     new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))
                 ?? throw new InvalidOperationException("The project receipt snapshot is invalid.");

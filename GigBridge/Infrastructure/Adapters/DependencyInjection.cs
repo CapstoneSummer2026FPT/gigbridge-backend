@@ -7,6 +7,7 @@ using Application.Features.ESign.Common.Interfaces;
 using Application.Features.Wallets.Common.Interfaces;
 using Infrastructure.Adapters.Caching;
 using Infrastructure.Adapters.Documents.ESign;
+using Infrastructure.Adapters.Documents.Receipts;
 using Infrastructure.Adapters.Security.Auth;
 using Infrastructure.Adapters.Security.Wallets;
 using Infrastructure.Adapters.Templates;
@@ -30,6 +31,7 @@ internal static class DependencyInjection
         services.AddTransient<IDateTimeService, DateTimeService>();
         services.AddHttpClient<IContractEsignDocumentGenerator, ContractEsignDocumentGenerator>(client =>
             client.Timeout = TimeSpan.FromSeconds(15));
+        services.AddScoped<IProjectReceiptDocumentGenerator, ProjectReceiptDocumentGenerator>();
         services.AddScoped<IWordToPdfConverter, WordToPdfConverter>();
         return services;
     }

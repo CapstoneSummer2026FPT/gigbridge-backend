@@ -1,8 +1,8 @@
-using Application.Features.Receipts.Common.DTOs;
+using Application.Common.InternalServices.Receipts.Models;
+using Infrastructure.Adapters.Documents.Receipts;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Validation;
 using Domain.Enums;
-using Infrastructure.Services.Receipts;
 using Test_Gigbridge_Backend.TestSupport;
 
 namespace Test_Gigbridge_Backend.Infrastructure.Receipts;
