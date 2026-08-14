@@ -17,6 +17,7 @@ public sealed class JobPostMilestonePlanDto
     public string? Description { get; set; }
     public decimal Amount { get; set; }
     public string? EstimatedDuration { get; set; }
+    // Server-computed from JobPost.EndDate + ordered EstimatedDuration; any client-supplied value is overwritten on save.
     public DateOnly? DueDate { get; set; }
     public string? Deliverables { get; set; }
     public string? AcceptanceCriteria { get; set; }
