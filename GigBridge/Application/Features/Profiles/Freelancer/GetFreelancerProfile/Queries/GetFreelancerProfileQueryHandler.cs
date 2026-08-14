@@ -84,6 +84,7 @@ public class GetFreelancerProfileQueryHandler
             Availability = freelancerProfile.Availability,
             Location = freelancerProfile.Location,
             ProfileCompletionScore = freelancerProfile.ProfileCompletionScore,
+            AllowSearchEngineIndexing = freelancerProfile.AllowSearchEngineIndexing,
             CreatedAt = freelancerProfile.CreatedAt,
             UpdatedAt = freelancerProfile.UpdatedAt,
             MajorId = freelancerProfile.MajorId,
