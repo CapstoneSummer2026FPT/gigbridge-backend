@@ -1,11 +1,13 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces.Identity;
+using Application.Common.Interfaces.Caching;
 using Application.Common.Interfaces.Time;
 using Application.Features.Profiles.Common.UpdateUserProfile.Commands;
 using Application.Features.Profiles.Common.UpdateUserProfile.DTOs;
 using Domain.Entities;
 using Domain.Enums.Accounts;
 using Test_Gigbridge_Backend.TestSupport;
+using NSubstitute;
 
 namespace Test_Gigbridge_Backend.Application.Features.Profiles.Common;
 
@@ -38,6 +40,8 @@ public sealed class UpdateUserProfileCommandHandlerTests
                 Email = " OLD@example.com ",
                 Avatar = " https://cdn.example.com/new.png ",
                 PhoneNumber = " +84987654321 ",
+                IdentityOrTaxCode = "001 234 567 890",
+                IdentityVerificationTicket = "verified-ticket",
                 PreferredLanguage = " EN "
             }),
             CancellationToken.None);
@@ -48,6 +52,8 @@ public sealed class UpdateUserProfileCommandHandlerTests
         Assert.Equal("old@example.com", user.Email);
         Assert.Equal("https://cdn.example.com/new.png", user.Avatar);
         Assert.Equal("+84987654321", user.PhoneNumber);
+        Assert.Equal("001234567890", user.IdentityOrTaxCode);
+        Assert.Equal("001234567890", result.IdentityOrTaxCode);
         Assert.Equal("en", user.PreferredLanguage);
         Assert.True(user.IsEmailVerified);
         Assert.Equal(UpdatedAt, user.UpdatedAt);
@@ -65,6 +71,7 @@ public sealed class UpdateUserProfileCommandHandlerTests
             Email = "verified@example.com",
             Avatar = "avatar",
             PhoneNumber = "phone",
+            IdentityOrTaxCode = "123456789",
             PreferredLanguage = "vi",
             Role = (int)UserRole.Freelancer,
             IsEmailVerified = true
@@ -85,6 +92,7 @@ public sealed class UpdateUserProfileCommandHandlerTests
 
         Assert.Null(user.Avatar);
         Assert.Null(user.PhoneNumber);
+        Assert.Equal("123456789", user.IdentityOrTaxCode);
         Assert.Null(user.PreferredLanguage);
         Assert.True(user.IsEmailVerified);
     }
@@ -114,6 +122,37 @@ public sealed class UpdateUserProfileCommandHandlerTests
         Assert.Equal(0, context.SaveChangesCount);
     }
 
+    [Fact]
+    public async Task Handle_RejectsIdentityChangeWithoutEmailVerification()
+    {
+        var context = new InMemoryApplicationDbContext();
+        var currentUser = new User
+        {
+            UserId = Guid.NewGuid(),
+            FullName = "Current",
+            Email = "current@example.com"
+        };
+        context.AddSet(currentUser);
+        var handler = new UpdateUserProfileCommandHandler(
+            context,
+            new FixedCurrentUserService(currentUser.UserId),
+            new FixedDateTimeService(),
+            Substitute.For<ICacheService>());
+
+        var exception = await Assert.ThrowsAsync<BadRequestException>(() => handler.Handle(
+            new UpdateUserProfileCommand(new UpdateUserProfileDto
+            {
+                FullName = "Current",
+                Email = currentUser.Email,
+                IdentityOrTaxCode = "001234567890"
+            }),
+            CancellationToken.None));
+
+        Assert.Contains("Verify", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Null(currentUser.IdentityOrTaxCode);
+        Assert.Equal(0, context.SaveChangesCount);
+    }
+
     private static UpdateUserProfileCommandHandler CreateHandler(
         InMemoryApplicationDbContext context,
         Guid userId)
@@ -121,7 +160,16 @@ public sealed class UpdateUserProfileCommandHandlerTests
         return new UpdateUserProfileCommandHandler(
             context,
             new FixedCurrentUserService(userId),
-            new FixedDateTimeService());
+            new FixedDateTimeService(),
+            CreateVerifiedIdentityCache());
+    }
+
+    private static ICacheService CreateVerifiedIdentityCache()
+    {
+        var cache = Substitute.For<ICacheService>();
+        cache.GetAndRemoveAsync<bool>(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(true);
+        return cache;
     }
 
     private sealed class FixedCurrentUserService : ICurrentUserService

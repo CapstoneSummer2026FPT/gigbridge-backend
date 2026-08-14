@@ -22,6 +22,7 @@ public sealed class GetMyUserProfileQueryHandlerTests
             Email = "current@example.com",
             Avatar = "avatar.png",
             PhoneNumber = "+84901234567",
+            IdentityOrTaxCode = "001234567890",
             PreferredLanguage = "vi",
             Role = (int)UserRole.Client
         };
@@ -49,6 +50,7 @@ public sealed class GetMyUserProfileQueryHandlerTests
         Assert.Equal(user.Email, result.Email);
         Assert.Equal(user.Avatar, result.Avatar);
         Assert.Equal(user.PhoneNumber, result.PhoneNumber);
+        Assert.Equal(user.IdentityOrTaxCode, result.IdentityOrTaxCode);
         Assert.Equal(user.PreferredLanguage, result.PreferredLanguage);
         Assert.Equal(user.Role, result.Role);
         Assert.True(user.IsPremium);
