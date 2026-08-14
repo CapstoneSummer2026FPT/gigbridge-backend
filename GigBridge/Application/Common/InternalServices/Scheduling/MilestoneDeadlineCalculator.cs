@@ -1,8 +1,8 @@
 using System.Text.RegularExpressions;
 
-namespace Application.Features.JobPosts.Common;
+namespace Application.Common.InternalServices.Scheduling;
 
-public static class MilestonePlanDeadlineCalculator
+public static class MilestoneDeadlineCalculator
 {
     private static readonly Regex DurationPattern = new(
         @"^\s*(\d+)\s*(week|weeks|tuần|tuan|month|months|tháng|thang|year|years|năm|nam)\s*$",
@@ -51,12 +51,13 @@ public static class MilestonePlanDeadlineCalculator
     }
 
     // Each stage starts the day after the previous one ends: Milestone 1 starts the day
-    // after the JobPost's end date, and Milestone N+1 starts the day after Milestone N's
-    // deadline — work never starts on the same calendar day the prior stage ends.
-    public static List<DateOnly?> CalculateDueDates(DateOnly? jobPostEndDate, IReadOnlyList<string?> durationsInOrder)
+    // after the anchor date (JobPost end date, proposal's job closing date, or "today" for
+    // negotiations), and Milestone N+1 starts the day after Milestone N's deadline — work
+    // never starts on the same calendar day the prior stage ends.
+    public static List<DateOnly?> CalculateDueDates(DateOnly? anchorDate, IReadOnlyList<string?> durationsInOrder)
     {
         var result = new List<DateOnly?>(durationsInOrder.Count);
-        DateOnly? nextStart = jobPostEndDate?.AddDays(1);
+        DateOnly? nextStart = anchorDate?.AddDays(1);
 
         foreach (var duration in durationsInOrder)
         {

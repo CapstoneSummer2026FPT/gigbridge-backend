@@ -1,6 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.Time;
+using Application.Common.InternalServices.Scheduling;
 using Application.Features.JobPosts.Common;
 using Application.Features.Proposals.Common;
 using Application.Features.Proposals.Common.DTOs;
@@ -46,7 +47,7 @@ public class SubmitProposalCommandHandler : IRequestHandler<SubmitProposalComman
         await EnsureProposalHasNotBeenSubmittedAsync(command, freelancerProfile.FreelancerProfilesId, cancellationToken);
 
         var proposalId = Guid.NewGuid();
-        var milestonePlans = (command.Request.MilestonePlans ?? []).ToList();
+        var milestonePlans = (command.Request.MilestonePlans ?? []).OrderBy(item => item.OrderIndex).ToList();
         if (milestonePlans.Count == 0 && jobPost.JobPostMilestonePlans.Count > 0)
         {
             milestonePlans = jobPost.JobPostMilestonePlans.OrderBy(item => item.OrderIndex).Select(item => new ProposalMilestonePlanDto
@@ -80,9 +81,18 @@ public class SubmitProposalCommandHandler : IRequestHandler<SubmitProposalComman
             UpdatedAt = _dateTimeService.UtcNow
         };
 
-        proposal.ProposalMilestonePlans = milestonePlans
+        var milestonePlanEntities = milestonePlans
             .Select((item, index) => ProposalPlanMapper.ToEntity(proposalId, item, index))
             .ToList();
+        var jobPostEndDate = jobPost.EndDate.HasValue ? DateOnly.FromDateTime(jobPost.EndDate.Value) : (DateOnly?)null;
+        var computedDueDates = MilestoneDeadlineCalculator.CalculateDueDates(
+            jobPostEndDate,
+            milestonePlans.Select(item => item.EstimatedDuration).ToList());
+        for (var i = 0; i < milestonePlanEntities.Count; i++)
+        {
+            milestonePlanEntities[i].DueDate = computedDueDates[i];
+        }
+        proposal.ProposalMilestonePlans = milestonePlanEntities;
         var milestoneIdsByOrder = proposal.ProposalMilestonePlans.ToDictionary(item => item.OrderIndex, item => item.ProposalMilestonePlansId);
         proposal.ProposalWorkBreakdownItems = ProposalPlanMapper.ResolveWorkItems(command.Request.WorkBreakdownItems, milestonePlans)
             .Select((item, index) => ProposalPlanMapper.ToEntity(

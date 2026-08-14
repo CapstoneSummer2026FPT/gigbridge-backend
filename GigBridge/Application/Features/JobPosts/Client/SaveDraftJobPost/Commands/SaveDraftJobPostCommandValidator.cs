@@ -1,4 +1,4 @@
-using Application.Features.JobPosts.Common;
+using Application.Common.InternalServices.Scheduling;
 using Application.Features.JobPosts.Common.ContentModeration;
 using FluentValidation;
 
@@ -102,7 +102,7 @@ public sealed class SaveDraftJobPostCommandValidator
                     milestone.RuleFor(x => x.Title).MaximumLength(200);
                     milestone.RuleFor(x => x.Amount).GreaterThanOrEqualTo(0);
                     milestone.RuleFor(x => x.EstimatedDuration)
-                        .Must(duration => MilestonePlanDeadlineCalculator.TryParseDurationDays(duration, out _))
+                        .Must(duration => MilestoneDeadlineCalculator.TryParseDurationDays(duration, out _))
                         .When(x => !string.IsNullOrWhiteSpace(x.EstimatedDuration))
                         .WithMessage("EstimatedDuration must be a number followed by week(s), month(s), or year(s).");
                     milestone.RuleForEach(x => x.WorkItems).ChildRules(item =>

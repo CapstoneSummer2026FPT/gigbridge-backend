@@ -1,6 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.Time;
+using Application.Common.InternalServices.Scheduling;
 using Application.Features.Proposals.Common;
 using Domain.Entities;
 using MediatR;
@@ -69,6 +70,7 @@ public class UpdateProposalCommandHandler : IRequestHandler<UpdateProposalComman
         var proposal = await _context.Set<Proposal>()
             .Include(item => item.ProposalWorkBreakdownItems)
             .Include(item => item.ProposalMilestonePlans)
+            .Include(item => item.JobPosts)
             .FirstOrDefaultAsync(
                 proposal =>
                     proposal.ProposalsId == command.ProposalId &&
@@ -87,7 +89,7 @@ public class UpdateProposalCommandHandler : IRequestHandler<UpdateProposalComman
             throw new BadRequestException("Only draft proposals can be updated.");
         }
 
-        var milestonePlans = (command.Request.MilestonePlans ?? []).ToList();
+        var milestonePlans = (command.Request.MilestonePlans ?? []).OrderBy(item => item.OrderIndex).ToList();
 
         proposal.CoverLetter = string.IsNullOrWhiteSpace(command.Request.CoverLetter)
             ? null
@@ -105,6 +107,16 @@ public class UpdateProposalCommandHandler : IRequestHandler<UpdateProposalComman
         var newMilestonePlans = milestonePlans
             .Select((item, index) => ProposalPlanMapper.ToEntity(proposal.ProposalsId, item, index))
             .ToList();
+        var jobPostEndDate = proposal.JobPosts.EndDate.HasValue
+            ? DateOnly.FromDateTime(proposal.JobPosts.EndDate.Value)
+            : (DateOnly?)null;
+        var computedDueDates = MilestoneDeadlineCalculator.CalculateDueDates(
+            jobPostEndDate,
+            milestonePlans.Select(item => item.EstimatedDuration).ToList());
+        for (var i = 0; i < newMilestonePlans.Count; i++)
+        {
+            newMilestonePlans[i].DueDate = computedDueDates[i];
+        }
         var milestoneIdsByOrder = newMilestonePlans.ToDictionary(item => item.OrderIndex, item => item.ProposalMilestonePlansId);
         var newWorkItems = ProposalPlanMapper.ResolveWorkItems(command.Request.WorkBreakdownItems, milestonePlans)
             .Select((item, index) => ProposalPlanMapper.ToEntity(

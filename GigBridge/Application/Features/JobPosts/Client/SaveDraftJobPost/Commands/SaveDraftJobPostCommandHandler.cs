@@ -1,7 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.Time;
-using Application.Features.JobPosts.Common;
+using Application.Common.InternalServices.Scheduling;
 using Application.Features.JobPosts.Common.ContentModeration;
 using Application.Features.JobPosts.Client.Common;
 using Application.Features.JobPosts.Client.SaveDraftJobPost.DTOs;
@@ -106,7 +106,7 @@ public sealed class SaveDraftJobPostCommandHandler
         var jobPostEndDate = jobPost.EndDate.HasValue
             ? DateOnly.FromDateTime(jobPost.EndDate.Value)
             : (DateOnly?)null;
-        var computedDueDates = MilestonePlanDeadlineCalculator.CalculateDueDates(
+        var computedDueDates = MilestoneDeadlineCalculator.CalculateDueDates(
             jobPostEndDate,
             orderedRequests.Select(x => x.item.EstimatedDuration).ToList());
 
