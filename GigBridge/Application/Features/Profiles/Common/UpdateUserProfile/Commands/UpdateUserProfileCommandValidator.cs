@@ -24,6 +24,10 @@ public sealed class UpdateUserProfileCommandValidator : AbstractValidator<Update
             .Must(value => string.IsNullOrWhiteSpace(value) || ContractIdentityCode.IsValid(value))
             .WithMessage("Identity code must contain exactly 9 or 12 digits.");
 
+        RuleFor(command => command.Dto.IdentityVerificationTicket)
+            .MaximumLength(128).WithMessage("Identity verification ticket is invalid.")
+            .When(command => command.Dto.IdentityVerificationTicket is not null);
+
         RuleFor(command => command.Dto.PreferredLanguage)
             .MaximumLength(5).WithMessage("Preferred language cannot exceed 5 characters.")
             .When(command => command.Dto.PreferredLanguage is not null);

@@ -1,5 +1,6 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces.Time;
+using Application.Common.Interfaces.Caching;
 using Application.Features.Notifications.Common.Interfaces;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.Contracts.Details.Client.Update.Commands;
@@ -25,12 +26,14 @@ using Domain.Enums.Wallets;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Test_Gigbridge_Backend.TestSupport;
+using NSubstitute;
 
 namespace Test_Gigbridge_Backend.Application.Features.Contracts.Common;
 
 public class ContractWorkflowTests
 {
     private const string SignatureDataUri = "data:image/png;base64,aGVsbG8=";
+    private const string IdentityVerificationTicket = "verified-identity-ticket";
 
     [Fact]
     public async Task UpdateContractDetails_MilestoneTotalExceedsContractBudget_ThrowsBadRequest()
@@ -583,6 +586,43 @@ public class ContractWorkflowTests
     }
 
     [Fact]
+    public async Task SignContract_RejectsFirstIdentityWithoutEmailVerification()
+    {
+        var fixture = new ContractWorkflowFixture();
+        fixture.MoveToPendingSignatureWithDocument();
+        var handler = new SignContractCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopChatRealtimeNotifier(),
+            fixture.MediaService,
+            fixture.DocumentGenerator,
+            fixture.PdfConverter,
+            new CapturingUserAuditLogService(),
+            Substitute.For<ICacheService>());
+
+        var exception = await Assert.ThrowsAsync<BadRequestException>(() => handler.Handle(
+            new SignContractCommand(
+                fixture.ContractId,
+                fixture.ClientUserId,
+                new SignContractRequest(
+                    SignatureDataUri,
+                    300,
+                    100,
+                    "012345678901",
+                    true,
+                    "Ver 1.0 Gigbridge"),
+                null,
+                null),
+            CancellationToken.None));
+
+        Assert.Contains("Verify", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Null(fixture.Context.Set<User>()
+            .Single(user => user.UserId == fixture.ClientUserId)
+            .IdentityOrTaxCode);
+        Assert.Empty(fixture.MediaService.Uploads);
+    }
+
+    [Fact]
     public async Task SignContract_FullySignedMovesToPendingEscrowFunding()
     {
         var fixture = new ContractWorkflowFixture();
@@ -596,13 +636,14 @@ public class ContractWorkflowTests
             fixture.MediaService,
             fixture.DocumentGenerator,
             fixture.PdfConverter,
-            signUserAuditLog);
+            signUserAuditLog,
+            CreateVerifiedIdentityCache());
 
         await handler.Handle(
             new SignContractCommand(
                 fixture.ContractId,
                 fixture.ClientUserId,
-                new SignContractRequest(SignatureDataUri, 300, 100, "012345678901", true, "Ver 1.0 Gigbridge"),
+                new SignContractRequest(SignatureDataUri, 300, 100, "012345678901", true, "Ver 1.0 Gigbridge", IdentityVerificationTicket),
                 "127.0.0.1",
                 "test"),
             CancellationToken.None);
@@ -625,7 +666,7 @@ public class ContractWorkflowTests
                 new SignContractCommand(
                     fixture.ContractId,
                     fixture.ClientUserId,
-                    new SignContractRequest(SignatureDataUri, null, null, "012345678901", true, "Ver 1.0 Gigbridge"),
+                    new SignContractRequest(SignatureDataUri, null, null, "012345678901", true, "Ver 1.0 Gigbridge", IdentityVerificationTicket),
                     null,
                     null),
                 CancellationToken.None));
@@ -634,7 +675,7 @@ public class ContractWorkflowTests
             new SignContractCommand(
                 fixture.ContractId,
                 fixture.FreelancerUserId,
-                new SignContractRequest(SignatureDataUri, 300, 100, "012345678901", true, "Ver 1.0 Gigbridge"),
+                new SignContractRequest(SignatureDataUri, 300, 100, "012345678901", true, "Ver 1.0 Gigbridge", IdentityVerificationTicket),
                 "127.0.0.1",
                 "test"),
             CancellationToken.None);
@@ -700,7 +741,8 @@ public class ContractWorkflowTests
             fixture.MediaService,
             fixture.DocumentGenerator,
             fixture.PdfConverter,
-            new CapturingUserAuditLogService());
+            new CapturingUserAuditLogService(),
+            CreateVerifiedIdentityCache());
 
         await handler.Handle(
             new SignContractCommand(
@@ -799,13 +841,14 @@ public class ContractWorkflowTests
             mediaService,
             fixture.DocumentGenerator,
             fixture.PdfConverter,
-            new CapturingUserAuditLogService());
+            new CapturingUserAuditLogService(),
+            CreateVerifiedIdentityCache());
 
         var result = await handler.Handle(
             new SignContractCommand(
                 fixture.ContractId,
                 fixture.FreelancerUserId,
-                new SignContractRequest(SignatureDataUri, 300, 100, "012345678901", true, "Ver 1.0 Gigbridge"),
+                new SignContractRequest(SignatureDataUri, 300, 100, "012345678901", true, "Ver 1.0 Gigbridge", IdentityVerificationTicket),
                 "127.0.0.1",
                 "test"),
             CancellationToken.None);
@@ -843,7 +886,8 @@ public class ContractWorkflowTests
             fixture.MediaService,
             fixture.DocumentGenerator,
             fixture.PdfConverter,
-            new CapturingUserAuditLogService());
+            new CapturingUserAuditLogService(),
+            CreateVerifiedIdentityCache());
 
         await Assert.ThrowsAsync<BadRequestException>(() =>
             handler.Handle(
@@ -872,14 +916,15 @@ public class ContractWorkflowTests
             fixture.MediaService,
             fixture.DocumentGenerator,
             fixture.PdfConverter,
-            new CapturingUserAuditLogService());
+            new CapturingUserAuditLogService(),
+            CreateVerifiedIdentityCache());
 
         await Assert.ThrowsAsync<BadRequestException>(() =>
             handler.Handle(
                 new SignContractCommand(
                     fixture.ContractId,
                     fixture.ClientUserId,
-                    new SignContractRequest("not-base64", null, null, "012345678901", true, "Ver 1.0 Gigbridge"),
+                    new SignContractRequest("not-base64", null, null, "012345678901", true, "Ver 1.0 Gigbridge", IdentityVerificationTicket),
                     null,
                     null),
                 CancellationToken.None));
@@ -989,6 +1034,14 @@ public class ContractWorkflowTests
             document.Status == (int)ESignDocumentStatus.Voided));
         Assert.Single(fixture.EsignDocuments.Entities.Where(document =>
             document.Status == (int)ESignDocumentStatus.PendingSignatures));
+    }
+
+    private static ICacheService CreateVerifiedIdentityCache()
+    {
+        var cache = Substitute.For<ICacheService>();
+        cache.GetAndRemoveAsync<bool>(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(true);
+        return cache;
     }
 
     private sealed class ContractWorkflowFixture

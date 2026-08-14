@@ -1,6 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.Caching;
+using Application.Common.Interfaces.Identity;
 using Application.Common.Interfaces.Time;
 using Application.Features.Auth.Common.Interfaces;
 using Application.Features.Elo.Common.Interfaces;
@@ -215,7 +216,10 @@ public class AuthEmailCanonicalizationTests
         // Arrange
         var cache = Substitute.For<ICacheService>();
         var emailSender = Substitute.For<IAuthEmailSender>();
-        var handler = new SendOtpCommandHandler(cache, emailSender);
+        var handler = new SendOtpCommandHandler(
+            cache,
+            emailSender,
+            Substitute.For<ICurrentUserService>());
         var command = new SendOtpCommand(new SendOtpRequest
         {
             Email = MixedEmail,
@@ -250,7 +254,9 @@ public class AuthEmailCanonicalizationTests
         var challenge = new OtpChallengeState(otp, 0, DateTime.UtcNow.AddMinutes(5));
         cache.GetAndRemoveAsync<OtpChallengeState>(challengeKey, CancellationToken.None)
             .Returns(challenge);
-        var handler = new VerifyOtpCommandHandler(cache);
+        var handler = new VerifyOtpCommandHandler(
+            cache,
+            Substitute.For<ICurrentUserService>());
         var command = new VerifyOtpCommand(new VerifyOtpRequest
         {
             Email = MixedEmail,
@@ -277,6 +283,62 @@ public class AuthEmailCanonicalizationTests
     }
 
     [Fact]
+    public async Task IdentityVerification_IsBoundToAuthenticatedEmailAndExactIdentityCode()
+    {
+        const string otp = "123456";
+        const string identityCode = "001234567890";
+        var cache = Substitute.For<ICacheService>();
+        var challengeKey = OtpSecurity.ChallengeKey(
+            OtpPurpose.IdentityVerification,
+            CanonicalEmail);
+        cache.GetAndRemoveAsync<OtpChallengeState>(challengeKey, CancellationToken.None)
+            .Returns(new OtpChallengeState(otp, 0, DateTime.UtcNow.AddMinutes(5)));
+        var currentUser = Substitute.For<ICurrentUserService>();
+        currentUser.Email.Returns(CanonicalEmail);
+        var handler = new VerifyOtpCommandHandler(cache, currentUser);
+
+        var result = await handler.Handle(
+            new VerifyOtpCommand(new VerifyOtpRequest
+            {
+                Email = MixedEmail,
+                Otp = otp,
+                Purpose = OtpPurposeNames.IdentityVerification,
+                IdentityOrTaxCode = "001 234 567 890"
+            }),
+            CancellationToken.None);
+
+        Assert.NotNull(result.VerificationTicket);
+        await cache.Received(1).SetAsync(
+            OtpSecurity.VerifiedKey(
+                OtpPurpose.IdentityVerification,
+                CanonicalEmail,
+                result.VerificationTicket,
+                identityCode),
+            true,
+            OtpSecurity.ChallengeLifetime,
+            CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task IdentityVerification_RejectsAnotherAccountEmail()
+    {
+        var currentUser = Substitute.For<ICurrentUserService>();
+        currentUser.Email.Returns("other@example.com");
+        var handler = new SendOtpCommandHandler(
+            Substitute.For<ICacheService>(),
+            Substitute.For<IAuthEmailSender>(),
+            currentUser);
+
+        await Assert.ThrowsAsync<ForbiddenAccessException>(() => handler.Handle(
+            new SendOtpCommand(new SendOtpRequest
+            {
+                Email = CanonicalEmail,
+                Purpose = OtpPurposeNames.IdentityVerification
+            }),
+            CancellationToken.None));
+    }
+
+    [Fact]
     public async Task SendOtp_RejectsResendDuringPurposeScopedCooldown()
     {
         var cache = Substitute.For<ICacheService>();
@@ -285,7 +347,10 @@ public class AuthEmailCanonicalizationTests
                 CancellationToken.None)
             .Returns(true);
         var emailSender = Substitute.For<IAuthEmailSender>();
-        var handler = new SendOtpCommandHandler(cache, emailSender);
+        var handler = new SendOtpCommandHandler(
+            cache,
+            emailSender,
+            Substitute.For<ICurrentUserService>());
 
         var action = () => handler.Handle(
             new SendOtpCommand(new SendOtpRequest
@@ -312,7 +377,9 @@ public class AuthEmailCanonicalizationTests
                 challengeOtp,
                 OtpSecurity.MaxFailedAttempts - 1,
                 DateTime.UtcNow.AddMinutes(5)));
-        var handler = new VerifyOtpCommandHandler(cache);
+        var handler = new VerifyOtpCommandHandler(
+            cache,
+            Substitute.For<ICurrentUserService>());
 
         var action = () => handler.Handle(
             new VerifyOtpCommand(new VerifyOtpRequest
@@ -345,7 +412,9 @@ public class AuthEmailCanonicalizationTests
             DateTime.UtcNow.AddMinutes(5));
         cache.GetAndRemoveAsync<OtpChallengeState>(challengeKey, CancellationToken.None)
             .Returns(challenge);
-        var handler = new VerifyOtpCommandHandler(cache);
+        var handler = new VerifyOtpCommandHandler(
+            cache,
+            Substitute.For<ICurrentUserService>());
 
         var action = () => handler.Handle(
             new VerifyOtpCommand(new VerifyOtpRequest

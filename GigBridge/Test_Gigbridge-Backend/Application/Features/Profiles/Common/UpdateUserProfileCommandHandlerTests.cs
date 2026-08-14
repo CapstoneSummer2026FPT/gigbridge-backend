@@ -1,11 +1,13 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces.Identity;
+using Application.Common.Interfaces.Caching;
 using Application.Common.Interfaces.Time;
 using Application.Features.Profiles.Common.UpdateUserProfile.Commands;
 using Application.Features.Profiles.Common.UpdateUserProfile.DTOs;
 using Domain.Entities;
 using Domain.Enums.Accounts;
 using Test_Gigbridge_Backend.TestSupport;
+using NSubstitute;
 
 namespace Test_Gigbridge_Backend.Application.Features.Profiles.Common;
 
@@ -39,6 +41,7 @@ public sealed class UpdateUserProfileCommandHandlerTests
                 Avatar = " https://cdn.example.com/new.png ",
                 PhoneNumber = " +84987654321 ",
                 IdentityOrTaxCode = "001 234 567 890",
+                IdentityVerificationTicket = "verified-ticket",
                 PreferredLanguage = " EN "
             }),
             CancellationToken.None);
@@ -119,6 +122,37 @@ public sealed class UpdateUserProfileCommandHandlerTests
         Assert.Equal(0, context.SaveChangesCount);
     }
 
+    [Fact]
+    public async Task Handle_RejectsIdentityChangeWithoutEmailVerification()
+    {
+        var context = new InMemoryApplicationDbContext();
+        var currentUser = new User
+        {
+            UserId = Guid.NewGuid(),
+            FullName = "Current",
+            Email = "current@example.com"
+        };
+        context.AddSet(currentUser);
+        var handler = new UpdateUserProfileCommandHandler(
+            context,
+            new FixedCurrentUserService(currentUser.UserId),
+            new FixedDateTimeService(),
+            Substitute.For<ICacheService>());
+
+        var exception = await Assert.ThrowsAsync<BadRequestException>(() => handler.Handle(
+            new UpdateUserProfileCommand(new UpdateUserProfileDto
+            {
+                FullName = "Current",
+                Email = currentUser.Email,
+                IdentityOrTaxCode = "001234567890"
+            }),
+            CancellationToken.None));
+
+        Assert.Contains("Verify", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Null(currentUser.IdentityOrTaxCode);
+        Assert.Equal(0, context.SaveChangesCount);
+    }
+
     private static UpdateUserProfileCommandHandler CreateHandler(
         InMemoryApplicationDbContext context,
         Guid userId)
@@ -126,7 +160,16 @@ public sealed class UpdateUserProfileCommandHandlerTests
         return new UpdateUserProfileCommandHandler(
             context,
             new FixedCurrentUserService(userId),
-            new FixedDateTimeService());
+            new FixedDateTimeService(),
+            CreateVerifiedIdentityCache());
+    }
+
+    private static ICacheService CreateVerifiedIdentityCache()
+    {
+        var cache = Substitute.For<ICacheService>();
+        cache.GetAndRemoveAsync<bool>(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(true);
+        return cache;
     }
 
     private sealed class FixedCurrentUserService : ICurrentUserService

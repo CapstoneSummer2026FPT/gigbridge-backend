@@ -7,5 +7,6 @@ public sealed class UpdateUserProfileDto
     public string? Avatar { get; set; }
     public string? PhoneNumber { get; set; }
     public string? IdentityOrTaxCode { get; set; }
+    public string? IdentityVerificationTicket { get; set; }
     public string? PreferredLanguage { get; set; }
 }

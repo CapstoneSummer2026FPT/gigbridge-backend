@@ -19,6 +19,8 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 using Application.Features.ESign.Common.Interfaces;
+using Application.Common.Interfaces.Caching;
+using Application.Features.Auth.Common;
 
 namespace Application.Features.Contracts.Signing.Common.Sign.Commands;
 
@@ -32,6 +34,7 @@ public sealed class SignContractCommandHandler :
     private readonly IContractEsignDocumentGenerator _documentGenerator;
     private readonly IWordToPdfConverter _pdfConverter;
     private readonly IUserAuditLogService _userAuditLog;
+    private readonly ICacheService _cacheService;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public SignContractCommandHandler(
@@ -41,7 +44,8 @@ public sealed class SignContractCommandHandler :
         IMediaService mediaService,
         IContractEsignDocumentGenerator documentGenerator,
         IWordToPdfConverter pdfConverter,
-        IUserAuditLogService userAuditLog)
+        IUserAuditLogService userAuditLog,
+        ICacheService cacheService)
     {
         _context = context;
         _dateTimeService = dateTimeService;
@@ -50,6 +54,7 @@ public sealed class SignContractCommandHandler :
         _documentGenerator = documentGenerator;
         _pdfConverter = pdfConverter;
         _userAuditLog = userAuditLog;
+        _cacheService = cacheService;
     }
 
     public async Task<ContractWorkflowResponse> Handle(
@@ -104,6 +109,11 @@ public sealed class SignContractCommandHandler :
 
         if (!hasStoredIdentityCode)
         {
+            await ConsumeIdentityVerificationAsync(
+                signer.Email,
+                identityOrTaxCode,
+                command.Request.IdentityVerificationTicket,
+                cancellationToken);
             signer.IdentityOrTaxCode = identityOrTaxCode;
             signer.UpdatedAt = now;
         }
@@ -294,6 +304,33 @@ public sealed class SignContractCommandHandler :
             contract.Status,
             escrowId,
             document.EsignDocumentsId);
+    }
+
+    private async Task ConsumeIdentityVerificationAsync(
+        string email,
+        string identityCode,
+        string? verificationTicket,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(verificationTicket))
+        {
+            throw new BadRequestException(
+                "Verify the identity code through your account email before signing.");
+        }
+
+        var verificationKey = OtpSecurity.VerifiedKey(
+            OtpPurpose.IdentityVerification,
+            EmailCanonicalizer.Canonicalize(email),
+            verificationTicket,
+            identityCode);
+        var isVerified = await _cacheService.GetAndRemoveAsync<bool>(
+            verificationKey,
+            cancellationToken);
+        if (!isVerified)
+        {
+            throw new BadRequestException(
+                "Identity verification is invalid or has expired. Please verify your email again.");
+        }
     }
 
     private static bool IsValidDraft(EsignSignature signature, string policyVersion) =>
