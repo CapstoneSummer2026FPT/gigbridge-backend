@@ -4415,6 +4415,155 @@ namespace Infrastructure.Persistence.Migrations
                     b.ToTable("PremiumUsageEvents", (string)null);
                 });
 
+            modelBuilder.Entity("Domain.Entities.ProjectReceipt", b =>
+                {
+                    b.Property<Guid>("ProjectReceiptId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<Guid>("ContractsId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime?>("DeliveryLeaseExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("EmailAttemptCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("EmailLastError")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<int>("EmailStatus")
+                        .HasColumnType("integer")
+                        .HasComment("Enum ProjectReceiptEmailStatus: 0=Pending, 1=Delivered, 2=Failed");
+
+                    b.Property<DateTime?>("EmailedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("GeneratedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("GenerationAttemptCount")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("GenerationLastError")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTime?>("GenerationLeaseExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("GenerationLeaseToken")
+                        .IsConcurrencyToken()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("GenerationStatus")
+                        .HasColumnType("integer")
+                        .HasComment("Enum ProjectReceiptGenerationStatus: 0=Pending, 1=Processing, 2=Ready, 3=Failed");
+
+                    b.Property<DateTime>("IssuedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("NextEmailAttemptAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("NextGenerationAttemptAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("NextNotificationAttemptAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<int>("NotificationAttemptCount")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("NotificationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("NotificationLastError")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<DateTime?>("NotifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("OwnerUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<byte[]>("PdfContent")
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("PdfContentType")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("PdfFileName")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("PdfHashSha256")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<long?>("PdfSizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("ReceiptNumber")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("ReceiptType")
+                        .HasColumnType("integer")
+                        .HasComment("Enum ProjectReceiptType: 0=Client, 1=Freelancer");
+
+                    b.Property<string>("SnapshotHashSha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SnapshotJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<int>("TemplateVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("ProjectReceiptId");
+
+                    b.HasIndex("NotificationId");
+
+                    b.HasIndex("ReceiptNumber")
+                        .IsUnique();
+
+                    b.HasIndex("ContractsId", "ReceiptType")
+                        .IsUnique();
+
+                    b.HasIndex("EmailStatus", "NextEmailAttemptAt");
+
+                    b.HasIndex("GenerationStatus", "NextGenerationAttemptAt");
+
+                    b.HasIndex("GenerationStatus", "DeliveryLeaseExpiresAt");
+
+                    b.HasIndex("NotificationId", "NextNotificationAttemptAt");
+
+                    b.HasIndex("OwnerUserId", "IssuedAt")
+                        .IsDescending(false, true);
+
+                    b.ToTable("ProjectReceipts");
+                });
+
             modelBuilder.Entity("Domain.Entities.Proposal", b =>
                 {
                     b.Property<Guid>("ProposalsId")
@@ -5913,6 +6062,10 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.Property<bool>("IsSetup")
                         .HasColumnType("boolean");
+
+                    b.Property<string>("IdentityOrTaxCode")
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)");
 
                     b.Property<string>("Password")
                         .HasMaxLength(255)
@@ -7937,6 +8090,32 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("JobPost");
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ProjectReceipt", b =>
+                {
+                    b.HasOne("Domain.Entities.Contract", "Contract")
+                        .WithMany()
+                        .HasForeignKey("ContractsId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Domain.Entities.Notification", "Notification")
+                        .WithMany()
+                        .HasForeignKey("NotificationId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Domain.Entities.User", "OwnerUser")
+                        .WithMany()
+                        .HasForeignKey("OwnerUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Contract");
+
+                    b.Navigation("Notification");
+
+                    b.Navigation("OwnerUser");
                 });
 
             modelBuilder.Entity("Domain.Entities.Proposal", b =>

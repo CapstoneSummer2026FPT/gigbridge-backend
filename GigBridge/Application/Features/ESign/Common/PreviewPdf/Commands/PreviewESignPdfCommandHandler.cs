@@ -1,5 +1,6 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
+using Application.Common.Interfaces.Documents;
 using Application.Features.ESign.Common.Interfaces;
 using Application.Features.ESign.Common.Services;
 using Application.Features.Contracts.Common.DTOs;
@@ -59,7 +60,15 @@ public sealed class PreviewESignPdfCommandHandler(
             throw new ConflictException("This user has already signed the contract.");
         }
 
-        var identityCode = ContractIdentityCode.Normalize(request.Request.IdentityOrTaxCode);
+        var storedIdentityCode = await context.Set<User>()
+            .AsNoTracking()
+            .Where(user => user.UserId == request.UserId)
+            .Select(user => user.IdentityOrTaxCode)
+            .SingleOrDefaultAsync(cancellationToken);
+        var identityCode = ContractIdentityCode.Normalize(
+            ContractIdentityCode.IsValid(storedIdentityCode)
+                ? storedIdentityCode
+                : request.Request.IdentityOrTaxCode);
         var existingDraft = signatures.SingleOrDefault(signature =>
             signature.UserId == request.UserId &&
             signature.Status == (int)ESignSignatureStatus.Pending);

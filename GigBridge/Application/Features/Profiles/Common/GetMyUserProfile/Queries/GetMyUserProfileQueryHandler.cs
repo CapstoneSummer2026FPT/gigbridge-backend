@@ -45,6 +45,7 @@ public sealed class GetMyUserProfileQueryHandler
                 Email = user.Email,
                 Avatar = user.Avatar,
                 PhoneNumber = user.PhoneNumber,
+                IdentityOrTaxCode = user.IdentityOrTaxCode,
                 PreferredLanguage = user.PreferredLanguage,
                 Role = user.Role,
                 IsPremium = (user.Role == (int)UserRole.Client || user.Role == (int)UserRole.Freelancer) &&

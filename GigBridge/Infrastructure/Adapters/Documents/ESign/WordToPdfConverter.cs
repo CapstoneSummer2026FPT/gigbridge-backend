@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using System.Text;
-using Application.Features.ESign.Common.Interfaces;
+using Application.Common.Interfaces.Documents;
 using Microsoft.Extensions.Configuration;
 
 namespace Infrastructure.Adapters.Documents.ESign;

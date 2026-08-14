@@ -22,6 +22,9 @@ public sealed class SignContractCommandValidator : AbstractValidator<SignContrac
             RuleFor(command => command.Request.PolicyVersion)
                 .NotEmpty()
                 .MaximumLength(100);
+            RuleFor(command => command.Request.IdentityVerificationTicket)
+                .MaximumLength(128)
+                .When(command => command.Request.IdentityVerificationTicket is not null);
             RuleFor(command => command.Request.SignatureImageUrl)
                 .MaximumLength(1_000_000)
                 .When(command => !string.IsNullOrWhiteSpace(command.Request.SignatureImageUrl));
