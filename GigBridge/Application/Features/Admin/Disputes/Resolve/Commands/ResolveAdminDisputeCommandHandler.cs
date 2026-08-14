@@ -113,21 +113,61 @@ public sealed class ResolveAdminDisputeCommandHandler :
         if (Math.Abs(allLocked - escrowBefore) >= Tolerance)
             throw new ConflictException("Escrow and milestone balances changed or are inconsistent. Refresh and retry.");
 
-        var editable = milestones.Where(item => Locked(item) >= Tolerance &&
-            (command.ContractAction == AdminContractAction.Terminate ||
-             item.Status == (int)MilestoneStatus.Disputed || item.MilestonesId == dispute.MilestonesId))
-            .ToDictionary(item => item.MilestonesId);
-        var inputs = command.MilestoneAllocations.GroupBy(item => item.MilestoneId).ToList();
-        if (inputs.Any(group => group.Count() != 1))
-            throw new BadRequestException("Each milestone may have only one administrative allocation.");
-        var allocations = inputs.ToDictionary(group => group.Key, group => group.Single());
-        if (editable.Keys.Any(id => !allocations.ContainsKey(id)))
-            throw new BadRequestException("An allocation is required for every affected milestone.");
-        if (allocations.Keys.Any(id => !editable.ContainsKey(id)))
-            throw new BadRequestException("An allocation is out of scope, fully processed, or belongs to another contract.");
+        Dictionary<Guid, Milestone> editable;
+        Dictionary<Guid, AdminMilestoneAllocationInput> allocations;
 
-        foreach (var allocation in allocations.Values)
-            ValidateAllocation(allocation, editable[allocation.MilestoneId], Locked(editable[allocation.MilestoneId]));
+        if (command.ContractAction == AdminContractAction.Resume)
+        {
+            // Keep Active only ever marks an admin-selected, top-to-bottom, gap-free prefix
+            // of the contract's milestones as Complete. An already-Complete milestone must
+            // remain selectable (it may still be holding a locked balance, e.g. the
+            // freelancer only ever withdrew up to the 80% early-release cap), so there is
+            // deliberately no Locked-amount filter here. Unlike Terminate, the admin still
+            // gets a full Release/Refund/Penalty breakdown per selected milestone — only the
+            // resulting Milestone.Status is fixed (always Completed) regardless of the split.
+            var selectedIds = command.SelectedMilestoneIds.ToList();
+            if (selectedIds.Distinct().Count() != selectedIds.Count)
+                throw new BadRequestException("Each milestone may only be selected once.");
+
+            var indexByMilestoneId = milestones
+                .Select((milestone, index) => (milestone.MilestonesId, index))
+                .ToDictionary(item => item.MilestonesId, item => item.index);
+            if (selectedIds.Any(id => !indexByMilestoneId.ContainsKey(id)))
+                throw new BadRequestException("A selected milestone is out of scope or belongs to another contract.");
+
+            var selectedIndices = selectedIds.Select(id => indexByMilestoneId[id]).OrderBy(index => index).ToList();
+            if (!selectedIndices.SequenceEqual(Enumerable.Range(0, selectedIndices.Count)))
+                throw new BadRequestException(
+                    "Milestones must be selected sequentially from the top with no gaps.");
+
+            editable = selectedIds.ToDictionary(id => id, id => milestones[indexByMilestoneId[id]]);
+            var inputs = command.MilestoneAllocations.GroupBy(item => item.MilestoneId).ToList();
+            if (inputs.Any(group => group.Count() != 1))
+                throw new BadRequestException("Each milestone may have only one administrative allocation.");
+            allocations = inputs.ToDictionary(group => group.Key, group => group.Single());
+            if (editable.Keys.Any(id => !allocations.ContainsKey(id)))
+                throw new BadRequestException("An allocation is required for every selected milestone.");
+            if (allocations.Keys.Any(id => !editable.ContainsKey(id)))
+                throw new BadRequestException("An allocation was supplied for a milestone that was not selected.");
+
+            foreach (var allocation in allocations.Values)
+                ValidateAllocation(allocation, editable[allocation.MilestoneId], Locked(editable[allocation.MilestoneId]), isResume: true);
+        }
+        else
+        {
+            editable = milestones.Where(item => Locked(item) >= Tolerance).ToDictionary(item => item.MilestonesId);
+            var inputs = command.MilestoneAllocations.GroupBy(item => item.MilestoneId).ToList();
+            if (inputs.Any(group => group.Count() != 1))
+                throw new BadRequestException("Each milestone may have only one administrative allocation.");
+            allocations = inputs.ToDictionary(group => group.Key, group => group.Single());
+            if (editable.Keys.Any(id => !allocations.ContainsKey(id)))
+                throw new BadRequestException("An allocation is required for every affected milestone.");
+            if (allocations.Keys.Any(id => !editable.ContainsKey(id)))
+                throw new BadRequestException("An allocation is out of scope, fully processed, or belongs to another contract.");
+
+            foreach (var allocation in allocations.Values)
+                ValidateAllocation(allocation, editable[allocation.MilestoneId], Locked(editable[allocation.MilestoneId]));
+        }
 
         var totalRelease = allocations.Values.Sum(item => item.FreelancerAward);
         var totalRefund = allocations.Values.Sum(item => item.ClientRefund);
@@ -204,9 +244,10 @@ public sealed class ResolveAdminDisputeCommandHandler :
             milestone.ReleasedAmount += allocation.FreelancerAward;
             milestone.RefundedAmount += allocation.ClientRefund + allocation.PenaltyAmount;
             if (allocation.FreelancerAward > 0m) milestone.LastReleasedAt = now;
-            var finalizedByResume = command.ContractAction == AdminContractAction.Resume &&
-                allocation.Outcome != DisputeMilestoneOutcome.Rejected;
-            milestone.Status = finalizedByResume
+            // Keep Active always finalizes every selected milestone as Completed, regardless
+            // of how its escrow was split — the split is a financial decision, not a verdict
+            // on the milestone's completion (only Terminate's outcome affects final status).
+            milestone.Status = command.ContractAction == AdminContractAction.Resume
                 ? (int)MilestoneStatus.Completed
                 : allocation.Outcome switch
                 {
@@ -349,7 +390,8 @@ public sealed class ResolveAdminDisputeCommandHandler :
             throw new BadRequestException($"{party} violation reason is required.");
     }
 
-    private static void ValidateAllocation(AdminMilestoneAllocationInput input, Milestone milestone, decimal locked)
+    private static void ValidateAllocation(AdminMilestoneAllocationInput input, Milestone milestone, decimal locked,
+        bool isResume = false)
     {
         if (!Enum.IsDefined(input.Outcome)) throw new BadRequestException("Invalid milestone outcome.");
         if (input.FreelancerAward < 0m || input.ClientRefund < 0m || input.PenaltyAmount < 0m)
@@ -359,14 +401,20 @@ public sealed class ResolveAdminDisputeCommandHandler :
         if (input.PenaltyAmount > 0m && string.IsNullOrWhiteSpace(input.Reason))
             throw new BadRequestException($"A reason is required for the penalty on milestone '{milestone.Title}'.");
 
-        var differsFromSuggestion = milestone.Status switch
-        {
-            (int)MilestoneStatus.Submitted or (int)MilestoneStatus.Approved =>
-                Math.Abs(input.FreelancerAward - locked) >= Tolerance || input.ClientRefund >= Tolerance || input.PenaltyAmount >= Tolerance,
-            (int)MilestoneStatus.Pending or (int)MilestoneStatus.InProgress =>
-                Math.Abs(input.ClientRefund - locked) >= Tolerance || input.FreelancerAward >= Tolerance || input.PenaltyAmount >= Tolerance,
-            _ => false
-        };
+        // Keep Active always finalizes the milestone as Completed, so the only "expected"
+        // split is a full release to the freelancer — the Terminate-oriented, status-based
+        // suggestion heuristic below (which assumes Pending/InProgress implies a refund) does
+        // not apply here.
+        var differsFromSuggestion = isResume
+            ? Math.Abs(input.FreelancerAward - locked) >= Tolerance || input.ClientRefund >= Tolerance || input.PenaltyAmount >= Tolerance
+            : milestone.Status switch
+            {
+                (int)MilestoneStatus.Submitted or (int)MilestoneStatus.Approved =>
+                    Math.Abs(input.FreelancerAward - locked) >= Tolerance || input.ClientRefund >= Tolerance || input.PenaltyAmount >= Tolerance,
+                (int)MilestoneStatus.Pending or (int)MilestoneStatus.InProgress =>
+                    Math.Abs(input.ClientRefund - locked) >= Tolerance || input.FreelancerAward >= Tolerance || input.PenaltyAmount >= Tolerance,
+                _ => false
+            };
         if (differsFromSuggestion && string.IsNullOrWhiteSpace(input.Reason))
             throw new BadRequestException($"A reason is required when overriding the suggested allocation for '{milestone.Title}'.");
     }

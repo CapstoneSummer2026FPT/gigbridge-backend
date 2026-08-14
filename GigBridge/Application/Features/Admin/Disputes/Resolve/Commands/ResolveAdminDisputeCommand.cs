@@ -32,6 +32,7 @@ public sealed record ResolveAdminDisputeCommand(
     string ResolutionNote,
     string? InternalNotes,
     IReadOnlyList<AdminMilestoneAllocationInput> MilestoneAllocations,
+    IReadOnlyList<Guid> SelectedMilestoneIds,
     AdminContractAction ContractAction,
     AdminViolationInput ClientViolation,
     AdminViolationInput FreelancerViolation) : IRequest<AdminDisputeDetailResponse>;

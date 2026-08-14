@@ -1,6 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.Time;
+using Application.Common.InternalServices.Scheduling;
 using Application.Features.Chat.Common.Negotiations.MilestonePlans.DTOs;
 using Application.Features.JobPosts.Common;
 using Application.Features.Proposals.Common;
@@ -68,7 +69,11 @@ public sealed class UpdateNegotiationMilestonePlanCommandHandler
         _context.Set<NegotiationMilestoneDraft>().RemoveRange(existing);
 
         var now = _dateTimeService.UtcNow;
-        var drafts = command.Request.Milestones.Select((item, index) =>
+        var orderedMilestones = command.Request.Milestones.OrderBy(item => item.OrderIndex).ToList();
+        var computedDueDates = MilestoneDeadlineCalculator.CalculateDueDates(
+            DateOnly.FromDateTime(_dateTimeService.UtcNow),
+            orderedMilestones.Select(item => item.EstimatedDuration).ToList());
+        var drafts = orderedMilestones.Select((item, index) =>
         {
             var draft = new NegotiationMilestoneDraft
             {
@@ -78,7 +83,7 @@ public sealed class UpdateNegotiationMilestonePlanCommandHandler
                 Description = Clean(item.Description),
                 Amount = item.Amount,
                 EstimatedDuration = Clean(item.EstimatedDuration),
-                DueDate = item.DueDate,
+                DueDate = computedDueDates[index],
                 Deliverables = item.Deliverables?.Trim() ?? string.Empty,
                 AcceptanceCriteria = item.AcceptanceCriteria?.Trim() ?? string.Empty,
                 OrderIndex = index,

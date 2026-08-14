@@ -8,6 +8,7 @@ using Application.Features.Chat.Common.Messages.Send.DTOs;
 using Domain.Entities;
 using Domain.Enums.Chat;
 using Domain.Enums.Contracts;
+using Domain.Enums.Disputes;
 using Test_Gigbridge_Backend.TestSupport;
 
 namespace Test_Gigbridge_Backend.Application.Features.Proposals.Common;
@@ -115,6 +116,75 @@ public class MessageCommandHandlerTests
         Assert.Empty(fixture.Messages.Entities);
         Assert.Null(fixture.Conversation.LastMessageId);
         Assert.Equal(0, fixture.Context.SaveChangesCount);
+    }
+
+    [Fact]
+    public async Task SendMessage_ClosedDisputeIsRejectedEvenIfConversationStatusIsStillActive()
+    {
+        // Regression coverage for the "procedural sync" fragility: Conversation.Status is
+        // normally closed in lockstep with Dispute.Status by UpdateAdminDisputeStatusCommandHandler,
+        // but the send handler must also check Dispute.Status directly, so a send can never
+        // slip through even if that sync were ever missed (Conversation.Status left Active here).
+        var fixture = new MessageFixture();
+        var disputeId = Guid.NewGuid();
+        fixture.Conversation.ConversationType = (int)ConversationType.Dispute;
+        fixture.Conversation.DisputesId = disputeId;
+        fixture.Context.AddSet(new Dispute
+        {
+            DisputesId = disputeId,
+            ContractsId = Guid.NewGuid(),
+            InitiatorId = fixture.ClientUserId,
+            Reason = "Payment dispute",
+            Status = (int)DisputeStatus.Closed,
+            CreatedAt = fixture.Now
+        });
+
+        var handler = new SendMessageCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopChatRealtimeNotifier());
+
+        var exception = await Assert.ThrowsAsync<BadRequestException>(() =>
+            handler.Handle(
+                new SendMessageCommand(
+                    fixture.ClientUserId,
+                    new SendMessageRequest(fixture.ConversationId, "closed-dispute-1", "Please refund me.", null, [])),
+                CancellationToken.None));
+
+        Assert.Equal("This dispute is closed and no longer accepts new messages.", exception.Message);
+        Assert.Empty(fixture.Messages.Entities);
+    }
+
+    [Fact]
+    public async Task SendMessage_OpenDisputeConversationStillAcceptsMessages()
+    {
+        var fixture = new MessageFixture();
+        var disputeId = Guid.NewGuid();
+        fixture.Conversation.ConversationType = (int)ConversationType.Dispute;
+        fixture.Conversation.DisputesId = disputeId;
+        fixture.Context.AddSet(new Dispute
+        {
+            DisputesId = disputeId,
+            ContractsId = Guid.NewGuid(),
+            InitiatorId = fixture.ClientUserId,
+            Reason = "Payment dispute",
+            Status = (int)DisputeStatus.InProgress,
+            CreatedAt = fixture.Now
+        });
+
+        var handler = new SendMessageCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopChatRealtimeNotifier());
+
+        var response = await handler.Handle(
+            new SendMessageCommand(
+                fixture.ClientUserId,
+                new SendMessageRequest(fixture.ConversationId, "open-dispute-1", "Here is my evidence.", null, [])),
+            CancellationToken.None);
+
+        Assert.Equal("Here is my evidence.", response.Content);
+        Assert.Single(fixture.Messages.Entities);
     }
 
     [Fact]

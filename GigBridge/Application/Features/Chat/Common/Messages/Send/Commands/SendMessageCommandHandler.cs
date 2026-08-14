@@ -64,6 +64,23 @@ public class SendMessageCommandHandler : IRequestHandler<SendMessageCommand, Mes
             throw new BadRequestException("Conversation is not active.");
         }
 
+        // Defense in depth: a dispute conversation is normally closed in lockstep with its
+        // Dispute (see UpdateAdminDisputeStatusCommandHandler), but check the Dispute's own
+        // status directly too, so a send can never slip through if that sync is ever missed.
+        if (conversation.ConversationType == (int)ConversationType.Dispute && conversation.DisputesId.HasValue)
+        {
+            var disputeStatus = await _context.Set<Dispute>()
+                .AsNoTracking()
+                .Where(dispute => dispute.DisputesId == conversation.DisputesId.Value)
+                .Select(dispute => (int?)dispute.Status)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            if (disputeStatus == (int)DisputeStatus.Closed)
+            {
+                throw new BadRequestException("This dispute is closed and no longer accepts new messages.");
+            }
+        }
+
         var participant = await _context.Set<ConversationParticipant>()
             .FirstOrDefaultAsync(
                 participant =>
