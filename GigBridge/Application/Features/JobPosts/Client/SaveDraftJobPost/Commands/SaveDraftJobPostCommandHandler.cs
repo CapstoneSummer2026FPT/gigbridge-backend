@@ -1,6 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.Time;
+using Application.Features.JobPosts.Common;
 using Application.Features.JobPosts.Common.ContentModeration;
 using Application.Features.JobPosts.Client.Common;
 using Application.Features.JobPosts.Client.SaveDraftJobPost.DTOs;
@@ -100,7 +101,16 @@ public sealed class SaveDraftJobPostCommandHandler
         _context.Set<JobPostMilestonePlan>().RemoveRange(existing);
 
         var now = _dateTimeService.UtcNow;
-        foreach (var request in requests.OrderBy(item => item.OrderIndex).Select((item, index) => (item, index)))
+        var orderedRequests = requests.OrderBy(item => item.OrderIndex).Select((item, index) => (item, index)).ToList();
+
+        var jobPostEndDate = jobPost.EndDate.HasValue
+            ? DateOnly.FromDateTime(jobPost.EndDate.Value)
+            : (DateOnly?)null;
+        var computedDueDates = MilestonePlanDeadlineCalculator.CalculateDueDates(
+            jobPostEndDate,
+            orderedRequests.Select(x => x.item.EstimatedDuration).ToList());
+
+        foreach (var request in orderedRequests)
         {
             var milestone = new JobPostMilestonePlan
             {
@@ -110,7 +120,7 @@ public sealed class SaveDraftJobPostCommandHandler
                 Description = Clean(request.item.Description),
                 Amount = request.item.Amount,
                 EstimatedDuration = Clean(request.item.EstimatedDuration),
-                DueDate = request.item.DueDate,
+                DueDate = computedDueDates[request.index],
                 Deliverables = Clean(request.item.Deliverables),
                 AcceptanceCriteria = Clean(request.item.AcceptanceCriteria),
                 OrderIndex = request.index,
