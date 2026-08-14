@@ -3,7 +3,7 @@ using Application.Common.Interfaces.Time;
 using Application.Features.JobPosts.Client.UpdateStatusJobPost.Commands;
 using Application.Features.JobPosts.Client.UpdateStatusJobPost.DTOs;
 using Domain.Entities;
-using Infrastructure.Services.ContentModerationService;
+using Application.Features.JobPosts.Common.ContentModeration.Services;
 using Test_Gigbridge_Backend.TestSupport;
 
 namespace Test_Gigbridge_Backend.Application.Features.JobPosts.Client;
