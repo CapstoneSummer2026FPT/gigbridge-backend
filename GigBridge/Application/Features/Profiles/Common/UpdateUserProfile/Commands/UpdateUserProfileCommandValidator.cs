@@ -1,4 +1,5 @@
 using FluentValidation;
+using Application.Features.Contracts.Common.Internal;
 
 namespace Application.Features.Profiles.Common.UpdateUserProfile.Commands;
 
@@ -18,6 +19,14 @@ public sealed class UpdateUserProfileCommandValidator : AbstractValidator<Update
         RuleFor(command => command.Dto.PhoneNumber)
             .MaximumLength(20).WithMessage("Phone number cannot exceed 20 characters.")
             .When(command => command.Dto.PhoneNumber is not null);
+
+        RuleFor(command => command.Dto.IdentityOrTaxCode)
+            .Must(value => string.IsNullOrWhiteSpace(value) || ContractIdentityCode.IsValid(value))
+            .WithMessage("Identity code must contain exactly 9 or 12 digits.");
+
+        RuleFor(command => command.Dto.IdentityVerificationTicket)
+            .MaximumLength(128).WithMessage("Identity verification ticket is invalid.")
+            .When(command => command.Dto.IdentityVerificationTicket is not null);
 
         RuleFor(command => command.Dto.PreferredLanguage)
             .MaximumLength(5).WithMessage("Preferred language cannot exceed 5 characters.")

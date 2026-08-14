@@ -3,6 +3,7 @@ using Application.Common.Behaviours;
 using Application.Common.InternalServices.Accounts;
 using Application.Common.InternalServices.Auditing;
 using Application.Common.InternalServices.Delivery;
+using Application.Common.InternalServices.Receipts;
 using Application.Common.Mappings;
 using Application.Features.Admin.AuditLogs.Common;
 using Application.Features.Admin.Analytics.Common;
@@ -63,6 +64,7 @@ public static class DependencyInjection
         services.AddNotificationServices();
         services.AddPremiumServices(configuration);
         services.AddProposalServices();
+        services.AddReceiptServices(configuration);
         services.AddScoped<IMarketplaceAnalyticsRecorder, MarketplaceAnalyticsRecorder>();
         services.AddWalletServices(configuration);
         services.AddJobPostServices(configuration);

@@ -1,8 +1,11 @@
+using Application.Common.Interfaces.Email;
+using Application.Features.Auth.Common.Email;
 using Application.Features.Auth.Shared.DTOs;
 using Infrastructure.ExternalServices.Email.Resend;
 using Microsoft.Extensions.Configuration;
 using NSubstitute;
 using Resend;
+using Test_Gigbridge_Backend.TestSupport;
 
 namespace Test_Gigbridge_Backend.Infrastructure.ExternalServices.Email.Resend;
 
@@ -37,5 +40,32 @@ public sealed class EmailServiceTests
         Assert.Equal("Gigbridge-Client-Freelancer-Contract.pdf", attachment.Filename);
         Assert.Equal("application/pdf", attachment.ContentType);
         Assert.Equal(content, attachment.Content!.Value.AsByteArray());
+    }
+}
+
+public sealed class AuthEmailSenderTests
+{
+    [Fact]
+    public async Task SendIdentityVerificationOtpEmailAsync_UsesDedicatedVietnameseTemplate()
+    {
+        var emailService = Substitute.For<IEmailService>();
+        var sender = new AuthEmailSender(
+            emailService,
+            TestTemplateReader.FromProjectTemplates());
+
+        await sender.SendIdentityVerificationOtpEmailAsync(
+            "member@example.com",
+            "123456",
+            CancellationToken.None);
+
+        var call = Assert.Single(emailService.ReceivedCalls());
+        var sentEmail = Assert.IsType<EmailRequest>(call.GetArguments()[0]);
+        Assert.Equal("member@example.com", sentEmail.To);
+        Assert.Equal("GigBridge: Xác thực mã định danh", sentEmail.Subject);
+        Assert.True(sentEmail.IsHtml);
+        Assert.Contains("Xác thực mã định danh", sentEmail.Body);
+        Assert.Contains("123456", sentEmail.Body);
+        Assert.Contains("5 phút", sentEmail.Body);
+        Assert.DoesNotContain("{{OTP_CODE}}", sentEmail.Body);
     }
 }

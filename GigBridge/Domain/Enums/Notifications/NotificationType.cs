@@ -25,9 +25,8 @@ public enum NotificationType
     ReportUpdate = 20,
     ReviewRequested = 21,
 
-    /// <summary>Elo points changed via a manual administrator adjustment.</summary>
     EloPointsUpdated = 22,
-
-    /// <summary>An Elo appeal's status/resolution changed (created, resolved, cancelled).</summary>
-    EloAppealStatusChanged = 23
+    EloAppealStatusChanged = 23,
+    ReceiptReady = 24,
+    ReceiptFailed = 25
 }

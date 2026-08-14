@@ -1,4 +1,4 @@
-namespace Application.Features.ESign.Common.Interfaces;
+namespace Application.Common.Interfaces.Documents;
 
 public interface IWordToPdfConverter
 {

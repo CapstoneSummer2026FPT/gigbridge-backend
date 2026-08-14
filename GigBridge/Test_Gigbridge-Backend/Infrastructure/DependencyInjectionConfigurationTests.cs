@@ -2,6 +2,7 @@ using Application;
 using Application.Common.InternalServices.Accounts.Interfaces;
 using Application.Common.InternalServices.Auditing.Interfaces;
 using Application.Common.InternalServices.Delivery.Interfaces;
+using Application.Common.InternalServices.Receipts.BackgroundJobs;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.Ai;
 using Application.Common.Interfaces.Caching;
@@ -52,9 +53,9 @@ public sealed class DependencyInjectionConfigurationTests
 {
     [Theory]
     [InlineData("Development", null, 1)]
-    [InlineData("Production", null, 7)]
+    [InlineData("Production", null, 8)]
     [InlineData("Production", "false", 1)]
-    [InlineData("Development", "true", 7)]
+    [InlineData("Development", "true", 8)]
     public void ApplicationWorkers_RespectEnvironmentAndExplicitOverride(
         string environment,
         string? enabled,
@@ -77,7 +78,7 @@ public sealed class DependencyInjectionConfigurationTests
         services.AddApplicationServices(new ConfigurationBuilder().Build());
 
         Assert.Equal(
-            7,
+            8,
             services.Count(descriptor => descriptor.ServiceType == typeof(IHostedService)));
     }
 
@@ -126,7 +127,8 @@ public sealed class DependencyInjectionConfigurationTests
         [
             typeof(GoogleMeetProvisioningWorker),
             typeof(PremiumExpiryWorker),
-            typeof(AnalyticsMaintenanceWorker)
+            typeof(AnalyticsMaintenanceWorker),
+            typeof(ProjectReceiptWorker)
         ];
         Assert.DoesNotContain(
             services,

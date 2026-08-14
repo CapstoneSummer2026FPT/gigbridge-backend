@@ -8,6 +8,8 @@ namespace Application.Features.Auth.Common.Email;
 public class AuthEmailSender : IAuthEmailSender
 {
     private const string OtpEmailTemplate = "Auth/Email/OtpEmail.html";
+    private const string IdentityVerificationOtpEmailTemplate =
+        "Auth/Email/IdentityVerificationOtpEmail.html";
     private const string ForgotPasswordOtpEmailTemplate = "Auth/Email/ForgotPasswordOtpEmail.html";
 
     private readonly IEmailService _emailService;
@@ -43,6 +45,26 @@ public class AuthEmailSender : IAuthEmailSender
             Body = body,
             To = email,
             Subject = "GigBridge: Reset Password Verification Code",
+            IsHtml = true
+        }, cancellationToken);
+    }
+
+    public async Task SendIdentityVerificationOtpEmailAsync(
+        string email,
+        string otp,
+        CancellationToken cancellationToken = default)
+    {
+        var body = await RenderTemplateAsync(
+            IdentityVerificationOtpEmailTemplate,
+            "{{OTP_CODE}}",
+            otp,
+            cancellationToken);
+
+        await _emailService.SendEmailAsync(new EmailRequest
+        {
+            Body = body,
+            To = email,
+            Subject = "GigBridge: Xác thực mã định danh",
             IsHtml = true
         }, cancellationToken);
     }

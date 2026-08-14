@@ -20,6 +20,8 @@ public partial class User
 
     public string? PhoneNumber { get; set; }
 
+    public string? IdentityOrTaxCode { get; set; }
+
     /// <summary>
     /// Enum UserRole: 0=Client, 1=Freelancer, 2=Admin
     /// </summary>

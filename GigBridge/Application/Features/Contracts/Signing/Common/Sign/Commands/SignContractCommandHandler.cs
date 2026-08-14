@@ -1,11 +1,11 @@
 using Domain.Enums.Chat;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
+using Application.Common.Interfaces.Documents;
 using Application.Common.InternalServices.Auditing.Interfaces;
 using Application.Common.Interfaces.Media;
 using Application.Common.Interfaces.Time;
 using Application.Features.Chat.Common.Interfaces;
-using Application.Features.ESign.Common.Interfaces;
 using Application.Features.ESign.Common.Services;
 using Application.Features.Contracts.Common.DTOs;
 using Application.Features.Contracts.Common.Internal;
@@ -18,6 +18,9 @@ using Domain.Enums.ESign;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
+using Application.Features.ESign.Common.Interfaces;
+using Application.Common.Interfaces.Caching;
+using Application.Features.Auth.Common;
 
 namespace Application.Features.Contracts.Signing.Common.Sign.Commands;
 
@@ -31,6 +34,7 @@ public sealed class SignContractCommandHandler :
     private readonly IContractEsignDocumentGenerator _documentGenerator;
     private readonly IWordToPdfConverter _pdfConverter;
     private readonly IUserAuditLogService _userAuditLog;
+    private readonly ICacheService _cacheService;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public SignContractCommandHandler(
@@ -40,7 +44,8 @@ public sealed class SignContractCommandHandler :
         IMediaService mediaService,
         IContractEsignDocumentGenerator documentGenerator,
         IWordToPdfConverter pdfConverter,
-        IUserAuditLogService userAuditLog)
+        IUserAuditLogService userAuditLog,
+        ICacheService cacheService)
     {
         _context = context;
         _dateTimeService = dateTimeService;
@@ -49,6 +54,7 @@ public sealed class SignContractCommandHandler :
         _documentGenerator = documentGenerator;
         _pdfConverter = pdfConverter;
         _userAuditLog = userAuditLog;
+        _cacheService = cacheService;
     }
 
     public async Task<ContractWorkflowResponse> Handle(
@@ -91,8 +97,26 @@ public sealed class SignContractCommandHandler :
             throw new BadRequestException("The current E-sign policy must be accepted before submitting a signature draft.");
         }
 
-        var identityOrTaxCode = ContractIdentityCode.Normalize(
+        var signer = await _context.Set<User>()
+            .FirstOrDefaultAsync(user => user.UserId == command.UserId, cancellationToken)
+            ?? throw new NotFoundException("Signer user does not exist.");
+        var submittedIdentityCode = ContractIdentityCode.Normalize(
             command.Request.IdentityOrTaxCode);
+        var hasStoredIdentityCode = ContractIdentityCode.IsValid(signer.IdentityOrTaxCode);
+        var identityOrTaxCode = hasStoredIdentityCode
+            ? ContractIdentityCode.Normalize(signer.IdentityOrTaxCode)
+            : submittedIdentityCode;
+
+        if (!hasStoredIdentityCode)
+        {
+            await ConsumeIdentityVerificationAsync(
+                signer.Email,
+                identityOrTaxCode,
+                command.Request.IdentityVerificationTicket,
+                cancellationToken);
+            signer.IdentityOrTaxCode = identityOrTaxCode;
+            signer.UpdatedAt = now;
+        }
 
         var existingSignature = await _context.Set<EsignSignature>()
             .FirstOrDefaultAsync(
@@ -280,6 +304,33 @@ public sealed class SignContractCommandHandler :
             contract.Status,
             escrowId,
             document.EsignDocumentsId);
+    }
+
+    private async Task ConsumeIdentityVerificationAsync(
+        string email,
+        string identityCode,
+        string? verificationTicket,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(verificationTicket))
+        {
+            throw new BadRequestException(
+                "Verify the identity code through your account email before signing.");
+        }
+
+        var verificationKey = OtpSecurity.VerifiedKey(
+            OtpPurpose.IdentityVerification,
+            EmailCanonicalizer.Canonicalize(email),
+            verificationTicket,
+            identityCode);
+        var isVerified = await _cacheService.GetAndRemoveAsync<bool>(
+            verificationKey,
+            cancellationToken);
+        if (!isVerified)
+        {
+            throw new BadRequestException(
+                "Identity verification is invalid or has expired. Please verify your email again.");
+        }
     }
 
     private static bool IsValidDraft(EsignSignature signature, string policyVersion) =>
