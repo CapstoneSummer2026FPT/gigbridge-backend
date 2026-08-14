@@ -47,6 +47,7 @@ public sealed record AdminResolveDisputeRequest(
     string? InternalNotes,
     List<AdminMilestoneAllocationRequest>? MilestoneAllocations,
     List<AdminMilestoneDecisionRequest>? MilestoneDecisions,
+    List<Guid>? SelectedMilestoneIds,
     int ContractAction,
     AdminViolationRequest? ClientViolation,
     AdminViolationRequest? FreelancerViolation);
@@ -232,6 +233,7 @@ public sealed class AdminDisputesController : BaseApiController
             ?? request.MilestoneDecisions?.Select(item => new AdminMilestoneAllocationInput(
                 item.MilestoneId, item.Outcome, item.AdditionalReleaseToFreelancer,
                 item.RefundToClient, 0m, null)).ToList() ?? [],
+            request.SelectedMilestoneIds ?? [],
             (AdminContractAction)request.ContractAction,
             request.ClientViolation is null
                 ? new AdminViolationInput(false, null, null, null)
