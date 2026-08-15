@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.InternalServices.Auditing.Interfaces;
@@ -7,11 +8,14 @@ using Application.Features.Chat.Common.Interfaces;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.Contracts.Milestones.Common.DTOs;
 using Application.Features.Contracts.Milestones.Common.Internal;
+using Application.Features.Contracts.Milestones.Freelancer.Submit.Common;
 using Domain.Entities;
 using Domain.Enums.Accounts;
 using Domain.Enums.Auditing;
+using Domain.Enums.Chat;
 using Domain.Enums.Contracts;
 using Domain.Enums.Contracts.Milestones;
+using Domain.Enums.Delivery;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -20,6 +24,8 @@ namespace Application.Features.Contracts.Milestones.Freelancer.Submit.Commands;
 public sealed class SubmitMilestoneCommandHandler :
     IRequestHandler<SubmitMilestoneCommand, ContractMilestoneResponse>
 {
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
     private readonly IUserAuditLogService _userAuditLog;
@@ -117,6 +123,8 @@ public sealed class SubmitMilestoneCommandHandler :
             $"Submitted milestone: {milestone.Title}.",
             milestoneId: milestone.MilestonesId);
 
+        await EnqueueSubmissionEmailAsync(contract, milestone, now, cancellationToken);
+
         await _context.SaveChangesAsync(cancellationToken);
 
         if (_realtimeNotifier is not null)
@@ -193,5 +201,36 @@ public sealed class SubmitMilestoneCommandHandler :
     private static string? NormalizeDescription(string? description)
     {
         return string.IsNullOrWhiteSpace(description) ? null : description.Trim();
+    }
+
+    private async Task EnqueueSubmissionEmailAsync(
+        Contract contract,
+        Milestone milestone,
+        DateTime now,
+        CancellationToken cancellationToken)
+    {
+        var client = await MilestoneWorkflowGuard.GetClientContactAsync(_context, contract, cancellationToken);
+
+        var deliveryKey = $"milestone:{milestone.MilestonesId:D}:submitted:{now:O}";
+        var payload = new MilestoneSubmissionDeliveryPayload(
+            contract.ContractsId,
+            milestone.MilestonesId,
+            client.Email,
+            client.FullName);
+
+        _context.Set<DeliveryOutbox>().Add(new DeliveryOutbox
+        {
+            DeliveryOutboxId = Guid.NewGuid(),
+            DeliveryKey = deliveryKey,
+            ScheduleId = null,
+            DeliveryType = (int)DeliveryOutboxType.MilestoneSubmission,
+            RecipientUserId = client.UserId,
+            EventSequence = 0,
+            Channel = (int)DeliveryChannel.Email,
+            Payload = JsonSerializer.Serialize(payload, JsonOptions),
+            Status = (int)DeliveryOutboxStatus.Pending,
+            NextAttemptAt = now,
+            CreatedAt = now
+        });
     }
 }

@@ -10,6 +10,7 @@ using Application.Features.Admin.Analytics.Common;
 using Application.Features.Auth.Common;
 using Application.Features.Chat.Common;
 using Application.Features.Contracts.Completion.Common;
+using Application.Features.Contracts.Milestones.Freelancer.Submit.Common;
 using Application.Features.Elo.Common;
 using Application.Features.ESign.Common;
 using Application.Features.JobInvitations.Common;
@@ -60,6 +61,7 @@ public static class DependencyInjection
         services.AddEloServices();
         services.AddESignServices();
         services.AddJobInvitationServices();
+        services.AddMilestoneSubmissionServices();
         services.AddScoped<IReviewModerationService, ReviewModerationService>();
         services.AddNotificationServices();
         services.AddPremiumServices(configuration);
