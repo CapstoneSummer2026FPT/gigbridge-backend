@@ -1,6 +1,6 @@
 using Application.Common.Models;
 using Application.Features.Proposals.Freelancer.QuestionTimers.Commands;
-using Application.Features.Proposals.Freelancer.QuestionTimers.DTOs;
+using Application.Common.InternalServices.Proposals.Models;
 using Domain.Enums.Accounts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;

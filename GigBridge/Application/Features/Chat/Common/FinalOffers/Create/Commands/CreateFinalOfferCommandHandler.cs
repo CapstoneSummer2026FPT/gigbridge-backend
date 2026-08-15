@@ -3,7 +3,7 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.Time;
 using Application.Common.InternalServices.Scheduling;
-using Application.Features.Chat.Common.Interfaces;
+using Application.Common.InternalServices.Chat.Interfaces;
 using Application.Features.Chat.Common.Messages.Send.DTOs;
 using Application.Features.JobPosts.Common;
 using Application.Features.Proposals.Common;

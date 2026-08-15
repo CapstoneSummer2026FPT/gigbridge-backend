@@ -1,10 +1,11 @@
+using Application.Common.InternalServices.Premium.Services;
 using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Features.Premium.Common.Interfaces;
+using Application.Common.InternalServices.Premium.Interfaces;
 using Application.Features.Profiles.FreelancerProfile.GetFreelancerProfile.DTOs;
 using Application.Features.Profiles.FreelancerProfile.Common.DTOs;
 using Application.Features.Premium.Common;

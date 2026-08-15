@@ -1,3 +1,4 @@
+using Application.Common.InternalServices.ESign.Models;
 namespace Application.Features.Contracts.Milestones.Freelancer.Submit.Common;
 
 /// <summary>

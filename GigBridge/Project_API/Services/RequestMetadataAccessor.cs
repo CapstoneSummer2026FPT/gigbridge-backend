@@ -1,4 +1,4 @@
-using Application.Features.Admin.AuditLogs.Common.Interfaces;
+using Application.Common.InternalServices.Admin.AuditLogs.Interfaces;
 
 namespace Project_API.Services;
 

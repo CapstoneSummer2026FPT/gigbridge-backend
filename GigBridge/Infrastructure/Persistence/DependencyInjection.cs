@@ -1,5 +1,5 @@
 using Application.Common.Interfaces;
-using Application.Features.Wallets.Common.Interfaces;
+using Application.Common.InternalServices.Wallets.Interfaces;
 using Infrastructure.Persistence.Delivery;
 using Infrastructure.Persistence.Wallets;
 using Microsoft.AspNetCore.DataProtection;

@@ -1,11 +1,12 @@
+using Application.Common.InternalServices.Premium.Models;
 using Domain.Enums.AiInterviews;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces.Ai;
 using Application.Common.Interfaces.Caching;
 using Application.Common.Interfaces.Time;
-using Application.Features.Premium.Common.Interfaces;
-using Application.Features.Premium.Common.Services;
-using Application.Features.Wallets.Common.Interfaces;
+using Application.Common.InternalServices.Premium.Interfaces;
+using Application.Common.InternalServices.Premium.Services;
+using Application.Common.InternalServices.Wallets.Interfaces;
 using Application.Common.Models.Ai;
 using Application.Features.AiInterviews.Freelancer.Start.Commands;
 using Application.Features.Premium.Client.AiInterviews.Create.Commands;
@@ -523,7 +524,7 @@ public sealed class PremiumClientCapabilityTests
     {
         public Task<bool> IsPremiumFreelancerAsync(Guid userId, CancellationToken cancellationToken) => Task.FromResult(false);
         public Task<bool> IsPremiumClientAsync(Guid userId, CancellationToken cancellationToken) => Task.FromResult(isPremium);
-        public Task<global::Application.Features.Premium.Common.PremiumBenefitsDto> GetPremiumBenefitsAsync(Guid userId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<global::Application.Common.InternalServices.Premium.Models.PremiumBenefitsDto> GetPremiumBenefitsAsync(Guid userId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task RequirePremiumFreelancerAsync(Guid userId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task RequirePremiumClientAsync(Guid userId, CancellationToken cancellationToken) =>
             isPremium ? Task.CompletedTask : Task.FromException(new ForbiddenAccessException("This feature requires a Premium subscription"));

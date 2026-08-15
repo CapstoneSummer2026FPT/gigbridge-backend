@@ -1,4 +1,4 @@
-using Application.Features.Wallets.Common.Interfaces;
+using Application.Common.InternalServices.Wallets.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Infrastructure.ExternalServices.Banking.VietQr;

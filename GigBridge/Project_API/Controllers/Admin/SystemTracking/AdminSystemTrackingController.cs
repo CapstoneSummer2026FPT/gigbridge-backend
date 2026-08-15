@@ -1,5 +1,5 @@
 using Application.Common.Models;
-using Application.Features.Admin.SystemTracking.Common.DTOs;
+using Application.Common.InternalServices.Admin.SystemTracking.Models;
 using Application.Features.Admin.SystemTracking.GetSnapshot.Queries;
 using Domain.Enums.Accounts;
 using Microsoft.AspNetCore.Authorization;

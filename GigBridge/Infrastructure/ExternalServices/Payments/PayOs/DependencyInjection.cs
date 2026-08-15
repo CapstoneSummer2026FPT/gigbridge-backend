@@ -1,6 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
-using Application.Features.Wallets.Common.Interfaces;
+using Application.Common.InternalServices.Wallets.Interfaces;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;

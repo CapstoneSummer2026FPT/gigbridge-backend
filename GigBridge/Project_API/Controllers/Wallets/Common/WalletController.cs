@@ -15,7 +15,7 @@ using Application.Features.Wallets.Common.Withdrawals.Create;
 using Application.Features.Wallets.Common.Withdrawals.Get;
 using Application.Features.Wallets.Common.Withdrawals.GetDetail;
 using Application.Features.Wallets.Common.Withdrawals.Sync;
-using Application.Features.Wallets.Common.Interfaces;
+using Application.Common.InternalServices.Wallets.Interfaces;
 using Application.Common.Options;
 using Domain.Enums.Accounts;
 using Microsoft.AspNetCore.Authorization;

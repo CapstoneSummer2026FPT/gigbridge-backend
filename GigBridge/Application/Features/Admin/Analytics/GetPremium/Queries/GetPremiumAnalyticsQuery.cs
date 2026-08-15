@@ -1,4 +1,4 @@
-using Application.Features.Admin.Analytics.Common.DTOs;
+using Application.Common.InternalServices.Admin.Analytics.Models;
 using MediatR;
 
 namespace Application.Features.Admin.Analytics.GetPremium.Queries;

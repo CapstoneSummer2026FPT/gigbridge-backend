@@ -1,5 +1,5 @@
 using Application.Common.Interfaces.Email;
-using Application.Features.Auth.Common.Email;
+using Application.Common.InternalServices.Auth.Services;
 using Application.Features.Auth.Shared.DTOs;
 using Infrastructure.ExternalServices.Email.Resend;
 using Microsoft.Extensions.Configuration;

@@ -1,7 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.Time;
-using Application.Features.Chat.Common.Interfaces;
+using Application.Common.InternalServices.Chat.Interfaces;
 using Application.Features.JobPosts.Common;
 using Domain.Entities;
 using Domain.Enums.Chat;

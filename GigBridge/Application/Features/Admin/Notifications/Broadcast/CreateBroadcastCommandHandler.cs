@@ -1,4 +1,4 @@
-using Application.Features.Notifications.Common.Interfaces;
+using Application.Common.InternalServices.Notifications.Interfaces;
 using MediatR;
 
 namespace Application.Features.Admin.Notifications.Broadcast;

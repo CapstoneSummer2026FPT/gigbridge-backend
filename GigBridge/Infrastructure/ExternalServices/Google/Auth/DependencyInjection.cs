@@ -1,4 +1,4 @@
-using Application.Features.Auth.Common.Interfaces;
+using Application.Common.InternalServices.Auth.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Infrastructure.ExternalServices.Google.Auth;

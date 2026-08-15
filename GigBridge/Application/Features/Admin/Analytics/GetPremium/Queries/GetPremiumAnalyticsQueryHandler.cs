@@ -1,6 +1,6 @@
-using Application.Features.Admin.Analytics.Common.DTOs;
-using Application.Features.Admin.Analytics.Common.Interfaces;
-using Application.Features.Admin.Analytics.Common.Services;
+using Application.Common.InternalServices.Admin.Analytics.Models;
+using Application.Common.InternalServices.Admin.Analytics.Interfaces;
+using Application.Common.InternalServices.Admin.Analytics.Services;
 using MediatR;
 
 namespace Application.Features.Admin.Analytics.GetPremium.Queries;

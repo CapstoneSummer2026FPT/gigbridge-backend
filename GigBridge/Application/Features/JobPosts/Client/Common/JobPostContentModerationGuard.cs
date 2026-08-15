@@ -1,5 +1,6 @@
 using Application.Common.Exceptions;
-using Application.Features.JobPosts.Common.ContentModeration;
+using Application.Common.InternalServices.JobPosts.Interfaces;
+using Application.Common.InternalServices.JobPosts.Models;
 
 namespace Application.Features.JobPosts.Client.Common;
 

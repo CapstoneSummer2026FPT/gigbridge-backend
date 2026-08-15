@@ -2,7 +2,7 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.Caching;
 using Application.Common.Interfaces.Time;
-using Application.Features.Notifications.Common.Interfaces;
+using Application.Common.InternalServices.Notifications.Interfaces;
 using Application.Features.Premium.Freelancer.Promotions.Common;
 using Application.Features.Premium.Freelancer.Promotions.DTOs;
 using Domain.Entities;

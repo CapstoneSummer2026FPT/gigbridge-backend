@@ -1,3 +1,4 @@
+using Application.Common.InternalServices.Notifications.Models;
 using Application.Common.Interfaces;
 using Application.Common.Models;
 using Application.Features.Notifications.Common.DTOs;

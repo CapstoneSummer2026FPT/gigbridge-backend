@@ -1,7 +1,9 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces.Time;
 using Application.Features.Admin.Reports.ResolveReport.Commands;
-using Application.Features.Reviews.Common.Moderation;
+using Application.Common.InternalServices.Reviews.Interfaces;
+using Application.Common.InternalServices.Reviews.Models;
+using Application.Common.InternalServices.Reviews.Services;
 using Application.Features.Admin.Reports.ResolveReport.DTOs;
 using Application.Features.Admin.Reports.GetReports.Queries;
 using Application.Features.Admin.Reports.GetReportSummary.Queries;

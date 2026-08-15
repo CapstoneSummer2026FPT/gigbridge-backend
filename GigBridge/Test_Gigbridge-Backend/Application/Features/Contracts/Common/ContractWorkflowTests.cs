@@ -1,7 +1,8 @@
+using Application.Common.InternalServices.ESign.Services;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces.Time;
 using Application.Common.Interfaces.Caching;
-using Application.Features.Notifications.Common.Interfaces;
+using Application.Common.InternalServices.Notifications.Interfaces;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.Contracts.Details.Client.Update.Commands;
 using Application.Features.Contracts.Details.Client.Update.DTOs;

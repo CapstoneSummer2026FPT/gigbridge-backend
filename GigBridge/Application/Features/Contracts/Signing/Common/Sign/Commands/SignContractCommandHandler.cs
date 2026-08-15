@@ -1,3 +1,5 @@
+using Application.Common.InternalServices.Contracts.Services;
+using Application.Common.InternalServices.ESign.Models;
 using Domain.Enums.Chat;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
@@ -5,8 +7,8 @@ using Application.Common.Interfaces.Documents;
 using Application.Common.InternalServices.Auditing.Interfaces;
 using Application.Common.Interfaces.Media;
 using Application.Common.Interfaces.Time;
-using Application.Features.Chat.Common.Interfaces;
-using Application.Features.ESign.Common.Services;
+using Application.Common.InternalServices.Chat.Interfaces;
+using Application.Common.InternalServices.ESign.Services;
 using Application.Features.Contracts.Common.DTOs;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.ESign.Common.Internal;
@@ -18,9 +20,9 @@ using Domain.Enums.ESign;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
-using Application.Features.ESign.Common.Interfaces;
+using Application.Common.InternalServices.ESign.Interfaces;
 using Application.Common.Interfaces.Caching;
-using Application.Features.Auth.Common;
+using Application.Common.InternalServices.Auth.Services;
 
 namespace Application.Features.Contracts.Signing.Common.Sign.Commands;
 

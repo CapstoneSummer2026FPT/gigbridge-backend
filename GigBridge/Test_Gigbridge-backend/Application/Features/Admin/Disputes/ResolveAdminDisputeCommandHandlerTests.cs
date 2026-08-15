@@ -1,7 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.InternalServices.Accounts.Interfaces;
 using Application.Common.Interfaces.Time;
-using Application.Features.Elo.Common.Interfaces;
+using Application.Common.InternalServices.Elo.Interfaces;
 using Application.Features.Admin.Disputes.Resolve.Commands;
 using Application.Features.Contracts.Completion.Client.Commands;
 using Application.Features.Contracts.Milestones.Freelancer.RequestUnlock.Commands;

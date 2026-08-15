@@ -1,6 +1,6 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces.Media;
-using Application.Features.Premium.Common.Interfaces;
+using Application.Common.InternalServices.Premium.Interfaces;
 using MediatR;
 
 namespace Application.Features.Premium.Client.JobPostPromotion.Commands;

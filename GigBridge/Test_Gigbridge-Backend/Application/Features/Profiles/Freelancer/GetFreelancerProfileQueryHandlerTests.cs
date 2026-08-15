@@ -1,4 +1,5 @@
-using Application.Features.Premium.Common.Interfaces;
+using Application.Common.InternalServices.Premium.Models;
+using Application.Common.InternalServices.Premium.Interfaces;
 using Application.Features.Premium.Common;
 using Application.Features.Profiles.FreelancerProfile.GetFreelancerProfile.Queries;
 using Domain.Entities;

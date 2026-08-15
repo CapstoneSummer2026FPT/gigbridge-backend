@@ -1,6 +1,6 @@
-using Application.Features.Chat.Common.Models;
+using Application.Common.InternalServices.Chat.Models;
 using Application.Common.Exceptions;
-using Application.Features.Chat.Common.Interfaces;
+using Application.Common.InternalServices.Chat.Interfaces;
 using Application.Features.Chat.Common.Messages.CreateGoogleMeet;
 using Application.Features.Chat.Common.Messages.Send.Commands;
 using Application.Features.Chat.Common.Messages.Send.DTOs;

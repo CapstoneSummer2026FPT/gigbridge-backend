@@ -1,11 +1,12 @@
+using Application.Common.InternalServices.ESign.Models;
 using System.Globalization;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using Application.Common.Interfaces.Templates;
-using Application.Features.ESign.Common.Interfaces;
-using Application.Features.ESign.Common.Services;
+using Application.Common.InternalServices.ESign.Interfaces;
+using Application.Common.InternalServices.ESign.Services;
 using Application.Features.Contracts.Common.DTOs;
 using Domain.Services.Payments;
 using DocumentFormat.OpenXml;

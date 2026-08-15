@@ -1,6 +1,6 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces.Time;
-using Application.Features.Chat.Common.Interfaces;
+using Application.Common.InternalServices.Chat.Interfaces;
 using Application.Features.Contracts.ProductHandoffs.Acknowledge.Commands;
 using Application.Features.Contracts.ProductHandoffs.Common.DTOs;
 using Application.Features.Contracts.ProductHandoffs.Download.Queries;

@@ -1,4 +1,5 @@
-using Application.Features.MarketplaceAnalytics.Common.Services;
+using Application.Common.InternalServices.MarketplaceAnalytics.Interfaces;
+using Application.Common.InternalServices.MarketplaceAnalytics.Services;
 using MediatR;
 using Microsoft.Extensions.Logging;
 

@@ -7,7 +7,7 @@ using Application.Features.JobPosts.Client.UpdateJobPost.Commands;
 using Application.Features.JobPosts.Client.UpdateJobPost.DTOs;
 using Domain.Entities;
 
-using Application.Features.JobPosts.Common.ContentModeration.Services;
+using Application.Common.InternalServices.JobPosts.Services;
 using NSubstitute;
 using Test_Gigbridge_Backend.TestSupport;
 
