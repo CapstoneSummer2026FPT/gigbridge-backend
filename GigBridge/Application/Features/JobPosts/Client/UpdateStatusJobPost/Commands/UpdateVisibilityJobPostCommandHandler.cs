@@ -1,6 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.Time;
+using Application.Features.JobPosts.Common;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -47,10 +48,9 @@ public class UpdateVisibilityJobPostCommandHandler
             throw new NotFoundException("Job post does not exist or you do not have permission to update it.");
         }
 
-        if (jobPost.Visibility == 3)
-        {
-            throw new BadRequestException("This job post has been locked by an admin and cannot be updated.");
-        }
+        JobPostEditingGuard.EnsureVisibilityTransitionAllowed(
+            jobPost,
+            command.Request.Visibility);
 
         jobPost.Visibility = command.Request.Visibility;
         jobPost.UpdatedAt = _dateTimeService.UtcNow;
