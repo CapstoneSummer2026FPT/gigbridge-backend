@@ -7,6 +7,7 @@ using Application.Common.InternalServices.JobPosts.Interfaces;
 using Application.Common.InternalServices.JobPosts.Models;
 using Application.Common.Models.Ai;
 using Application.Features.JobPosts.Client.Common;
+using Application.Features.JobPosts.Common;
 using Domain.Entities;
 
 using MediatR;
@@ -71,10 +72,7 @@ public class UpdateJobPostCommandHandler : IRequestHandler<UpdateJobPostCommand,
             throw new NotFoundException("Job post does not exist or you do not have permission to update it.");
         }
 
-        if (jobPost.Visibility == 3)
-        {
-            throw new BadRequestException("This job post has been locked by an admin and cannot be updated.");
-        }
+        JobPostEditingGuard.EnsureContentCanBeEdited(jobPost);
 
         var normalizedSkills = await JobPostSkillNormalizer.NormalizeAsync(
             _context,
