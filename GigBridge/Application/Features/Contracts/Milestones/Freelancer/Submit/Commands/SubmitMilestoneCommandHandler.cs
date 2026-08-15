@@ -1,9 +1,10 @@
 using System.Text.Json;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Common.InternalServices.Auditing.Interfaces;
+using Application.Common.Interfaces.Files;
 using Application.Common.Interfaces.Media;
 using Application.Common.Interfaces.Time;
+using Application.Common.InternalServices.Auditing.Interfaces;
 using Application.Common.InternalServices.Chat.Interfaces;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.Contracts.Milestones.Common.DTOs;
@@ -18,6 +19,7 @@ using Domain.Enums.Contracts.Milestones;
 using Domain.Enums.Delivery;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace Application.Features.Contracts.Milestones.Freelancer.Submit.Commands;
 
@@ -29,21 +31,27 @@ public sealed class SubmitMilestoneCommandHandler :
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
     private readonly IUserAuditLogService _userAuditLog;
+    private readonly IWorkspaceUploadFilePolicy _uploadFilePolicy;
     private readonly IMediaService? _mediaService;
     private readonly IChatRealtimeNotifier? _realtimeNotifier;
+    private readonly ILogger<SubmitMilestoneCommandHandler>? _logger;
 
     public SubmitMilestoneCommandHandler(
         IApplicationDbContext context,
         IDateTimeService dateTimeService,
         IUserAuditLogService userAuditLog,
+        IWorkspaceUploadFilePolicy uploadFilePolicy,
         IMediaService? mediaService = null,
-        IChatRealtimeNotifier? realtimeNotifier = null)
+        IChatRealtimeNotifier? realtimeNotifier = null,
+        ILogger<SubmitMilestoneCommandHandler>? logger = null)
     {
         _context = context;
         _dateTimeService = dateTimeService;
         _userAuditLog = userAuditLog;
+        _uploadFilePolicy = uploadFilePolicy;
         _mediaService = mediaService;
         _realtimeNotifier = realtimeNotifier;
+        _logger = logger;
     }
 
     public async Task<ContractMilestoneResponse> Handle(
@@ -67,9 +75,9 @@ public sealed class SubmitMilestoneCommandHandler :
             command.MilestoneId,
             cancellationToken);
 
-        if (milestone.Status != (int)MilestoneStatus.InProgress && milestone.Status != (int)MilestoneStatus.Pending)
+        if (milestone.Status != (int)MilestoneStatus.InProgress)
         {
-            throw new BadRequestException("Only in-progress or pending milestones can be submitted.");
+            throw new BadRequestException("Only in-progress milestones can be submitted.");
         }
 
         var workItems = await _context.Set<ContractWorkItem>()
@@ -80,75 +88,127 @@ public sealed class SubmitMilestoneCommandHandler :
             throw new BadRequestException("All milestone work items must be completed before submitting deliverables.");
         }
 
-        var validatedFile = await ValidateRequestAsync(command, cancellationToken);
-
-        var now = _dateTimeService.UtcNow;
-        var existingAttachments = await _context.Set<MilestoneAttachment>()
-            .Where(attachment => attachment.MilestonesId == milestone.MilestonesId)
-            .ToListAsync(cancellationToken);
-
-        if (existingAttachments.Count > 0)
+        var validatedFiles = await ValidateRequestAsync(command, cancellationToken);
+        try
         {
-            _context.Set<MilestoneAttachment>().RemoveRange(existingAttachments);
-            milestone.MilestoneAttachments.Clear();
+            if (_mediaService is null)
+            {
+                throw new InvalidOperationException("MediaService is not configured for file uploads.");
+            }
+
+            var now = _dateTimeService.UtcNow;
+            var existingAttachments = await _context.Set<MilestoneAttachment>()
+                .Where(attachment => attachment.MilestonesId == milestone.MilestonesId)
+                .ToListAsync(cancellationToken);
+            var newAttachments = new List<MilestoneAttachment>(validatedFiles.Count);
+
+            try
+            {
+                foreach (var validatedFile in validatedFiles)
+                {
+                    newAttachments.Add(await CreateAttachmentAsync(
+                        command.UserId,
+                        validatedFile,
+                        milestone.MilestonesId,
+                        now,
+                        cancellationToken));
+                }
+            }
+            catch
+            {
+                await DeleteAttachmentsBestEffortAsync(newAttachments, CancellationToken.None);
+                throw;
+            }
+
+            Message? systemMessage;
+            try
+            {
+                await using var transaction = await _context.BeginTransactionAsync(cancellationToken);
+
+                if (existingAttachments.Count > 0)
+                {
+                    _context.Set<MilestoneAttachment>().RemoveRange(existingAttachments);
+                }
+
+                _context.Set<MilestoneAttachment>().AddRange(newAttachments);
+                milestone.MilestoneAttachments.Clear();
+                foreach (var attachment in newAttachments)
+                {
+                    milestone.MilestoneAttachments.Add(attachment);
+                }
+
+                milestone.SubmissionDescription = NormalizeDescription(command.Description);
+                milestone.Status = (int)MilestoneStatus.Submitted;
+                milestone.SubmittedAt = now;
+                milestone.UpdatedAt = now;
+                contract.UpdatedAt = now;
+
+                systemMessage = await ContractConversationEvents.AddSystemMessageAsync(
+                    _context,
+                    contract.ContractsId,
+                    $"Milestone submitted: {milestone.Title}.",
+                    now,
+                    cancellationToken);
+
+                _userAuditLog.Add(
+                    command.UserId,
+                    UserRole.Freelancer,
+                    AuditUserActionType.MilestoneSubmitted,
+                    contract.ContractsId,
+                    $"Submitted milestone: {milestone.Title}.",
+                    milestoneId: milestone.MilestonesId);
+
+                await EnqueueSubmissionEmailAsync(contract, milestone, now, cancellationToken);
+                await _context.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+            }
+            catch
+            {
+                await DeleteAttachmentsBestEffortAsync(newAttachments, CancellationToken.None);
+                throw;
+            }
+
+            await DeleteAttachmentsBestEffortAsync(existingAttachments, CancellationToken.None);
+
+            if (_realtimeNotifier is not null)
+            {
+                var participantIds = await MilestoneWorkflowGuard.GetParticipantUserIdsAsync(
+                    _context,
+                    contract,
+                    cancellationToken);
+                await _realtimeNotifier.SendUsersEventAsync(
+                    participantIds,
+                    "DeliverableSubmitted",
+                    new
+                    {
+                        contractId = contract.ContractsId,
+                        milestoneId = milestone.MilestonesId,
+                        status = milestone.Status
+                    },
+                    cancellationToken);
+                if (systemMessage is not null)
+                {
+                    await _realtimeNotifier.SendConversationEventAsync(
+                        systemMessage.ConversationsId,
+                        "ReceiveMessage",
+                        ContractConversationEvents.ToRealtimePayload(systemMessage),
+                        cancellationToken);
+                }
+            }
+
+            return MilestoneWorkflowGuard.ToResponse(milestone);
         }
-
-        var attachment = await CreateAttachmentAsync(
-            command,
-            validatedFile,
-            milestone.MilestonesId,
-            now,
-            cancellationToken);
-        _context.Set<MilestoneAttachment>().Add(attachment);
-        milestone.MilestoneAttachments.Add(attachment);
-
-        milestone.SubmissionDescription = NormalizeDescription(command.Description);
-        milestone.Status = (int)MilestoneStatus.Submitted;
-        milestone.SubmittedAt = now;
-        milestone.UpdatedAt = now;
-        contract.UpdatedAt = now;
-
-        var systemMessage = await ContractConversationEvents.AddSystemMessageAsync(
-            _context,
-            contract.ContractsId,
-            $"Milestone submitted: {milestone.Title}.",
-            now,
-            cancellationToken);
-
-        _userAuditLog.Add(
-            command.UserId,
-            UserRole.Freelancer,
-            AuditUserActionType.MilestoneSubmitted,
-            contract.ContractsId,
-            $"Submitted milestone: {milestone.Title}.",
-            milestoneId: milestone.MilestonesId);
-
-        await EnqueueSubmissionEmailAsync(contract, milestone, now, cancellationToken);
-
-        await _context.SaveChangesAsync(cancellationToken);
-
-        if (_realtimeNotifier is not null)
+        finally
         {
-            var participantIds = await MilestoneWorkflowGuard.GetParticipantUserIdsAsync(_context, contract, cancellationToken);
-            await _realtimeNotifier.SendUsersEventAsync(
-                participantIds,
-                "DeliverableSubmitted",
-                new { contractId = contract.ContractsId, milestoneId = milestone.MilestonesId, status = milestone.Status },
-                cancellationToken);
-            if (systemMessage is not null)
-                await _realtimeNotifier.SendConversationEventAsync(
-                    systemMessage.ConversationsId, "ReceiveMessage",
-                    ContractConversationEvents.ToRealtimePayload(systemMessage), cancellationToken);
+            await validatedFiles.DisposeAsync();
         }
-
-        return MilestoneWorkflowGuard.ToResponse(milestone);
     }
 
-    private static async Task<ValidatedMilestoneSubmissionFile> ValidateRequestAsync(
+    private async Task<ValidatedWorkspaceUploadBatch> ValidateRequestAsync(
         SubmitMilestoneCommand command,
         CancellationToken cancellationToken)
     {
-        if (command.File is null)
+        if (command.Files.Count == 0)
         {
             throw new BadRequestException("A milestone deliverable file is required.");
         }
@@ -158,24 +218,26 @@ public sealed class SubmitMilestoneCommandHandler :
             throw new BadRequestException("Submission description exceeds 5000 characters.");
         }
 
-        return await MilestoneSubmissionFilePolicy.ValidateAsync(
-            command.File,
+        return await _uploadFilePolicy.ValidateBatchAsync(
+            command.Files
+                .Select(file => new WorkspaceUploadFile(
+                    file.Content,
+                    file.FileName,
+                    file.ContentType,
+                    file.Length))
+                .ToList(),
+            WorkspaceUploadLimits.MaxFilesPerBatch,
             cancellationToken);
     }
 
     private async Task<MilestoneAttachment> CreateAttachmentAsync(
-        SubmitMilestoneCommand command,
-        ValidatedMilestoneSubmissionFile file,
+        Guid uploadedByUserId,
+        ValidatedWorkspaceUploadFile file,
         Guid milestoneId,
         DateTime now,
         CancellationToken cancellationToken)
     {
-        if (_mediaService == null)
-        {
-            throw new InvalidOperationException("MediaService is not configured for file uploads.");
-        }
-
-        var fileUrl = await _mediaService.UploadFileAsync(
+        var fileUrl = await _mediaService!.UploadFileAsync(
             file.Content,
             file.FileName,
             file.ContentType,
@@ -193,9 +255,38 @@ public sealed class SubmitMilestoneCommandHandler :
             MimeType = string.IsNullOrWhiteSpace(file.ContentType)
                 ? null
                 : file.ContentType.Trim(),
-            UploadedByUserId = command.UserId,
+            UploadedByUserId = uploadedByUserId,
             CreatedAt = now
         };
+    }
+
+    private async Task DeleteAttachmentsBestEffortAsync(
+        IEnumerable<MilestoneAttachment> attachments,
+        CancellationToken cancellationToken)
+    {
+        if (_mediaService is null)
+        {
+            return;
+        }
+
+        foreach (var attachment in attachments)
+        {
+            try
+            {
+                await _mediaService.DeleteFileAsync(
+                    attachment.FileUrl,
+                    "milestones",
+                    cancellationToken);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                _logger?.LogWarning(
+                    exception,
+                    "Failed to clean up milestone attachment {AttachmentId} at {FileUrl}.",
+                    attachment.MilestoneAttachmentsId,
+                    attachment.FileUrl);
+            }
+        }
     }
 
     private static string? NormalizeDescription(string? description)

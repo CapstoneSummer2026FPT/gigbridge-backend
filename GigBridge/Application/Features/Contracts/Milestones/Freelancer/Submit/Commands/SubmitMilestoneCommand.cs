@@ -15,11 +15,27 @@ public sealed record SubmitMilestoneCommand(
     Guid ContractId,
     Guid MilestoneId,
     Guid UserId,
-    string? Description = null,
-    SubmitMilestoneFile? File = null) : IRequest<ContractMilestoneResponse>
+    string? Description,
+    IReadOnlyList<SubmitMilestoneFile> Files) : IRequest<ContractMilestoneResponse>
 {
     public SubmitMilestoneCommand(Guid contractId, Guid milestoneId, Guid userId)
-        : this(contractId, milestoneId, userId, null, null)
+        : this(contractId, milestoneId, userId, null, [])
+    {
+    }
+
+    // Backward-compatible constructor for callers that still submit one multipart file.
+    public SubmitMilestoneCommand(
+        Guid contractId,
+        Guid milestoneId,
+        Guid userId,
+        string? description = null,
+        SubmitMilestoneFile? File = null)
+        : this(
+            contractId,
+            milestoneId,
+            userId,
+            description,
+            File is null ? [] : [File])
     {
     }
 }

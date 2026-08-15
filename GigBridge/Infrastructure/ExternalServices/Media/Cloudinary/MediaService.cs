@@ -130,9 +130,12 @@ public class MediaService : IMediaService
 
         try
         {
+            var resourceType = TryGetResourceType(fileUrl, out var detectedResourceType)
+                ? detectedResourceType
+                : ResourceType.Image;
             var result = await _cloudinary.DestroyAsync(new DeletionParams(publicId)
             {
-                ResourceType = ResourceType.Image
+                ResourceType = resourceType
             });
             if (result.Error is not null)
             {
@@ -144,7 +147,7 @@ public class MediaService : IMediaService
         {
             _logger.LogWarning(
                 exception,
-                "Cloudinary image deletion failed for public ID {PublicId}.",
+                "Cloudinary file deletion failed for public ID {PublicId}.",
                 publicId);
             throw new ExternalServiceException("Media deletion failed. Try again later.", exception);
         }
@@ -245,6 +248,40 @@ public class MediaService : IMediaService
             publicId.StartsWith(
                 $"gigbridge/{normalizedFolder}/",
                 StringComparison.Ordinal);
+    }
+
+    internal static bool TryGetResourceType(string fileUrl, out ResourceType resourceType)
+    {
+        resourceType = ResourceType.Image;
+        if (!Uri.TryCreate(fileUrl, UriKind.Absolute, out var uri) ||
+            uri.Scheme != Uri.UriSchemeHttps ||
+            !(uri.Host.Equals("res.cloudinary.com", StringComparison.OrdinalIgnoreCase) ||
+              uri.Host.EndsWith(".cloudinary.com", StringComparison.OrdinalIgnoreCase)))
+        {
+            return false;
+        }
+
+        var segments = uri.AbsolutePath
+            .Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var uploadIndex = Array.FindIndex(
+            segments,
+            segment => segment.Equals("upload", StringComparison.OrdinalIgnoreCase));
+        if (uploadIndex <= 0)
+        {
+            return false;
+        }
+
+        resourceType = segments[uploadIndex - 1].ToLowerInvariant() switch
+        {
+            "image" => ResourceType.Image,
+            "video" => ResourceType.Video,
+            "raw" => ResourceType.Raw,
+            _ => resourceType
+        };
+
+        return segments[uploadIndex - 1].Equals("image", StringComparison.OrdinalIgnoreCase) ||
+               segments[uploadIndex - 1].Equals("video", StringComparison.OrdinalIgnoreCase) ||
+               segments[uploadIndex - 1].Equals("raw", StringComparison.OrdinalIgnoreCase);
     }
 
     private string GetSecureUrl(UploadResult uploadResult, string resourceType)

@@ -1,4 +1,5 @@
 using Application.Common.Exceptions;
+using Application.Common.Interfaces.Files;
 using Application.Common.Models;
 using Application.Features.Contracts.Milestones.Client.Approve.Commands;
 using Application.Features.Contracts.Milestones.Client.RequestRevision.Commands;
@@ -26,9 +27,9 @@ namespace Project_API.Controllers.Contracts.Common;
 [Authorize]
 public sealed class ContractMilestonesController : BaseApiController
 {
-    // The command handler enforces a 100 MB file limit. This allowance only covers
-    // multipart headers and the optional description around that file.
-    private const long MaxRequestSizeBytes = (100 * 1024 * 1024) + (64 * 1024);
+    private const long MaxRequestSizeBytes =
+        WorkspaceUploadLimits.MaxTotalFileSizeBytes +
+        WorkspaceUploadLimits.MultipartOverheadAllowanceBytes;
 
     [HttpGet]
     public async Task<IActionResult> GetMilestones(Guid contractId)
@@ -120,26 +121,44 @@ public sealed class ContractMilestonesController : BaseApiController
             return InvalidTokenResponse();
         }
 
-        if (Request.Form.Files.Count > 1)
+        if (Request.Form.Files.Count > WorkspaceUploadLimits.MaxFilesPerBatch)
         {
-            throw new BadRequestException("Only one milestone file can be submitted at a time.");
+            throw new BadRequestException(
+                $"A milestone submission may contain at most {WorkspaceUploadLimits.MaxFilesPerBatch} files.");
         }
 
-        SubmitMilestoneFile? commandFile = null;
-        var file = Request.Form.Files.FirstOrDefault();
-        if (file is not null)
+        var streams = new List<Stream>();
+        try
         {
-            commandFile = new SubmitMilestoneFile(
-                file.OpenReadStream(),
-                file.FileName,
-                file.ContentType,
-                file.Length);
+            var commandFiles = new List<SubmitMilestoneFile>(Request.Form.Files.Count);
+            foreach (var file in Request.Form.Files)
+            {
+                var stream = file.OpenReadStream();
+                streams.Add(stream);
+                commandFiles.Add(new SubmitMilestoneFile(
+                    stream,
+                    file.FileName,
+                    file.ContentType,
+                    file.Length));
+            }
+
+            var result = await Mediator.Send(
+                new SubmitMilestoneCommand(
+                    contractId,
+                    milestoneId,
+                    userId,
+                    description,
+                    commandFiles));
+
+            return Ok(ApiResponse<ContractMilestoneResponse>.Ok(result, "Milestone submitted"));
         }
-
-        var result = await Mediator.Send(
-            new SubmitMilestoneCommand(contractId, milestoneId, userId, description, commandFile));
-
-        return Ok(ApiResponse<ContractMilestoneResponse>.Ok(result, "Milestone submitted"));
+        finally
+        {
+            foreach (var stream in streams)
+            {
+                await stream.DisposeAsync();
+            }
+        }
     }
 
     [HttpPost("{milestoneId:guid}/early-start-requests")]

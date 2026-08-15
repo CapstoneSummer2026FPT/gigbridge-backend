@@ -8,6 +8,7 @@ using Application.Common.InternalServices.Wallets.Interfaces;
 using Infrastructure.Adapters.Caching;
 using Infrastructure.Adapters.Documents.ESign;
 using Infrastructure.Adapters.Documents.Receipts;
+using Infrastructure.Adapters.Files;
 using Infrastructure.Adapters.Security.Auth;
 using Infrastructure.Adapters.Security.Wallets;
 using Infrastructure.Adapters.Templates;
@@ -24,6 +25,7 @@ internal static class DependencyInjection
         IConfiguration configuration)
     {
         services.AddCachingAdapter(configuration);
+        services.AddFileUploadAdapter();
         services.AddScoped<IPasswordHasher, BCryptPasswordHasher>();
         services.AddScoped<IJwtService, JwtService>();
         services.AddScoped<IBankAccountProtector, BankAccountProtector>();

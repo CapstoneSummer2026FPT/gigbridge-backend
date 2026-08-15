@@ -7,6 +7,7 @@ using Application.Common.Interfaces;
 using Application.Common.Interfaces.Ai;
 using Application.Common.Interfaces.Caching;
 using Application.Common.Interfaces.Email;
+using Application.Common.Interfaces.Files;
 using Application.Common.Interfaces.Media;
 using Application.Common.Interfaces.Templates;
 using Application.Common.Interfaces.Time;
@@ -38,6 +39,7 @@ using Application.Common.InternalServices.Proposals.Models;
 using Application.Common.InternalServices.Reviews.Interfaces;
 using Application.Common.InternalServices.Wallets.Interfaces;
 using Infrastructure.Adapters.Caching;
+using Infrastructure.Adapters.Files;
 using Infrastructure.Adapters.Security.Auth;
 using Infrastructure.Adapters.Security.Wallets;
 using Infrastructure.Adapters.Templates;
@@ -170,6 +172,9 @@ public sealed class DependencyInjectionConfigurationTests
             services,
             ServiceLifetime.Scoped);
         AssertRegistration<ICacheService, HybridCacheService>(
+            services,
+            ServiceLifetime.Singleton);
+        AssertRegistration<IWorkspaceUploadFilePolicy, WorkspaceUploadFilePolicy>(
             services,
             ServiceLifetime.Singleton);
         AssertRegistration<ITemplateReader, FileSystemTemplateReader>(

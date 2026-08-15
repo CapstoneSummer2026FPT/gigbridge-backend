@@ -10,22 +10,26 @@ using Domain.Entities;
 using Domain.Enums.Accounts;
 using Domain.Enums.Chat;
 using Domain.Enums.Contracts;
+using Infrastructure.Adapters.Files;
 using Test_Gigbridge_Backend.TestSupport;
 
 namespace Test_Gigbridge_Backend.Application.Features.Contracts.Common;
 
 public class ContractProductHandoffWorkflowTests
 {
+    private static readonly byte[] ValidPdfContent =
+        [0x25, 0x50, 0x44, 0x46, 0x2D, 0x31, 0x2E, 0x37, 0x0A];
+
     [Fact]
     public async Task SubmitFileHandoff_UploadsToContractProductsAndCreatesCurrentVersion()
     {
         var fixture = new ContractProductHandoffFixture();
         var handler = fixture.CreateSubmitHandler();
         var file = new SubmitContractProductHandoffFile(
-            new MemoryStream(new byte[] { 1, 2, 3 }),
+            new MemoryStream(ValidPdfContent),
             "brief.pdf",
             "application/pdf",
-            3);
+            ValidPdfContent.Length);
 
         var response = await handler.Handle(
             new SubmitContractProductHandoffCommand(
@@ -53,10 +57,10 @@ public class ContractProductHandoffWorkflowTests
         var realtime = new CapturingChatRealtimeNotifier();
         var handler = fixture.CreateSubmitHandler(realtime);
         var file = new SubmitContractProductHandoffFile(
-            new MemoryStream(new byte[] { 1, 2, 3 }),
+            new MemoryStream(ValidPdfContent),
             "brief.pdf",
             "application/pdf",
-            3);
+            ValidPdfContent.Length);
 
         await handler.Handle(
             new SubmitContractProductHandoffCommand(
@@ -380,7 +384,8 @@ public class ContractProductHandoffWorkflowTests
                 new FixedDateTimeService(Now),
                 MediaService,
                 new NoopNotificationService(),
-                realtimeNotifier ?? new NoopChatRealtimeNotifier());
+                realtimeNotifier ?? new NoopChatRealtimeNotifier(),
+                new WorkspaceUploadFilePolicy());
         }
 
         public AcknowledgeContractProductHandoffCommandHandler CreateAcknowledgeHandler()
