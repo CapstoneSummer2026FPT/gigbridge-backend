@@ -31,8 +31,7 @@ public sealed class PublicFreelancersController : BaseApiController
             skills,
             availabilityStatus,
             minRating,
-            sort,
-            SearchEngineVisibleOnly: true);
+            sort);
         var result = await Mediator.Send(query);
         var publicItems = result.Items.Select(profile => new PublicFreelancerSummaryDto(
             profile.UserId,

@@ -17,6 +17,13 @@ public class UnhandledExceptionBehaviour<TRequest, TResponse> : IPipelineBehavio
         {
             return await next();
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            _logger.LogDebug(
+                "GigBridge Request: Request {Name} was canceled.",
+                typeof(TRequest).Name);
+            throw;
+        }
         catch (Exception ex)
         {
             var requestName = typeof(TRequest).Name;

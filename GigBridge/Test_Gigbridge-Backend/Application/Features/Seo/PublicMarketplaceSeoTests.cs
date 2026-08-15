@@ -1,6 +1,8 @@
 using Application.Features.Seo.PublicMarketplace.DTOs;
 using Application.Features.Seo.PublicMarketplace.Queries;
 using Application.Common.Exceptions;
+using Application.Features.Profiles.FreelancerProfile.GetFreelancerProfile.DTOs;
+using Application.Features.Profiles.FreelancerProfile.GetFreelancerProfile.Queries;
 using Domain.Entities;
 using Infrastructure.Persistence;
 using MediatR;
@@ -64,20 +66,45 @@ public sealed class PublicMarketplaceSeoTests
         Assert.Equal(optedInActive.UserId, freelancer.Id);
     }
 
-    [Theory]
-    [InlineData(false, true)]
-    [InlineData(true, false)]
-    public async Task PublicFreelancerDetail_RejectsOptedOutOrInactiveProfiles(
-        bool allowIndexing,
-        bool isActive)
+    [Fact]
+    public async Task PublicFreelancerDetail_AllowsActiveProfileThatOptsOutOfIndexing()
     {
         await using var context = CreateContext();
-        var profile = CreateFreelancer(allowIndexing, isActive, DateTime.UtcNow);
+        var profile = CreateFreelancer(allowIndexing: false, isActive: true, DateTime.UtcNow);
         context.Users.Add(profile.User);
         context.FreelancerProfiles.Add(profile);
         await context.SaveChangesAsync();
         var mediator = Substitute.For<IMediator>();
+        mediator.Send(
+                Arg.Any<GetFreelancerProfileQuery>(),
+                Arg.Any<CancellationToken>())
+            .Returns(new FreelancerProfileDetailDto
+            {
+                FreelancerProfilesId = profile.FreelancerProfilesId,
+                UserId = profile.UserId,
+                UserFullName = profile.User.FullName,
+                AllowSearchEngineIndexing = false,
+                CreatedAt = profile.CreatedAt
+            });
         var handler = new GetPublicFreelancerProfileQueryHandler(context, mediator);
+
+        var result = await handler.Handle(
+            new GetPublicFreelancerProfileQuery(profile.UserId),
+            CancellationToken.None);
+
+        Assert.Equal(profile.UserId, result.UserId);
+        Assert.False(result.AllowSearchEngineIndexing);
+    }
+
+    [Fact]
+    public async Task PublicFreelancerDetail_RejectsInactiveProfile()
+    {
+        await using var context = CreateContext();
+        var profile = CreateFreelancer(allowIndexing: true, isActive: false, DateTime.UtcNow);
+        context.Users.Add(profile.User);
+        context.FreelancerProfiles.Add(profile);
+        await context.SaveChangesAsync();
+        var handler = new GetPublicFreelancerProfileQueryHandler(context, Substitute.For<IMediator>());
 
         await Assert.ThrowsAsync<NotFoundException>(() => handler.Handle(
             new GetPublicFreelancerProfileQuery(profile.UserId),
