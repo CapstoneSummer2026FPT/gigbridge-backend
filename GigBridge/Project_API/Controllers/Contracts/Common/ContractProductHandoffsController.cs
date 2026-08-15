@@ -1,4 +1,5 @@
 using Application.Common.Exceptions;
+using Application.Common.Interfaces.Files;
 using Application.Common.Models;
 using Application.Features.Contracts.ProductHandoffs.Acknowledge.Commands;
 using Application.Features.Contracts.ProductHandoffs.Common.DTOs;
@@ -15,7 +16,9 @@ namespace Project_API.Controllers.Contracts.Common;
 [Authorize]
 public sealed class ContractProductHandoffsController : BaseApiController
 {
-    private const long MaxRequestSizeBytes = 100 * 1024 * 1024;
+    private const long MaxRequestSizeBytes =
+        WorkspaceUploadLimits.MaxTotalFileSizeBytes +
+        WorkspaceUploadLimits.MultipartOverheadAllowanceBytes;
 
     [HttpGet]
     public async Task<IActionResult> GetHandoffs(Guid contractId)

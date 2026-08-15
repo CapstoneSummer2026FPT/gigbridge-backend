@@ -1,3 +1,4 @@
+using Application.Common.Interfaces.Files;
 using Application.Common.Models;
 using Application.Features.Chat.Common.Messages.GetConversationMessages.DTOs;
 using Application.Features.Chat.Common.Messages.GetConversationMessages.Queries;
@@ -15,7 +16,9 @@ namespace Project_API.Controllers.Chat.Common;
 [Authorize]
 public class MessagesController : BaseApiController
 {
-    private const long MaxRequestSizeBytes = 100 * 1024 * 1024;
+    private const long MaxRequestSizeBytes =
+        WorkspaceUploadLimits.MaxTotalFileSizeBytes +
+        WorkspaceUploadLimits.MultipartOverheadAllowanceBytes;
 
     [HttpPost]
     public async Task<IActionResult> SendMessage([FromBody] SendMessageRequest request)

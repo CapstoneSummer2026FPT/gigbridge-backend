@@ -1,5 +1,6 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
+using Application.Common.Interfaces.Files;
 using Application.Common.Interfaces.Media;
 using Application.Common.Interfaces.Time;
 using Application.Common.InternalServices.Chat.Interfaces;
@@ -12,40 +13,39 @@ using Domain.Enums.Contracts;
 using Domain.Enums.Notifications;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace Application.Features.Contracts.ProductHandoffs.Submit.Commands;
 
 public sealed class SubmitContractProductHandoffCommandHandler :
     IRequestHandler<SubmitContractProductHandoffCommand, ContractProductHandoffResponse>
 {
-    private static readonly HashSet<string> BlockedExtensions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ".exe",
-        ".bat",
-        ".cmd",
-        ".sh"
-    };
-
-    private const long MaxFileSizeBytes = 100 * 1024 * 1024;
+    private const string UploadFolder = "contract-products";
 
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
     private readonly IMediaService _mediaService;
     private readonly INotificationService _notificationService;
     private readonly IChatRealtimeNotifier _chatRealtimeNotifier;
+    private readonly IWorkspaceUploadFilePolicy _uploadFilePolicy;
+    private readonly ILogger<SubmitContractProductHandoffCommandHandler>? _logger;
 
     public SubmitContractProductHandoffCommandHandler(
         IApplicationDbContext context,
         IDateTimeService dateTimeService,
         IMediaService mediaService,
         INotificationService notificationService,
-        IChatRealtimeNotifier chatRealtimeNotifier)
+        IChatRealtimeNotifier chatRealtimeNotifier,
+        IWorkspaceUploadFilePolicy uploadFilePolicy,
+        ILogger<SubmitContractProductHandoffCommandHandler>? logger = null)
     {
         _context = context;
         _dateTimeService = dateTimeService;
         _mediaService = mediaService;
         _notificationService = notificationService;
         _chatRealtimeNotifier = chatRealtimeNotifier;
+        _uploadFilePolicy = uploadFilePolicy;
+        _logger = logger;
     }
 
     public async Task<ContractProductHandoffResponse> Handle(
@@ -54,106 +54,152 @@ public sealed class SubmitContractProductHandoffCommandHandler :
     {
         ValidateRequest(command);
 
-        var contract = await ContractProductHandoffAccess.GetActiveContractAsync(
-            _context,
-            command.ContractId,
-            cancellationToken);
-
-        await ContractProductHandoffAccess.EnsureClientAsync(
-            _context,
-            contract,
-            command.UserId,
-            cancellationToken);
-
-        var now = _dateTimeService.UtcNow;
-        var currentHandoffs = await _context.Set<ContractProductHandoff>()
-            .Where(handoff => handoff.ContractsId == contract.ContractsId && handoff.IsCurrent)
-            .ToListAsync(cancellationToken);
-
-        foreach (var currentHandoff in currentHandoffs)
-        {
-            currentHandoff.IsCurrent = false;
-        }
-
-        var nextVersion = await _context.Set<ContractProductHandoff>()
-            .AsNoTracking()
-            .Where(handoff => handoff.ContractsId == contract.ContractsId)
-            .Select(handoff => (int?)handoff.Version)
-            .MaxAsync(cancellationToken) ?? 0;
-
-        var handoff = new ContractProductHandoff
-        {
-            ContractProductHandoffId = Guid.NewGuid(),
-            ContractsId = contract.ContractsId,
-            SubmittedByUserId = command.UserId,
-            Note = NormalizeNote(command.Note),
-            Version = nextVersion + 1,
-            IsCurrent = true,
-            CreatedAt = now
-        };
-
-        if (command.File is not null)
-        {
-            var fileUrl = await _mediaService.UploadFileAsync(
-                command.File.Content,
-                command.File.FileName,
-                command.File.ContentType,
-                "contract-products",
+        var validatedFiles = command.File is null
+            ? new ValidatedWorkspaceUploadBatch(Array.Empty<ValidatedWorkspaceUploadFile>())
+            : await _uploadFilePolicy.ValidateBatchAsync(
+                [new WorkspaceUploadFile(
+                    command.File.Content,
+                    command.File.FileName,
+                    command.File.ContentType,
+                    command.File.Length)],
+                1,
                 cancellationToken);
 
-            handoff.SourceType = (int)ContractProductHandoffSourceType.File;
-            handoff.FileName = command.File.FileName.Trim();
-            handoff.FileUrl = fileUrl;
-            handoff.MimeType = command.File.ContentType.Trim();
-            handoff.FileSizeBytes = command.File.Length;
-        }
-        else
+        try
         {
-            handoff.SourceType = (int)ContractProductHandoffSourceType.Link;
-            handoff.ExternalUrl = command.ExternalUrl!.Trim();
-        }
-
-        _context.Set<ContractProductHandoff>().Add(handoff);
-        contract.UpdatedAt = now;
-
-        var materialLabel = handoff.SourceType == (int)ContractProductHandoffSourceType.File
-            ? handoff.FileName
-            : handoff.ExternalUrl;
-        var systemMessage = await ContractConversationEvents.AddSystemMessageAsync(
-            _context,
-            contract.ContractsId,
-            $"Client sent product materials: {materialLabel}.",
-            now,
-            cancellationToken);
-
-        await NotifyFreelancerAsync(contract, handoff, cancellationToken);
-
-        await _context.SaveChangesAsync(cancellationToken);
-
-        var participantUserIds = await ContractProductHandoffAccess.GetParticipantUserIdsAsync(
-            _context,
-            contract,
-            cancellationToken);
-
-        if (participantUserIds.Count > 0)
-        {
-            await _chatRealtimeNotifier.SendUsersEventAsync(
-                participantUserIds,
-                "ProductHandoffUpdated",
-                ContractProductHandoffMapper.ToResponse(handoff),
+            var contract = await ContractProductHandoffAccess.GetActiveContractAsync(
+                _context,
+                command.ContractId,
                 cancellationToken);
-        }
 
-        if (systemMessage is not null)
-        {
-            await _chatRealtimeNotifier.SendConversationEventAsync(
-                systemMessage.ConversationsId,
-                "ReceiveMessage",
-                ContractConversationEvents.ToRealtimePayload(systemMessage),
+            await ContractProductHandoffAccess.EnsureClientAsync(
+                _context,
+                contract,
+                command.UserId,
                 cancellationToken);
-        }
 
-        return ContractProductHandoffMapper.ToResponse(handoff);
+            var now = _dateTimeService.UtcNow;
+            var currentHandoffs = await _context.Set<ContractProductHandoff>()
+                .Where(handoff => handoff.ContractsId == contract.ContractsId && handoff.IsCurrent)
+                .ToListAsync(cancellationToken);
+
+            foreach (var currentHandoff in currentHandoffs)
+            {
+                currentHandoff.IsCurrent = false;
+            }
+
+            var nextVersion = await _context.Set<ContractProductHandoff>()
+                .AsNoTracking()
+                .Where(handoff => handoff.ContractsId == contract.ContractsId)
+                .Select(handoff => (int?)handoff.Version)
+                .MaxAsync(cancellationToken) ?? 0;
+
+            var handoff = new ContractProductHandoff
+            {
+                ContractProductHandoffId = Guid.NewGuid(),
+                ContractsId = contract.ContractsId,
+                SubmittedByUserId = command.UserId,
+                Note = NormalizeNote(command.Note),
+                Version = nextVersion + 1,
+                IsCurrent = true,
+                CreatedAt = now
+            };
+
+            string? uploadedFileUrl = null;
+            try
+            {
+                if (validatedFiles.Count == 1)
+                {
+                    var file = validatedFiles[0];
+                    uploadedFileUrl = await _mediaService.UploadFileAsync(
+                        file.Content,
+                        file.FileName,
+                        file.ContentType,
+                        UploadFolder,
+                        cancellationToken);
+
+                    handoff.SourceType = (int)ContractProductHandoffSourceType.File;
+                    handoff.FileName = file.FileName;
+                    handoff.FileUrl = uploadedFileUrl;
+                    handoff.MimeType = file.ContentType;
+                    handoff.FileSizeBytes = file.Length;
+                }
+                else
+                {
+                    handoff.SourceType = (int)ContractProductHandoffSourceType.Link;
+                    handoff.ExternalUrl = command.ExternalUrl!.Trim();
+                }
+
+                _context.Set<ContractProductHandoff>().Add(handoff);
+                contract.UpdatedAt = now;
+
+                var materialLabel =
+                    handoff.SourceType == (int)ContractProductHandoffSourceType.File
+                        ? handoff.FileName
+                        : handoff.ExternalUrl;
+                var systemMessage = await ContractConversationEvents.AddSystemMessageAsync(
+                    _context,
+                    contract.ContractsId,
+                    $"Client sent product materials: {materialLabel}.",
+                    now,
+                    cancellationToken);
+
+                await NotifyFreelancerAsync(contract, handoff, cancellationToken);
+                await _context.SaveChangesAsync(cancellationToken);
+
+                var participantUserIds =
+                    await ContractProductHandoffAccess.GetParticipantUserIdsAsync(
+                        _context,
+                        contract,
+                        cancellationToken);
+
+                if (participantUserIds.Count > 0)
+                {
+                    await _chatRealtimeNotifier.SendUsersEventAsync(
+                        participantUserIds,
+                        "ProductHandoffUpdated",
+                        ContractProductHandoffMapper.ToResponse(handoff),
+                        cancellationToken);
+                }
+
+                if (systemMessage is not null)
+                {
+                    await _chatRealtimeNotifier.SendConversationEventAsync(
+                        systemMessage.ConversationsId,
+                        "ReceiveMessage",
+                        ContractConversationEvents.ToRealtimePayload(systemMessage),
+                        cancellationToken);
+                }
+
+                return ContractProductHandoffMapper.ToResponse(handoff);
+            }
+            catch
+            {
+                if (!string.IsNullOrWhiteSpace(uploadedFileUrl))
+                {
+                    try
+                    {
+                        await _mediaService.DeleteFileAsync(
+                            uploadedFileUrl,
+                            UploadFolder,
+                            CancellationToken.None);
+                    }
+                    catch (Exception exception) when (exception is not OperationCanceledException)
+                    {
+                        _logger?.LogWarning(
+                            exception,
+                            "Failed to roll back product handoff file at {FileUrl}.",
+                            uploadedFileUrl);
+                    }
+                }
+
+                throw;
+            }
+        }
+        finally
+        {
+            await validatedFiles.DisposeAsync();
+        }
     }
 
     private static void ValidateRequest(SubmitContractProductHandoffCommand command)
@@ -182,21 +228,7 @@ public sealed class SubmitContractProductHandoffCommandHandler :
             return;
         }
 
-        if (command.File.Length <= 0 || command.File.Length > MaxFileSizeBytes)
-        {
-            throw new BadRequestException("Product file size is invalid.");
-        }
-
-        if (string.IsNullOrWhiteSpace(command.File.FileName))
-        {
-            throw new BadRequestException("Product file name is required.");
-        }
-
-        var extension = Path.GetExtension(command.File.FileName);
-        if (!string.IsNullOrWhiteSpace(extension) && BlockedExtensions.Contains(extension))
-        {
-            throw new BadRequestException("Product file extension is not allowed.");
-        }
+        // File content, type, archive entries, and size are validated by the shared policy.
     }
 
     private static string? NormalizeNote(string? note)
