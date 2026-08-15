@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces.Media;
 using Application.Common.Interfaces.Time;
@@ -12,6 +13,7 @@ using Application.Features.Contracts.Milestones.Common.Get.Queries;
 using Application.Features.Contracts.Milestones.Common.List.Queries;
 using Application.Features.Contracts.Milestones.Freelancer.RequestUnlock.Commands;
 using Application.Features.Contracts.Milestones.Freelancer.Submit.Commands;
+using Application.Features.Contracts.Milestones.Freelancer.Submit.Common;
 using Application.Features.Contracts.Milestones.Freelancer.Withdraw.Commands;
 using Application.Features.Contracts.WorkItems.Freelancer.Update.Commands;
 using Application.Features.Contracts.WorkItems.Freelancer.Update.DTOs;
@@ -22,6 +24,7 @@ using Domain.Enums.Chat;
 using Domain.Enums.Contracts;
 using Domain.Enums.Contracts.Escrow;
 using Domain.Enums.Contracts.Milestones;
+using Domain.Enums.Delivery;
 using Domain.Enums.Notifications;
 using Domain.Enums.Wallets;
 using NSubstitute;
@@ -1323,5 +1326,119 @@ public class MilestoneWorkflowTests
             CancellationToken.None);
 
         Assert.Equal(content, mediaService.UploadedContent);
+    }
+
+    [Fact]
+    public async Task SubmitMilestone_EnqueuesClientSubmissionEmailOutboxRow()
+    {
+        var fixture = new MilestoneWorkflowFixture();
+        var submitHandler = new SubmitMilestoneCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new CapturingUserAuditLogService(),
+            new TestMediaService());
+        fixture.FirstMilestone.Status = (int)MilestoneStatus.InProgress;
+
+        await submitHandler.Handle(
+            new SubmitMilestoneCommand(
+                fixture.ContractId,
+                fixture.FirstMilestoneId,
+                fixture.FreelancerUserId,
+                "Initial delivery.",
+                File: CreateSubmissionFile("milestone-1-v1.zip")),
+            CancellationToken.None);
+
+        var outboxRow = Assert.Single(fixture.Context.Set<DeliveryOutbox>().ToList());
+        Assert.Null(outboxRow.ScheduleId);
+        Assert.Equal((int)DeliveryOutboxType.MilestoneSubmission, outboxRow.DeliveryType);
+        Assert.Equal((int)DeliveryChannel.Email, outboxRow.Channel);
+        Assert.Equal((int)DeliveryOutboxStatus.Pending, outboxRow.Status);
+        Assert.Equal(fixture.ClientUserId, outboxRow.RecipientUserId);
+        Assert.StartsWith($"milestone:{fixture.FirstMilestoneId:D}:submitted:", outboxRow.DeliveryKey);
+
+        var payload = JsonSerializer.Deserialize<MilestoneSubmissionDeliveryPayload>(
+            outboxRow.Payload, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        Assert.NotNull(payload);
+        Assert.Equal(fixture.ContractId, payload!.ContractId);
+        Assert.Equal(fixture.FirstMilestoneId, payload.MilestoneId);
+        Assert.Equal("client@example.com", payload.ClientEmail);
+        Assert.Equal("Client", payload.ClientName);
+    }
+
+    [Fact]
+    public async Task SubmitMilestone_Resubmission_UsesDistinctDeliveryKeys()
+    {
+        var fixture = new MilestoneWorkflowFixture();
+        var firstSubmitHandler = new SubmitMilestoneCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new CapturingUserAuditLogService(),
+            new TestMediaService());
+        var revisionHandler = new RequestMilestoneRevisionCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now.AddMinutes(1)));
+        var secondSubmitHandler = new SubmitMilestoneCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now.AddMinutes(2)),
+            new CapturingUserAuditLogService(),
+            new TestMediaService());
+        fixture.FirstMilestone.Status = (int)MilestoneStatus.InProgress;
+
+        await firstSubmitHandler.Handle(
+            new SubmitMilestoneCommand(
+                fixture.ContractId,
+                fixture.FirstMilestoneId,
+                fixture.FreelancerUserId,
+                File: CreateSubmissionFile("milestone-1-v1.zip")),
+            CancellationToken.None);
+
+        await revisionHandler.Handle(
+            new RequestMilestoneRevisionCommand(
+                fixture.ContractId,
+                fixture.FirstMilestoneId,
+                fixture.ClientUserId,
+                new RequestMilestoneRevisionRequest("Needs another pass.", [fixture.FirstWorkItem.ContractWorkItemId])),
+            CancellationToken.None);
+        fixture.FirstWorkItem.Status = (int)ContractWorkItemStatus.Completed;
+
+        await secondSubmitHandler.Handle(
+            new SubmitMilestoneCommand(
+                fixture.ContractId,
+                fixture.FirstMilestoneId,
+                fixture.FreelancerUserId,
+                File: CreateSubmissionFile("milestone-1-v2.zip")),
+            CancellationToken.None);
+
+        var outboxRows = fixture.Context.Set<DeliveryOutbox>().ToList();
+        Assert.Equal(2, outboxRows.Count);
+        Assert.Equal(2, outboxRows.Select(row => row.DeliveryKey).Distinct().Count());
+        Assert.All(outboxRows, row => Assert.Equal(fixture.ClientUserId, row.RecipientUserId));
+    }
+
+    [Fact]
+    public async Task SubmitMilestone_WithSingleFile_OutboxPayloadTargetsClientOnly()
+    {
+        var fixture = new MilestoneWorkflowFixture();
+        var submitHandler = new SubmitMilestoneCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new CapturingUserAuditLogService(),
+            new TestMediaService());
+        fixture.FirstMilestone.Status = (int)MilestoneStatus.InProgress;
+
+        await submitHandler.Handle(
+            new SubmitMilestoneCommand(
+                fixture.ContractId,
+                fixture.FirstMilestoneId,
+                fixture.FreelancerUserId,
+                File: CreateSubmissionFile("deliverable.zip")),
+            CancellationToken.None);
+
+        var outboxRow = Assert.Single(fixture.Context.Set<DeliveryOutbox>().ToList());
+        Assert.NotEqual(fixture.FreelancerUserId, outboxRow.RecipientUserId);
+        Assert.Equal(fixture.ClientUserId, outboxRow.RecipientUserId);
+
+        var attachment = Assert.Single(fixture.Context.Set<MilestoneAttachment>().ToList());
+        Assert.Equal("deliverable.zip", attachment.FileName);
     }
 }

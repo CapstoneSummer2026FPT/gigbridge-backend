@@ -222,6 +222,34 @@ internal static class MilestoneWorkflowGuard
         return userIds;
     }
 
+    /// <summary>
+    /// The contract's Client user id, full name, and email — used to address notifications
+    /// (e.g. the milestone submission email) to the JobPost owner.
+    /// </summary>
+    public static async Task<(Guid UserId, string FullName, string Email)> GetClientContactAsync(
+        IApplicationDbContext context,
+        Contract contract,
+        CancellationToken cancellationToken)
+    {
+        var clientUserId = await context.Set<ClientProfile>()
+            .Where(profile => profile.ClientProfilesId == contract.ClientProfilesId)
+            .Select(profile => profile.UserId)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (clientUserId == Guid.Empty)
+        {
+            throw new NotFoundException("Client account does not exist.");
+        }
+
+        var user = await context.Set<User>()
+            .Where(user => user.UserId == clientUserId)
+            .Select(user => new { user.FullName, user.Email })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return user is null
+            ? throw new NotFoundException("Client account does not exist.")
+            : (clientUserId, user.FullName, user.Email);
+    }
+
     public static IOrderedQueryable<Milestone> OrderMilestones(IQueryable<Milestone> milestones)
     {
         return milestones
