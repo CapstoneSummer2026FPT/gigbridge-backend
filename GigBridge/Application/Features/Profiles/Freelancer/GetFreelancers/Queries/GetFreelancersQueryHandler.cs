@@ -47,11 +47,6 @@ public sealed class GetFreelancersQueryHandler
                 .AsNoTracking()
                 .Where(profile => profile.User.IsActive);
 
-        if (request.SearchEngineVisibleOnly)
-        {
-            profiles = profiles.Where(profile => profile.AllowSearchEngineIndexing);
-        }
-
         var search = request.Search?.Trim().ToLowerInvariant();
         if (!string.IsNullOrWhiteSpace(search))
         {

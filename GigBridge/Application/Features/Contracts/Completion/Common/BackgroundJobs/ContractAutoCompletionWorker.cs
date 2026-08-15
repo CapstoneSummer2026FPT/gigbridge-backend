@@ -33,12 +33,23 @@ public sealed class ContractAutoCompletionWorker : BackgroundService
             {
                 await ProcessOnceAsync(stoppingToken);
             }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
             catch (Exception exception) when (exception is not OperationCanceledException)
             {
                 _logger.LogError(exception, "Automatic contract completion batch failed.");
             }
 
-            await Task.Delay(CheckInterval, stoppingToken);
+            try
+            {
+                await Task.Delay(CheckInterval, stoppingToken);
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
         }
     }
 

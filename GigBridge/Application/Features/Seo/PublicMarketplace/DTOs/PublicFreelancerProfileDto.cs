@@ -4,7 +4,7 @@ using Application.Features.Profiles.FreelancerProfile.GetFreelancerProfile.DTOs;
 namespace Application.Features.Seo.PublicMarketplace.DTOs;
 
 /// <summary>
-/// Search-engine-safe freelancer profile returned only after explicit opt-in.
+/// Public-safe marketplace profile. Search-engine indexing is controlled separately.
 /// </summary>
 public sealed class PublicFreelancerProfileDto
 {
@@ -25,6 +25,7 @@ public sealed class PublicFreelancerProfileDto
     public bool IsPremium { get; init; }
     public bool IsIdentityVerified { get; init; }
     public bool ShowProVerifiedBadge { get; init; }
+    public bool AllowSearchEngineIndexing { get; init; }
     public List<FreelancerProfileCategoryDto> Categories { get; init; } = [];
     public List<FreelancerSkillDto> Skills { get; init; } = [];
     public List<PortfolioItemDto> PortfolioItems { get; init; } = [];
