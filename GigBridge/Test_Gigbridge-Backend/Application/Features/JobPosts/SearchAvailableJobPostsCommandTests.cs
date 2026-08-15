@@ -40,76 +40,62 @@ public sealed class SearchAvailableJobPostsCommandTests
     }
 
     [Fact]
-    public void Profile_filter_matches_category_or_official_or_custom_skill()
+    public void Profile_filter_matches_only_the_freelancer_major()
     {
-        var categoryId = Guid.NewGuid();
+        var profileMajorId = Guid.NewGuid();
+        var otherMajorId = Guid.NewGuid();
         var skillId = Guid.NewGuid();
-        var categoryMatch = Job("Category", "Engineering", [], Now, true, categoryId);
-        var officialSkillMatch = Job("Official skill", "Design", [], Now, true);
-        officialSkillMatch.JobPostSkills.Add(new JobPostSkill { SkillsId = skillId });
-        var customSkillMatch = Job("Custom skill", "Design", ["REACT"], Now, true);
-        var noMatch = Job("No match", "Design", ["Figma"], Now, true);
+        var sameMajorDifferentCategory = Job(
+            "Same major", "Design", ["Figma"], Now, true, majorId: profileMajorId);
+        var otherMajorWithSameSkill = Job(
+            "Other major", "Engineering", ["React"], Now, true, majorId: otherMajorId);
+        otherMajorWithSameSkill.JobPostSkills.Add(new JobPostSkill { SkillsId = skillId });
 
-        var result = GetProfileMatchedJobPostsQueryHandler.ApplyProfileMatchFilter(
-            new[] { categoryMatch, officialSkillMatch, customSkillMatch, noMatch }.AsQueryable(),
-            [categoryId],
-            [skillId],
-            ["react"]).ToList();
+        var result = GetProfileMatchedJobPostsQueryHandler.ApplyMajorMatchFilter(
+            new[] { sameMajorDifferentCategory, otherMajorWithSameSkill }.AsQueryable(),
+            profileMajorId).ToList();
 
-        Assert.Equal(3, result.Count);
-        Assert.DoesNotContain(noMatch, result);
+        Assert.Equal(new[] { sameMajorDifferentCategory }, result);
     }
 
     [Fact]
-    public void Profile_filter_supports_multiple_categories_with_or_semantics()
+    public void Profile_filter_excludes_jobs_without_a_major_mapping()
     {
-        var firstCategoryId = Guid.NewGuid();
-        var secondCategoryId = Guid.NewGuid();
-        var first = Job("First", "Engineering", [], Now, true, firstCategoryId);
-        var second = Job("Second", "Design", [], Now, true, secondCategoryId);
-        var other = Job("Other", "Writing", [], Now, true, Guid.NewGuid());
+        var profileMajorId = Guid.NewGuid();
+        var matching = Job("Matching", "Engineering", [], Now, true, majorId: profileMajorId);
+        var missingMapping = Job("Missing mapping", "Engineering", [], Now, true);
+        missingMapping.MajorCategory = null;
 
-        var result = GetProfileMatchedJobPostsQueryHandler.ApplyProfileMatchFilter(
-            new[] { first, second, other }.AsQueryable(),
-            [firstCategoryId, secondCategoryId],
-            [],
-            []).ToList();
+        var result = GetProfileMatchedJobPostsQueryHandler.ApplyMajorMatchFilter(
+            new[] { matching, missingMapping }.AsQueryable(),
+            profileMajorId).ToList();
 
-        Assert.Equal(new[] { first, second }, result);
+        Assert.Equal(new[] { matching }, result);
     }
 
     [Fact]
-    public void Profile_relevance_prioritizes_both_dimensions_then_skill_overlap()
+    public void Profile_sorting_uses_featured_then_created_date_without_skill_weighting()
     {
-        var categoryId = Guid.NewGuid();
-        var firstSkillId = Guid.NewGuid();
-        var secondSkillId = Guid.NewGuid();
-        var categoryOnly = Job("Category only", "Engineering", [], Now, true, categoryId);
-        var bothOneSkill = Job("Both one", "Engineering", [], Now, true, categoryId);
-        bothOneSkill.JobPostSkills.Add(new JobPostSkill { SkillsId = firstSkillId });
-        var bothTwoSkills = Job("Both two", "Engineering", [], Now, true, categoryId);
-        bothTwoSkills.JobPostSkills.Add(new JobPostSkill { SkillsId = firstSkillId });
-        bothTwoSkills.JobPostSkills.Add(new JobPostSkill { SkillsId = secondSkillId });
+        var olderFeatured = Job("Featured", "Engineering", [], Now.AddDays(-5), true);
+        olderFeatured.IsFeatured = true;
+        olderFeatured.FeaturedUntil = Now.AddDays(1);
+        var newerWithoutSkills = Job("Newer", "Engineering", [], Now.AddDays(-1), true);
+        var olderWithSkills = Job("Skilled", "Engineering", ["React", "SQL"], Now.AddDays(-2), true);
 
-        var result = GetProfileMatchedJobPostsQueryHandler.ApplyProfileMatchSorting(
-            new[] { categoryOnly, bothOneSkill, bothTwoSkills }.AsQueryable(),
-            [categoryId],
-            [firstSkillId, secondSkillId],
-            [],
+        var result = GetProfileMatchedJobPostsQueryHandler.ApplyMajorMatchSorting(
+            new[] { newerWithoutSkills, olderWithSkills, olderFeatured }.AsQueryable(),
             "relevance",
             Now).ToList();
 
-        Assert.Equal(new[] { bothTwoSkills, bothOneSkill, categoryOnly }, result);
+        Assert.Equal(new[] { olderFeatured, newerWithoutSkills, olderWithSkills }, result);
     }
 
     [Fact]
-    public void Empty_profile_criteria_returns_no_matches()
+    public void Missing_profile_major_returns_no_matches()
     {
-        var result = GetProfileMatchedJobPostsQueryHandler.ApplyProfileMatchFilter(
+        var result = GetProfileMatchedJobPostsQueryHandler.ApplyMajorMatchFilter(
             new[] { Job("Any", "Engineering", [], Now, true) }.AsQueryable(),
-            [],
-            [],
-            []).ToList();
+            null).ToList();
 
         Assert.Empty(result);
     }
@@ -134,16 +120,14 @@ public sealed class SearchAvailableJobPostsCommandTests
     [Fact]
     public void Manual_filters_are_combined_with_profile_matching_using_and_semantics()
     {
-        var categoryId = Guid.NewGuid();
-        var matching = Job("Recent React", "Engineering", ["React"], Now.AddDays(-2), true, categoryId);
-        var wrongManualSkill = Job("Recent Figma", "Engineering", ["Figma"], Now.AddDays(-2), true, categoryId);
-        var tooOld = Job("Old React", "Engineering", ["React"], Now.AddDays(-60), true, categoryId);
+        var majorId = Guid.NewGuid();
+        var matching = Job("Recent React", "Engineering", ["React"], Now.AddDays(-2), true, majorId);
+        var wrongManualSkill = Job("Recent Figma", "Engineering", ["Figma"], Now.AddDays(-2), true, majorId);
+        var tooOld = Job("Old React", "Engineering", ["React"], Now.AddDays(-60), true, majorId);
 
-        var profileMatches = GetProfileMatchedJobPostsQueryHandler.ApplyProfileMatchFilter(
+        var profileMatches = GetProfileMatchedJobPostsQueryHandler.ApplyMajorMatchFilter(
             new[] { matching, wrongManualSkill, tooOld }.AsQueryable(),
-            [categoryId],
-            [],
-            []);
+            majorId);
         var result = SearchAvailableJobPostsCommandHandler.ApplyBrowseFilters(
             profileMatches,
             new SearchAvailableJobPostsCommand(Skills: "react", PostedWithinDays: 30),
@@ -158,7 +142,7 @@ public sealed class SearchAvailableJobPostsCommandTests
         string[] customSkills,
         DateTime createdAt,
         bool aiGenerated,
-        Guid? majorCategoryId = null,
+        Guid? majorId = null,
         int status = 1,
         int? visibility = 0)
     {
@@ -171,10 +155,11 @@ public sealed class SearchAvailableJobPostsCommandTests
             Status = status,
             Visibility = visibility,
             IsAigenerated = aiGenerated,
-            MajorCategoryId = majorCategoryId,
+            MajorCategoryId = majorId.HasValue ? Guid.NewGuid() : null,
             CustomSkillNames = customSkills,
             MajorCategory = new MajorCategory
             {
+                MajorId = majorId ?? Guid.Empty,
                 Category = new Category { Name = category, Slug = category.ToLowerInvariant() }
             }
         };

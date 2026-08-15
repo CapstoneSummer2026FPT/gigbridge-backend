@@ -3,7 +3,6 @@ namespace Application.Features.JobPosts.Freelancer.GetProfileMatchedJobPosts.DTO
 public sealed record ProfileMatchedJobPostsRequest(
     int PageIndex = 1,
     int PageSize = 20,
-    List<Guid>? MajorCategoryIds = null,
     string? Search = null,
     decimal? BudgetMin = null,
     decimal? BudgetMax = null,

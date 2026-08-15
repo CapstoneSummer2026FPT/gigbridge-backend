@@ -34,7 +34,6 @@ public class FreelancerJobPostsController : BaseApiController
             userId,
             request.PageIndex,
             request.PageSize,
-            request.MajorCategoryIds ?? [],
             request.Search,
             request.BudgetMin,
             request.BudgetMax,

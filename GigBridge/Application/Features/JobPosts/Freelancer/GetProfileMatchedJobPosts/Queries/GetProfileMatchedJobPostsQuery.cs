@@ -7,7 +7,6 @@ public sealed record GetProfileMatchedJobPostsQuery(
     Guid UserId,
     int PageIndex,
     int PageSize,
-    IReadOnlyList<Guid> MajorCategoryIds,
     string? Search,
     decimal? BudgetMin,
     decimal? BudgetMax,

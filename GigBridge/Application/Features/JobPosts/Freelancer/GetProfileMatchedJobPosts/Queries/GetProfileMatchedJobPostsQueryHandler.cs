@@ -22,30 +22,12 @@ public sealed class GetProfileMatchedJobPostsQueryHandler(
     {
         var freelancer = await context.Set<FreelancerProfile>()
             .AsNoTracking()
-            .Include(profile => profile.FreelancerSkills)
-                .ThenInclude(selection => selection.Skills)
             .FirstOrDefaultAsync(profile => profile.UserId == request.UserId, cancellationToken);
 
         if (freelancer is null)
         {
             throw new NotFoundException("Freelancer profile not found.");
         }
-
-        var majorCategoryIds = request.MajorCategoryIds
-            .Where(id => id != Guid.Empty)
-            .Distinct()
-            .Take(50)
-            .ToArray();
-        var profileSkillIds = freelancer.FreelancerSkills
-            .Select(selection => selection.SkillsId)
-            .Distinct()
-            .ToArray();
-        var profileSkillNames = freelancer.FreelancerSkills
-            .Where(selection => selection.Skills is not null &&
-                !string.IsNullOrWhiteSpace(selection.Skills.Name))
-            .Select(selection => selection.Skills.Name.Trim().ToLowerInvariant())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
 
         var appliedJobIds = context.Set<Proposal>()
             .AsNoTracking()
@@ -56,11 +38,7 @@ public sealed class GetProfileMatchedJobPostsQueryHandler(
             context.Set<JobPost>().AsNoTracking(),
             appliedJobIds);
 
-        jobQuery = ApplyProfileMatchFilter(
-            jobQuery,
-            majorCategoryIds,
-            profileSkillIds,
-            profileSkillNames);
+        jobQuery = ApplyMajorMatchFilter(jobQuery, freelancer.MajorId);
 
         var manualFilters = new SearchAvailableJobPostsCommand(
             PageIndex: request.PageIndex,
@@ -91,13 +69,7 @@ public sealed class GetProfileMatchedJobPostsQueryHandler(
             clock.UtcNow);
 
         var total = await jobQuery.LongCountAsync(cancellationToken);
-        jobQuery = ApplyProfileMatchSorting(
-            jobQuery,
-            majorCategoryIds,
-            profileSkillIds,
-            profileSkillNames,
-            request.SortBy,
-            clock.UtcNow);
+        jobQuery = ApplyMajorMatchSorting(jobQuery, request.SortBy, clock.UtcNow);
 
         var pageIndex = GetAvailableJobPostsQueryHandler.NormalizePageIndex(request.PageIndex);
         var pageSize = GetAvailableJobPostsQueryHandler.NormalizePageSize(request.PageSize);
@@ -140,8 +112,7 @@ public sealed class GetProfileMatchedJobPostsQueryHandler(
                     new
                     {
                         View = "profile",
-                        MajorCategoryIds = majorCategoryIds,
-                        ProfileSkillIds = profileSkillIds,
+                        MajorId = freelancer.MajorId,
                         request.BudgetMin,
                         request.BudgetMax,
                         request.Skills,
@@ -165,42 +136,17 @@ public sealed class GetProfileMatchedJobPostsQueryHandler(
             searchEventId);
     }
 
-    internal static IQueryable<JobPost> ApplyProfileMatchFilter(
+    internal static IQueryable<JobPost> ApplyMajorMatchFilter(
         IQueryable<JobPost> query,
-        IReadOnlyCollection<Guid> majorCategoryIds,
-        IReadOnlyCollection<Guid> profileSkillIds,
-        IReadOnlyCollection<string> profileSkillNames)
+        Guid? majorId)
     {
-        var categories = majorCategoryIds.Distinct().ToArray();
-        var skillIds = profileSkillIds.Distinct().ToArray();
-        var skillNames = profileSkillNames
-            .Where(name => !string.IsNullOrWhiteSpace(name))
-            .Select(name => name.Trim().ToLowerInvariant())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-        if (categories.Length == 0 && skillIds.Length == 0 && skillNames.Length == 0)
+        if (!majorId.HasValue || majorId.Value == Guid.Empty)
         {
             return query.Where(_ => false);
         }
 
-        if (categories.Length == 0)
-        {
-            return query.Where(job =>
-                job.JobPostSkills.Any(selection => skillIds.Contains(selection.SkillsId)) ||
-                job.CustomSkillNames.Any(name => skillNames.Contains(name.ToLower())));
-        }
-
-        if (skillIds.Length == 0 && skillNames.Length == 0)
-        {
-            return query.Where(job =>
-                job.MajorCategoryId.HasValue && categories.Contains(job.MajorCategoryId.Value));
-        }
-
         return query.Where(job =>
-            (job.MajorCategoryId.HasValue && categories.Contains(job.MajorCategoryId.Value)) ||
-            job.JobPostSkills.Any(selection => skillIds.Contains(selection.SkillsId)) ||
-            job.CustomSkillNames.Any(name => skillNames.Contains(name.ToLower())));
+            job.MajorCategory != null && job.MajorCategory.MajorId == majorId.Value);
     }
 
     internal static IQueryable<JobPost> ApplyEligibilityFilter(
@@ -213,39 +159,13 @@ public sealed class GetProfileMatchedJobPostsQueryHandler(
             !appliedJobIds.Contains(job.JobPostsId));
     }
 
-    internal static IOrderedQueryable<JobPost> ApplyProfileMatchSorting(
+    internal static IOrderedQueryable<JobPost> ApplyMajorMatchSorting(
         IQueryable<JobPost> query,
-        IReadOnlyCollection<Guid> majorCategoryIds,
-        IReadOnlyCollection<Guid> profileSkillIds,
-        IReadOnlyCollection<string> profileSkillNames,
         string? sortBy,
         DateTime now)
     {
-        if (sortBy?.Trim().Equals("newest", StringComparison.OrdinalIgnoreCase) == true)
-        {
-            return query
-                .OrderByDescending(job => job.IsFeatured && job.FeaturedUntil > now)
-                .ThenByDescending(job => job.CreatedAt)
-                .ThenByDescending(job => job.JobPostsId);
-        }
-
-        var categories = majorCategoryIds.Distinct().ToArray();
-        var skillIds = profileSkillIds.Distinct().ToArray();
-        var skillNames = profileSkillNames
-            .Where(name => !string.IsNullOrWhiteSpace(name))
-            .Select(name => name.Trim().ToLowerInvariant())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
         return query
-            .OrderByDescending(job =>
-                (job.MajorCategoryId.HasValue && categories.Contains(job.MajorCategoryId.Value) ? 1 : 0) +
-                (job.JobPostSkills.Any(selection => skillIds.Contains(selection.SkillsId)) ||
-                    job.CustomSkillNames.Any(name => skillNames.Contains(name.ToLower())) ? 1 : 0))
-            .ThenByDescending(job =>
-                job.JobPostSkills.Count(selection => skillIds.Contains(selection.SkillsId)) +
-                job.CustomSkillNames.Count(name => skillNames.Contains(name.ToLower())))
-            .ThenByDescending(job => job.IsFeatured && job.FeaturedUntil > now)
+            .OrderByDescending(job => job.IsFeatured && job.FeaturedUntil > now)
             .ThenByDescending(job => job.CreatedAt)
             .ThenByDescending(job => job.JobPostsId);
     }
