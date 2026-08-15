@@ -61,7 +61,7 @@ internal static class ContractConversationEvents
     /// </summary>
     public static object ToRealtimePayload(Message message) => new
     {
-        messagesId = message.MessagesId, conversationsId = message.ConversationsId,
+        messageId = message.MessagesId, conversationId = message.ConversationsId,
         senderUserId = (Guid?)null, messageType = message.MessageType, content = message.Content,
         sentAt = message.SentAt, attachments = Array.Empty<object>()
     };
