@@ -3,8 +3,11 @@ using Application.Features.JobPosts.Freelancer.GetMyAppliedJobPostDetail.Queries
 using Application.Features.JobPosts.Freelancer.GetMyAppliedJobPosts.Queries;
 using Application.Features.JobPosts.Freelancer.GetRecommendedJobPosts.DTOs;
 using Application.Features.JobPosts.Freelancer.GetRecommendedJobPosts.Queries;
+using Application.Features.JobPosts.Freelancer.GetProfileMatchedJobPosts.DTOs;
+using Application.Features.JobPosts.Freelancer.GetProfileMatchedJobPosts.Queries;
 using Application.Features.JobPosts.Public.GetAvailableJobPosts.DTOs;
 using Application.Features.JobPosts.Public.GetJobPostDetail.DTOs;
+using Application.Features.JobPosts.Public.SearchAvailableJobPosts.Commands;
 using Domain.Enums.Accounts;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -17,6 +20,33 @@ namespace Project_API.Controllers.Jobs.Freelancer;
 [Authorize(Roles = nameof(UserRole.Freelancer))]
 public class FreelancerJobPostsController : BaseApiController
 {
+    [HttpGet("profile-matches")]
+    public async Task<IActionResult> GetProfileMatchedJobPosts(
+        [FromQuery] ProfileMatchedJobPostsRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return InvalidTokenResponse();
+        }
+
+        var result = await Mediator.Send(new GetProfileMatchedJobPostsQuery(
+            userId,
+            request.PageIndex,
+            request.PageSize,
+            request.MajorCategoryIds ?? [],
+            request.Search,
+            request.BudgetMin,
+            request.BudgetMax,
+            request.Skills,
+            request.WorkType,
+            request.PostedWithinDays,
+            request.SortBy,
+            request.SortDesc,
+            request.SearchEventId), cancellationToken);
+        return Ok(ApiResponse<PagedJobSearchResponse>.Ok(result, "Success"));
+    }
+
     [HttpGet("recommended")]
     public async Task<IActionResult> GetRecommendedJobPosts([FromQuery] int topK = 20)
     {
