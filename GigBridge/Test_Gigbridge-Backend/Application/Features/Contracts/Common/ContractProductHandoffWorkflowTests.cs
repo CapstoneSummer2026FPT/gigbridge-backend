@@ -153,7 +153,7 @@ public class ContractProductHandoffWorkflowTests
                         new MemoryStream(new byte[] { 1 }),
                         "huge.zip",
                         "application/zip",
-                        100 * 1024 * 1024 + 1),
+                        10 * 1024 * 1024 + 1),
                     null,
                     null),
                 CancellationToken.None));
