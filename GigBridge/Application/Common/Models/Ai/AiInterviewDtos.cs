@@ -268,6 +268,15 @@ public class VettingEvaluationResponseDto
     [JsonPropertyName("holistic_adjustment_reason")]
     public string HolisticAdjustmentReason { get; set; } = string.Empty;
 
+    [JsonPropertyName("is_ai_generated")]
+    public bool IsAiGenerated { get; set; }
+
+    [JsonPropertyName("ai_confidence_score")]
+    public double AiConfidenceScore { get; set; }
+
+    [JsonPropertyName("ai_detection_summary")]
+    public string AiDetectionSummary { get; set; } = string.Empty;
+
     [JsonPropertyName("graded_questions")]
     public List<GradedQuestionDto> GradedQuestions { get; set; } = new();
 }
@@ -294,4 +303,13 @@ public class GradedQuestionDto
 
     [JsonPropertyName("feedback")]
     public string Feedback { get; set; } = string.Empty;
+
+    [JsonPropertyName("is_ai_generated")]
+    public bool IsAiGenerated { get; set; }
+
+    [JsonPropertyName("ai_confidence_score")]
+    public double AiConfidenceScore { get; set; }
+
+    [JsonPropertyName("ai_detection_reason")]
+    public string AiDetectionReason { get; set; } = string.Empty;
 }
