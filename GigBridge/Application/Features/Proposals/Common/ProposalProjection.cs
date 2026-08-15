@@ -71,6 +71,11 @@ internal static class ProposalProjection
             AiSoftSkills = softSkills,
             AiHolisticAdjustmentReason = judging?.HolisticAdjustmentReason,
             AiHolisticAdjustment = judging?.HolisticAdjustment,
+            AiIsAiGenerated = gradedQuestions?.Any(q => q.IsAiGenerated || q.AiConfidenceScore >= 0.5),
+            AiConfidenceScore = gradedQuestions?.Any() == true ? gradedQuestions.Max(q => q.AiConfidenceScore) : null,
+            AiDetectionSummary = gradedQuestions?.Any(q => q.IsAiGenerated || q.AiConfidenceScore >= 0.5) == true
+                ? "At least 1 candidate answer exhibits AI generation patterns or generic textbook structure."
+                : (gradedQuestions?.Any() == true ? "Candidate answers appear authentic with human experience indicators." : null),
             AiGradedQuestions = gradedQuestions
         };
     }
