@@ -1,6 +1,6 @@
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.Caching;
-using Application.Features.Auth.Common;
+using Application.Common.InternalServices.Auth.Services;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;

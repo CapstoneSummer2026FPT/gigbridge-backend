@@ -1,5 +1,6 @@
+using Application.Common.InternalServices.Premium.Services;
 using Application.Common.Interfaces;
-using Application.Features.Premium.Common.Interfaces;
+using Application.Common.InternalServices.Premium.Interfaces;
 using Application.Features.Premium.Common;
 using Application.Features.Premium.Freelancer.Points.DTOs;
 using Domain.Entities;

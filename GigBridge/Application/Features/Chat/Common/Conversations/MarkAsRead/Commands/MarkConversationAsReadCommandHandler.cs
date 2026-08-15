@@ -1,7 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.Time;
-using Application.Features.Chat.Common.Interfaces;
+using Application.Common.InternalServices.Chat.Interfaces;
 using Application.Features.Chat.Common.Messages.GetConversationMessages.DTOs;
 using Application.Features.Chat.Common.Messages.Send.DTOs;
 using Domain.Entities;

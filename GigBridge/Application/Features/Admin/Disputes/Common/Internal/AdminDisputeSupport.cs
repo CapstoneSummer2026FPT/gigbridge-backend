@@ -1,6 +1,6 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Features.Notifications.Common.Interfaces;
+using Application.Common.InternalServices.Notifications.Interfaces;
 using Application.Features.Admin.Disputes.Common.DTOs;
 using Application.Features.Disputes.Common.DTOs;
 using Domain.Entities;

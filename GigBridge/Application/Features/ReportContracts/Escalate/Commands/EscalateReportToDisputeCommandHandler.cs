@@ -1,12 +1,13 @@
+using Application.Common.InternalServices.Contracts.Services;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.InternalServices.Auditing.Interfaces;
 using Application.Common.Interfaces.Media;
 using Application.Common.Interfaces.Time;
-using Application.Features.Admin.AuditLogs.Common.Interfaces;
-using Application.Features.Admin.AuditLogs.Common.Services;
-using Application.Features.Chat.Common.Interfaces;
-using Application.Features.Notifications.Common.Interfaces;
+using Application.Common.InternalServices.Admin.AuditLogs.Interfaces;
+using Application.Common.InternalServices.Admin.AuditLogs.Services;
+using Application.Common.InternalServices.Chat.Interfaces;
+using Application.Common.InternalServices.Notifications.Interfaces;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.Disputes.Common.DTOs;
 using Application.Features.Disputes.Common.Internal;

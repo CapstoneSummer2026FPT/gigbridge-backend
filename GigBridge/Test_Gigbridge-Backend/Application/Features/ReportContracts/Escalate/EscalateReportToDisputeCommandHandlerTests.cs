@@ -1,6 +1,6 @@
 using Application.Common.Interfaces.Media;
 using Application.Common.Interfaces.Time;
-using Application.Features.Chat.Common.Interfaces;
+using Application.Common.InternalServices.Chat.Interfaces;
 using Application.Features.Disputes.Common.Internal;
 using Application.Features.ReportContracts.Escalate.Commands;
 using Domain.Entities;

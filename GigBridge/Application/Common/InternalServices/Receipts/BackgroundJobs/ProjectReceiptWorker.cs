@@ -5,7 +5,7 @@ using Application.Common.Interfaces.Email;
 using Application.Common.InternalServices.Receipts.Models;
 using Application.Common.InternalServices.Receipts.Services;
 using Application.Features.Auth.Shared.DTOs;
-using Application.Features.Notifications.Common.Interfaces;
+using Application.Common.InternalServices.Notifications.Interfaces;
 using Domain.Entities;
 using Domain.Enums;
 using Domain.Enums.Notifications;

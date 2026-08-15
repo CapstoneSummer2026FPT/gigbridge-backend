@@ -1,9 +1,10 @@
-﻿using Application.Common.Exceptions;
+using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
-using Application.Features.MarketplaceAnalytics.Common.Services;
+using Application.Common.InternalServices.MarketplaceAnalytics.Interfaces;
+using Application.Common.InternalServices.MarketplaceAnalytics.Services;
 
 namespace Application.Features.SavedJobs.Freelancer.SaveJob.Commands;
 

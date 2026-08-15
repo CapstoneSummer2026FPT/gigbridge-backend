@@ -1,6 +1,6 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces.Caching;
-using Application.Features.Auth.Common;
+using Application.Common.InternalServices.Auth.Services;
 using Application.Features.Auth.VerifyOtp.DTOs;
 using Application.Common.Interfaces.Identity;
 using MediatR;

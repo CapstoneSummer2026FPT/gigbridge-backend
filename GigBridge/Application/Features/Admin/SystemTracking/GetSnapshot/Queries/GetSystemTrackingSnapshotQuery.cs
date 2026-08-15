@@ -1,4 +1,4 @@
-using Application.Features.Admin.SystemTracking.Common.DTOs;
+using Application.Common.InternalServices.Admin.SystemTracking.Models;
 using MediatR;
 
 namespace Application.Features.Admin.SystemTracking.GetSnapshot.Queries;

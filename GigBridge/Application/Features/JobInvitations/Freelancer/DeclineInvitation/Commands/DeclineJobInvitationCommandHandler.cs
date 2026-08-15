@@ -1,6 +1,6 @@
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.Time;
-using Application.Features.Notifications.Common.Interfaces;
+using Application.Common.InternalServices.Notifications.Interfaces;
 using Application.Features.JobInvitations.Common;
 using Application.Features.JobInvitations.Common.DTOs;
 using Domain.Entities;

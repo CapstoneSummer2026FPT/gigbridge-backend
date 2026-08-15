@@ -2,7 +2,7 @@ using System.Text.Json;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces.Media;
 using Application.Common.Interfaces.Time;
-using Application.Features.Notifications.Common.Interfaces;
+using Application.Common.InternalServices.Notifications.Interfaces;
 using Application.Features.Contracts.Completion.Client.Commands;
 using Application.Features.Contracts.Completion.Freelancer.Commands;
 using Application.Features.Contracts.Milestones.Client.Approve.Commands;

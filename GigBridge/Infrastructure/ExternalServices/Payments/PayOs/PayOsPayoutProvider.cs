@@ -1,5 +1,5 @@
-using Application.Features.Wallets.Common.Models;
-using Application.Features.Wallets.Common.Interfaces;
+using Application.Common.InternalServices.Wallets.Models;
+using Application.Common.InternalServices.Wallets.Interfaces;
 using System.Globalization;
 using Microsoft.Extensions.Caching.Memory;
 using PayOS;

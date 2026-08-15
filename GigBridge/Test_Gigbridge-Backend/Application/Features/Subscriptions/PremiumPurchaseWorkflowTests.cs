@@ -1,7 +1,8 @@
+using Application.Common.InternalServices.Premium.Models;
 using Application.Common.Interfaces.Caching;
 using Application.Common.Interfaces.Time;
-using Application.Features.Premium.Common.Services;
-using Application.Features.Wallets.Common.Interfaces;
+using Application.Common.InternalServices.Premium.Services;
+using Application.Common.InternalServices.Wallets.Interfaces;
 using Application.Common.Exceptions;
 using Application.Features.Premium.Client.Subscriptions.GetCurrent;
 using Application.Features.Premium.Client.Subscriptions.Purchase;

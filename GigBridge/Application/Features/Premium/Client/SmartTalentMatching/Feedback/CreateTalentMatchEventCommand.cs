@@ -1,7 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.Time;
-using Application.Features.Premium.Common.Interfaces;
+using Application.Common.InternalServices.Premium.Interfaces;
 using Domain.Entities;
 using Domain.Enums.Premium;
 using MediatR;

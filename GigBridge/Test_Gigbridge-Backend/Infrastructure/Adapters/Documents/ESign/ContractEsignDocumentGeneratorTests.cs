@@ -1,3 +1,4 @@
+using Application.Common.InternalServices.ESign.Models;
 using System.Net;
 using System.Net.Http.Headers;
 using Application.Features.Contracts.Common.DTOs;

@@ -1,6 +1,6 @@
 using System.Text;
 using Application.Common.Models;
-using Application.Features.Admin.Analytics.Common.DTOs;
+using Application.Common.InternalServices.Admin.Analytics.Models;
 using Application.Features.Admin.Analytics.ExportTransactions.Queries;
 using Application.Features.Admin.Analytics.GetFinance.Queries;
 using Application.Features.Admin.Analytics.GetMarketplace.Queries;

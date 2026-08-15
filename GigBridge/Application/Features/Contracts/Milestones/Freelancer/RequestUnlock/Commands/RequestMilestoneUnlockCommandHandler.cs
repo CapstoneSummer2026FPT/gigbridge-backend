@@ -2,7 +2,7 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.InternalServices.Auditing.Interfaces;
 using Application.Common.Interfaces.Time;
-using Application.Features.Notifications.Common.Interfaces;
+using Application.Common.InternalServices.Notifications.Interfaces;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.Contracts.Milestones.Common.Internal;
 using Domain.Entities;

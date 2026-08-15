@@ -1,0 +1,22 @@
+using Domain.Enums.Notifications;
+
+namespace Application.Common.InternalServices.Notifications.Models;
+public class NotificationDto
+{
+    public Guid Id { get; set; }
+    public string Source { get; set; } = "Personal";
+    public Guid? NotificationId { get; set; }
+    public Guid? BroadcastNotificationId { get; set; }
+    public Guid? BroadcastRecipientId { get; set; }
+    public Guid ReadTargetId { get; set; }
+    public NotificationType Type { get; set; }
+    public string Title { get; set; } = string.Empty;
+    public string? Content { get; set; }
+    public Guid? ReferenceId { get; set; }
+    public string? ReferenceType { get; set; }
+    public string? Metadata { get; set; }
+    public int? Revision { get; set; }
+    public bool IsRead { get; set; }
+    public DateTime? ReadAt { get; set; }
+    public DateTime CreatedAt { get; set; }
+}

@@ -1,7 +1,7 @@
 using System.Text.RegularExpressions;
 using Application.Common.Interfaces.Caching;
-using Application.Features.Auth.Common.Interfaces;
-using Application.Features.Auth.Common;
+using Application.Common.InternalServices.Auth.Interfaces;
+using Application.Common.InternalServices.Auth.Services;
 using Application.Features.Auth.ForgotPassword.Commands;
 using Application.Features.Auth.ForgotPassword.DTOs;
 using Domain.Entities;

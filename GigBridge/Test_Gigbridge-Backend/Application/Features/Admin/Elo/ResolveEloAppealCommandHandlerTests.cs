@@ -1,9 +1,9 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.Time;
-using Application.Features.Admin.AuditLogs.Common.Interfaces;
-using Application.Features.Elo.Common.Services;
-using Application.Features.Notifications.Common.Interfaces;
+using Application.Common.InternalServices.Admin.AuditLogs.Interfaces;
+using Application.Common.InternalServices.Elo.Services;
+using Application.Common.InternalServices.Notifications.Interfaces;
 using Application.Features.Admin.Elo.Commands.ResolveEloAppeal;
 using Domain.Entities;
 using Domain.Enums.Accounts;

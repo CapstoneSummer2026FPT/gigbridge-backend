@@ -1,8 +1,9 @@
+using Application.Common.InternalServices.Contracts.Services;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.Time;
-using Application.Features.Elo.Common.Interfaces;
-using Application.Features.Notifications.Common.Interfaces;
+using Application.Common.InternalServices.Elo.Interfaces;
+using Application.Common.InternalServices.Notifications.Interfaces;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.Reviews.Common;
 using Application.Features.Reviews.Common.DTOs;

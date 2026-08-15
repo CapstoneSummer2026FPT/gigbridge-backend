@@ -1,7 +1,9 @@
 using Application.Common.Interfaces;
 using Application.Features.Reviews.Common;
 using Application.Features.Reviews.Common.DTOs;
-using Application.Features.Reviews.Common.Moderation;
+using Application.Common.InternalServices.Reviews.Interfaces;
+using Application.Common.InternalServices.Reviews.Models;
+using Application.Common.InternalServices.Reviews.Services;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 

@@ -1,4 +1,5 @@
-using Application.Features.ESign.Common.Interfaces;
+using Application.Common.InternalServices.ESign.Models;
+using Application.Common.InternalServices.ESign.Interfaces;
 using Application.Features.Contracts.Common.DTOs;
 
 namespace Test_Gigbridge_Backend.TestSupport;

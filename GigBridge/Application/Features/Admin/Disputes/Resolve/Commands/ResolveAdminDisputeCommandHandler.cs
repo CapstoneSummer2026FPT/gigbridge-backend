@@ -1,11 +1,12 @@
+using Application.Common.InternalServices.Contracts.Services;
 using System.Text.Json;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.InternalServices.Accounts.Interfaces;
 using Application.Common.InternalServices.Accounts.Services;
 using Application.Common.Interfaces.Time;
-using Application.Features.Chat.Common.Interfaces;
-using Application.Features.Elo.Common.Interfaces;
+using Application.Common.InternalServices.Chat.Interfaces;
+using Application.Common.InternalServices.Elo.Interfaces;
 using Application.Features.Admin.Disputes.Common.DTOs;
 using Application.Features.Admin.Disputes.Common.Internal;
 using Application.Features.Contracts.Common.Internal;

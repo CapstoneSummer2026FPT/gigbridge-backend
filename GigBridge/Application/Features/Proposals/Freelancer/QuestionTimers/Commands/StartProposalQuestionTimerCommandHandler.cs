@@ -1,5 +1,5 @@
-using Application.Features.Proposals.Common.Interfaces;
-using Application.Features.Proposals.Freelancer.QuestionTimers.DTOs;
+using Application.Common.InternalServices.Proposals.Interfaces;
+using Application.Common.InternalServices.Proposals.Models;
 using MediatR;
 
 namespace Application.Features.Proposals.Freelancer.QuestionTimers.Commands;

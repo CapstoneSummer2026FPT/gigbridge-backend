@@ -1,7 +1,8 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.Time;
-using Application.Features.JobPosts.Common.ContentModeration;
+using Application.Common.InternalServices.JobPosts.Interfaces;
+using Application.Common.InternalServices.JobPosts.Models;
 using Application.Features.JobPosts.Client.Common;
 using Domain.Entities;
 using Domain.Enums.Contracts;
