@@ -27,7 +27,6 @@ public sealed class GetPublicFreelancerProfileQueryHandler
             .AsNoTracking()
             .AnyAsync(
                 profile => profile.UserId == request.UserId
-                    && profile.AllowSearchEngineIndexing
                     && profile.User.IsActive,
                 cancellationToken);
 
@@ -59,6 +58,7 @@ public sealed class GetPublicFreelancerProfileQueryHandler
             IsPremium = detail.IsPremium,
             IsIdentityVerified = detail.IsIdentityVerified,
             ShowProVerifiedBadge = detail.ShowProVerifiedBadge,
+            AllowSearchEngineIndexing = detail.AllowSearchEngineIndexing,
             Categories = detail.Categories,
             Skills = detail.Skills,
             PortfolioItems = detail.PortfolioItems,
