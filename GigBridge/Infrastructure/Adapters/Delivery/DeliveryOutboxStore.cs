@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
 using NpgsqlTypes;
 
-namespace Infrastructure.Persistence.Delivery;
+namespace Infrastructure.Adapters.Delivery;
 
 internal sealed class DeliveryOutboxStore : IDeliveryOutboxStore
 {

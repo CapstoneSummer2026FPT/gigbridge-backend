@@ -39,11 +39,13 @@ using Application.Common.InternalServices.Proposals.Models;
 using Application.Common.InternalServices.Reviews.Interfaces;
 using Application.Common.InternalServices.Wallets.Interfaces;
 using Infrastructure.Adapters.Caching;
+using Infrastructure.Adapters.Delivery;
 using Infrastructure.Adapters.Files;
 using Infrastructure.Adapters.Security.Auth;
 using Infrastructure.Adapters.Security.Wallets;
 using Infrastructure.Adapters.Templates;
 using Infrastructure.Adapters.Time;
+using Infrastructure.Adapters.Wallets;
 using Infrastructure.ExternalServices.Ai;
 using Infrastructure.ExternalServices.Banking.VietQr;
 using Infrastructure.ExternalServices.Email.Resend;
@@ -51,8 +53,6 @@ using Infrastructure.ExternalServices.Google.Meet;
 using Infrastructure.ExternalServices.Media.Cloudinary;
 using Infrastructure.ExternalServices.Payments.PayOs;
 using Infrastructure.Persistence;
-using Infrastructure.Persistence.Delivery;
-using Infrastructure.Persistence.Wallets;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -160,7 +160,7 @@ public sealed class DependencyInjectionConfigurationTests
     }
 
     [Fact]
-    public void Infrastructure_RegistersDeliveryAndAdaptersWithOriginalLifetimes()
+    public void Infrastructure_RegistersAdaptersWithOriginalLifetimes()
     {
         var services = new ServiceCollection();
 
