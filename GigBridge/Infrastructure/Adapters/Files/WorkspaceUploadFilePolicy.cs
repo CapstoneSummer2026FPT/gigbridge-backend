@@ -110,7 +110,7 @@ internal sealed class WorkspaceUploadFilePolicy : IWorkspaceUploadFilePolicy
 
             if (file.Length > WorkspaceUploadLimits.MaxFileSizeBytes)
             {
-                throw new BadRequestException("Each uploaded file must not exceed 100 MB.");
+                throw new BadRequestException("Each uploaded file must not exceed 10 MB.");
             }
 
             if (totalLength > WorkspaceUploadLimits.MaxTotalFileSizeBytes - file.Length)
@@ -532,7 +532,7 @@ internal sealed class WorkspaceUploadFilePolicy : IWorkspaceUploadFilePolicy
 
             if (total > limit - read)
             {
-                throw new BadRequestException("Each uploaded file must not exceed 100 MB.");
+                throw new BadRequestException("Each uploaded file must not exceed 10 MB.");
             }
 
             total += read;
