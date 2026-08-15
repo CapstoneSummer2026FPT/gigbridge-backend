@@ -1,7 +1,9 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.Time;
-using Application.Features.Reviews.Common.Moderation;
+using Application.Common.InternalServices.Reviews.Interfaces;
+using Application.Common.InternalServices.Reviews.Models;
+using Application.Common.InternalServices.Reviews.Services;
 using Application.Features.Admin.Reports.AccountReports;
 using Domain.Entities;
 using Domain.Enums.Accounts;

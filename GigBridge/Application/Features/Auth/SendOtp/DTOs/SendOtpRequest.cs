@@ -1,4 +1,4 @@
-using Application.Features.Auth.Common;
+using Application.Common.InternalServices.Auth.Services;
 
 namespace Application.Features.Auth.SendOtp.DTOs;
 

@@ -4,7 +4,7 @@ using Application.Features.JobPosts.Client.SaveDraftJobPost.Commands;
 using Application.Features.JobPosts.Client.SaveDraftJobPost.DTOs;
 using Application.Features.JobPosts.Common.DTOs;
 using Domain.Entities;
-using Application.Features.JobPosts.Common.ContentModeration.Services;
+using Application.Common.InternalServices.JobPosts.Services;
 using Test_Gigbridge_Backend.TestSupport;
 
 namespace Test_Gigbridge_Backend.Application.Features.JobPosts.Client;

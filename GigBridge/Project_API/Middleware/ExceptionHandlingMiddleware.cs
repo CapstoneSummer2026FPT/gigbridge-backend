@@ -24,6 +24,13 @@ public class ExceptionHandlingMiddleware
         {
             await _next(context);
         }
+        catch (OperationCanceledException) when (context.RequestAborted.IsCancellationRequested)
+        {
+            _logger.LogDebug(
+                "Request {Method} {Path} was canceled by the client.",
+                context.Request.Method,
+                context.Request.Path);
+        }
         catch (Exception ex)
         {
             if (ex is not ValidationException &&

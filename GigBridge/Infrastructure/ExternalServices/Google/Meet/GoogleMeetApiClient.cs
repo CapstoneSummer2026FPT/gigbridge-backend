@@ -1,7 +1,7 @@
-using Application.Features.Chat.Common.Models;
+using Application.Common.InternalServices.Chat.Models;
 using System.Text;
 using System.Text.Json;
-using Application.Features.Chat.Common.Interfaces;
+using Application.Common.InternalServices.Chat.Interfaces;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 

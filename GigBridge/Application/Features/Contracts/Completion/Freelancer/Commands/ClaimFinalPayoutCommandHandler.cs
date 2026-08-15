@@ -1,7 +1,8 @@
+using Application.Common.InternalServices.Contracts.Services;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.Time;
-using Application.Features.Chat.Common.Interfaces;
+using Application.Common.InternalServices.Chat.Interfaces;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.Contracts.Completion.Common.Internal;
 using Application.Features.Contracts.Completion.Freelancer.DTOs;

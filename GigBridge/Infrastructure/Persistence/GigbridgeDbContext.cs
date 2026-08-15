@@ -1248,11 +1248,14 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
             entity.HasIndex(e => e.Availability, "IX_FreelancerProfiles_Availability");
 
+            entity.HasIndex(e => e.AllowSearchEngineIndexing, "IX_FreelancerProfiles_AllowSearchEngineIndexing");
+
             entity.HasIndex(e => e.MajorId, "IX_FreelancerProfiles_MajorId");
 
             entity.Property(e => e.FreelancerProfilesId)
                 .HasDefaultValueSql("gen_random_uuid()")
                 .HasColumnName("FreelancerProfilesId");
+            entity.Property(e => e.AllowSearchEngineIndexing).HasDefaultValue(false);
             entity.Property(e => e.Availability)
                 .HasDefaultValue(0)
                 .HasComment("Enum Availability: 0=FullTime, 1=PartTime, 2=NotAvailable");

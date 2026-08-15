@@ -6,6 +6,8 @@ using Application.Features.JobPosts.Public.GetJobPostDetail.DTOs;
 using Application.Features.JobPosts.Public.GetJobPostDetail.Queries;
 using Application.Features.JobPosts.Public.SearchAvailableJobPosts.Commands;
 using Application.Features.JobPosts.Public.SearchAvailableJobPosts.DTOs;
+using Application.Features.Seo.PublicMarketplace.DTOs;
+using Application.Features.Seo.PublicMarketplace.Queries;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Mvc;
@@ -44,9 +46,9 @@ public class JobPostsPublicController : BaseApiController
     [HttpGet("{id}")]
     public async Task<IActionResult> GetJobPostDetail(Guid id)
     {
-        var query = new GetJobPostDetailQuery(id);
+        var query = new GetPublicJobPostDetailQuery(id);
         var result = await Mediator.Send(query);
-        return Ok(ApiResponse<JobPostDetailDto>.Ok(result, "Success"));
+        return Ok(ApiResponse<PublicJobPostDetailDto>.Ok(result, "Success"));
     }
 
     [HttpGet("client/{userId:guid}")]

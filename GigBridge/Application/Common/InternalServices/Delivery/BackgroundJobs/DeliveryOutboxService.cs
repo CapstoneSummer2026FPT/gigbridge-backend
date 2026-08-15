@@ -1,19 +1,31 @@
+using Application.Common.InternalServices.Chat.Interfaces;
+using Application.Common.InternalServices.Chat.Models;
+using Application.Common.InternalServices.Chat.Services;
+using Application.Common.InternalServices.ESign.Models;
+using Application.Common.InternalServices.ESign.Services;
+using Application.Common.InternalServices.Notifications.Models;
 using System.Text.Json;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.Email;
 using Application.Common.InternalServices.Delivery.Interfaces;
 using Application.Common.InternalServices.Delivery.Models;
-using Application.Features.ESign.Common.Interfaces;
-using Application.Features.Notifications.Common.Interfaces;
+using Application.Common.InternalServices.ESign.Interfaces;
+using Application.Common.InternalServices.Notifications.Interfaces;
 using Application.Common.Options;
 using Application.Features.Auth.Shared.DTOs;
 using Application.Features.Chat.Common.Schedules;
 using Application.Features.Contracts.Common.DTOs;
+using Application.Features.Contracts.Milestones.Common.Internal;
+using Application.Features.Contracts.Milestones.Freelancer.Submit.Common;
+using Application.Common.InternalServices.Contracts.Interfaces;
+using Application.Common.InternalServices.Contracts.Milestones.Email;
+using Application.Common.InternalServices.Contracts.Models;
 using Application.Features.Contracts.Signing.Common.Sign.DTOs;
 using Application.Features.ESign.Common.Internal;
 using Application.Features.Notifications.Common.DTOs;
 using Domain.Entities;
 using Domain.Enums.Chat;
+using Domain.Enums.Delivery;
 using Domain.Enums.ESign;
 using Domain.Enums.Notifications;
 using Microsoft.EntityFrameworkCore;
@@ -45,6 +57,7 @@ public sealed class DeliveryOutboxService : BackgroundService
     private readonly ILogger<DeliveryOutboxService> _logger;
     private readonly IScheduleEmailRenderer _emailRenderer;
     private readonly ISignedEmailRenderer _signedEmailRenderer;
+    private readonly IMilestoneSubmissionEmailRenderer _milestoneSubmissionEmailRenderer;
     private readonly DeliveryOutboxOptions _options;
     private readonly DeliveryOutboxDatabaseGate _databaseGate;
     private readonly string _frontendBaseUrl;
@@ -55,12 +68,14 @@ public sealed class DeliveryOutboxService : BackgroundService
         IConfiguration configuration,
         IScheduleEmailRenderer emailRenderer,
         ISignedEmailRenderer signedEmailRenderer,
+        IMilestoneSubmissionEmailRenderer milestoneSubmissionEmailRenderer,
         IOptions<DeliveryOutboxOptions> options)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
         _emailRenderer = emailRenderer;
         _signedEmailRenderer = signedEmailRenderer;
+        _milestoneSubmissionEmailRenderer = milestoneSubmissionEmailRenderer;
         _options = options.Value;
         _databaseGate = new DeliveryOutboxDatabaseGate(_options.MaxConcurrentDbConnections);
         _frontendBaseUrl = (configuration["FrontendBaseUrl"] ?? "http://localhost:5173").TrimEnd('/');
@@ -338,7 +353,13 @@ public sealed class DeliveryOutboxService : BackgroundService
     {
         if (job.ScheduleId is null)
         {
-            return await PrepareFinalContractEmailAsync(context, lease, job, ct);
+            var deliveryType = (DeliveryOutboxType)(job.DeliveryType ?? (int)DeliveryOutboxType.FinalContractEmail);
+            return deliveryType switch
+            {
+                DeliveryOutboxType.MilestoneSubmission =>
+                    await PrepareMilestoneSubmissionEmailAsync(context, lease, job, ct),
+                _ => await PrepareFinalContractEmailAsync(context, lease, job, ct)
+            };
         }
 
         var payload = JsonSerializer.Deserialize<ScheduleDeliveryPayload>(job.Payload, JsonOptions)
@@ -1115,6 +1136,80 @@ public sealed class DeliveryOutboxService : BackgroundService
                         document.Content,
                         document.MimeType)
                 ]
+            });
+    }
+
+    private async Task<PreparedDelivery> PrepareMilestoneSubmissionEmailAsync(
+        IApplicationDbContext context,
+        DeliveryOutboxLease lease,
+        DeliveryOutbox job,
+        CancellationToken ct)
+    {
+        if (job.Channel != (int)DeliveryChannel.Email)
+        {
+            throw new InvalidOperationException("Milestone submission outbox deliveries only support email.");
+        }
+
+        var payload = JsonSerializer.Deserialize<MilestoneSubmissionDeliveryPayload>(job.Payload, JsonOptions)
+            ?? throw new JsonException("Invalid milestone submission delivery payload.");
+
+        var contract = await context.Set<Contract>()
+            .AsNoTracking()
+            .Include(c => c.JobPosts)
+            .Include(c => c.Milestones)
+            .Include(c => c.FreelancerProfiles).ThenInclude(f => f!.User)
+            .FirstOrDefaultAsync(c => c.ContractsId == payload.ContractId, ct)
+            ?? throw new InvalidOperationException("The contract for this milestone submission no longer exists.");
+
+        var milestone = contract.Milestones.FirstOrDefault(m => m.MilestonesId == payload.MilestoneId)
+            ?? throw new InvalidOperationException("The submitted milestone no longer exists.");
+
+        var attachments = await context.Set<MilestoneAttachment>()
+            .AsNoTracking()
+            .Where(a => a.MilestonesId == milestone.MilestonesId)
+            .ToListAsync(ct);
+
+        var orderedMilestones = MilestoneWorkflowGuard.OrderMilestones(contract.Milestones.AsQueryable()).ToList();
+        var milestoneNumber = orderedMilestones.FindIndex(m => m.MilestonesId == milestone.MilestonesId) + 1;
+        var freelancerName = contract.FreelancerProfiles?.User?.FullName ?? "Freelancer";
+
+        var files = attachments
+            .Select(a => new MilestoneSubmissionFileModel(
+                a.FileName,
+                MilestoneAttachmentPresentation.TypeLabel(a.FileName, a.MimeType),
+                MilestoneAttachmentPresentation.SizeLabel(a.FileSize),
+                MilestoneAttachmentPresentation.IconGlyph(a.FileName)))
+            .ToList();
+
+        var model = new MilestoneSubmissionEmailModel(
+            payload.ClientName,
+            contract.JobPosts.Title,
+            milestone.Title,
+            milestoneNumber,
+            orderedMilestones.Count,
+            milestone.StartedAt,
+            milestone.DueDate,
+            milestone.SubmittedAt ?? DateTime.UtcNow,
+            "Submitted",
+            freelancerName,
+            files,
+            $"{_frontendBaseUrl}/contracts/{contract.ContractsId}/milestones/{milestone.MilestonesId}/approve");
+
+        var rendered = _milestoneSubmissionEmailRenderer.Render(model);
+
+        return PreparedDelivery.ForEmail(
+            lease,
+            job.DeliveryKey,
+            job.AttemptCount,
+            new EmailRequest
+            {
+                To = payload.ClientEmail,
+                Subject = rendered.Subject,
+                Body = rendered.HtmlBody,
+                TextBody = rendered.TextBody,
+                IsHtml = true,
+                IdempotencyKey = job.DeliveryKey,
+                MessageId = $"<{job.DeliveryKey.Replace(':', '.')}@gigbridge.local>"
             });
     }
 

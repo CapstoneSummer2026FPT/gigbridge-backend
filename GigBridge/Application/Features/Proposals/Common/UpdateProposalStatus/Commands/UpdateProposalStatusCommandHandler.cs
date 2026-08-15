@@ -1,7 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.Time;
-using Application.Features.Proposals.Common.Interfaces;
+using Application.Common.InternalServices.Proposals.Interfaces;
 using Application.Features.JobPosts.Common;
 using Application.Features.Proposals.Common.UpdateProposalStatus.Commands.DTOs;
 using Application.Features.Proposals.Common;

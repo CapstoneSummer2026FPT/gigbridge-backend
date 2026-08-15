@@ -1,7 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.InternalServices.Accounts.Interfaces;
 using Application.Common.Interfaces.Time;
-using Application.Features.Elo.Common.Interfaces;
+using Application.Common.InternalServices.Elo.Interfaces;
 using Application.Features.Admin.Disputes.Resolve.Commands;
 using Application.Features.Contracts.Completion.Client.Commands;
 using Application.Features.Contracts.Milestones.Freelancer.RequestUnlock.Commands;
@@ -16,6 +16,7 @@ using Domain.Enums.Contracts;
 using Domain.Enums.Contracts.Escrow;
 using Domain.Enums.Contracts.Milestones;
 using Domain.Enums.Disputes;
+using Infrastructure.Adapters.Files;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Test_Gigbridge_Backend.TestSupport;
@@ -32,16 +33,13 @@ namespace Test_Gigbridge_Backend.Application.Features.Admin.Disputes;
 public sealed class ResolveAdminDisputeCommandHandlerTests
 {
     [Fact]
-    public async Task Resolve_Resume_Accepted_FinalizesMilestoneAndKeepsConversationWritable()
+    public async Task Resolve_Resume_SelectingFirstMilestone_CompletesItAndKeepsConversationWritable()
     {
         var fixture = new DisputeResolutionFixture();
         var handler = fixture.CreateHandler();
 
         var response = await handler.Handle(
-            fixture.BuildCommand(
-                new AdminMilestoneAllocationInput(
-                    fixture.DisputedMilestoneId, DisputeMilestoneOutcome.Accepted, 100m, 0m, 0m, null),
-                AdminContractAction.Resume),
+            fixture.BuildResumeCommand([fixture.DisputedMilestoneId]),
             CancellationToken.None);
 
         Assert.NotNull(response);
@@ -52,6 +50,9 @@ public sealed class ResolveAdminDisputeCommandHandlerTests
         Assert.Equal(100m, fixture.Escrow.ReleasedAmount);
         Assert.Equal((int)ContractStatus.Active, fixture.Contract.Status);
         Assert.Equal((int)DisputeStatus.Resolved, fixture.Dispute.Status);
+        // Not selected — must stay completely untouched.
+        Assert.Equal((int)MilestoneStatus.Approved, fixture.SiblingMilestone.Status);
+        Assert.Equal(0m, fixture.SiblingMilestone.ReleasedAmount);
 
         // Bug 1 regression: the dispute conversation must stay Active/writable after Resolve.
         Assert.Equal((int)ConversationStatus.Active, fixture.DisputeConversation.Status);
@@ -64,110 +65,73 @@ public sealed class ResolveAdminDisputeCommandHandlerTests
     }
 
     [Fact]
-    public async Task Resolve_Resume_PartiallyAccepted_KeepsEscrowAndMilestoneTotalsInSyncAndAllowsEndProject()
+    public async Task Resolve_Resume_SelectingBothMilestones_CompletesBothInOrder()
     {
         var fixture = new DisputeResolutionFixture();
         var handler = fixture.CreateHandler();
 
         await handler.Handle(
-            fixture.BuildCommand(
-                new AdminMilestoneAllocationInput(
-                    fixture.DisputedMilestoneId, DisputeMilestoneOutcome.PartiallyAccepted, 60m, 40m, 0m,
-                    "Partial delivery accepted."),
-                AdminContractAction.Resume),
+            fixture.BuildResumeCommand([fixture.DisputedMilestoneId, fixture.SiblingMilestoneId]),
             CancellationToken.None);
 
         Assert.Equal((int)MilestoneStatus.Completed, fixture.DisputedMilestone.Status);
-        Assert.Equal(60m, fixture.DisputedMilestone.ReleasedAmount);
-        Assert.Equal(40m, fixture.DisputedMilestone.RefundedAmount);
-        Assert.Equal(110m, fixture.Escrow.FundedAmount);
-        Assert.Equal(60m, fixture.Escrow.ReleasedAmount);
-
-        // Core regression: EndProject must succeed once every milestone is resolved, even
-        // though this dispute included a refund. Before the fix, escrow.FundedAmount no
-        // longer matched Σ Milestone.Amount and this threw BadRequestException forever.
-        var endProjectHandler = new EndProjectCommandHandler(
-            fixture.Context,
-            new FixedDateTimeService(fixture.Now.AddMinutes(10)),
-            fixture.Realtime,
-            new NoopNotificationService());
-
-        var result = await endProjectHandler.Handle(
-            new EndProjectCommand(fixture.ContractId, fixture.ClientUserId),
-            CancellationToken.None);
-
-        Assert.Equal((int)ContractStatus.Completed, result.ContractStatus);
-        // Sibling milestone (50, untouched by the dispute) pays out in full; the disputed
-        // milestone contributes nothing further (60 already released, 40 already refunded).
-        Assert.Equal(50m, result.ReleasedAmountVnd);
-        Assert.Equal(110m, fixture.FreelancerWallet.WithdrawableTokens);
+        Assert.Equal(100m, fixture.DisputedMilestone.ReleasedAmount);
+        Assert.Equal((int)MilestoneStatus.Completed, fixture.SiblingMilestone.Status);
+        Assert.Equal(50m, fixture.SiblingMilestone.ReleasedAmount);
+        Assert.Equal(150m, fixture.Escrow.ReleasedAmount);
+        Assert.Equal(fixture.Escrow.FundedAmount, fixture.Escrow.ReleasedAmount);
     }
 
     [Fact]
-    public async Task Resolve_Resume_Cancelled_FinalizesMilestoneInsteadOfDeadEndStatus()
+    public async Task Resolve_Resume_SkippingTheFirstMilestone_IsRejected()
     {
         var fixture = new DisputeResolutionFixture();
         var handler = fixture.CreateHandler();
 
-        await handler.Handle(
-            fixture.BuildCommand(
-                new AdminMilestoneAllocationInput(
-                    fixture.DisputedMilestoneId, DisputeMilestoneOutcome.Cancelled, 0m, 100m, 0m,
-                    "Milestone voided; full refund to client."),
-                AdminContractAction.Resume),
-            CancellationToken.None);
-
-        // Before the fix this landed on MilestoneStatus.Cancelled, a status nothing ever
-        // transitions out of, permanently blocking EndProjectCommandHandler for the contract.
-        Assert.Equal((int)MilestoneStatus.Completed, fixture.DisputedMilestone.Status);
-        Assert.Equal(100m, fixture.DisputedMilestone.RefundedAmount);
-        Assert.Equal(50m, fixture.Escrow.FundedAmount);
-
-        var endProjectHandler = new EndProjectCommandHandler(
-            fixture.Context,
-            new FixedDateTimeService(fixture.Now.AddMinutes(10)),
-            fixture.Realtime,
-            new NoopNotificationService());
-
-        var result = await endProjectHandler.Handle(
-            new EndProjectCommand(fixture.ContractId, fixture.ClientUserId),
-            CancellationToken.None);
-
-        Assert.Equal((int)ContractStatus.Completed, result.ContractStatus);
-    }
-
-    [Fact]
-    public async Task Resolve_Resume_Rejected_ReturnsMilestoneToInProgressAndPreventsOverWithdrawalAfterRefund()
-    {
-        var fixture = new DisputeResolutionFixture();
-        var handler = fixture.CreateHandler();
-
-        await handler.Handle(
-            fixture.BuildCommand(
-                new AdminMilestoneAllocationInput(
-                    fixture.DisputedMilestoneId, DisputeMilestoneOutcome.Rejected, 0m, 100m, 0m,
-                    "Work rejected; full refund to client."),
-                AdminContractAction.Resume),
-            CancellationToken.None);
-
-        Assert.Equal((int)MilestoneStatus.InProgress, fixture.DisputedMilestone.Status);
-        Assert.Equal(100m, fixture.DisputedMilestone.RefundedAmount);
-        Assert.Equal(0m, fixture.DisputedMilestone.ReleasedAmount);
-
-        // Freelancer redoes the work and gets re-approved through the normal flow. The 80%
-        // withdrawal cap must be based on what's actually left in escrow (Amount -
-        // RefundedAmount), not the stale original Amount, or the freelancer could withdraw
-        // against money that was already refunded to the client.
-        fixture.DisputedMilestone.Status = (int)MilestoneStatus.Approved;
-        fixture.DisputedMilestone.ApprovedAt = fixture.Now;
-
-        var withdrawHandler = new WithdrawMilestoneCommandHandler(
-            fixture.Context,
-            new FixedDateTimeService(fixture.Now.AddMinutes(10)));
-
-        await Assert.ThrowsAsync<ConflictException>(() => withdrawHandler.Handle(
-            new WithdrawMilestoneCommand(fixture.ContractId, fixture.DisputedMilestoneId, fixture.FreelancerUserId),
+        // M1 + M3-style skip: selecting only the second milestone without the first.
+        var exception = await Assert.ThrowsAsync<BadRequestException>(() => handler.Handle(
+            fixture.BuildResumeCommand([fixture.SiblingMilestoneId]),
             CancellationToken.None));
+
+        Assert.Equal("Milestones must be selected sequentially from the top with no gaps.", exception.Message);
+        Assert.Equal((int)MilestoneStatus.Approved, fixture.SiblingMilestone.Status);
+        Assert.Equal(0m, fixture.SiblingMilestone.ReleasedAmount);
+    }
+
+    [Fact]
+    public async Task Resolve_Resume_EmptySelection_ProcessesNothingButStillReturnsContractToActive()
+    {
+        var fixture = new DisputeResolutionFixture();
+        var handler = fixture.CreateHandler();
+
+        await handler.Handle(fixture.BuildResumeCommand([]), CancellationToken.None);
+
+        Assert.Equal((int)ContractStatus.Active, fixture.Contract.Status);
+        Assert.Equal((int)MilestoneStatus.Disputed, fixture.DisputedMilestone.Status);
+        Assert.Equal((int)MilestoneStatus.Approved, fixture.SiblingMilestone.Status);
+        Assert.Equal(0m, fixture.Escrow.ReleasedAmount);
+        Assert.Empty(fixture.Context.Set<EscrowTransaction>().ToList());
+    }
+
+    [Fact]
+    public async Task Resolve_Resume_AlreadyCompletedMilestoneWithResidualEscrow_ReleasesResidualAndStaysComplete()
+    {
+        var fixture = new DisputeResolutionFixture();
+        // Sibling is already Complete but only ever had 80% released (20% early-withdrawal
+        // cap residual) — must remain selectable and release exactly the residual.
+        fixture.SiblingMilestone.Status = (int)MilestoneStatus.Completed;
+        fixture.SiblingMilestone.ReleasedAmount = 40m;
+        fixture.SiblingMilestone.ApprovedAt = fixture.Now;
+        fixture.Escrow.ReleasedAmount = 40m;
+        var handler = fixture.CreateHandler();
+
+        await handler.Handle(
+            fixture.BuildResumeCommand([fixture.DisputedMilestoneId, fixture.SiblingMilestoneId]),
+            CancellationToken.None);
+
+        Assert.Equal((int)MilestoneStatus.Completed, fixture.SiblingMilestone.Status);
+        Assert.Equal(50m, fixture.SiblingMilestone.ReleasedAmount);
+        Assert.Equal(0m, fixture.SiblingMilestone.RefundedAmount);
     }
 
     [Fact]
@@ -378,7 +342,7 @@ public sealed class ResolveAdminDisputeCommandHandlerTests
 
         public ResolveAdminDisputeCommand BuildCommand(IReadOnlyList<AdminMilestoneAllocationInput> allocations) => new(
             DisputeId, AdminUserId, DisputeResolution.Split, "Resolution note.", null,
-            allocations, AdminContractAction.Terminate,
+            allocations, [], AdminContractAction.Terminate,
             new AdminViolationInput(false, null, null, null), new AdminViolationInput(false, null, null, null));
     }
 
@@ -440,10 +404,7 @@ public sealed class ResolveAdminDisputeCommandHandlerTests
     {
         var fixture = new DisputeResolutionFixture();
         var handler = fixture.CreateHandler();
-        var command = fixture.BuildCommand(
-            new AdminMilestoneAllocationInput(
-                fixture.DisputedMilestoneId, DisputeMilestoneOutcome.Accepted, 100m, 0m, 0m, null),
-            AdminContractAction.Resume);
+        var command = fixture.BuildResumeCommand([fixture.DisputedMilestoneId]);
 
         await handler.Handle(command, CancellationToken.None);
 
@@ -645,7 +606,28 @@ public sealed class ResolveAdminDisputeCommandHandlerTests
             "Resolution note.",
             null,
             allocations,
+            [],
             contractAction,
+            new AdminViolationInput(false, null, null, null),
+            new AdminViolationInput(false, null, null, null));
+
+        // Defaults every selected milestone to a full release of whatever is currently
+        // locked for it — matches the frontend's default suggestion, so tests that don't
+        // care about a custom split don't need to spell one out.
+        public ResolveAdminDisputeCommand BuildResumeCommand(IReadOnlyList<Guid> selectedMilestoneIds) => new(
+            DisputeId,
+            AdminUserId,
+            DisputeResolution.Split,
+            "Resolution note.",
+            null,
+            selectedMilestoneIds.Select(id =>
+            {
+                var milestone = id == DisputedMilestoneId ? DisputedMilestone : SiblingMilestone;
+                return new AdminMilestoneAllocationInput(
+                    id, DisputeMilestoneOutcome.Accepted, milestone.Amount - milestone.ReleasedAmount, 0m, 0m, null);
+            }).ToList(),
+            selectedMilestoneIds,
+            AdminContractAction.Resume,
             new AdminViolationInput(false, null, null, null),
             new AdminViolationInput(false, null, null, null));
     }
@@ -662,10 +644,11 @@ public sealed class ResolveAdminDisputeCommandHandlerTests
         var fixture = new KeepContractAdvanceFixture();
         var handler = fixture.CreateHandler();
 
+        // M3 is the 3rd milestone — selecting it requires selecting the whole top-down
+        // prefix {M1, M2, M3}, even though M1/M2 are already Completed (their remaining
+        // 20% early-withdrawal-cap residual gets released too).
         await handler.Handle(
-            fixture.BuildCommand(new AdminMilestoneAllocationInput(
-                fixture.M3Id, DisputeMilestoneOutcome.Accepted, 25m, 0m, 0m,
-                "Work was substantially complete; admin approves full release to the freelancer.")),
+            fixture.BuildCommand([fixture.M1.MilestonesId, fixture.M2.MilestonesId, fixture.M3Id]),
             CancellationToken.None);
 
         Assert.Equal((int)MilestoneStatus.Completed, fixture.M3.Status);
@@ -680,13 +663,14 @@ public sealed class ResolveAdminDisputeCommandHandlerTests
         var handler = fixture.CreateHandler();
 
         await handler.Handle(
-            fixture.BuildCommand(new AdminMilestoneAllocationInput(
-                fixture.M3Id, DisputeMilestoneOutcome.Accepted, 25m, 0m, 0m,
-                "Work was substantially complete; admin approves full release to the freelancer.")),
+            fixture.BuildCommand([fixture.M1.MilestonesId, fixture.M2.MilestonesId, fixture.M3Id]),
             CancellationToken.None);
 
         var submitHandler = new SubmitMilestoneCommandHandler(
-            fixture.Context, new FixedDateTimeService(fixture.Now), new CapturingUserAuditLogService());
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new CapturingUserAuditLogService(),
+            new WorkspaceUploadFilePolicy());
         await Assert.ThrowsAsync<BadRequestException>(() => submitHandler.Handle(
             new SubmitMilestoneCommand(fixture.ContractId, fixture.M3Id, fixture.FreelancerUserId),
             CancellationToken.None));
@@ -720,18 +704,18 @@ public sealed class ResolveAdminDisputeCommandHandlerTests
         var handler = fixture.CreateHandler();
 
         await handler.Handle(
-            fixture.BuildCommand(new AdminMilestoneAllocationInput(
-                fixture.M3Id, DisputeMilestoneOutcome.Accepted, 25m, 0m, 0m,
-                "Work was substantially complete; admin approves full release to the freelancer.")),
+            fixture.BuildCommand([fixture.M1.MilestonesId, fixture.M2.MilestonesId, fixture.M3Id]),
             CancellationToken.None);
 
         // AdvanceNextMilestone only flips Milestone.Status/StartedAt — it must not touch
-        // escrow or wallet ledgers. Exactly one release should exist, for M3's dispute payout.
+        // escrow or wallet ledgers. One release per selected milestone with a nonzero
+        // locked amount: M1 (5 residual), M2 (5 residual), M3 (25, nothing released yet).
         var walletTransactions = fixture.Context.Set<WalletTransaction>().ToList();
         var escrowTransactions = fixture.Context.Set<EscrowTransaction>().ToList();
-        Assert.Equal(2, walletTransactions.Count); // client debit + freelancer credit, one release
-        Assert.Single(escrowTransactions);
-        Assert.All(walletTransactions, tx => Assert.Equal(25m, tx.TokenAmount));
+        Assert.Equal(6, walletTransactions.Count); // client debit + freelancer credit, per release
+        Assert.Equal(3, escrowTransactions.Count);
+        Assert.Equal(35m, escrowTransactions.Sum(tx => tx.Amount));
+        Assert.Equal(70m, walletTransactions.Sum(tx => tx.TokenAmount)); // debit + credit side of each release
     }
 
     [Fact]
@@ -741,9 +725,7 @@ public sealed class ResolveAdminDisputeCommandHandlerTests
         var handler = fixture.CreateHandler();
 
         await handler.Handle(
-            fixture.BuildCommand(new AdminMilestoneAllocationInput(
-                fixture.M3Id, DisputeMilestoneOutcome.Accepted, 25m, 0m, 0m,
-                "Work was substantially complete; admin approves full release to the freelancer.")),
+            fixture.BuildCommand([fixture.M1.MilestonesId, fixture.M2.MilestonesId, fixture.M3Id]),
             CancellationToken.None);
 
         Assert.Equal((int)MilestoneStatus.Completed, fixture.M3.Status);
@@ -763,22 +745,22 @@ public sealed class ResolveAdminDisputeCommandHandlerTests
     }
 
     [Fact]
-    public async Task Resolve_Resume_M1ToM4Example_FinalRemainingPayoutIs35()
+    public async Task Resolve_Resume_M1ToM4Example_FinalRemainingPayoutIsM4Only()
     {
         var fixture = new KeepContractAdvanceFixture();
         var handler = fixture.CreateHandler();
 
+        // Processing M3 now requires selecting the whole top-down prefix {M1, M2, M3} — so,
+        // unlike the old single-milestone-allocation flow, M1/M2's residual 20% is released
+        // as part of THIS resolution, not deferred to EndProject.
         await handler.Handle(
-            fixture.BuildCommand(new AdminMilestoneAllocationInput(
-                fixture.M3Id, DisputeMilestoneOutcome.Accepted, 25m, 0m, 0m,
-                "Work was substantially complete; admin approves full release to the freelancer.")),
+            fixture.BuildCommand([fixture.M1.MilestonesId, fixture.M2.MilestonesId, fixture.M3Id]),
             CancellationToken.None);
 
         Assert.Equal((int)MilestoneStatus.InProgress, fixture.M4.Status);
 
-        // Freelancer finishes M4 through the normal flow; client approves it. This is the
-        // only remaining milestone with money left in escrow (M1/M2 already 80%-withdrawn,
-        // M3 already fully released via the dispute).
+        // Freelancer finishes M4 through the normal flow; client approves it. This is now the
+        // only milestone with money left in escrow — M1/M2/M3 were fully drained above.
         fixture.M4.Status = (int)MilestoneStatus.Approved;
         fixture.M4.ApprovedAt = fixture.Now;
 
@@ -792,9 +774,8 @@ public sealed class ResolveAdminDisputeCommandHandlerTests
             new EndProjectCommand(fixture.ContractId, fixture.ClientUserId),
             CancellationToken.None);
 
-        // M1 remaining 5 + M2 remaining 5 + M3 remaining 0 (already released) + M4 remaining 25 = 35.
-        // Derived from real milestone/escrow state, not hardcoded in the handler.
-        Assert.Equal(35m, result.ReleasedAmountVnd);
+        // M1/M2/M3 remaining 0 (already released via dispute resolution) + M4 remaining 25 = 25.
+        Assert.Equal(25m, result.ReleasedAmountVnd);
     }
 
     /// <summary>
@@ -969,13 +950,19 @@ public sealed class ResolveAdminDisputeCommandHandlerTests
             Substitute.For<IUserAccountStatusService>(),
             Substitute.For<IUserEloService>());
 
-        public ResolveAdminDisputeCommand BuildCommand(AdminMilestoneAllocationInput allocation) => new(
+        public ResolveAdminDisputeCommand BuildCommand(IReadOnlyList<Guid> selectedMilestoneIds) => new(
             DisputeId,
             AdminUserId,
             DisputeResolution.Split,
             "Resolution note.",
             null,
-            new[] { allocation },
+            selectedMilestoneIds.Select(id =>
+            {
+                var milestone = new[] { M1, M2, M3, M4 }.Single(m => m?.MilestonesId == id);
+                return new AdminMilestoneAllocationInput(
+                    id, DisputeMilestoneOutcome.Accepted, milestone.Amount - milestone.ReleasedAmount, 0m, 0m, null);
+            }).ToList(),
+            selectedMilestoneIds,
             AdminContractAction.Resume,
             new AdminViolationInput(false, null, null, null),
             new AdminViolationInput(false, null, null, null));

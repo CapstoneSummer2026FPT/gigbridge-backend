@@ -2,12 +2,13 @@ using Application.Common.Interfaces;
 using Application.Common.Interfaces.Documents;
 using Application.Common.Interfaces.Templates;
 using Application.Common.Interfaces.Time;
-using Application.Features.Auth.Common.Interfaces;
-using Application.Features.ESign.Common.Interfaces;
-using Application.Features.Wallets.Common.Interfaces;
+using Application.Common.InternalServices.Auth.Interfaces;
+using Application.Common.InternalServices.ESign.Interfaces;
+using Application.Common.InternalServices.Wallets.Interfaces;
 using Infrastructure.Adapters.Caching;
 using Infrastructure.Adapters.Documents.ESign;
 using Infrastructure.Adapters.Documents.Receipts;
+using Infrastructure.Adapters.Files;
 using Infrastructure.Adapters.Security.Auth;
 using Infrastructure.Adapters.Security.Wallets;
 using Infrastructure.Adapters.Templates;
@@ -24,6 +25,7 @@ internal static class DependencyInjection
         IConfiguration configuration)
     {
         services.AddCachingAdapter(configuration);
+        services.AddFileUploadAdapter();
         services.AddScoped<IPasswordHasher, BCryptPasswordHasher>();
         services.AddScoped<IJwtService, JwtService>();
         services.AddScoped<IBankAccountProtector, BankAccountProtector>();

@@ -1,3 +1,4 @@
+using Application.Common.InternalServices.Scheduling;
 using Application.Features.Proposals.Common.DTOs;
 using FluentValidation;
 
@@ -30,6 +31,11 @@ internal sealed class ProposalMilestonePlanValidator
         RuleFor(item => item.EstimatedDuration)
             .MaximumLength(100)
             .WithMessage("Milestone estimated duration must not exceed 100 characters.");
+
+        RuleFor(item => item.EstimatedDuration)
+            .Must(duration => MilestoneDeadlineCalculator.TryParseDurationDays(duration, out _))
+            .When(item => !string.IsNullOrWhiteSpace(item.EstimatedDuration))
+            .WithMessage("Milestone duration must be a positive whole number in week(s), month(s), or year(s).");
 
         RuleForEach(item => item.WorkItems)
             .SetValidator(new ProposalWorkBreakdownItemValidator());

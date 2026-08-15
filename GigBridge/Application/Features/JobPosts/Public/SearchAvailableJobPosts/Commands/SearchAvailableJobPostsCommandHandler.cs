@@ -3,7 +3,8 @@ using Application.Common.Interfaces;
 using Application.Common.Interfaces.Time;
 using Application.Features.JobPosts.Common;
 using Application.Features.JobPosts.Public.GetAvailableJobPosts.Queries;
-using Application.Features.MarketplaceAnalytics.Common.Services;
+using Application.Common.InternalServices.MarketplaceAnalytics.Interfaces;
+using Application.Common.InternalServices.MarketplaceAnalytics.Services;
 using Domain.Entities;
 
 using Domain.Services;

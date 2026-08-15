@@ -1,4 +1,4 @@
-using Application.Features.Proposals.Freelancer.InterviewReview.DTOs;
+using Application.Common.InternalServices.Proposals.Models;
 using MediatR;
 
 namespace Application.Features.Proposals.Freelancer.InterviewReview.Commands;

@@ -1,4 +1,5 @@
 using Infrastructure.ExternalServices.Media.Cloudinary;
+using CloudinaryDotNet.Actions;
 
 namespace Test_Gigbridge_Backend.Infrastructure.ExternalServices.Media.Cloudinary;
 
@@ -33,5 +34,17 @@ public sealed class MediaServiceTests
         Assert.False(MediaService.IsInExpectedFolder(
             "gigbridge/signatures/contract/signature",
             "portfolio"));
+    }
+
+    [Theory]
+    [InlineData("https://res.cloudinary.com/demo/image/upload/v1/gigbridge/file", ResourceType.Image)]
+    [InlineData("https://res.cloudinary.com/demo/video/upload/v1/gigbridge/file", ResourceType.Video)]
+    [InlineData("https://res.cloudinary.com/demo/raw/upload/v1/gigbridge/file", ResourceType.Raw)]
+    public void TryGetResourceType_UsesCloudinaryDeliveryPath(
+        string url,
+        ResourceType expected)
+    {
+        Assert.True(MediaService.TryGetResourceType(url, out var actual));
+        Assert.Equal(expected, actual);
     }
 }

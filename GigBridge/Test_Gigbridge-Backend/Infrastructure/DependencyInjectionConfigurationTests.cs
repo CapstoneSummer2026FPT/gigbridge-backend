@@ -7,27 +7,39 @@ using Application.Common.Interfaces;
 using Application.Common.Interfaces.Ai;
 using Application.Common.Interfaces.Caching;
 using Application.Common.Interfaces.Email;
+using Application.Common.Interfaces.Files;
 using Application.Common.Interfaces.Media;
 using Application.Common.Interfaces.Templates;
 using Application.Common.Interfaces.Time;
-using Application.Features.Admin.AuditLogs.Common.Interfaces;
-using Application.Features.Admin.Analytics.Common.BackgroundJobs;
-using Application.Features.Auth.Common.Interfaces;
-using Application.Features.Chat.Common.FinalOffers.Shared.Email;
-using Application.Features.Chat.Common.Interfaces;
+using Application.Common.InternalServices.Admin.AuditLogs.Interfaces;
+using Application.Common.InternalServices.Admin.Analytics.Interfaces;
+using Application.Common.InternalServices.Admin.Analytics.BackgroundJobs;
+using Application.Common.InternalServices.Auth.Interfaces;
+using Application.Common.InternalServices.Chat.Email;
+using Application.Common.InternalServices.Chat.Interfaces;
+using Application.Common.InternalServices.Chat.Models;
+using Application.Common.InternalServices.Chat.Services;
 using Application.Features.Chat.Common.Schedules;
-using Application.Features.Chat.Common.Schedules.BackgroundJobs;
-using Application.Features.Elo.Common.Interfaces;
-using Application.Features.ESign.Common.Interfaces;
-using Application.Features.JobInvitations.Common.Email;
-using Application.Features.JobPosts.Common.ContentModeration;
-using Application.Features.Notifications.Common.Interfaces;
-using Application.Features.Premium.Common.Interfaces;
-using Application.Features.Premium.Common.BackgroundJobs;
-using Application.Features.Proposals.Common.Email;
-using Application.Features.Proposals.Common.Interfaces;
-using Application.Features.Wallets.Common.Interfaces;
+using Application.Common.InternalServices.Chat.BackgroundJobs;
+using Application.Common.InternalServices.Contracts.Interfaces;
+using Application.Common.InternalServices.Elo.Interfaces;
+using Application.Common.InternalServices.ESign.Interfaces;
+using Application.Common.InternalServices.JobInvitations.Email;
+using Application.Common.InternalServices.JobInvitations.Interfaces;
+using Application.Common.InternalServices.JobInvitations.Models;
+using Application.Common.InternalServices.JobPosts.Interfaces;
+using Application.Common.InternalServices.JobPosts.Models;
+using Application.Common.InternalServices.MarketplaceAnalytics.Interfaces;
+using Application.Common.InternalServices.Notifications.Interfaces;
+using Application.Common.InternalServices.Premium.Interfaces;
+using Application.Common.InternalServices.Premium.BackgroundJobs;
+using Application.Common.InternalServices.Proposals.Email;
+using Application.Common.InternalServices.Proposals.Interfaces;
+using Application.Common.InternalServices.Proposals.Models;
+using Application.Common.InternalServices.Reviews.Interfaces;
+using Application.Common.InternalServices.Wallets.Interfaces;
 using Infrastructure.Adapters.Caching;
+using Infrastructure.Adapters.Files;
 using Infrastructure.Adapters.Security.Auth;
 using Infrastructure.Adapters.Security.Wallets;
 using Infrastructure.Adapters.Templates;
@@ -86,20 +98,25 @@ public sealed class DependencyInjectionConfigurationTests
     public void ApplicationServices_ResolveFromModularRegistrations()
     {
         var services = new ServiceCollection();
+        var configuration = Configuration("Development");
         services.AddSingleton(Substitute.For<IApplicationDbContext>());
+        services.AddSingleton<IConfiguration>(configuration);
         services.AddSingleton(Substitute.For<IDateTimeService>());
         services.AddSingleton(Substitute.For<ICacheService>());
         services.AddSingleton(Substitute.For<IEmailService>());
         services.AddSingleton(Substitute.For<ITemplateReader>());
+        services.AddSingleton(Substitute.For<IChatRealtimeNotifier>());
+        services.AddSingleton(Substitute.For<IGoogleMeetOAuthService>());
         services.AddSingleton(Substitute.For<INotificationSender>());
         services.AddSingleton(Substitute.For<IRequestMetadataAccessor>());
         services.AddLogging();
-        services.AddApplicationServices(Configuration("Development"));
+        services.AddApplicationServices(configuration);
         using var provider = services.BuildServiceProvider();
 
         Assert.NotNull(provider.GetRequiredService<IUserAccountStatusService>());
         Assert.NotNull(provider.GetRequiredService<IUserAuditLogService>());
         Assert.NotNull(provider.GetRequiredService<IAdminAuditService>());
+        Assert.NotNull(provider.GetRequiredService<IAdminAnalyticsService>());
         Assert.NotNull(provider.GetRequiredService<IUserEloService>());
         Assert.NotNull(provider.GetRequiredService<IPremiumAccessService>());
         Assert.NotNull(provider.GetRequiredService<IProposalQuestionTimerService>());
@@ -107,6 +124,10 @@ public sealed class DependencyInjectionConfigurationTests
         Assert.NotNull(provider.GetRequiredService<IAuthEmailSender>());
         Assert.NotNull(provider.GetRequiredService<INotificationService>());
         Assert.NotNull(provider.GetRequiredService<IContentModerationService>());
+        Assert.NotNull(provider.GetRequiredService<IMarketplaceAnalyticsRecorder>());
+        Assert.NotNull(provider.GetRequiredService<IReviewModerationService>());
+        Assert.NotNull(provider.GetRequiredService<ScheduleWorkflowService>());
+        Assert.NotNull(provider.GetRequiredService<IMilestoneSubmissionEmailRenderer>());
         Assert.NotNull(provider.GetRequiredService<IScheduleEmailRenderer>());
         Assert.NotNull(provider.GetRequiredService<IJobAcceptanceEmailRenderer>());
         Assert.NotNull(provider.GetRequiredService<ISignedEmailRenderer>());
@@ -153,6 +174,9 @@ public sealed class DependencyInjectionConfigurationTests
         AssertRegistration<ICacheService, HybridCacheService>(
             services,
             ServiceLifetime.Singleton);
+        AssertRegistration<IWorkspaceUploadFilePolicy, WorkspaceUploadFilePolicy>(
+            services,
+            ServiceLifetime.Singleton);
         AssertRegistration<ITemplateReader, FileSystemTemplateReader>(
             services,
             ServiceLifetime.Singleton);
@@ -184,7 +208,10 @@ public sealed class DependencyInjectionConfigurationTests
             services,
             ServiceLifetime.Scoped);
         AssertFactoryRegistration<IAiServiceClient>(services, ServiceLifetime.Transient);
+        AssertFactoryRegistration<IGoogleAuthService>(services, ServiceLifetime.Transient);
         AssertFactoryRegistration<IGoogleMeetApiClient>(services, ServiceLifetime.Transient);
+        AssertFactoryRegistration<IContractEsignDocumentGenerator>(services, ServiceLifetime.Transient);
+        AssertFactoryRegistration<IPayoutProvider>(services, ServiceLifetime.Scoped);
         AssertFactoryRegistration<ISupportedBankDirectory>(services, ServiceLifetime.Transient);
         Assert.Single(services.Where(descriptor => descriptor.ServiceType == typeof(ICacheService)));
     }
@@ -257,6 +284,7 @@ public sealed class DependencyInjectionConfigurationTests
             ["ASPNETCORE_ENVIRONMENT"] = environment,
             ["ConnectionStrings:DefaultConnection"] =
                 "Host=localhost;Database=gigbridge;Username=postgres;Password=test",
+            ["Analytics:HashKey"] = "test-analytics-hash-key",
             ["Resend:ApiToken"] = "test-token"
         };
         if (workersEnabled is not null)

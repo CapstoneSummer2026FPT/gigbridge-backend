@@ -2,7 +2,8 @@ using System.Text.Json;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.Time;
-using Application.Features.Chat.Common.Interfaces;
+using Application.Common.InternalServices.Scheduling;
+using Application.Common.InternalServices.Chat.Interfaces;
 using Application.Features.Chat.Common.Messages.Send.DTOs;
 using Application.Features.JobPosts.Common;
 using Application.Features.Proposals.Common;
@@ -73,7 +74,7 @@ public class CreateFinalOfferCommandHandler : IRequestHandler<CreateFinalOfferCo
             conversation.JobPostsId.Value,
             cancellationToken);
 
-        ValidateRequest(request.FinalPrice, request.StartDate, request.EndDate, request.Milestones, DateOnly.FromDateTime(_dateTimeService.UtcNow));
+        ValidateRequest(request.FinalPrice, request.StartDate, request.EndDate, request.Milestones);
 
         var clientProfile = await _context.Set<ClientProfile>()
             .FirstOrDefaultAsync(profile => profile.UserId == command.UserId, cancellationToken);
@@ -145,8 +146,14 @@ public class CreateFinalOfferCommandHandler : IRequestHandler<CreateFinalOfferCo
             .ToListAsync(cancellationToken);
         _context.Set<NegotiationMilestoneDraft>().RemoveRange(existingDrafts);
 
-        foreach (var milestone in request.Milestones!.OrderBy(item => item.OrderIndex))
+        var orderedMilestones = request.Milestones!.OrderBy(item => item.OrderIndex).ToList();
+        var computedDueDates = MilestoneDeadlineCalculator.CalculateDueDates(
+            DateOnly.FromDateTime(_dateTimeService.UtcNow),
+            orderedMilestones.Select(item => item.EstimatedDuration).ToList());
+
+        foreach (var (milestone, milestoneIndex) in orderedMilestones.Select((item, index) => (item, index)))
         {
+            var dueDate = computedDueDates[milestoneIndex];
             var draftId = Guid.NewGuid();
             _context.Set<NegotiationMilestoneDraft>().Add(new NegotiationMilestoneDraft
             {
@@ -156,7 +163,7 @@ public class CreateFinalOfferCommandHandler : IRequestHandler<CreateFinalOfferCo
                 Description = Clean(milestone.Description),
                 Amount = milestone.Amount,
                 EstimatedDuration = Clean(milestone.EstimatedDuration),
-                DueDate = milestone.DueDate,
+                DueDate = dueDate,
                 Deliverables = milestone.Deliverables!.Trim(),
                 AcceptanceCriteria = milestone.AcceptanceCriteria!.Trim(),
                 OrderIndex = milestone.OrderIndex,
@@ -171,7 +178,7 @@ public class CreateFinalOfferCommandHandler : IRequestHandler<CreateFinalOfferCo
                 Description = Clean(milestone.Description),
                 Amount = milestone.Amount,
                 EstimatedDuration = Clean(milestone.EstimatedDuration),
-                DueDate = milestone.DueDate,
+                DueDate = dueDate,
                 Deliverables = milestone.Deliverables.Trim(),
                 AcceptanceCriteria = milestone.AcceptanceCriteria.Trim(),
                 OrderIndex = milestone.OrderIndex
@@ -240,8 +247,7 @@ public class CreateFinalOfferCommandHandler : IRequestHandler<CreateFinalOfferCo
         decimal finalPrice,
         DateOnly? startDate,
         DateOnly? endDate,
-        IReadOnlyCollection<Application.Features.Chat.Common.Negotiations.MilestonePlans.DTOs.NegotiationMilestoneDto>? milestones,
-        DateOnly today)
+        IReadOnlyCollection<Application.Features.Chat.Common.Negotiations.MilestonePlans.DTOs.NegotiationMilestoneDto>? milestones)
     {
         if (!ProposalTotalsCalculator.IsValidAmount(finalPrice))
         {
@@ -282,12 +288,9 @@ public class CreateFinalOfferCommandHandler : IRequestHandler<CreateFinalOfferCo
             throw new BadRequestException("Each milestone requires work items with title, description, and unique order indexes.");
         }
 
-        if (milestones.Any(item => item.DueDate.HasValue &&
-                                   (item.DueDate.Value < today ||
-                                    startDate.HasValue && item.DueDate.Value < startDate.Value ||
-                                    endDate.HasValue && item.DueDate.Value > endDate.Value)))
+        if (milestones.Any(item => !MilestoneDeadlineCalculator.TryParseDurationDays(item.EstimatedDuration, out _)))
         {
-            throw new BadRequestException("Milestone deadlines must be current and within the final-offer date range.");
+            throw new BadRequestException("Each milestone duration must be a positive whole number in week(s), month(s), or year(s).");
         }
 
         if (milestones.Sum(item => item.Amount) != finalPrice)

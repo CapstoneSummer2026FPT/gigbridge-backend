@@ -1,9 +1,10 @@
+using Application.Common.InternalServices.Contracts.Services;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.Time;
-using Application.Features.Admin.AuditLogs.Common.Interfaces;
-using Application.Features.Admin.AuditLogs.Common.Services;
-using Application.Features.Notifications.Common.Interfaces;
+using Application.Common.InternalServices.Admin.AuditLogs.Interfaces;
+using Application.Common.InternalServices.Admin.AuditLogs.Services;
+using Application.Common.InternalServices.Notifications.Interfaces;
 using Application.Common.Models;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.ReportContracts.Common.Internal;

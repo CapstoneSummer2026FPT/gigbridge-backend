@@ -2,9 +2,11 @@ using System;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.Time;
-using Application.Features.JobPosts.Common.ContentModeration;
+using Application.Common.InternalServices.JobPosts.Interfaces;
+using Application.Common.InternalServices.JobPosts.Models;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.JobPosts.Client.Common;
+using Application.Features.JobPosts.Common;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
@@ -56,10 +58,9 @@ public class UpdateStatusJobPostCommandHandler
             throw new NotFoundException("Job post does not exist or you do not have permission to update it.");
         }
 
-        if (jobPost.Visibility == 3)
-        {
-            throw new BadRequestException("This job post has been locked by an admin and cannot be updated.");
-        }
+        JobPostEditingGuard.EnsureStatusTransitionAllowed(
+            jobPost,
+            command.Request.Status);
 
         JobPostContentModerationGuard.EnsureAllowed(
             _contentModerationService,

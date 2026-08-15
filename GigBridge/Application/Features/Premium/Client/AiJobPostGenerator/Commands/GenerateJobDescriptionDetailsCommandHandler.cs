@@ -5,7 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.Ai;
-using Application.Features.Premium.Common.Interfaces;
+using Application.Common.InternalServices.Premium.Interfaces;
 using Application.Common.Models.Ai;
 using Application.Features.Premium.Client.AiJobPostGenerator.Commands;
 using Application.Features.Premium.Client.AiJobPostGenerator.DTOs;

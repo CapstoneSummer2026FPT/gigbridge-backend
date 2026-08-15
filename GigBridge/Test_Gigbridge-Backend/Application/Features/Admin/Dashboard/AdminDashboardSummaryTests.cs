@@ -1,7 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces.Time;
-using Application.Features.Admin.Analytics.Common.DTOs;
-using Application.Features.Admin.Analytics.Common.Interfaces;
+using Application.Common.InternalServices.Admin.Analytics.Models;
+using Application.Common.InternalServices.Admin.Analytics.Interfaces;
 using Application.Features.Admin.Dashboard.GetSummary.Queries;
 using Domain.Entities;
 using Domain.Enums.Accounts;

@@ -1,5 +1,6 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces.Time;
+using Application.Common.InternalServices.Chat.Interfaces;
 using Application.Features.Contracts.ProductHandoffs.Acknowledge.Commands;
 using Application.Features.Contracts.ProductHandoffs.Common.DTOs;
 using Application.Features.Contracts.ProductHandoffs.Download.Queries;
@@ -9,22 +10,26 @@ using Domain.Entities;
 using Domain.Enums.Accounts;
 using Domain.Enums.Chat;
 using Domain.Enums.Contracts;
+using Infrastructure.Adapters.Files;
 using Test_Gigbridge_Backend.TestSupport;
 
 namespace Test_Gigbridge_Backend.Application.Features.Contracts.Common;
 
 public class ContractProductHandoffWorkflowTests
 {
+    private static readonly byte[] ValidPdfContent =
+        [0x25, 0x50, 0x44, 0x46, 0x2D, 0x31, 0x2E, 0x37, 0x0A];
+
     [Fact]
     public async Task SubmitFileHandoff_UploadsToContractProductsAndCreatesCurrentVersion()
     {
         var fixture = new ContractProductHandoffFixture();
         var handler = fixture.CreateSubmitHandler();
         var file = new SubmitContractProductHandoffFile(
-            new MemoryStream(new byte[] { 1, 2, 3 }),
+            new MemoryStream(ValidPdfContent),
             "brief.pdf",
             "application/pdf",
-            3);
+            ValidPdfContent.Length);
 
         var response = await handler.Handle(
             new SubmitContractProductHandoffCommand(
@@ -43,6 +48,35 @@ public class ContractProductHandoffWorkflowTests
         Assert.Equal("brief.pdf", fixture.MediaService.Uploads[0].FileName);
         Assert.Single(fixture.Handoffs.Entities);
         Assert.Single(fixture.Context.Set<Message>().ToList());
+    }
+
+    [Fact]
+    public async Task SubmitFileHandoff_PushesNamedMessageLiveToTheWorkspaceConversation()
+    {
+        var fixture = new ContractProductHandoffFixture();
+        var realtime = new CapturingChatRealtimeNotifier();
+        var handler = fixture.CreateSubmitHandler(realtime);
+        var file = new SubmitContractProductHandoffFile(
+            new MemoryStream(ValidPdfContent),
+            "brief.pdf",
+            "application/pdf",
+            ValidPdfContent.Length);
+
+        await handler.Handle(
+            new SubmitContractProductHandoffCommand(
+                fixture.ContractId,
+                fixture.ClientUserId,
+                file,
+                null,
+                "Please work from this brief."),
+            CancellationToken.None);
+
+        var message = Assert.Single(fixture.Context.Set<Message>().ToList());
+        Assert.Contains("brief.pdf", message.Content);
+
+        var conversationEvent = Assert.Single(realtime.ConversationEvents);
+        Assert.Equal("ReceiveMessage", conversationEvent.EventName);
+        Assert.Equal(message.ConversationsId, conversationEvent.ConversationId);
     }
 
     [Fact]
@@ -119,7 +153,7 @@ public class ContractProductHandoffWorkflowTests
                         new MemoryStream(new byte[] { 1 }),
                         "huge.zip",
                         "application/zip",
-                        100 * 1024 * 1024 + 1),
+                        10 * 1024 * 1024 + 1),
                     null,
                     null),
                 CancellationToken.None));
@@ -342,14 +376,16 @@ public class ContractProductHandoffWorkflowTests
         public TestDbSet<ContractProductHandoff> Handoffs { get; }
         public FakeMediaService MediaService { get; } = new("https://res.cloudinary.com/gigbridge/product.pdf");
 
-        public SubmitContractProductHandoffCommandHandler CreateSubmitHandler()
+        public SubmitContractProductHandoffCommandHandler CreateSubmitHandler(
+            IChatRealtimeNotifier? realtimeNotifier = null)
         {
             return new SubmitContractProductHandoffCommandHandler(
                 Context,
                 new FixedDateTimeService(Now),
                 MediaService,
                 new NoopNotificationService(),
-                new NoopChatRealtimeNotifier());
+                realtimeNotifier ?? new NoopChatRealtimeNotifier(),
+                new WorkspaceUploadFilePolicy());
         }
 
         public AcknowledgeContractProductHandoffCommandHandler CreateAcknowledgeHandler()

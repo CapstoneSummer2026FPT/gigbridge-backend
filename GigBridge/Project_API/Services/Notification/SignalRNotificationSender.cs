@@ -1,5 +1,6 @@
+using Application.Common.InternalServices.Notifications.Models;
 using Application.Common.Exceptions;
-using Application.Features.Notifications.Common.Interfaces;
+using Application.Common.InternalServices.Notifications.Interfaces;
 using Application.Features.Notifications.Common.DTOs;
 using Microsoft.AspNetCore.SignalR;
 using Project_API.Hubs;

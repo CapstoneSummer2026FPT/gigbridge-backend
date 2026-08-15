@@ -24,6 +24,12 @@ public partial class FreelancerProfile
 
     public int? ProfileCompletionScore { get; set; }
 
+    /// <summary>
+    /// Explicit opt-in for anonymous discovery and search-engine indexing.
+    /// Existing and newly created profiles remain private until the freelancer enables it.
+    /// </summary>
+    public bool AllowSearchEngineIndexing { get; set; }
+
     public DateTime CreatedAt { get; set; }
 
     public DateTime? UpdatedAt { get; set; }

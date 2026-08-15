@@ -1,7 +1,9 @@
+using System.IO.Compression;
+using System.Text.Json;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces.Media;
 using Application.Common.Interfaces.Time;
-using Application.Features.Notifications.Common.Interfaces;
+using Application.Common.InternalServices.Notifications.Interfaces;
 using Application.Features.Contracts.Completion.Client.Commands;
 using Application.Features.Contracts.Completion.Freelancer.Commands;
 using Application.Features.Contracts.Milestones.Client.Approve.Commands;
@@ -12,6 +14,7 @@ using Application.Features.Contracts.Milestones.Common.Get.Queries;
 using Application.Features.Contracts.Milestones.Common.List.Queries;
 using Application.Features.Contracts.Milestones.Freelancer.RequestUnlock.Commands;
 using Application.Features.Contracts.Milestones.Freelancer.Submit.Commands;
+using Application.Features.Contracts.Milestones.Freelancer.Submit.Common;
 using Application.Features.Contracts.Milestones.Freelancer.Withdraw.Commands;
 using Application.Features.Contracts.WorkItems.Freelancer.Update.Commands;
 using Application.Features.Contracts.WorkItems.Freelancer.Update.DTOs;
@@ -22,8 +25,10 @@ using Domain.Enums.Chat;
 using Domain.Enums.Contracts;
 using Domain.Enums.Contracts.Escrow;
 using Domain.Enums.Contracts.Milestones;
+using Domain.Enums.Delivery;
 using Domain.Enums.Notifications;
 using Domain.Enums.Wallets;
+using Infrastructure.Adapters.Files;
 using NSubstitute;
 using Test_Gigbridge_Backend.TestSupport;
 
@@ -31,7 +36,8 @@ namespace Test_Gigbridge_Backend.Application.Features.Contracts.Common;
 
 public class MilestoneWorkflowTests
 {
-    private static readonly byte[] ValidZipContent = [0x50, 0x4B, 0x03, 0x04];
+    private static readonly byte[] ValidZipContent = CreateZipContent(
+        ("readme.txt", "Milestone delivery"));
     private static readonly byte[] ValidPdfContent = [0x25, 0x50, 0x44, 0x46, 0x2D, 0x31, 0x2E, 0x37, 0x0A];
 
     private static SubmitMilestoneFile CreateSubmissionFile(string fileName) =>
@@ -41,6 +47,38 @@ public class MilestoneWorkflowTests
             "application/zip",
             ValidZipContent.Length);
 
+    private static byte[] CreateZipContent(params (string FileName, string Content)[] entries)
+    {
+        using var content = new MemoryStream();
+        using (var archive = new ZipArchive(content, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            foreach (var entry in entries)
+            {
+                var archiveEntry = archive.CreateEntry(entry.FileName);
+                using var writer = new StreamWriter(archiveEntry.Open());
+                writer.Write(entry.Content);
+            }
+        }
+
+        return content.ToArray();
+    }
+
+    private static byte[] CreateBinaryZipContent(params (string FileName, byte[] Content)[] entries)
+    {
+        using var content = new MemoryStream();
+        using (var archive = new ZipArchive(content, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            foreach (var entry in entries)
+            {
+                var archiveEntry = archive.CreateEntry(entry.FileName);
+                using var entryStream = archiveEntry.Open();
+                entryStream.Write(entry.Content);
+            }
+        }
+
+        return content.ToArray();
+    }
+
     [Fact]
     public async Task MilestoneLifecycle_EnforcesParticipantRolesAndTransitions()
     {
@@ -49,6 +87,7 @@ public class MilestoneWorkflowTests
             fixture.Context,
             new FixedDateTimeService(fixture.Now.AddMinutes(1)),
             new CapturingUserAuditLogService(),
+            new WorkspaceUploadFilePolicy(),
             new TestMediaService());
         var approveHandler = new ApproveMilestoneCommandHandler(
             fixture.Context,
@@ -697,6 +736,7 @@ public class MilestoneWorkflowTests
         var realtime = new CapturingChatRealtimeNotifier();
         var handler = new SubmitMilestoneCommandHandler(
             fixture.Context, new FixedDateTimeService(fixture.Now), new CapturingUserAuditLogService(),
+            new WorkspaceUploadFilePolicy(),
             new TestMediaService(), realtime);
 
         await handler.Handle(
@@ -947,10 +987,20 @@ public class MilestoneWorkflowTests
 
     private sealed class TestMediaService : IMediaService
     {
+        private readonly int? _failOnUploadAttempt;
+
+        public TestMediaService(int? failOnUploadAttempt = null)
+        {
+            _failOnUploadAttempt = failOnUploadAttempt;
+        }
+
         public string? UploadedFileName { get; private set; }
         public string? UploadedContentType { get; private set; }
         public byte[]? UploadedContent { get; private set; }
         public int UploadCount { get; private set; }
+        public int UploadAttempts { get; private set; }
+        public List<string> UploadedFileNames { get; } = [];
+        public List<string> DeletedFileUrls { get; } = [];
 
         public async Task<string> UploadFileAsync(
             Stream fileStream,
@@ -959,6 +1009,12 @@ public class MilestoneWorkflowTests
             string folder,
             CancellationToken cancellationToken = default)
         {
+            UploadAttempts++;
+            if (UploadAttempts == _failOnUploadAttempt)
+            {
+                throw new InvalidOperationException("Simulated media upload failure.");
+            }
+
             using var uploadedContent = new MemoryStream();
             await fileStream.CopyToAsync(uploadedContent, cancellationToken);
 
@@ -966,6 +1022,7 @@ public class MilestoneWorkflowTests
             UploadedContentType = contentType;
             UploadedContent = uploadedContent.ToArray();
             UploadCount++;
+            UploadedFileNames.Add(fileName);
 
             return $"https://test-storage.com/{folder}/{fileName}";
         }
@@ -977,7 +1034,10 @@ public class MilestoneWorkflowTests
             string fileUrl,
             string expectedFolder,
             CancellationToken cancellationToken = default)
-            => Task.CompletedTask;
+        {
+            DeletedFileUrls.Add(fileUrl);
+            return Task.CompletedTask;
+        }
 
         public Task<string> GetPrivateDownloadUrlAsync(string storageKey, string contentType, CancellationToken cancellationToken = default)
             => Task.FromResult(storageKey);
@@ -1048,6 +1108,7 @@ public class MilestoneWorkflowTests
             fixture.Context,
             new FixedDateTimeService(fixture.Now),
             userAuditLog,
+            new WorkspaceUploadFilePolicy(),
             mediaService);
 
         fixture.FirstMilestone.Status = (int)MilestoneStatus.InProgress;
@@ -1099,6 +1160,7 @@ public class MilestoneWorkflowTests
             fixture.Context,
             new FixedDateTimeService(fixture.Now),
             userAuditLog,
+            new WorkspaceUploadFilePolicy(),
             new TestMediaService());
 
         fixture.FirstMilestone.Status = (int)MilestoneStatus.Approved;
@@ -1123,7 +1185,8 @@ public class MilestoneWorkflowTests
         var submitHandler = new SubmitMilestoneCommandHandler(
             fixture.Context,
             new FixedDateTimeService(fixture.Now.AddMinutes(4)),
-            new CapturingUserAuditLogService());
+            new CapturingUserAuditLogService(),
+            new WorkspaceUploadFilePolicy());
 
         fixture.ApproveMilestone(fixture.FirstMilestone);
 
@@ -1151,6 +1214,7 @@ public class MilestoneWorkflowTests
             fixture.Context,
             new FixedDateTimeService(fixture.Now),
             new CapturingUserAuditLogService(),
+            new WorkspaceUploadFilePolicy(),
             mediaService);
 
         fixture.FirstMilestone.Status = (int)MilestoneStatus.InProgress;
@@ -1172,8 +1236,31 @@ public class MilestoneWorkflowTests
                         new MemoryStream(new byte[] { 1 }),
                         "huge.zip",
                         "application/zip",
-                        100 * 1024 * 1024 + 1)),
+                        10 * 1024 * 1024 + 1)),
                 CancellationToken.None));
+
+        await Assert.ThrowsAsync<BadRequestException>(() =>
+            submitHandler.Handle(
+                new SubmitMilestoneCommand(
+                    fixture.ContractId,
+                    fixture.FirstMilestoneId,
+                    fixture.FreelancerUserId,
+                    null,
+                    [
+                        new SubmitMilestoneFile(
+                            new MemoryStream(ValidPdfContent),
+                            "first.pdf",
+                            "application/pdf",
+                            60L * 1024 * 1024),
+                        new SubmitMilestoneFile(
+                            new MemoryStream(ValidPdfContent),
+                            "second.pdf",
+                            "application/pdf",
+                            50L * 1024 * 1024)
+                    ]),
+                CancellationToken.None));
+
+        Assert.Equal(0, mediaService.UploadCount);
     }
 
     [Fact]
@@ -1185,6 +1272,7 @@ public class MilestoneWorkflowTests
             fixture.Context,
             new FixedDateTimeService(fixture.Now),
             new CapturingUserAuditLogService(),
+            new WorkspaceUploadFilePolicy(),
             mediaService);
 
         fixture.FirstMilestone.Status = (int)MilestoneStatus.InProgress;
@@ -1217,6 +1305,7 @@ public class MilestoneWorkflowTests
             fixture.Context,
             new FixedDateTimeService(fixture.Now),
             new CapturingUserAuditLogService(),
+            new WorkspaceUploadFilePolicy(),
             mediaService);
 
         fixture.FirstMilestone.Status = (int)MilestoneStatus.InProgress;
@@ -1246,6 +1335,7 @@ public class MilestoneWorkflowTests
             fixture.Context,
             new FixedDateTimeService(fixture.Now),
             new CapturingUserAuditLogService(),
+            new WorkspaceUploadFilePolicy(),
             mediaService);
 
         fixture.FirstMilestone.Status = (int)MilestoneStatus.InProgress;
@@ -1276,7 +1366,17 @@ public class MilestoneWorkflowTests
                 new MemoryStream([0x00]),
                 "binary.txt",
                 "text/plain",
-                1)
+                1),
+            new SubmitMilestoneFile(
+                new MemoryStream([0x4D, 0x5A, 0x20, 0x20]),
+                "disguised.txt",
+                "text/plain",
+                4),
+            new SubmitMilestoneFile(
+                new MemoryStream([0x50, 0x4B, 0x03, 0x04]),
+                "broken.zip",
+                "application/zip",
+                4)
         };
 
         foreach (var file in rejectedFiles)
@@ -1305,6 +1405,7 @@ public class MilestoneWorkflowTests
             fixture.Context,
             new FixedDateTimeService(fixture.Now),
             new CapturingUserAuditLogService(),
+            new WorkspaceUploadFilePolicy(),
             mediaService);
         byte[] content = [.. ValidPdfContent, 0x01, 0x02, 0x03];
 
@@ -1323,5 +1424,430 @@ public class MilestoneWorkflowTests
             CancellationToken.None);
 
         Assert.Equal(content, mediaService.UploadedContent);
+    }
+
+    [Fact]
+    public async Task SubmitMilestone_EnqueuesClientSubmissionEmailOutboxRow()
+    {
+        var fixture = new MilestoneWorkflowFixture();
+        var submitHandler = new SubmitMilestoneCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new CapturingUserAuditLogService(),
+            new WorkspaceUploadFilePolicy(),
+            new TestMediaService());
+        fixture.FirstMilestone.Status = (int)MilestoneStatus.InProgress;
+
+        await submitHandler.Handle(
+            new SubmitMilestoneCommand(
+                fixture.ContractId,
+                fixture.FirstMilestoneId,
+                fixture.FreelancerUserId,
+                "Initial delivery.",
+                File: CreateSubmissionFile("milestone-1-v1.zip")),
+            CancellationToken.None);
+
+        var outboxRow = Assert.Single(fixture.Context.Set<DeliveryOutbox>().ToList());
+        Assert.Null(outboxRow.ScheduleId);
+        Assert.Equal((int)DeliveryOutboxType.MilestoneSubmission, outboxRow.DeliveryType);
+        Assert.Equal((int)DeliveryChannel.Email, outboxRow.Channel);
+        Assert.Equal((int)DeliveryOutboxStatus.Pending, outboxRow.Status);
+        Assert.Equal(fixture.ClientUserId, outboxRow.RecipientUserId);
+        Assert.StartsWith($"milestone:{fixture.FirstMilestoneId:D}:submitted:", outboxRow.DeliveryKey);
+
+        var payload = JsonSerializer.Deserialize<MilestoneSubmissionDeliveryPayload>(
+            outboxRow.Payload, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        Assert.NotNull(payload);
+        Assert.Equal(fixture.ContractId, payload!.ContractId);
+        Assert.Equal(fixture.FirstMilestoneId, payload.MilestoneId);
+        Assert.Equal("client@example.com", payload.ClientEmail);
+        Assert.Equal("Client", payload.ClientName);
+    }
+
+    [Fact]
+    public async Task SubmitMilestone_Resubmission_UsesDistinctDeliveryKeys()
+    {
+        var fixture = new MilestoneWorkflowFixture();
+        var firstSubmitHandler = new SubmitMilestoneCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new CapturingUserAuditLogService(),
+            new WorkspaceUploadFilePolicy(),
+            new TestMediaService());
+        var revisionHandler = new RequestMilestoneRevisionCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now.AddMinutes(1)));
+        var secondSubmitHandler = new SubmitMilestoneCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now.AddMinutes(2)),
+            new CapturingUserAuditLogService(),
+            new WorkspaceUploadFilePolicy(),
+            new TestMediaService());
+        fixture.FirstMilestone.Status = (int)MilestoneStatus.InProgress;
+
+        await firstSubmitHandler.Handle(
+            new SubmitMilestoneCommand(
+                fixture.ContractId,
+                fixture.FirstMilestoneId,
+                fixture.FreelancerUserId,
+                File: CreateSubmissionFile("milestone-1-v1.zip")),
+            CancellationToken.None);
+
+        await revisionHandler.Handle(
+            new RequestMilestoneRevisionCommand(
+                fixture.ContractId,
+                fixture.FirstMilestoneId,
+                fixture.ClientUserId,
+                new RequestMilestoneRevisionRequest("Needs another pass.", [fixture.FirstWorkItem.ContractWorkItemId])),
+            CancellationToken.None);
+        fixture.FirstWorkItem.Status = (int)ContractWorkItemStatus.Completed;
+
+        await secondSubmitHandler.Handle(
+            new SubmitMilestoneCommand(
+                fixture.ContractId,
+                fixture.FirstMilestoneId,
+                fixture.FreelancerUserId,
+                File: CreateSubmissionFile("milestone-1-v2.zip")),
+            CancellationToken.None);
+
+        var outboxRows = fixture.Context.Set<DeliveryOutbox>().ToList();
+        Assert.Equal(2, outboxRows.Count);
+        Assert.Equal(2, outboxRows.Select(row => row.DeliveryKey).Distinct().Count());
+        Assert.All(outboxRows, row => Assert.Equal(fixture.ClientUserId, row.RecipientUserId));
+    }
+
+    [Fact]
+    public async Task SubmitMilestone_WithSingleFile_OutboxPayloadTargetsClientOnly()
+    {
+        var fixture = new MilestoneWorkflowFixture();
+        var submitHandler = new SubmitMilestoneCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new CapturingUserAuditLogService(),
+            new WorkspaceUploadFilePolicy(),
+            new TestMediaService());
+        fixture.FirstMilestone.Status = (int)MilestoneStatus.InProgress;
+
+        await submitHandler.Handle(
+            new SubmitMilestoneCommand(
+                fixture.ContractId,
+                fixture.FirstMilestoneId,
+                fixture.FreelancerUserId,
+                File: CreateSubmissionFile("deliverable.zip")),
+            CancellationToken.None);
+
+        var outboxRow = Assert.Single(fixture.Context.Set<DeliveryOutbox>().ToList());
+        Assert.NotEqual(fixture.FreelancerUserId, outboxRow.RecipientUserId);
+        Assert.Equal(fixture.ClientUserId, outboxRow.RecipientUserId);
+
+        var attachment = Assert.Single(fixture.Context.Set<MilestoneAttachment>().ToList());
+        Assert.Equal("deliverable.zip", attachment.FileName);
+    }
+
+    [Fact]
+    public async Task SubmitMilestone_AcceptsFiveFilesAndCreatesOneAttachmentPerFile()
+    {
+        var fixture = new MilestoneWorkflowFixture();
+        var mediaService = new TestMediaService();
+        var submitHandler = new SubmitMilestoneCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new CapturingUserAuditLogService(),
+            new WorkspaceUploadFilePolicy(),
+            mediaService);
+        fixture.FirstMilestone.Status = (int)MilestoneStatus.InProgress;
+        var files = Enumerable.Range(1, 5)
+            .Select(index => new SubmitMilestoneFile(
+                new MemoryStream(ValidPdfContent),
+                $"deliverable-{index}.pdf",
+                "application/pdf",
+                ValidPdfContent.Length))
+            .ToList();
+
+        var response = await submitHandler.Handle(
+            new SubmitMilestoneCommand(
+                fixture.ContractId,
+                fixture.FirstMilestoneId,
+                fixture.FreelancerUserId,
+                "Complete batch.",
+                files),
+            CancellationToken.None);
+
+        Assert.Equal(5, response.Attachments.Count);
+        Assert.Equal(5, fixture.Context.Set<MilestoneAttachment>().Count());
+        Assert.Equal(5, mediaService.UploadCount);
+        Assert.Equal(files.Select(file => file.FileName), mediaService.UploadedFileNames);
+    }
+
+    [Fact]
+    public async Task SubmitMilestone_RejectsSixFilesAndNormalizedDuplicateNamesBeforeUpload()
+    {
+        static SubmitMilestoneFile Pdf(string name) => new(
+            new MemoryStream(ValidPdfContent),
+            name,
+            "application/pdf",
+            ValidPdfContent.Length);
+
+        foreach (var files in new IReadOnlyList<SubmitMilestoneFile>[]
+        {
+            Enumerable.Range(1, 6).Select(index => Pdf($"file-{index}.pdf")).ToList(),
+            [Pdf("../report.pdf"), Pdf("report.pdf")]
+        })
+        {
+            var fixture = new MilestoneWorkflowFixture();
+            var mediaService = new TestMediaService();
+            var submitHandler = new SubmitMilestoneCommandHandler(
+                fixture.Context,
+                new FixedDateTimeService(fixture.Now),
+                new CapturingUserAuditLogService(),
+                new WorkspaceUploadFilePolicy(),
+                mediaService);
+            fixture.FirstMilestone.Status = (int)MilestoneStatus.InProgress;
+
+            await Assert.ThrowsAsync<BadRequestException>(() => submitHandler.Handle(
+                new SubmitMilestoneCommand(
+                    fixture.ContractId,
+                    fixture.FirstMilestoneId,
+                    fixture.FreelancerUserId,
+                    null,
+                    files),
+                CancellationToken.None));
+
+            Assert.Equal(0, mediaService.UploadCount);
+            Assert.Empty(fixture.Context.Set<MilestoneAttachment>().ToList());
+        }
+    }
+
+    [Fact]
+    public async Task SubmitMilestone_AllowsSourceCodeInArchiveButRejectsExecutableEntry()
+    {
+        var sourceArchive = CreateZipContent(("src/app.ts", "export const ready = true;"));
+        var executableArchive = CreateBinaryZipContent(
+            ("bin/runner.exe", new byte[] { 0x4D, 0x5A, 0x00, 0x00 }));
+
+        var acceptedFixture = new MilestoneWorkflowFixture();
+        var acceptedMedia = new TestMediaService();
+        var acceptedHandler = new SubmitMilestoneCommandHandler(
+            acceptedFixture.Context,
+            new FixedDateTimeService(acceptedFixture.Now),
+            new CapturingUserAuditLogService(),
+            new WorkspaceUploadFilePolicy(),
+            acceptedMedia);
+        acceptedFixture.FirstMilestone.Status = (int)MilestoneStatus.InProgress;
+
+        await acceptedHandler.Handle(
+            new SubmitMilestoneCommand(
+                acceptedFixture.ContractId,
+                acceptedFixture.FirstMilestoneId,
+                acceptedFixture.FreelancerUserId,
+                File: new SubmitMilestoneFile(
+                    new MemoryStream(sourceArchive),
+                    "source.zip",
+                    "application/zip",
+                    sourceArchive.Length)),
+            CancellationToken.None);
+        Assert.Equal(1, acceptedMedia.UploadCount);
+
+        var rejectedFixture = new MilestoneWorkflowFixture();
+        var rejectedMedia = new TestMediaService();
+        var rejectedHandler = new SubmitMilestoneCommandHandler(
+            rejectedFixture.Context,
+            new FixedDateTimeService(rejectedFixture.Now),
+            new CapturingUserAuditLogService(),
+            new WorkspaceUploadFilePolicy(),
+            rejectedMedia);
+        rejectedFixture.FirstMilestone.Status = (int)MilestoneStatus.InProgress;
+
+        await Assert.ThrowsAsync<BadRequestException>(() => rejectedHandler.Handle(
+            new SubmitMilestoneCommand(
+                rejectedFixture.ContractId,
+                rejectedFixture.FirstMilestoneId,
+                rejectedFixture.FreelancerUserId,
+                File: new SubmitMilestoneFile(
+                    new MemoryStream(executableArchive),
+                    "unsafe.zip",
+                    "application/zip",
+                    executableArchive.Length)),
+            CancellationToken.None));
+        Assert.Equal(0, rejectedMedia.UploadCount);
+    }
+
+    [Fact]
+    public async Task SubmitMilestone_RejectsUnsafeArchivePathsExcessiveNestingAndZipBombs()
+    {
+        var traversalArchive = CreateZipContent(("../secrets.txt", "unsafe"));
+        var levelFour = CreateZipContent(("readme.txt", "safe"));
+        for (var level = 3; level >= 1; level--)
+        {
+            levelFour = CreateBinaryZipContent(($"level-{level}.zip", levelFour));
+        }
+
+        var zipBomb = CreateBinaryZipContent(("zeros.bin", new byte[1024 * 1024]));
+        var tooManyEntries = CreateZipContent(
+            Enumerable.Range(0, 10_001)
+                .Select(index => ($"entry-{index}.txt", string.Empty))
+                .ToArray());
+
+        foreach (var archive in new[] { traversalArchive, levelFour, zipBomb, tooManyEntries })
+        {
+            var fixture = new MilestoneWorkflowFixture();
+            var mediaService = new TestMediaService();
+            var submitHandler = new SubmitMilestoneCommandHandler(
+                fixture.Context,
+                new FixedDateTimeService(fixture.Now),
+                new CapturingUserAuditLogService(),
+                new WorkspaceUploadFilePolicy(),
+                mediaService);
+            fixture.FirstMilestone.Status = (int)MilestoneStatus.InProgress;
+
+            await Assert.ThrowsAsync<BadRequestException>(() => submitHandler.Handle(
+                new SubmitMilestoneCommand(
+                    fixture.ContractId,
+                    fixture.FirstMilestoneId,
+                    fixture.FreelancerUserId,
+                    File: new SubmitMilestoneFile(
+                        new MemoryStream(archive),
+                        "archive.zip",
+                        "application/zip",
+                        archive.Length)),
+                CancellationToken.None));
+            Assert.Equal(0, mediaService.UploadCount);
+        }
+    }
+
+    [Fact]
+    public async Task SubmitMilestone_FailedResubmissionCleansNewMediaAndPreservesOldAttachment()
+    {
+        var fixture = new MilestoneWorkflowFixture();
+        fixture.FirstMilestone.Status = (int)MilestoneStatus.InProgress;
+        var initialHandler = new SubmitMilestoneCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new CapturingUserAuditLogService(),
+            new WorkspaceUploadFilePolicy(),
+            new TestMediaService());
+        await initialHandler.Handle(
+            new SubmitMilestoneCommand(
+                fixture.ContractId,
+                fixture.FirstMilestoneId,
+                fixture.FreelancerUserId,
+                File: CreateSubmissionFile("old.zip")),
+            CancellationToken.None);
+        var oldAttachment = Assert.Single(fixture.Context.Set<MilestoneAttachment>().ToList());
+
+        var revisionHandler = new RequestMilestoneRevisionCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now.AddMinutes(1)));
+        await revisionHandler.Handle(
+            new RequestMilestoneRevisionCommand(
+                fixture.ContractId,
+                fixture.FirstMilestoneId,
+                fixture.ClientUserId,
+                new RequestMilestoneRevisionRequest(
+                    "Please revise.",
+                    [fixture.FirstWorkItem.ContractWorkItemId])),
+            CancellationToken.None);
+        fixture.FirstWorkItem.Status = (int)ContractWorkItemStatus.Completed;
+
+        var failingMedia = new TestMediaService(failOnUploadAttempt: 2);
+        var resubmitHandler = new SubmitMilestoneCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now.AddMinutes(2)),
+            new CapturingUserAuditLogService(),
+            new WorkspaceUploadFilePolicy(),
+            failingMedia);
+        var replacementFiles = new[]
+        {
+            new SubmitMilestoneFile(
+                new MemoryStream(ValidPdfContent), "new-1.pdf", "application/pdf", ValidPdfContent.Length),
+            new SubmitMilestoneFile(
+                new MemoryStream(ValidPdfContent), "new-2.pdf", "application/pdf", ValidPdfContent.Length)
+        };
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => resubmitHandler.Handle(
+            new SubmitMilestoneCommand(
+                fixture.ContractId,
+                fixture.FirstMilestoneId,
+                fixture.FreelancerUserId,
+                null,
+                replacementFiles),
+            CancellationToken.None));
+
+        var preservedAttachment = Assert.Single(fixture.Context.Set<MilestoneAttachment>().ToList());
+        Assert.Equal(oldAttachment.MilestoneAttachmentsId, preservedAttachment.MilestoneAttachmentsId);
+        Assert.Single(failingMedia.DeletedFileUrls);
+        Assert.Contains("new-1.pdf", failingMedia.DeletedFileUrls[0]);
+        Assert.Equal((int)MilestoneStatus.InProgress, fixture.FirstMilestone.Status);
+    }
+
+    [Fact]
+    public async Task SubmitMilestone_SuccessfulResubmissionReplacesBatchAndCleansOldMedia()
+    {
+        var fixture = new MilestoneWorkflowFixture();
+        var mediaService = new TestMediaService();
+        fixture.FirstMilestone.Status = (int)MilestoneStatus.InProgress;
+        var initialHandler = new SubmitMilestoneCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new CapturingUserAuditLogService(),
+            new WorkspaceUploadFilePolicy(),
+            mediaService);
+        await initialHandler.Handle(
+            new SubmitMilestoneCommand(
+                fixture.ContractId,
+                fixture.FirstMilestoneId,
+                fixture.FreelancerUserId,
+                File: CreateSubmissionFile("old.zip")),
+            CancellationToken.None);
+        var oldAttachment = Assert.Single(fixture.Context.Set<MilestoneAttachment>().ToList());
+
+        var revisionHandler = new RequestMilestoneRevisionCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now.AddMinutes(1)));
+        await revisionHandler.Handle(
+            new RequestMilestoneRevisionCommand(
+                fixture.ContractId,
+                fixture.FirstMilestoneId,
+                fixture.ClientUserId,
+                new RequestMilestoneRevisionRequest(
+                    "Please revise.",
+                    [fixture.FirstWorkItem.ContractWorkItemId])),
+            CancellationToken.None);
+        fixture.FirstWorkItem.Status = (int)ContractWorkItemStatus.Completed;
+
+        var resubmitHandler = new SubmitMilestoneCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now.AddMinutes(2)),
+            new CapturingUserAuditLogService(),
+            new WorkspaceUploadFilePolicy(),
+            mediaService);
+        var response = await resubmitHandler.Handle(
+            new SubmitMilestoneCommand(
+                fixture.ContractId,
+                fixture.FirstMilestoneId,
+                fixture.FreelancerUserId,
+                null,
+                [
+                    new SubmitMilestoneFile(
+                        new MemoryStream(ValidPdfContent),
+                        "new-1.pdf",
+                        "application/pdf",
+                        ValidPdfContent.Length),
+                    new SubmitMilestoneFile(
+                        new MemoryStream(ValidPdfContent),
+                        "new-2.pdf",
+                        "application/pdf",
+                        ValidPdfContent.Length)
+                ]),
+            CancellationToken.None);
+
+        Assert.Equal(2, response.Attachments.Count);
+        Assert.Equal(
+            ["new-1.pdf", "new-2.pdf"],
+            fixture.Context.Set<MilestoneAttachment>()
+                .Select(attachment => attachment.FileName)
+                .OrderBy(name => name)
+                .ToArray());
+        Assert.Contains(oldAttachment.FileUrl, mediaService.DeletedFileUrls);
     }
 }

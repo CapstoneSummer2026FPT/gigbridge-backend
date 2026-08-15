@@ -1,7 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces.Time;
-using Application.Features.Elo.Common.Services;
-using Application.Features.Notifications.Common.Interfaces;
+using Application.Common.InternalServices.Elo.Services;
+using Application.Common.InternalServices.Notifications.Interfaces;
 using Application.Features.Reviews.Common.CreateReview.Commands;
 using Application.Features.Reviews.Common.DTOs;
 using Domain.Entities;

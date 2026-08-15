@@ -1,4 +1,4 @@
-using Application.Features.Wallets.Common.Interfaces;
+using Application.Common.InternalServices.Wallets.Interfaces;
 using Microsoft.AspNetCore.DataProtection;
 
 namespace Infrastructure.Adapters.Security.Wallets;

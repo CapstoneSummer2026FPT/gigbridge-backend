@@ -2,7 +2,7 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.Caching;
 using Application.Common.Interfaces.Time;
-using Application.Features.Elo.Common.Interfaces;
+using Application.Common.InternalServices.Elo.Interfaces;
 using Application.Features.Auth.Register.Commands;
 using Application.Features.Auth.Register.DTOs;
 using AutoMapper;

@@ -1,6 +1,6 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces.Media;
-using Application.Features.Premium.Common.Interfaces;
+using Application.Common.InternalServices.Premium.Interfaces;
 using Application.Common.Interfaces;
 using Application.Features.Premium.Freelancer.Promotions.Common;
 using MediatR;
