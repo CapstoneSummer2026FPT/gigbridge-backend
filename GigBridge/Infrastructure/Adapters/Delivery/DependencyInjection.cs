@@ -1,11 +1,11 @@
 using Application.Common.InternalServices.Delivery.Interfaces;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Infrastructure.Persistence.Delivery;
+namespace Infrastructure.Adapters.Delivery;
 
 internal static class DependencyInjection
 {
-    internal static IServiceCollection AddDeliveryPersistence(this IServiceCollection services)
+    internal static IServiceCollection AddDeliveryAdapter(this IServiceCollection services)
     {
         services.AddScoped<IDeliveryOutboxStore, DeliveryOutboxStore>();
         return services;

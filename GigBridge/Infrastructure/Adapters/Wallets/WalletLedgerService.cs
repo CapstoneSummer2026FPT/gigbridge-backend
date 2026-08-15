@@ -9,7 +9,7 @@ using Domain.Services.Payments;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
-namespace Infrastructure.Persistence.Wallets;
+namespace Infrastructure.Adapters.Wallets;
 
 public sealed class WalletLedgerService : IWalletLedgerService
 {

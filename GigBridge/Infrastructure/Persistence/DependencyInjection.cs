@@ -1,7 +1,4 @@
 using Application.Common.Interfaces;
-using Application.Common.InternalServices.Wallets.Interfaces;
-using Infrastructure.Persistence.Delivery;
-using Infrastructure.Persistence.Wallets;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -24,9 +21,6 @@ internal static class DependencyInjection
             options.UseNpgsql(pooledConnectionString));
         services.AddScoped<IApplicationDbContext>(provider =>
             provider.GetRequiredService<GigbridgeDbContext>());
-        services.AddDeliveryPersistence();
-        services.AddScoped<IWalletLedgerService, WalletLedgerService>();
-
         services.AddDataProtection()
             .SetApplicationName("GigBridge")
             .PersistKeysToDbContext<GigbridgeDbContext>();
