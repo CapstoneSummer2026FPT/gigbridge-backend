@@ -10,11 +10,9 @@ public static class ForwardedHeadersExtensions
         services.Configure<ForwardedHeadersOptions>(options =>
         {
             options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-            options.ForwardLimit = 1;
-            options.KnownProxies.Add(IPAddress.Loopback);
-            options.KnownProxies.Add(IPAddress.IPv6Loopback);
-            options.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(
-                IPAddress.Parse("172.16.0.0"), 12));
+            options.ForwardLimit = null;
+            options.KnownProxies.Clear();
+            options.KnownNetworks.Clear();
         });
         return services;
     }
