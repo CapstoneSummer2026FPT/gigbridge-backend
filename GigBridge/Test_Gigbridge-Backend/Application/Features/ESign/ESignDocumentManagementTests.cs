@@ -1,13 +1,16 @@
 using Application.Common.Exceptions;
+using Application.Common.InternalServices.ESign.Services;
 using Application.Features.ESign.Common.DeleteDocument.Commands;
 using Application.Features.ESign.Common.DownloadDocument.Queries;
 using Application.Features.ESign.Common.GetDocument.Queries;
 using Application.Features.ESign.Common.GetDocuments.Queries;
+using Application.Features.ESign.Common.Internal;
 using Application.Features.ESign.Common.SavePdf.Commands;
 using Domain.Entities;
 using Domain.Enums.Accounts;
 using Domain.Enums.Contracts;
 using Domain.Enums.ESign;
+using Microsoft.EntityFrameworkCore;
 using Test_Gigbridge_Backend.TestSupport;
 
 namespace Test_Gigbridge_Backend.Application.Features.ESign;
@@ -104,6 +107,23 @@ public sealed class ESignDocumentManagementTests
         Assert.True(result.HasFinalArtifact);
         Assert.Equal("GB-CONTRACT-FINAL.docx", result.FinalizedDocumentFileName);
         Assert.True(result.HasPdfArtifact);
+    }
+
+    [Fact]
+    public async Task ResponseProjection_DoesNotMaterializeBinaryArtifacts()
+    {
+        var fixture = new Fixture();
+
+        var readModel = await fixture.Context.Set<EsignDocument>()
+            .Where(document => document.EsignDocumentsId == fixture.FinalizedDocumentId)
+            .SelectForResponse()
+            .SingleAsync();
+
+        Assert.True(readModel.HasFinalizedDocumentContent);
+        Assert.True(readModel.HasPdfDocumentContent);
+        Assert.Null(readModel.Document.FinalizedDocumentContent);
+        Assert.Null(readModel.Document.PdfDocumentContent);
+        Assert.Equal("<h1>Final</h1>", readModel.Document.RenderedHtmlContent);
     }
 
     [Fact]
@@ -244,7 +264,7 @@ public sealed class ESignDocumentManagementTests
                     FinalizedDocumentSizeBytes = FinalizedContent.Length,
                     PdfDocumentContent = PdfContent,
                     PdfDocumentFileName = "GB-CONTRACT-FINAL.pdf",
-                    PdfDocumentHash = "final-hash:contract-template-pdf-v2",
+                    PdfDocumentHash = $"final-hash{ESignPdfArtifactRevision.ContractTemplate}",
                     PdfSignatureCount = 2,
                     CreatedAt = Now.AddDays(-1)
                 });

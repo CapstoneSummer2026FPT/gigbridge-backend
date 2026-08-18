@@ -34,12 +34,11 @@ public sealed class GetESignDocumentByJobPostQueryHandler
             cancellationToken);
 
         var document = await _context.Set<EsignDocument>()
-            .AsNoTracking()
-            .FirstOrDefaultAsync(
-                document =>
-                    document.JobPostsId == request.JobPostId &&
-                    document.ContractsId == null,
-                cancellationToken);
+            .Where(document =>
+                document.JobPostsId == request.JobPostId &&
+                document.ContractsId == null)
+            .SelectForResponse()
+            .FirstOrDefaultAsync(cancellationToken);
 
         if (document is null)
         {
@@ -48,8 +47,10 @@ public sealed class GetESignDocumentByJobPostQueryHandler
 
         return await ESignDocumentProjection.ToResponseAsync(
             _context,
-            document,
+            document.Document,
             request.UserId,
-            cancellationToken);
+            cancellationToken,
+            document.HasFinalizedDocumentContent,
+            document.HasPdfDocumentContent);
     }
 }

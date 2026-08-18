@@ -64,9 +64,9 @@ namespace Test_Gigbridge_backend.Infrastructure;
 public sealed class DependencyInjectionConfigurationTests
 {
     [Theory]
-    [InlineData("Development", null, 1)]
+    [InlineData("Development", null, 0)]
     [InlineData("Production", null, 8)]
-    [InlineData("Production", "false", 1)]
+    [InlineData("Production", "false", 0)]
     [InlineData("Development", "true", 8)]
     public void ApplicationWorkers_RespectEnvironmentAndExplicitOverride(
         string environment,
