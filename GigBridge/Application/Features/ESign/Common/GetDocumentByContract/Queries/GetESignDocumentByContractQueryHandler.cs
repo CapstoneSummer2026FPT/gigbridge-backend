@@ -25,26 +25,29 @@ public sealed class GetESignDocumentByContractQueryHandler
         GetESignDocumentByContractQuery request,
         CancellationToken cancellationToken)
     {
-        var document = await _context.Set<EsignDocument>()
+        var readModel = await _context.Set<EsignDocument>()
             .Where(d => d.ContractsId == request.ContractId)
             .OrderByDescending(d => d.CreatedAt)
+            .SelectForResponse()
             .FirstOrDefaultAsync(cancellationToken);
 
-        if (document == null)
+        if (readModel == null)
         {
             throw new NotFoundException("E-sign document does not exist for this contract.");
         }
 
         await ESignAccessGuard.EnsureCanViewDocumentAsync(
             _context,
-            document,
+            readModel.Document,
             request.UserId,
             cancellationToken);
 
         return await ESignDocumentProjection.ToResponseAsync(
             _context,
-            document,
+            readModel.Document,
             request.UserId,
-            cancellationToken);
+            cancellationToken,
+            readModel.HasFinalizedDocumentContent,
+            readModel.HasPdfDocumentContent);
     }
 }

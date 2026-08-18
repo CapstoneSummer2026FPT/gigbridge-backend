@@ -11,11 +11,43 @@ namespace Application.Features.ESign.Common.Internal;
 
 internal static class ESignDocumentProjection
 {
+    public static IQueryable<ESignDocumentReadModel> SelectForResponse(
+        this IQueryable<EsignDocument> documents)
+    {
+        return documents
+            .AsNoTracking()
+            .Select(document => new ESignDocumentReadModel(
+                new EsignDocument
+                {
+                    EsignDocumentsId = document.EsignDocumentsId,
+                    EsignTemplatesId = document.EsignTemplatesId,
+                    JobPostsId = document.JobPostsId,
+                    ContractsId = document.ContractsId,
+                    DocumentCode = document.DocumentCode,
+                    RenderedHtmlContent = document.RenderedHtmlContent,
+                    Status = document.Status,
+                    DocumentHash = document.DocumentHash,
+                    ExpiresAt = document.ExpiresAt,
+                    FinalizedAt = document.FinalizedAt,
+                    ExportedPdfUrl = document.ExportedPdfUrl,
+                    FinalizedDocumentFileName = document.FinalizedDocumentFileName,
+                    PdfSignatureCount = document.PdfSignatureCount,
+                    PdfDocumentHash = document.PdfDocumentHash,
+                    CreatedAt = document.CreatedAt,
+                    UpdatedAt = document.UpdatedAt
+                },
+                document.FinalizedDocumentSizeBytes.HasValue &&
+                    document.FinalizedDocumentSizeBytes.Value > 0,
+                document.PdfDocumentHash != null));
+    }
+
     public static async Task<ESignDocumentResponse> ToResponseAsync(
         IApplicationDbContext context,
         EsignDocument document,
         Guid currentUserId,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool? hasFinalizedDocumentContent = null,
+        bool? hasPdfDocumentContent = null)
     {
         var signatures = await context.Set<EsignSignature>()
             .AsNoTracking()
@@ -30,14 +62,22 @@ internal static class ESignDocumentProjection
             currentUserId,
             cancellationToken);
 
-        return ToResponse(document, signatures, currentUserId, signerRole);
+        return ToResponse(
+            document,
+            signatures,
+            currentUserId,
+            signerRole,
+            hasFinalizedDocumentContent,
+            hasPdfDocumentContent);
     }
 
     public static ESignDocumentResponse ToResponse(
         EsignDocument document,
         IReadOnlyList<EsignSignature> signatures,
         Guid currentUserId,
-        int? signerRole)
+        int? signerRole,
+        bool? hasFinalizedDocumentContent = null,
+        bool? hasPdfDocumentContent = null)
     {
         var hasCurrentUserSigned = signatures.Any(signature =>
             signature.UserId == currentUserId &&
@@ -47,7 +87,8 @@ internal static class ESignDocumentProjection
             !hasCurrentUserSigned;
         var signedCount = signatures.Count(signature =>
             signature.Status == (int)ESignSignatureStatus.Signed);
-        var hasCurrentPdf = document.PdfDocumentContent is { Length: > 0 } &&
+        var hasCurrentPdf = (hasPdfDocumentContent ??
+                document.PdfDocumentContent is { Length: > 0 }) &&
             document.PdfSignatureCount == signedCount &&
             string.Equals(
                 document.PdfDocumentHash,
@@ -68,7 +109,8 @@ internal static class ESignDocumentProjection
             document.ExportedPdfUrl,
             signerRole,
             canCurrentUserSign,
-            document.FinalizedDocumentContent is { Length: > 0 },
+            hasFinalizedDocumentContent ??
+                document.FinalizedDocumentContent is { Length: > 0 },
             document.FinalizedDocumentFileName,
             hasCurrentPdf,
             document.CreatedAt,
@@ -185,3 +227,8 @@ internal static class ESignDocumentProjection
             : null;
     }
 }
+
+internal sealed record ESignDocumentReadModel(
+    EsignDocument Document,
+    bool HasFinalizedDocumentContent,
+    bool HasPdfDocumentContent);

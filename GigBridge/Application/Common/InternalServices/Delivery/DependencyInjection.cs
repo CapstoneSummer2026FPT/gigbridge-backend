@@ -21,9 +21,13 @@ internal static class DependencyInjection
                 binder => binder.ErrorOnUnknownConfiguration = true)
             .ValidateOnStart();
 
-        services.AddSingleton<DeliveryOutboxService>();
-        services.AddSingleton<IHostedService>(provider =>
-            provider.GetRequiredService<DeliveryOutboxService>());
+        if (BackgroundWorkerOptions.IsEnabled(configuration))
+        {
+            services.AddSingleton<DeliveryOutboxService>();
+            services.AddSingleton<IHostedService>(provider =>
+                provider.GetRequiredService<DeliveryOutboxService>());
+        }
+
         return services;
     }
 }

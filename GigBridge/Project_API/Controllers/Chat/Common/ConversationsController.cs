@@ -1,4 +1,6 @@
 using Application.Common.Models;
+using Application.Features.Chat.Common.Conversations.GetUnreadCount.DTOs;
+using Application.Features.Chat.Common.Conversations.GetUnreadCount.Queries;
 using Application.Features.Chat.Common.Conversations.GetMine.DTOs;
 using Application.Features.Chat.Common.Conversations.GetMine.Queries;
 using Application.Features.Chat.Common.Conversations.MarkAsRead.Commands;
@@ -25,6 +27,21 @@ public class ConversationsController : BaseApiController
         var result = await Mediator.Send(new GetMyConversationsQuery(userId));
 
         return Ok(ApiResponse<IReadOnlyList<ConversationSummaryResponse>>.Ok(result, "Success"));
+    }
+
+    [HttpGet("unread-count")]
+    public async Task<IActionResult> GetUnreadCount()
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return InvalidTokenResponse();
+        }
+
+        var result = await Mediator.Send(new GetConversationUnreadCountQuery(userId));
+
+        return Ok(ApiResponse<ConversationUnreadCountResponse>.Ok(
+            result,
+            "Unread conversation count retrieved successfully."));
     }
 
     [HttpPost("proposal/{proposalId}/negotiation")]
