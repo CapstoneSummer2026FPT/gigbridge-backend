@@ -58,7 +58,7 @@ public sealed class ESignController : BaseApiController
 
         var result = await Mediator.Send(new Application.Features.ESign.Common.GetDocumentByContract.Queries.GetESignDocumentByContractQuery(contractId, userId));
 
-        return Ok(ApiResponse<ESignDocumentResponse>.Ok(result, "E-sign document retrieved"));
+        return Ok(ApiResponse<ESignDocumentStatusResponse>.Ok(result, "E-sign document retrieved"));
     }
 
     [HttpGet("documents/my-signed")]

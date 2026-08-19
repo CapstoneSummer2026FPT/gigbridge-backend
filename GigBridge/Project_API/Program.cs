@@ -13,6 +13,7 @@ using Project_API.Services.Chat;
 using Project_API.Services.Notification;
 using Project_API.Services.SystemTracking;
 
+// Multi-node load balancing enabled with Redis SignalR Backplane
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddScoped<Application.Common.InternalServices.Admin.AuditLogs.Interfaces.IRequestMetadataAccessor, Project_API.Services.RequestMetadataAccessor>();
 
@@ -39,7 +40,17 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddScoped<IChatRealtimeNotifier, SignalRChatRealtimeNotifier>();
 builder.Services.AddScoped<INotificationSender, SignalRNotificationSender>();
-builder.Services.AddSignalR();
+
+var signalRBuilder = builder.Services.AddSignalR();
+var redisConnectionString = builder.Configuration.GetConnectionString("Redis");
+if (!string.IsNullOrWhiteSpace(redisConnectionString))
+{
+    signalRBuilder.AddStackExchangeRedis(redisConnectionString, options =>
+    {
+        options.Configuration.ChannelPrefix = StackExchange.Redis.RedisChannel.Literal("GigBridge_SignalR");
+    });
+}
+
 builder.Services.AddSingleton<SystemTrackingStore>();
 builder.Services.AddSingleton<ISystemTrackingReader>(provider => provider.GetRequiredService<SystemTrackingStore>());
 

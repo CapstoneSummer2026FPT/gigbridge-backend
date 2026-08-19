@@ -1963,8 +1963,10 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnName("ESignDocumentsId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
-                    b.Property<string>("ContractSnapshotJson")
-                        .HasColumnType("jsonb");
+                    b.Property<int>("ContentRevision")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
 
                     b.Property<Guid?>("ContractsId")
                         .HasColumnType("uuid")
@@ -1997,16 +1999,9 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("FinalizedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<byte[]>("FinalizedDocumentContent")
-                        .HasColumnType("bytea");
-
                     b.Property<string>("FinalizedDocumentFileName")
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)");
-
-                    b.Property<string>("FinalizedDocumentMimeType")
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)");
 
                     b.Property<long?>("FinalizedDocumentSizeBytes")
                         .HasColumnType("bigint");
@@ -2015,25 +2010,17 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("JobPostsId");
 
-                    b.Property<byte[]>("PdfDocumentContent")
-                        .HasColumnType("bytea");
-
-                    b.Property<string>("PdfDocumentFileName")
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)");
-
                     b.Property<string>("PdfDocumentHash")
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
+
+                    b.Property<long?>("PdfDocumentSizeBytes")
+                        .HasColumnType("bigint");
 
                     b.Property<int>("PdfSignatureCount")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
                         .HasDefaultValue(0);
-
-                    b.Property<string>("RenderedHtmlContent")
-                        .IsRequired()
-                        .HasColumnType("text");
 
                     b.Property<int>("Status")
                         .ValueGeneratedOnAdd()
@@ -2062,6 +2049,39 @@ namespace Infrastructure.Persistence.Migrations
                         .IsDescending(false, true);
 
                     b.ToTable("ESignDocuments", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.Entities.EsignDocumentContent", b =>
+                {
+                    b.Property<Guid>("EsignDocumentsId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("ESignDocumentsId");
+
+                    b.Property<string>("ContractSnapshotJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<byte[]>("FinalizedDocumentContent")
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("FinalizedDocumentMimeType")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<byte[]>("PdfDocumentContent")
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("PdfDocumentFileName")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("RenderedHtmlContent")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("EsignDocumentsId")
+                        .HasName("ESignDocumentContents_pkey");
+
+                    b.ToTable("ESignDocumentContents", (string)null);
                 });
 
             modelBuilder.Entity("Domain.Entities.EsignSignature", b =>
@@ -4416,6 +4436,11 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasDefaultValueSql("gen_random_uuid()");
 
+                    b.Property<int>("ContentRevision")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
                     b.Property<Guid>("ContractsId")
                         .HasColumnType("uuid");
 
@@ -4492,21 +4517,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<Guid>("OwnerUserId")
                         .HasColumnType("uuid");
 
-                    b.Property<byte[]>("PdfContent")
-                        .HasColumnType("bytea");
-
-                    b.Property<string>("PdfContentType")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<string>("PdfFileName")
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)");
-
-                    b.Property<string>("PdfHashSha256")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
                     b.Property<long?>("PdfSizeBytes")
                         .HasColumnType("bigint");
 
@@ -4518,15 +4528,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<int>("ReceiptType")
                         .HasColumnType("integer")
                         .HasComment("Enum ProjectReceiptType: 0=Client, 1=Freelancer");
-
-                    b.Property<string>("SnapshotHashSha256")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<string>("SnapshotJson")
-                        .IsRequired()
-                        .HasColumnType("jsonb");
 
                     b.Property<int>("TemplateVersion")
                         .HasColumnType("integer");
@@ -4555,7 +4556,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex("OwnerUserId", "IssuedAt")
                         .IsDescending(false, true);
 
-                    b.ToTable("ProjectReceipts", (string)null);
+                    b.ToTable("ProjectReceipts");
                 });
 
             modelBuilder.Entity("Domain.Entities.Proposal", b =>
@@ -7454,6 +7455,18 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("JobPosts");
                 });
 
+            modelBuilder.Entity("Domain.Entities.EsignDocumentContent", b =>
+                {
+                    b.HasOne("Domain.Entities.EsignDocument", "EsignDocument")
+                        .WithOne("Content")
+                        .HasForeignKey("Domain.Entities.EsignDocumentContent", "EsignDocumentsId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("ESignDocumentContents_eDoc_ESignDocumentsId_fkey");
+
+                    b.Navigation("EsignDocument");
+                });
+
             modelBuilder.Entity("Domain.Entities.EsignSignature", b =>
                 {
                     b.HasOne("Domain.Entities.EsignDocument", "EsignDocuments")
@@ -8110,6 +8123,17 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("Notification");
 
                     b.Navigation("OwnerUser");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ProjectReceiptContent", b =>
+                {
+                    b.HasOne("Domain.Entities.ProjectReceipt", "ProjectReceipt")
+                        .WithOne("Content")
+                        .HasForeignKey("Domain.Entities.ProjectReceiptContent", "ProjectReceiptId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ProjectReceipt");
                 });
 
             modelBuilder.Entity("Domain.Entities.Proposal", b =>
@@ -8894,6 +8918,8 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.EsignDocument", b =>
                 {
+                    b.Navigation("Content");
+
                     b.Navigation("EsignSignatures");
                 });
 
@@ -9018,6 +9044,11 @@ namespace Infrastructure.Persistence.Migrations
             modelBuilder.Entity("Domain.Entities.NegotiationOfferMilestone", b =>
                 {
                     b.Navigation("WorkItems");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ProjectReceipt", b =>
+                {
+                    b.Navigation("Content");
                 });
 
             modelBuilder.Entity("Domain.Entities.Proposal", b =>

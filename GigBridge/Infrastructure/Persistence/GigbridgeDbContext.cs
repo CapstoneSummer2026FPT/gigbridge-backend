@@ -70,6 +70,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
     public virtual DbSet<ProjectReceipt> ProjectReceipts { get; set; }
 
+    public virtual DbSet<ProjectReceiptContent> ProjectReceiptContents { get; set; }
+
     public virtual DbSet<Conversation> Conversations { get; set; }
 
     public virtual DbSet<ConversationParticipant> ConversationParticipants { get; set; }
@@ -97,6 +99,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
     public virtual DbSet<UserViolation> UserViolations { get; set; }
 
     public virtual DbSet<EsignDocument> EsignDocuments { get; set; }
+
+    public virtual DbSet<EsignDocumentContent> EsignDocumentContents { get; set; }
 
     public virtual DbSet<EsignSignature> EsignSignatures { get; set; }
 
@@ -460,26 +464,14 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
                 .IsRequired();
             entity.Property(e => e.ReceiptType)
                 .HasComment("Enum ProjectReceiptType: 0=Client, 1=Freelancer");
-            entity.Property(e => e.SnapshotJson)
-                .HasColumnType("jsonb")
-                .IsRequired();
-            entity.Property(e => e.SnapshotHashSha256)
-                .HasMaxLength(64)
-                .IsRequired();
             entity.Property(e => e.GenerationStatus)
                 .HasComment("Enum ProjectReceiptGenerationStatus: 0=Pending, 1=Processing, 2=Ready, 3=Failed");
             entity.Property(e => e.GenerationLeaseToken)
                 .IsConcurrencyToken();
             entity.Property(e => e.GenerationLastError)
                 .HasMaxLength(2000);
-            entity.Property(e => e.PdfContent)
-                .HasColumnType("bytea");
-            entity.Property(e => e.PdfFileName)
-                .HasMaxLength(255);
-            entity.Property(e => e.PdfContentType)
-                .HasMaxLength(100);
-            entity.Property(e => e.PdfHashSha256)
-                .HasMaxLength(64);
+            entity.Property(e => e.ContentRevision)
+                .HasDefaultValue(0);
             entity.Property(e => e.EmailStatus)
                 .HasComment("Enum ProjectReceiptEmailStatus: 0=Pending, 1=Delivered, 2=Failed");
             entity.Property(e => e.EmailLastError)
@@ -505,6 +497,33 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
                 .WithMany()
                 .HasForeignKey(e => e.NotificationId)
                 .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<ProjectReceiptContent>(entity =>
+        {
+            entity.ToTable("ProjectReceiptContents");
+
+            entity.HasKey(e => e.ProjectReceiptId);
+
+            entity.Property(e => e.SnapshotJson)
+                .HasColumnType("jsonb")
+                .IsRequired();
+            entity.Property(e => e.SnapshotHashSha256)
+                .HasMaxLength(64)
+                .IsRequired();
+            entity.Property(e => e.PdfContent)
+                .HasColumnType("bytea");
+            entity.Property(e => e.PdfFileName)
+                .HasMaxLength(255);
+            entity.Property(e => e.PdfContentType)
+                .HasMaxLength(100);
+            entity.Property(e => e.PdfHashSha256)
+                .HasMaxLength(64);
+
+            entity.HasOne(e => e.ProjectReceipt)
+                .WithOne(r => r.Content)
+                .HasForeignKey<ProjectReceiptContent>(e => e.ProjectReceiptId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<ContractWorkItem>(entity =>
@@ -1093,16 +1112,12 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
                 .HasDefaultValueSql("gen_random_uuid()")
                 .HasColumnName("ESignDocumentsId");
             entity.Property(e => e.ContractsId).HasColumnName("ContractsId");
-            entity.Property(e => e.ContractSnapshotJson).HasColumnType("jsonb");
+            entity.Property(e => e.ContentRevision).HasDefaultValue(0);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.DocumentCode).HasMaxLength(50);
             entity.Property(e => e.DocumentHash).HasMaxLength(128);
             entity.Property(e => e.EsignTemplatesId).HasColumnName("ESignTemplatesId");
-            entity.Property(e => e.FinalizedDocumentContent).HasColumnType("bytea");
             entity.Property(e => e.FinalizedDocumentFileName).HasMaxLength(255);
-            entity.Property(e => e.FinalizedDocumentMimeType).HasMaxLength(150);
-            entity.Property(e => e.PdfDocumentContent).HasColumnType("bytea");
-            entity.Property(e => e.PdfDocumentFileName).HasMaxLength(255);
             entity.Property(e => e.PdfDocumentHash).HasMaxLength(128);
             entity.Property(e => e.PdfSignatureCount).HasDefaultValue(0);
             entity.Property(e => e.JobPostsId).HasColumnName("JobPostsId");
@@ -1123,6 +1138,26 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
                 .HasForeignKey(d => d.JobPostsId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("ESignDocuments_jp_JobPostsId_fkey");
+        });
+
+        modelBuilder.Entity<EsignDocumentContent>(entity =>
+        {
+            entity.HasKey(e => e.EsignDocumentsId).HasName("ESignDocumentContents_pkey");
+
+            entity.ToTable("ESignDocumentContents");
+
+            entity.Property(e => e.EsignDocumentsId).HasColumnName("ESignDocumentsId");
+            entity.Property(e => e.RenderedHtmlContent).IsRequired();
+            entity.Property(e => e.ContractSnapshotJson).HasColumnType("jsonb");
+            entity.Property(e => e.FinalizedDocumentContent).HasColumnType("bytea");
+            entity.Property(e => e.FinalizedDocumentMimeType).HasMaxLength(150);
+            entity.Property(e => e.PdfDocumentContent).HasColumnType("bytea");
+            entity.Property(e => e.PdfDocumentFileName).HasMaxLength(255);
+
+            entity.HasOne(e => e.EsignDocument).WithOne(d => d.Content)
+                .HasForeignKey<EsignDocumentContent>(e => e.EsignDocumentsId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("ESignDocumentContents_eDoc_ESignDocumentsId_fkey");
         });
 
         modelBuilder.Entity<EsignSignature>(entity =>

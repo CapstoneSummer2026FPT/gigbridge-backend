@@ -177,7 +177,6 @@ public class CompleteJobPostContractSetupCommandHandlerTests
                 JobPostsId = JobPostId,
                 ContractsId = ContractId,
                 DocumentCode = "GB-TEST",
-                RenderedHtmlContent = "<html>job post</html>",
                 Status = (int)ESignDocumentStatus.FullySigned,
                 CreatedAt = Now
             });

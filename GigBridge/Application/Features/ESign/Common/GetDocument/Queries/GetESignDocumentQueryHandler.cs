@@ -1,10 +1,7 @@
-using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Features.ESign.Common.DTOs;
 using Application.Features.ESign.Common.Internal;
-using Domain.Entities;
 using MediatR;
-using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.ESign.Common.GetDocument.Queries;
 
@@ -22,28 +19,21 @@ public sealed class GetESignDocumentQueryHandler
         GetESignDocumentQuery request,
         CancellationToken cancellationToken)
     {
-        var readModel = await _context.Set<EsignDocument>()
-            .Where(document => document.EsignDocumentsId == request.DocumentId)
-            .SelectForResponse()
-            .FirstOrDefaultAsync(cancellationToken);
-
-        if (readModel is null)
-        {
-            throw new NotFoundException("E-sign document does not exist.");
-        }
+        var document = await ESignAccessGuard.GetDocumentAsync(
+            _context,
+            request.DocumentId,
+            cancellationToken);
 
         await ESignAccessGuard.EnsureCanViewDocumentAsync(
             _context,
-            readModel.Document,
+            document,
             request.UserId,
             cancellationToken);
 
         return await ESignDocumentProjection.ToResponseAsync(
             _context,
-            readModel.Document,
+            document,
             request.UserId,
-            cancellationToken,
-            readModel.HasFinalizedDocumentContent,
-            readModel.HasPdfDocumentContent);
+            cancellationToken);
     }
 }

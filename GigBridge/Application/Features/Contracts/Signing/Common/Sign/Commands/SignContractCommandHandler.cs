@@ -19,6 +19,7 @@ using Domain.Enums.Contracts;
 using Domain.Enums.ESign;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using System.Text.Json;
 using Application.Common.InternalServices.ESign.Interfaces;
 using Application.Common.Interfaces.Caching;
@@ -37,6 +38,7 @@ public sealed class SignContractCommandHandler :
     private readonly IWordToPdfConverter _pdfConverter;
     private readonly IUserAuditLogService _userAuditLog;
     private readonly ICacheService _cacheService;
+    private readonly ILogger<SignContractCommandHandler> _logger;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public SignContractCommandHandler(
@@ -47,7 +49,8 @@ public sealed class SignContractCommandHandler :
         IContractEsignDocumentGenerator documentGenerator,
         IWordToPdfConverter pdfConverter,
         IUserAuditLogService userAuditLog,
-        ICacheService cacheService)
+        ICacheService cacheService,
+        ILogger<SignContractCommandHandler> logger)
     {
         _context = context;
         _dateTimeService = dateTimeService;
@@ -57,6 +60,7 @@ public sealed class SignContractCommandHandler :
         _pdfConverter = pdfConverter;
         _userAuditLog = userAuditLog;
         _cacheService = cacheService;
+        _logger = logger;
     }
 
     public async Task<ContractWorkflowResponse> Handle(
@@ -89,9 +93,9 @@ public sealed class SignContractCommandHandler :
 
         var signerRole = await ResolveSignerRoleAsync(contract, command.UserId, cancellationToken);
         var now = _dateTimeService.UtcNow;
-        var document = await ContractEsignRenderer.EnsureDocumentAsync(
+        var (document, content) = await ContractEsignRenderer.EnsureDocumentAsync(
             _context, _documentGenerator, contract, now, cancellationToken);
-        var snapshot = ContractEsignRenderer.GetSnapshot(document);
+        var snapshot = ContractEsignRenderer.GetSnapshot(content);
 
         if (!command.Request.PolicyAccepted ||
             !string.Equals(command.Request.PolicyVersion, snapshot.PolicyVersion, StringComparison.Ordinal))
@@ -196,8 +200,9 @@ public sealed class SignContractCommandHandler :
 
         document.Status = (int)ESignDocumentStatus.PendingSignatures;
         document.UpdatedAt = now;
-        ClearFinalArtifact(document);
-        InvalidatePdfArtifact(document);
+        document.ContentRevision++;
+        ClearFinalArtifact(document, content);
+        InvalidatePdfArtifact(document, content);
 
         await _context.SaveChangesAsync(cancellationToken);
 
@@ -222,7 +227,7 @@ public sealed class SignContractCommandHandler :
                 snapshot,
                 clientDraft!.IdentityOrTaxCode,
                 freelancerDraft!.IdentityOrTaxCode);
-            document.ContractSnapshotJson = JsonSerializer.Serialize(finalSnapshot, JsonOptions);
+            content.ContractSnapshotJson = JsonSerializer.Serialize(finalSnapshot, JsonOptions);
 
             foreach (var signature in new[] { clientDraft, freelancerDraft })
             {
@@ -235,7 +240,7 @@ public sealed class SignContractCommandHandler :
                 clientDraft);
             var freelancerSignature = ContractEsignRenderer.ToSignatureSnapshot(
                 freelancerDraft);
-            var documentHash = ContractEsignRenderer.ComputeFinalHash(document, clientSignature, freelancerSignature);
+            var documentHash = ContractEsignRenderer.ComputeFinalHash(content, clientSignature, freelancerSignature);
             var finalized = await _documentGenerator.GenerateAsync(
                 finalSnapshot,
                 clientSignature,
@@ -248,17 +253,19 @@ public sealed class SignContractCommandHandler :
                 cancellationToken);
 
             document.DocumentHash = documentHash;
-            document.FinalizedDocumentContent = finalized.Content;
+            content.FinalizedDocumentContent = finalized.Content;
             document.FinalizedDocumentFileName = finalized.FileName;
-            document.FinalizedDocumentMimeType = finalized.MimeType;
+            content.FinalizedDocumentMimeType = finalized.MimeType;
             document.FinalizedDocumentSizeBytes = finalized.Content.LongLength;
             document.Status = (int)ESignDocumentStatus.FullySigned;
             document.FinalizedAt = now;
             document.UpdatedAt = now;
-            document.PdfDocumentContent = finalizedPdf;
-            document.PdfDocumentFileName = ESignPdfArtifactRevision.ContractFileName;
+            content.PdfDocumentContent = finalizedPdf;
+            content.PdfDocumentFileName = ESignPdfArtifactRevision.ContractFileName;
             document.PdfDocumentHash = $"{documentHash}{ESignPdfArtifactRevision.ContractTemplate}";
             document.PdfSignatureCount = 2;
+            document.PdfDocumentSizeBytes = finalizedPdf.LongLength;
+            document.ContentRevision++;
 
             AddFinalContractEmail(finalSnapshot, document.EsignDocumentsId, finalSnapshot.Client, now);
             AddFinalContractEmail(finalSnapshot, document.EsignDocumentsId, finalSnapshot.Freelancer, now);
@@ -299,7 +306,7 @@ public sealed class SignContractCommandHandler :
         await _context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
-        if (isFullySigned)
+        try
         {
             var participantUserIds = await _context.Set<ConversationParticipant>()
                 .AsNoTracking()
@@ -309,16 +316,28 @@ public sealed class SignContractCommandHandler :
                     participant.DeletedAt == null)
                 .Select(participant => participant.UserId)
                 .Distinct()
-                .ToListAsync(cancellationToken);
+                .ToListAsync(CancellationToken.None);
 
-            if (participantUserIds.Any())
+            if (participantUserIds.Count > 0)
             {
-                await _chatRealtimeNotifier.SendUsersEventAsync(
-                    [.. participantUserIds],
-                    "ContractReadyForEscrowFunding",
-                    new { contractId = contract.ContractsId },
-                    cancellationToken);
+                await NotifyDocumentChangedAsync(document, participantUserIds, CancellationToken.None);
+
+                if (isFullySigned)
+                {
+                    await _chatRealtimeNotifier.SendUsersEventAsync(
+                        [.. participantUserIds],
+                        "ContractReadyForEscrowFunding",
+                        new { contractId = contract.ContractsId },
+                        CancellationToken.None);
+                }
             }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Post-sign real-time notification failed for contract {ContractId}; the signature itself was already committed.",
+                contract.ContractsId);
         }
 
         return new ContractWorkflowResponse(
@@ -362,19 +381,20 @@ public sealed class SignContractCommandHandler :
         signature.PolicyAcceptedAt.HasValue &&
         string.Equals(signature.PolicyVersion, policyVersion, StringComparison.Ordinal);
 
-    private static void InvalidatePdfArtifact(EsignDocument document)
+    private static void InvalidatePdfArtifact(EsignDocument document, EsignDocumentContent content)
     {
-        document.PdfDocumentContent = null;
-        document.PdfDocumentFileName = null;
+        content.PdfDocumentContent = null;
+        content.PdfDocumentFileName = null;
         document.PdfDocumentHash = null;
         document.PdfSignatureCount = 0;
+        document.PdfDocumentSizeBytes = null;
     }
 
-    private static void ClearFinalArtifact(EsignDocument document)
+    private static void ClearFinalArtifact(EsignDocument document, EsignDocumentContent content)
     {
-        document.FinalizedDocumentContent = null;
+        content.FinalizedDocumentContent = null;
+        content.FinalizedDocumentMimeType = null;
         document.FinalizedDocumentFileName = null;
-        document.FinalizedDocumentMimeType = null;
         document.FinalizedDocumentSizeBytes = null;
         document.FinalizedAt = null;
         document.ExportedPdfUrl = null;
@@ -405,6 +425,31 @@ public sealed class SignContractCommandHandler :
             NextAttemptAt = now,
             CreatedAt = now
         });
+    }
+
+    private async Task NotifyDocumentChangedAsync(
+        EsignDocument document,
+        IReadOnlyList<Guid> recipientUserIds,
+        CancellationToken cancellationToken)
+    {
+        foreach (var userId in recipientUserIds)
+        {
+            try
+            {
+                var status = await ESignDocumentProjection.ToStatusResponseAsync(
+                    _context, document, userId, cancellationToken);
+                await _chatRealtimeNotifier.SendUserEventAsync(
+                    userId, "ESignDocumentChanged", status, cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Failed to push ESignDocumentChanged to user {UserId} for document {DocumentId}.",
+                    userId,
+                    document.EsignDocumentsId);
+            }
+        }
     }
 
     private async Task<ESignerRole> ResolveSignerRoleAsync(

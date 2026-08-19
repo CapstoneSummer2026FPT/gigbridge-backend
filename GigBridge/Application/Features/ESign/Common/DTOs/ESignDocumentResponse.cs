@@ -19,4 +19,26 @@ public sealed record ESignDocumentResponse(
     bool HasPdfArtifact,
     DateTime CreatedAt,
     DateTime? UpdatedAt,
-    IReadOnlyList<ESignSignatureResponse> Signatures);
+    IReadOnlyList<ESignSignatureResponse> Signatures,
+    int ContentRevision = 0);
+
+public sealed record ESignDocumentStatusResponse(
+    Guid DocumentId,
+    Guid JobPostId,
+    Guid? ContractId,
+    Guid TemplateId,
+    string DocumentCode,
+    int Status,
+    string? DocumentHash,
+    DateTime? ExpiresAt,
+    DateTime? FinalizedAt,
+    string? ExportedPdfUrl,
+    int? CurrentUserSignerRole,
+    bool CanCurrentUserSign,
+    bool HasFinalArtifact,
+    string? FinalizedDocumentFileName,
+    bool HasPdfArtifact,
+    DateTime CreatedAt,
+    DateTime? UpdatedAt,
+    IReadOnlyList<ESignSignatureResponse> Signatures,
+    int ContentRevision);

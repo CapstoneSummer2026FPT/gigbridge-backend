@@ -197,7 +197,6 @@ public class GetMyJobPostDetailQueryHandlerTests
             JobPostsId = jobPostId,
             ContractsId = null,
             DocumentCode = $"DOC-{documentId:N}"[..32],
-            RenderedHtmlContent = "<p>Job</p>",
             Status = (int)ESignDocumentStatus.FullySigned,
             CreatedAt = createdAt
         });
