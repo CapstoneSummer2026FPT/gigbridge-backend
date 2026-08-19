@@ -6,4 +6,4 @@ namespace Application.Features.ESign.Common.GetDocumentByContract.Queries;
 
 public sealed record GetESignDocumentByContractQuery(
     Guid ContractId,
-    Guid UserId) : IRequest<ESignDocumentResponse>;
+    Guid UserId) : IRequest<ESignDocumentStatusResponse>;

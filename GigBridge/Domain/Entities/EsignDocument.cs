@@ -16,8 +16,6 @@ public partial class EsignDocument
 
     public string DocumentCode { get; set; } = null!;
 
-    public string RenderedHtmlContent { get; set; } = null!;
-
     /// <summary>
     /// Enum ESignDocumentStatus: 0=Draft, 1=PendingSignatures, 2=PartiallySigned, 3=FullySigned, 4=Expired, 5=Voided
     /// </summary>
@@ -31,29 +29,29 @@ public partial class EsignDocument
 
     public string? ExportedPdfUrl { get; set; }
 
-    public string? ContractSnapshotJson { get; set; }
-
-    public byte[]? FinalizedDocumentContent { get; set; }
-
     public string? FinalizedDocumentFileName { get; set; }
-
-    public string? FinalizedDocumentMimeType { get; set; }
 
     public long? FinalizedDocumentSizeBytes { get; set; }
 
-    public byte[]? PdfDocumentContent { get; set; }
-
-    public string? PdfDocumentFileName { get; set; }
+    public string? PdfDocumentHash { get; set; }
 
     public int PdfSignatureCount { get; set; }
 
-    public string? PdfDocumentHash { get; set; }
+    public long? PdfDocumentSizeBytes { get; set; }
+
+    /// <summary>
+    /// Bumped every time the paired <see cref="EsignDocumentContent"/> row changes, so callers can
+    /// detect content changes without loading the heavy columns themselves.
+    /// </summary>
+    public int ContentRevision { get; set; }
 
     public DateTime CreatedAt { get; set; }
 
     public DateTime? UpdatedAt { get; set; }
 
     public virtual Contract? Contracts { get; set; }
+
+    public virtual EsignDocumentContent? Content { get; set; }
 
     public virtual EsignTemplate EsignTemplates { get; set; } = null!;
 

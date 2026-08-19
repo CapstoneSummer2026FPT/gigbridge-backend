@@ -40,7 +40,7 @@ public sealed class DownloadESignDocumentQueryHandler
                 signature.EsignDocumentsId == document.EsignDocumentsId &&
                 signature.Status == (int)ESignSignatureStatus.Signed,
                 cancellationToken);
-        if (document.PdfDocumentContent is not { Length: > 0 } ||
+        if (document.PdfDocumentSizeBytes is not > 0 ||
             document.PdfSignatureCount != signedCount ||
             !string.Equals(
                 document.PdfDocumentHash,
@@ -50,16 +50,22 @@ public sealed class DownloadESignDocumentQueryHandler
             throw new ConflictException("The current PDF has not been prepared yet.");
         }
 
+        var content = await ESignAccessGuard.GetContentAsync(_context, document.EsignDocumentsId, cancellationToken);
+        if (content.PdfDocumentContent is not { Length: > 0 })
+        {
+            throw new ConflictException("The current PDF has not been prepared yet.");
+        }
+
         var fileName = document.ContractsId.HasValue
             ? ESignPdfArtifactRevision.ContractFileName
-            : Path.GetFileName(document.PdfDocumentFileName);
+            : Path.GetFileName(content.PdfDocumentFileName);
         if (string.IsNullOrWhiteSpace(fileName))
         {
             fileName = $"{document.DocumentCode}.pdf";
         }
 
         return new ESignDocumentDownloadResponse(
-            document.PdfDocumentContent,
+            content.PdfDocumentContent,
             fileName,
             "application/pdf");
     }

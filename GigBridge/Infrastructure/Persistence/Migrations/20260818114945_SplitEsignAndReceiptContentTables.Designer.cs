@@ -3,6 +3,7 @@ using System;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(GigbridgeDbContext))]
-    partial class GigbridgeDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260818114945_SplitEsignAndReceiptContentTables")]
+    partial class SplitEsignAndReceiptContentTables
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1349,9 +1352,6 @@ namespace Infrastructure.Persistence.Migrations
                         .HasMaxLength(250)
                         .HasColumnType("character varying(250)");
 
-                    b.Property<int?>("DeliveryType")
-                        .HasColumnType("integer");
-
                     b.Property<int>("EventSequence")
                         .HasColumnType("integer");
 
@@ -1968,6 +1968,9 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasDefaultValue(0);
 
+                    b.Property<string>("ContractSnapshotJson")
+                        .HasColumnType("jsonb");
+
                     b.Property<Guid?>("ContractsId")
                         .HasColumnType("uuid")
                         .HasColumnName("ContractsId");
@@ -1999,9 +2002,16 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("FinalizedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<byte[]>("FinalizedDocumentContent")
+                        .HasColumnType("bytea");
+
                     b.Property<string>("FinalizedDocumentFileName")
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)");
+
+                    b.Property<string>("FinalizedDocumentMimeType")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
 
                     b.Property<long?>("FinalizedDocumentSizeBytes")
                         .HasColumnType("bigint");
@@ -2009,6 +2019,13 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<Guid>("JobPostsId")
                         .HasColumnType("uuid")
                         .HasColumnName("JobPostsId");
+
+                    b.Property<byte[]>("PdfDocumentContent")
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("PdfDocumentFileName")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
 
                     b.Property<string>("PdfDocumentHash")
                         .HasMaxLength(128)
@@ -2021,6 +2038,10 @@ namespace Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
                         .HasDefaultValue(0);
+
+                    b.Property<string>("RenderedHtmlContent")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<int>("Status")
                         .ValueGeneratedOnAdd()
@@ -4517,6 +4538,21 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<Guid>("OwnerUserId")
                         .HasColumnType("uuid");
 
+                    b.Property<byte[]>("PdfContent")
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("PdfContentType")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("PdfFileName")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("PdfHashSha256")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<long?>("PdfSizeBytes")
                         .HasColumnType("bigint");
 
@@ -4528,6 +4564,15 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<int>("ReceiptType")
                         .HasColumnType("integer")
                         .HasComment("Enum ProjectReceiptType: 0=Client, 1=Freelancer");
+
+                    b.Property<string>("SnapshotHashSha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SnapshotJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
 
                     b.Property<int>("TemplateVersion")
                         .HasColumnType("integer");
@@ -4556,7 +4601,41 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex("OwnerUserId", "IssuedAt")
                         .IsDescending(false, true);
 
-                    b.ToTable("ProjectReceipts");
+                    b.ToTable("ProjectReceipts", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.Entities.ProjectReceiptContent", b =>
+                {
+                    b.Property<Guid>("ProjectReceiptId")
+                        .HasColumnType("uuid");
+
+                    b.Property<byte[]>("PdfContent")
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("PdfContentType")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("PdfFileName")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("PdfHashSha256")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SnapshotHashSha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SnapshotJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.HasKey("ProjectReceiptId");
+
+                    b.ToTable("ProjectReceiptContents", (string)null);
                 });
 
             modelBuilder.Entity("Domain.Entities.Proposal", b =>

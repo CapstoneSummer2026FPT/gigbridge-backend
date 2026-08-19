@@ -20,6 +20,7 @@ using Application.Common.InternalServices.Proposals;
 using Application.Common.InternalServices.Receipts;
 using Application.Common.InternalServices.Reviews;
 using Application.Common.InternalServices.Wallets;
+using Application.Common.InternalServices.WorkSignals;
 using Application.Common.Mappings;
 using FluentValidation;
 using MediatR;
@@ -53,6 +54,7 @@ public static class DependencyInjection
         }, typeof(MappingProfile));
         services.AddAccountServices();
         services.AddAuditingServices();
+        services.AddWorkSignalServices(configuration);
         services.AddDeliveryServices(configuration);
         services.AddAdminAuditLogServices();
         services.AddAdminAnalyticsServices(configuration);

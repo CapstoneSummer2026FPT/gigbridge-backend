@@ -12,7 +12,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Application.Features.ESign.Common.GetDocumentByContract.Queries;
 
 public sealed class GetESignDocumentByContractQueryHandler
-    : IRequestHandler<GetESignDocumentByContractQuery, ESignDocumentResponse>
+    : IRequestHandler<GetESignDocumentByContractQuery, ESignDocumentStatusResponse>
 {
     private readonly IApplicationDbContext _context;
 
@@ -21,33 +21,30 @@ public sealed class GetESignDocumentByContractQueryHandler
         _context = context;
     }
 
-    public async Task<ESignDocumentResponse> Handle(
+    public async Task<ESignDocumentStatusResponse> Handle(
         GetESignDocumentByContractQuery request,
         CancellationToken cancellationToken)
     {
-        var readModel = await _context.Set<EsignDocument>()
+        var document = await _context.Set<EsignDocument>()
             .Where(d => d.ContractsId == request.ContractId)
             .OrderByDescending(d => d.CreatedAt)
-            .SelectForResponse()
             .FirstOrDefaultAsync(cancellationToken);
 
-        if (readModel == null)
+        if (document == null)
         {
             throw new NotFoundException("E-sign document does not exist for this contract.");
         }
 
         await ESignAccessGuard.EnsureCanViewDocumentAsync(
             _context,
-            readModel.Document,
+            document,
             request.UserId,
             cancellationToken);
 
-        return await ESignDocumentProjection.ToResponseAsync(
+        return await ESignDocumentProjection.ToStatusResponseAsync(
             _context,
-            readModel.Document,
+            document,
             request.UserId,
-            cancellationToken,
-            readModel.HasFinalizedDocumentContent,
-            readModel.HasPdfDocumentContent);
+            cancellationToken);
     }
 }

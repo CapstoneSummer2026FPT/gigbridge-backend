@@ -110,23 +110,6 @@ public sealed class ESignDocumentManagementTests
     }
 
     [Fact]
-    public async Task ResponseProjection_DoesNotMaterializeBinaryArtifacts()
-    {
-        var fixture = new Fixture();
-
-        var readModel = await fixture.Context.Set<EsignDocument>()
-            .Where(document => document.EsignDocumentsId == fixture.FinalizedDocumentId)
-            .SelectForResponse()
-            .SingleAsync();
-
-        Assert.True(readModel.HasFinalizedDocumentContent);
-        Assert.True(readModel.HasPdfDocumentContent);
-        Assert.Null(readModel.Document.FinalizedDocumentContent);
-        Assert.Null(readModel.Document.PdfDocumentContent);
-        Assert.Equal("<h1>Final</h1>", readModel.Document.RenderedHtmlContent);
-    }
-
-    [Fact]
     public async Task SavePdf_RejectsBrowserGeneratedPdfForContractDocuments()
     {
         var fixture = new Fixture();
@@ -242,7 +225,6 @@ public sealed class ESignDocumentManagementTests
                     JobPostsId = JobPostId,
                     ContractsId = ContractId,
                     DocumentCode = "GB-CONTRACT-PENDING",
-                    RenderedHtmlContent = "<h1>Pending</h1>",
                     Status = (int)ESignDocumentStatus.PendingSignatures,
                     DocumentHash = "pending-hash",
                     CreatedAt = Now
@@ -254,19 +236,31 @@ public sealed class ESignDocumentManagementTests
                     JobPostsId = JobPostId,
                     ContractsId = ContractId,
                     DocumentCode = "GB-CONTRACT-FINAL",
-                    RenderedHtmlContent = "<h1>Final</h1>",
                     Status = (int)ESignDocumentStatus.FullySigned,
                     DocumentHash = "final-hash",
                     FinalizedAt = Now.AddDays(-1),
-                    FinalizedDocumentContent = FinalizedContent,
                     FinalizedDocumentFileName = "GB-CONTRACT-FINAL.docx",
-                    FinalizedDocumentMimeType = DocxContentType,
                     FinalizedDocumentSizeBytes = FinalizedContent.Length,
-                    PdfDocumentContent = PdfContent,
-                    PdfDocumentFileName = "GB-CONTRACT-FINAL.pdf",
-                    PdfDocumentHash = $"final-hash{ESignPdfArtifactRevision.ContractTemplate}",
+                    PdfDocumentSizeBytes = PdfContent.Length,
+                    PdfDocumentHash = "final-hash:contract-template-pdf-v2",
                     PdfSignatureCount = 2,
                     CreatedAt = Now.AddDays(-1)
+                });
+
+            Context.AddSet(
+                new EsignDocumentContent
+                {
+                    EsignDocumentsId = PendingDocumentId,
+                    RenderedHtmlContent = "<h1>Pending</h1>"
+                },
+                new EsignDocumentContent
+                {
+                    EsignDocumentsId = FinalizedDocumentId,
+                    RenderedHtmlContent = "<h1>Final</h1>",
+                    FinalizedDocumentContent = FinalizedContent,
+                    FinalizedDocumentMimeType = DocxContentType,
+                    PdfDocumentContent = PdfContent,
+                    PdfDocumentFileName = "GB-CONTRACT-FINAL.pdf"
                 });
 
             Signatures = Context.AddSet(
@@ -325,11 +319,15 @@ public sealed class ESignDocumentManagementTests
                 JobPostsId = JobPostId,
                 ContractsId = ContractId,
                 DocumentCode = $"GB-DRAFT-{Guid.NewGuid():N}",
-                RenderedHtmlContent = "<h1>Draft</h1>",
                 Status = (int)ESignDocumentStatus.Draft,
                 CreatedAt = Now
             };
             Documents.Add(document);
+            Context.Set<EsignDocumentContent>().Add(new EsignDocumentContent
+            {
+                EsignDocumentsId = document.EsignDocumentsId,
+                RenderedHtmlContent = "<h1>Draft</h1>"
+            });
             return document;
         }
     }

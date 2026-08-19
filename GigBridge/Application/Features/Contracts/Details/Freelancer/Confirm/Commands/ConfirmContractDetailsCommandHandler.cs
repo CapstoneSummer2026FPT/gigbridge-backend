@@ -88,7 +88,7 @@ public sealed class ConfirmContractDetailsCommandHandler :
 
         contract.Status = (int)ContractStatus.PendingSignature;
         contract.UpdatedAt = now;
-        var document = await ContractEsignRenderer.EnsureDocumentAsync(
+        var (document, _) = await ContractEsignRenderer.EnsureDocumentAsync(
             _context, _documentGenerator, contract, now, cancellationToken);
 
         await ContractConversationEvents.AddSystemMessageAsync(

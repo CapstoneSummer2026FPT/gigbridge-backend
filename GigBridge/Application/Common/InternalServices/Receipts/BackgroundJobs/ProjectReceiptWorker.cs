@@ -4,6 +4,9 @@ using Application.Common.Interfaces.Documents;
 using Application.Common.Interfaces.Email;
 using Application.Common.InternalServices.Receipts.Models;
 using Application.Common.InternalServices.Receipts.Services;
+using Application.Common.InternalServices.WorkSignals.Interfaces;
+using Application.Common.InternalServices.WorkSignals.Models;
+using Application.Common.Options;
 using Application.Features.Auth.Shared.DTOs;
 using Application.Common.InternalServices.Notifications.Interfaces;
 using Domain.Entities;
@@ -13,6 +16,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace Application.Common.InternalServices.Receipts.BackgroundJobs;
 
@@ -21,25 +25,35 @@ public sealed class ProjectReceiptWorker : BackgroundService
     private const int MaxAttempts = 5;
     private const long WorkerLock = 0x5245434549505457;
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan MaxIdlePollInterval = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan LeaseDuration = TimeSpan.FromMinutes(3);
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<ProjectReceiptWorker> _logger;
+    private readonly WorkSignalOptions _workSignalOptions;
+    private readonly IWorkSignalSource _workSignal;
 
     public ProjectReceiptWorker(
         IServiceScopeFactory scopeFactory,
-        ILogger<ProjectReceiptWorker> logger)
+        ILogger<ProjectReceiptWorker> logger,
+        IOptions<WorkSignalOptions> workSignalOptions,
+        [FromKeyedServices(WorkSignalChannels.ProjectReceipt)] IWorkSignalSource workSignal)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
+        _workSignalOptions = workSignalOptions.Value;
+        _workSignal = workSignal;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        var idleInterval = PollInterval;
+
         while (!stoppingToken.IsCancellationRequested)
         {
+            var processedWork = false;
             try
             {
-                await ProcessOnceAsync(stoppingToken);
+                processedWork = await ProcessOnceAsync(stoppingToken);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -50,9 +64,117 @@ public sealed class ProjectReceiptWorker : BackgroundService
                 _logger.LogError(exception, "Project receipt worker batch failed.");
             }
 
-            await Task.Delay(PollInterval, stoppingToken);
+            try
+            {
+                if (processedWork)
+                {
+                    await Task.Delay(PollInterval, stoppingToken);
+                    idleInterval = PollInterval;
+                    continue;
+                }
+
+                if (_workSignalOptions.Enabled)
+                {
+                    var deadline = await ResolveIdleDeadlineAsync(stoppingToken);
+                    await _workSignal.WaitAsync(deadline, stoppingToken);
+                    idleInterval = PollInterval;
+                }
+                else
+                {
+                    await Task.Delay(idleInterval, stoppingToken);
+                    idleInterval = NextIdleInterval(idleInterval, MaxIdlePollInterval);
+                }
+            }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
         }
     }
+
+    private async Task<DateTime> ResolveIdleDeadlineAsync(CancellationToken ct)
+    {
+        var ceiling = DateTime.UtcNow.Add(MaxIdlePollInterval);
+        var earliestAllowed = DateTime.UtcNow.Add(PollInterval);
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var context = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
+
+            var pendingOrFailedNext = await context.Set<ProjectReceipt>()
+                .Where(item =>
+                    item.GenerationAttemptCount < MaxAttempts &&
+                    (item.GenerationStatus == (int)ProjectReceiptGenerationStatus.Pending ||
+                     item.GenerationStatus == (int)ProjectReceiptGenerationStatus.Failed))
+                .OrderBy(item => item.NextGenerationAttemptAt)
+                .Select(item => (DateTime?)item.NextGenerationAttemptAt)
+                .FirstOrDefaultAsync(ct);
+
+            var stuckGenerationLeaseNext = await context.Set<ProjectReceipt>()
+                .Where(item => item.GenerationStatus == (int)ProjectReceiptGenerationStatus.Processing)
+                .OrderBy(item => item.GenerationLeaseExpiresAt)
+                .Select(item => item.GenerationLeaseExpiresAt)
+                .FirstOrDefaultAsync(ct);
+
+            var stuckDeliveryLeaseNext = await context.Set<ProjectReceipt>()
+                .Where(item =>
+                    item.GenerationStatus == (int)ProjectReceiptGenerationStatus.Ready &&
+                    item.DeliveryLeaseExpiresAt != null)
+                .OrderBy(item => item.DeliveryLeaseExpiresAt)
+                .Select(item => item.DeliveryLeaseExpiresAt)
+                .FirstOrDefaultAsync(ct);
+
+            var notificationDueNext = await context.Set<ProjectReceipt>()
+                .Where(item =>
+                    item.GenerationStatus == (int)ProjectReceiptGenerationStatus.Ready &&
+                    item.DeliveryLeaseExpiresAt == null &&
+                    item.NotificationId == null &&
+                    item.NotificationAttemptCount < MaxAttempts)
+                .OrderBy(item => item.NextNotificationAttemptAt)
+                .Select(item => (DateTime?)item.NextNotificationAttemptAt)
+                .FirstOrDefaultAsync(ct);
+
+            var emailDueNext = await context.Set<ProjectReceipt>()
+                .Where(item =>
+                    item.GenerationStatus == (int)ProjectReceiptGenerationStatus.Ready &&
+                    item.DeliveryLeaseExpiresAt == null &&
+                    item.EmailStatus != (int)ProjectReceiptEmailStatus.Delivered &&
+                    item.EmailAttemptCount < MaxAttempts)
+                .OrderBy(item => item.NextEmailAttemptAt)
+                .Select(item => (DateTime?)item.NextEmailAttemptAt)
+                .FirstOrDefaultAsync(ct);
+
+            DateTime? earliest = null;
+            foreach (var candidate in new[]
+                     {
+                         pendingOrFailedNext, stuckGenerationLeaseNext, stuckDeliveryLeaseNext,
+                         notificationDueNext, emailDueNext
+                     })
+            {
+                if (candidate.HasValue && (!earliest.HasValue || candidate.Value < earliest.Value))
+                {
+                    earliest = candidate;
+                }
+            }
+
+            var deadline = earliest.HasValue && earliest.Value < ceiling ? earliest.Value : ceiling;
+            return deadline < earliestAllowed ? earliestAllowed : deadline;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(
+                ex,
+                "Failed to resolve the idle deadline for the project receipt worker; falling back to the max idle interval.");
+            return ceiling;
+        }
+    }
+
+    private static TimeSpan NextIdleInterval(TimeSpan current, TimeSpan maximum) =>
+        TimeSpan.FromTicks(Math.Min(current.Ticks * 2, maximum.Ticks));
 
     internal async Task<bool> ProcessOnceAsync(CancellationToken cancellationToken)
     {
@@ -124,11 +246,17 @@ public sealed class ProjectReceiptWorker : BackgroundService
         receipt.UpdatedAt = now;
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+
+        var content = await context.Set<ProjectReceiptContent>()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(item => item.ProjectReceiptId == receipt.ProjectReceiptId, cancellationToken)
+            ?? throw new InvalidOperationException($"Receipt {receipt.ProjectReceiptId} is missing its content row.");
+
         return new GenerationClaim(
             receipt.ProjectReceiptId,
             token,
-            receipt.SnapshotJson,
-            receipt.SnapshotHashSha256,
+            content.SnapshotJson,
+            content.SnapshotHashSha256,
             receipt.GenerationAttemptCount);
     }
 
@@ -159,18 +287,22 @@ public sealed class ProjectReceiptWorker : BackgroundService
                     item.GenerationStatus == (int)ProjectReceiptGenerationStatus.Processing,
                     cancellationToken);
             if (receipt is null) return;
+            var content = await context.Set<ProjectReceiptContent>()
+                .FirstOrDefaultAsync(item => item.ProjectReceiptId == receipt.ProjectReceiptId, cancellationToken)
+                ?? throw new InvalidOperationException($"Receipt {receipt.ProjectReceiptId} is missing its content row.");
             var now = DateTime.UtcNow;
-            receipt.PdfContent = pdf;
-            receipt.PdfFileName = $"GigBridge-{receipt.ReceiptNumber}.pdf";
-            receipt.PdfContentType = "application/pdf";
+            content.PdfContent = pdf;
+            content.PdfFileName = $"GigBridge-{receipt.ReceiptNumber}.pdf";
+            content.PdfContentType = "application/pdf";
+            content.PdfHashSha256 = Convert.ToHexString(SHA256.HashData(pdf)).ToLowerInvariant();
             receipt.PdfSizeBytes = pdf.LongLength;
-            receipt.PdfHashSha256 = Convert.ToHexString(SHA256.HashData(pdf)).ToLowerInvariant();
             receipt.GeneratedAt = now;
             receipt.GenerationStatus = (int)ProjectReceiptGenerationStatus.Ready;
             receipt.GenerationLeaseToken = null;
             receipt.GenerationLeaseExpiresAt = null;
             receipt.GenerationLastError = null;
             receipt.NextEmailAttemptAt = now;
+            receipt.ContentRevision++;
             receipt.UpdatedAt = now;
             await context.SaveChangesAsync(cancellationToken);
         }
@@ -338,7 +470,15 @@ public sealed class ProjectReceiptWorker : BackgroundService
             receipt.EmailStatus == (int)ProjectReceiptEmailStatus.Delivered ||
             receipt.EmailAttemptCount >= MaxAttempts ||
             receipt.NextEmailAttemptAt > DateTime.UtcNow ||
-            receipt.PdfContent is not { Length: > 0 } || string.IsNullOrWhiteSpace(receipt.PdfFileName))
+            receipt.PdfSizeBytes is not > 0)
+        {
+            return;
+        }
+
+        var content = await context.Set<ProjectReceiptContent>()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(item => item.ProjectReceiptId == receiptId, cancellationToken);
+        if (content?.PdfContent is not { Length: > 0 } || string.IsNullOrWhiteSpace(content.PdfFileName))
         {
             return;
         }
@@ -364,9 +504,9 @@ public sealed class ProjectReceiptWorker : BackgroundService
                 ByteAttachments =
                 [
                     new EmailByteAttachment(
-                        receipt.PdfFileName,
-                        receipt.PdfContent,
-                        receipt.PdfContentType ?? "application/pdf")
+                        content.PdfFileName,
+                        content.PdfContent,
+                        content.PdfContentType ?? "application/pdf")
                 ]
             }, cancellationToken);
             receipt.EmailStatus = (int)ProjectReceiptEmailStatus.Delivered;
