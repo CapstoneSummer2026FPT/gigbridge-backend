@@ -1538,7 +1538,8 @@ public class ContractWorkflowTests
             string? content = null,
             Guid? referenceId = null,
             string? referenceType = null,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default,
+            string? metadata = null)
         {
             Notifications.Add(new NotificationCall(userId, type, title, content, referenceId, referenceType));
             return Task.CompletedTask;

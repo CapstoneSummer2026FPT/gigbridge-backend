@@ -386,7 +386,8 @@ public sealed class ProjectReceiptWorkerTests
             string? content = null,
             Guid? referenceId = null,
             string? referenceType = null,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default,
+            string? metadata = null)
         {
             notifications.Add(new Notification
             {
@@ -443,7 +444,8 @@ public sealed class ProjectReceiptWorkerTests
             string? content = null,
             Guid? referenceId = null,
             string? referenceType = null,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default,
+            string? metadata = null)
         {
             if (referenceId == failingReferenceId)
             {
