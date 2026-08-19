@@ -8,7 +8,7 @@ using Application.Common.InternalServices.WorkSignals.Interfaces;
 using Application.Common.InternalServices.WorkSignals.Models;
 using Application.Common.Options;
 using Application.Features.Auth.Shared.DTOs;
-using Application.Features.Notifications.Common.Interfaces;
+using Application.Common.InternalServices.Notifications.Interfaces;
 using Domain.Entities;
 using Domain.Enums;
 using Domain.Enums.Notifications;

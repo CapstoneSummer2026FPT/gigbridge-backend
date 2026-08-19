@@ -1349,6 +1349,9 @@ namespace Infrastructure.Persistence.Migrations
                         .HasMaxLength(250)
                         .HasColumnType("character varying(250)");
 
+                    b.Property<int?>("DeliveryType")
+                        .HasColumnType("integer");
+
                     b.Property<int>("EventSequence")
                         .HasColumnType("integer");
 
@@ -4553,41 +4556,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex("OwnerUserId", "IssuedAt")
                         .IsDescending(false, true);
 
-                    b.ToTable("ProjectReceipts", (string)null);
-                });
-
-            modelBuilder.Entity("Domain.Entities.ProjectReceiptContent", b =>
-                {
-                    b.Property<Guid>("ProjectReceiptId")
-                        .HasColumnType("uuid");
-
-                    b.Property<byte[]>("PdfContent")
-                        .HasColumnType("bytea");
-
-                    b.Property<string>("PdfContentType")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<string>("PdfFileName")
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)");
-
-                    b.Property<string>("PdfHashSha256")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<string>("SnapshotHashSha256")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<string>("SnapshotJson")
-                        .IsRequired()
-                        .HasColumnType("jsonb");
-
-                    b.HasKey("ProjectReceiptId");
-
-                    b.ToTable("ProjectReceiptContents", (string)null);
+                    b.ToTable("ProjectReceipts");
                 });
 
             modelBuilder.Entity("Domain.Entities.Proposal", b =>

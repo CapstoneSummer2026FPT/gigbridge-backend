@@ -1,7 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.Time;
-using Application.Features.Proposals.Common.Interfaces;
+using Application.Common.InternalServices.Proposals.Interfaces;
 using Application.Features.Proposals.Common.DTOs;
 using Application.Features.Proposals.Freelancer.Answers;
 using Domain.Entities;

@@ -1,3 +1,4 @@
+using Application.Common.InternalServices.ESign.Services;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Models;
@@ -70,18 +71,11 @@ public sealed class GetESignDocumentsQueryHandler
                 on contract.ClientProfilesId equals clientProfile.ClientProfilesId
             join clientUser in _context.Set<User>().AsNoTracking()
                 on clientProfile.UserId equals clientUser.UserId
-            join freelancerProfile in _context.Set<FreelancerProfile>().AsNoTracking()
-                on contract.FreelancerProfilesId equals (Guid?)freelancerProfile.FreelancerProfilesId into freelancerProfiles
-            from freelancerProfile in freelancerProfiles.DefaultIfEmpty()
-            join freelancerUser in _context.Set<User>().AsNoTracking()
-                on (freelancerProfile != null ? (Guid?)freelancerProfile.UserId : null) equals (Guid?)freelancerUser.UserId into freelancerUsers
-            from freelancerUser in freelancerUsers.DefaultIfEmpty()
             select new
             {
                 Document = document,
                 Contract = contract,
-                ClientUser = clientUser,
-                FreelancerUser = freelancerUser
+                ClientUser = clientUser
             };
 
         if (!request.AdminScope)
@@ -106,9 +100,12 @@ public sealed class GetESignDocumentsQueryHandler
                 item.Contract.Title.ToLower().Contains(search) ||
                 item.ClientUser.FullName.ToLower().Contains(search) ||
                 item.ClientUser.Email.ToLower().Contains(search) ||
-                (item.FreelancerUser != null &&
-                 (item.FreelancerUser.FullName.ToLower().Contains(search) ||
-                  item.FreelancerUser.Email.ToLower().Contains(search))));
+                _context.Set<FreelancerProfile>().Any(freelancerProfile =>
+                    freelancerProfile.FreelancerProfilesId == item.Contract.FreelancerProfilesId &&
+                    _context.Set<User>().Any(freelancerUser =>
+                        freelancerUser.UserId == freelancerProfile.UserId &&
+                        (freelancerUser.FullName.ToLower().Contains(search) ||
+                         freelancerUser.Email.ToLower().Contains(search)))));
         }
 
         var page = request.Page;

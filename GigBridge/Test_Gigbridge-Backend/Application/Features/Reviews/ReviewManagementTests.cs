@@ -1,10 +1,12 @@
 using Application.Common.Interfaces.Time;
-using Application.Features.Elo.Common.Services;
+using Application.Common.InternalServices.Elo.Services;
 using Application.Features.Reviews.Admin.GetReviews.Queries;
 using Application.Features.Reviews.Common.GetMyReviews.Queries;
 using Application.Features.Reviews.Common.GetReviewsByUser.Queries;
 using Application.Features.Reviews.Common.GetReviewStats.Queries;
-using Application.Features.Reviews.Common.Moderation;
+using Application.Common.InternalServices.Reviews.Interfaces;
+using Application.Common.InternalServices.Reviews.Models;
+using Application.Common.InternalServices.Reviews.Services;
 using Domain.Entities;
 using Domain.Enums.Accounts;
 using Domain.Enums.Contracts;

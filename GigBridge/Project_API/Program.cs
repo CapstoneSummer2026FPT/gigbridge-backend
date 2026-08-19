@@ -1,8 +1,8 @@
 using Application;
 using Application.Common.Interfaces.Identity;
-using Application.Features.Chat.Common.Interfaces;
-using Application.Features.Notifications.Common.Interfaces;
-using Application.Features.Admin.SystemTracking.Common.Interfaces;
+using Application.Common.InternalServices.Chat.Interfaces;
+using Application.Common.InternalServices.Notifications.Interfaces;
+using Application.Common.InternalServices.Admin.SystemTracking.Interfaces;
 using Infrastructure;
 using Project_API.Extensions;
 using Project_API.Hubs;
@@ -14,7 +14,7 @@ using Project_API.Services.Notification;
 using Project_API.Services.SystemTracking;
 
 var builder = WebApplication.CreateBuilder(args);
-builder.Services.AddScoped<Application.Features.Admin.AuditLogs.Common.Interfaces.IRequestMetadataAccessor, Project_API.Services.RequestMetadataAccessor>();
+builder.Services.AddScoped<Application.Common.InternalServices.Admin.AuditLogs.Interfaces.IRequestMetadataAccessor, Project_API.Services.RequestMetadataAccessor>();
 
 if (builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Testing"))
 {

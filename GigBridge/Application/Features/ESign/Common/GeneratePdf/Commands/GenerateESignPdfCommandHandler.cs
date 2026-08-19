@@ -1,7 +1,8 @@
+using Application.Common.InternalServices.ESign.Services;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.Documents;
-using Application.Features.ESign.Common.Interfaces;
+using Application.Common.InternalServices.ESign.Interfaces;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.ESign.Common.DTOs;
 using Application.Features.ESign.Common.Internal;

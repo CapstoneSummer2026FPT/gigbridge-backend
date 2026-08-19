@@ -1,4 +1,4 @@
-using Application.Features.Chat.Common.Interfaces;
+using Application.Common.InternalServices.Chat.Interfaces;
 using Infrastructure.ExternalServices.Google.Meet;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;

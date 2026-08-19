@@ -2,7 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
-using Application.Features.Auth.Common.Interfaces;
+using Application.Common.InternalServices.Auth.Interfaces;
 using Domain.Entities;
 using Domain.Enums.Accounts;
 

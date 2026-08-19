@@ -2,8 +2,9 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces.Time;
 using Application.Features.JobPosts.Client.UpdateStatusJobPost.Commands;
 using Application.Features.JobPosts.Client.UpdateStatusJobPost.DTOs;
+using Application.Features.JobPosts.Common;
 using Domain.Entities;
-using Application.Features.JobPosts.Common.ContentModeration.Services;
+using Application.Common.InternalServices.JobPosts.Services;
 using Test_Gigbridge_Backend.TestSupport;
 
 namespace Test_Gigbridge_Backend.Application.Features.JobPosts.Client;
@@ -164,6 +165,46 @@ public class UpdateStatusJobPostCommandHandlerTests
             "Job post appears to contain cybercrime, malware, hacking, or credential theft-related work.",
             exception.Errors["JobPostContent"]);
         Assert.Equal(0, fixture.JobPost.Status);
+    }
+
+    [Fact]
+    public async Task Handle_PublishedJobToDraft_ThrowsBadRequest()
+    {
+        var fixture = new UpdateStatusFixture();
+        fixture.JobPost.Status = 1;
+        fixture.JobPost.Visibility = JobPostEditingGuard.PublicVisibility;
+
+        var exception = await Assert.ThrowsAsync<BadRequestException>(() =>
+            fixture.CreateHandler().Handle(
+                new UpdateStatusJobPostCommand(
+                    fixture.JobPostId,
+                    fixture.ClientUserId,
+                    new UpdateStatusJobPostRequest { Status = JobPostEditingGuard.DraftStatus }),
+                CancellationToken.None));
+
+        Assert.Equal(JobPostEditingGuard.DraftTransitionLockedMessage, exception.Message);
+        Assert.Equal(1, fixture.JobPost.Status);
+        Assert.Equal(0, fixture.Context.SaveChangesCount);
+    }
+
+    [Fact]
+    public async Task Handle_AdminLockedJobToDraft_ThrowsAdminLockErrorFirst()
+    {
+        var fixture = new UpdateStatusFixture();
+        fixture.JobPost.Status = 1;
+        fixture.JobPost.Visibility = JobPostEditingGuard.AdminLockedVisibility;
+
+        var exception = await Assert.ThrowsAsync<BadRequestException>(() =>
+            fixture.CreateHandler().Handle(
+                new UpdateStatusJobPostCommand(
+                    fixture.JobPostId,
+                    fixture.ClientUserId,
+                    new UpdateStatusJobPostRequest { Status = JobPostEditingGuard.DraftStatus }),
+                CancellationToken.None));
+
+        Assert.Equal(JobPostEditingGuard.AdminLockedMessage, exception.Message);
+        Assert.Equal(1, fixture.JobPost.Status);
+        Assert.Equal(0, fixture.Context.SaveChangesCount);
     }
 
     private sealed class UpdateStatusFixture

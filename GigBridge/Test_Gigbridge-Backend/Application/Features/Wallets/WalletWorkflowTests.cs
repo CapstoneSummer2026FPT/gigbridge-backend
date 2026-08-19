@@ -1,8 +1,8 @@
-using Application.Features.Wallets.Common.Models;
+using Application.Common.InternalServices.Wallets.Models;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces.Time;
-using Application.Features.Wallets.Common.BackgroundJobs;
-using Application.Features.Wallets.Common.Interfaces;
+using Application.Common.InternalServices.Wallets.BackgroundJobs;
+using Application.Common.InternalServices.Wallets.Interfaces;
 using Application.Common.Options;
 using Application.Features.Wallets.Common;
 using Application.Features.Admin.AdminCredit.Commands;

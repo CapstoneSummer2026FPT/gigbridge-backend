@@ -3,7 +3,7 @@ using Application.Common.Interfaces.Caching;
 using Application.Common.Exceptions;
 using Application.Features.Auth.ResetPassword.Commands;
 using Application.Features.Auth.ResetPassword.DTOs;
-using Application.Features.Auth.Common;
+using Application.Common.InternalServices.Auth.Services;
 using Domain.Entities;
 using NSubstitute;
 using Test_Gigbridge_Backend.TestSupport;

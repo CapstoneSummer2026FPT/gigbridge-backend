@@ -1,13 +1,16 @@
 using Application.Common.Exceptions;
+using Application.Common.InternalServices.ESign.Services;
 using Application.Features.ESign.Common.DeleteDocument.Commands;
 using Application.Features.ESign.Common.DownloadDocument.Queries;
 using Application.Features.ESign.Common.GetDocument.Queries;
 using Application.Features.ESign.Common.GetDocuments.Queries;
+using Application.Features.ESign.Common.Internal;
 using Application.Features.ESign.Common.SavePdf.Commands;
 using Domain.Entities;
 using Domain.Enums.Accounts;
 using Domain.Enums.Contracts;
 using Domain.Enums.ESign;
+using Microsoft.EntityFrameworkCore;
 using Test_Gigbridge_Backend.TestSupport;
 
 namespace Test_Gigbridge_Backend.Application.Features.ESign;
@@ -238,8 +241,8 @@ public sealed class ESignDocumentManagementTests
                     FinalizedAt = Now.AddDays(-1),
                     FinalizedDocumentFileName = "GB-CONTRACT-FINAL.docx",
                     FinalizedDocumentSizeBytes = FinalizedContent.Length,
-                    PdfDocumentHash = "final-hash:contract-template-pdf-v2",
                     PdfDocumentSizeBytes = PdfContent.Length,
+                    PdfDocumentHash = "final-hash:contract-template-pdf-v2",
                     PdfSignatureCount = 2,
                     CreatedAt = Now.AddDays(-1)
                 });

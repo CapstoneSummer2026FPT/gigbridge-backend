@@ -1,27 +1,31 @@
 using Application.Common.Exceptions;
+using Application.Common.Interfaces.Files;
 using Application.Common.Interfaces.Media;
 using Application.Features.Chat.Common.Messages.Send.Commands;
 using Application.Features.Chat.Common.Messages.Send.DTOs;
 using MediatR;
+using Microsoft.Extensions.Logging;
 
 namespace Application.Features.Chat.Common.Messages.SendWithAttachments.Commands;
 
 public sealed class SendMessageWithAttachmentsCommandHandler
     : IRequestHandler<SendMessageWithAttachmentsCommand, MessageResponse>
 {
-    private static readonly HashSet<string> BlockedExtensions = new(StringComparer.OrdinalIgnoreCase)
-        { ".exe", ".bat", ".cmd", ".sh" };
-
-    private const long MaxFileSizeBytes = 100 * 1024 * 1024;
-    private const int MaxFilesPerMessage = 5;
-
     private readonly IMediaService _mediaService;
     private readonly ISender _sender;
+    private readonly IWorkspaceUploadFilePolicy _uploadFilePolicy;
+    private readonly ILogger<SendMessageWithAttachmentsCommandHandler>? _logger;
 
-    public SendMessageWithAttachmentsCommandHandler(IMediaService mediaService, ISender sender)
+    public SendMessageWithAttachmentsCommandHandler(
+        IMediaService mediaService,
+        ISender sender,
+        IWorkspaceUploadFilePolicy uploadFilePolicy,
+        ILogger<SendMessageWithAttachmentsCommandHandler>? logger = null)
     {
         _mediaService = mediaService;
         _sender = sender;
+        _uploadFilePolicy = uploadFilePolicy;
+        _logger = logger;
     }
 
     public async Task<MessageResponse> Handle(
@@ -33,53 +37,75 @@ public sealed class SendMessageWithAttachmentsCommandHandler
             throw new BadRequestException("Message content or an attachment is required.");
         }
 
-        if (command.Files.Count > MaxFilesPerMessage)
+        var validatedFiles = await _uploadFilePolicy.ValidateBatchAsync(
+            command.Files
+                .Select(file => new WorkspaceUploadFile(
+                    file.Content,
+                    file.FileName,
+                    file.ContentType,
+                    file.Length))
+                .ToList(),
+            WorkspaceUploadLimits.MaxFilesPerBatch,
+            cancellationToken);
+
+        var folder = $"chat/{command.ConversationId}/messages";
+        var attachments = new List<SendMessageAttachmentRequest>(validatedFiles.Count);
+        var uploadedUrls = new List<string>(validatedFiles.Count);
+        try
         {
-            throw new BadRequestException($"A message may contain at most {MaxFilesPerMessage} attachments.");
-        }
-
-        var attachments = new List<SendMessageAttachmentRequest>();
-
-        foreach (var file in command.Files)
-        {
-            var safeName = Path.GetFileName(file.FileName);
-            var extension = Path.GetExtension(safeName);
-
-            if (string.IsNullOrWhiteSpace(safeName) ||
-                safeName != file.FileName ||
-                file.Length <= 0 ||
-                file.Length > MaxFileSizeBytes ||
-                BlockedExtensions.Contains(extension))
+            foreach (var file in validatedFiles)
             {
-                throw new BadRequestException("An attachment filename, type, or size is invalid.");
+                var url = await _mediaService.UploadFileAsync(
+                    file.Content,
+                    file.FileName,
+                    file.ContentType,
+                    folder,
+                    cancellationToken);
+                uploadedUrls.Add(url);
+
+                attachments.Add(new SendMessageAttachmentRequest(
+                    file.FileName,
+                    url,
+                    "Cloudinary",
+                    null,
+                    file.ContentType,
+                    Path.GetExtension(file.FileName),
+                    file.Length));
             }
 
-            var url = await _mediaService.UploadFileAsync(
-                file.Content,
-                safeName,
-                file.ContentType,
-                $"chat/{command.ConversationId}/messages",
+            return await _sender.Send(
+                new SendMessageCommand(
+                    command.UserId,
+                    new SendMessageRequest(
+                        command.ConversationId,
+                        command.ClientMessageId,
+                        command.Content,
+                        null,
+                        attachments)),
                 cancellationToken);
-
-            attachments.Add(new SendMessageAttachmentRequest(
-                safeName,
-                url,
-                "Cloudinary",
-                null,
-                file.ContentType,
-                extension,
-                file.Length));
         }
+        catch
+        {
+            foreach (var url in uploadedUrls)
+            {
+                try
+                {
+                    await _mediaService.DeleteFileAsync(url, folder, CancellationToken.None);
+                }
+                catch (Exception exception) when (exception is not OperationCanceledException)
+                {
+                    _logger?.LogWarning(
+                        exception,
+                        "Failed to roll back chat attachment at {FileUrl}.",
+                        url);
+                }
+            }
 
-        return await _sender.Send(
-            new SendMessageCommand(
-                command.UserId,
-                new SendMessageRequest(
-                    command.ConversationId,
-                    command.ClientMessageId,
-                    command.Content,
-                    null,
-                    attachments)),
-            cancellationToken);
+            throw;
+        }
+        finally
+        {
+            await validatedFiles.DisposeAsync();
+        }
     }
 }

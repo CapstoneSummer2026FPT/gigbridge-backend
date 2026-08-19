@@ -1,7 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.InternalServices.Accounts.Interfaces;
 using Application.Common.Interfaces.Time;
-using Application.Features.Elo.Common.Interfaces;
+using Application.Common.InternalServices.Elo.Interfaces;
 using Application.Features.Admin.Disputes.Resolve.Commands;
 using Application.Features.Contracts.Completion.Client.Commands;
 using Application.Features.Contracts.Milestones.Freelancer.RequestUnlock.Commands;
@@ -16,6 +16,7 @@ using Domain.Enums.Contracts;
 using Domain.Enums.Contracts.Escrow;
 using Domain.Enums.Contracts.Milestones;
 using Domain.Enums.Disputes;
+using Infrastructure.Adapters.Files;
 using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Test_Gigbridge_Backend.TestSupport;
@@ -666,7 +667,10 @@ public sealed class ResolveAdminDisputeCommandHandlerTests
             CancellationToken.None);
 
         var submitHandler = new SubmitMilestoneCommandHandler(
-            fixture.Context, new FixedDateTimeService(fixture.Now), new CapturingUserAuditLogService());
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new CapturingUserAuditLogService(),
+            new WorkspaceUploadFilePolicy());
         await Assert.ThrowsAsync<BadRequestException>(() => submitHandler.Handle(
             new SubmitMilestoneCommand(fixture.ContractId, fixture.M3Id, fixture.FreelancerUserId),
             CancellationToken.None));

@@ -1,3 +1,4 @@
+using Application.Common.InternalServices.Chat.Services;
 using MediatR;
 
 namespace Application.Features.Chat.Common.Schedules;

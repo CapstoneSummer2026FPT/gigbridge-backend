@@ -1,4 +1,4 @@
-using Application.Features.Auth.Common;
+using Application.Common.InternalServices.Auth.Services;
 using FluentValidation;
 
 namespace Application.Features.Auth.VerifyOtp.Commands;

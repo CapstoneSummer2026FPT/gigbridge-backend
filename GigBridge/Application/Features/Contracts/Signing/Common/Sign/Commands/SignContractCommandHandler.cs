@@ -1,3 +1,5 @@
+using Application.Common.InternalServices.Contracts.Services;
+using Application.Common.InternalServices.ESign.Models;
 using Domain.Enums.Chat;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
@@ -5,8 +7,8 @@ using Application.Common.Interfaces.Documents;
 using Application.Common.InternalServices.Auditing.Interfaces;
 using Application.Common.Interfaces.Media;
 using Application.Common.Interfaces.Time;
-using Application.Features.Chat.Common.Interfaces;
-using Application.Features.ESign.Common.Services;
+using Application.Common.InternalServices.Chat.Interfaces;
+using Application.Common.InternalServices.ESign.Services;
 using Application.Features.Contracts.Common.DTOs;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.ESign.Common.Internal;
@@ -19,9 +21,9 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
-using Application.Features.ESign.Common.Interfaces;
+using Application.Common.InternalServices.ESign.Interfaces;
 using Application.Common.Interfaces.Caching;
-using Application.Features.Auth.Common;
+using Application.Common.InternalServices.Auth.Services;
 
 namespace Application.Features.Contracts.Signing.Common.Sign.Commands;
 
@@ -111,6 +113,39 @@ public sealed class SignContractCommandHandler :
             ? ContractIdentityCode.Normalize(signer.IdentityOrTaxCode)
             : submittedIdentityCode;
 
+        var counterpartParty = signerRole == ESignerRole.Client
+            ? snapshot.Freelancer
+            : snapshot.Client;
+        var documentSignatures = await _context.Set<EsignSignature>()
+            .Where(signature => signature.EsignDocumentsId == document.EsignDocumentsId)
+            .ToListAsync(cancellationToken);
+        var existingSignature = documentSignatures.SingleOrDefault(signature =>
+            signature.UserId == command.UserId);
+
+        if (existingSignature is not null &&
+            existingSignature.Status == (int)ESignSignatureStatus.Signed)
+        {
+            throw new ConflictException("This user has already signed the contract.");
+        }
+
+        var counterpartSignatureIdentityCode = documentSignatures
+            .SingleOrDefault(signature =>
+                signature.UserId == counterpartParty.UserId &&
+                signature.Status is (int)ESignSignatureStatus.Pending or
+                    (int)ESignSignatureStatus.Signed)
+            ?.IdentityOrTaxCode;
+        var counterpartStoredIdentityCode = await _context.Set<User>()
+            .AsNoTracking()
+            .Where(user => user.UserId == counterpartParty.UserId)
+            .Select(user => user.IdentityOrTaxCode)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        ContractIdentityCode.EnsureDifferentParties(
+            identityOrTaxCode,
+            counterpartSignatureIdentityCode,
+            counterpartStoredIdentityCode,
+            counterpartParty.IdentityOrTaxCode);
+
         if (!hasStoredIdentityCode)
         {
             await ConsumeIdentityVerificationAsync(
@@ -120,19 +155,6 @@ public sealed class SignContractCommandHandler :
                 cancellationToken);
             signer.IdentityOrTaxCode = identityOrTaxCode;
             signer.UpdatedAt = now;
-        }
-
-        var existingSignature = await _context.Set<EsignSignature>()
-            .FirstOrDefaultAsync(
-                signature =>
-                    signature.EsignDocumentsId == document.EsignDocumentsId &&
-                    signature.UserId == command.UserId,
-                cancellationToken);
-
-        if (existingSignature is not null &&
-            existingSignature.Status == (int)ESignSignatureStatus.Signed)
-        {
-            throw new ConflictException("This user has already signed the contract.");
         }
 
         if (existingSignature is null)

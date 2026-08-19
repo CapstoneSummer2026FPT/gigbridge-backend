@@ -5,7 +5,7 @@ using Application.Common.Interfaces.Time;
 using Application.Features.Profiles.Common.DTOs;
 using Application.Features.Contracts.Common.Internal;
 using Application.Common.Interfaces.Caching;
-using Application.Features.Auth.Common;
+using Application.Common.InternalServices.Auth.Services;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;

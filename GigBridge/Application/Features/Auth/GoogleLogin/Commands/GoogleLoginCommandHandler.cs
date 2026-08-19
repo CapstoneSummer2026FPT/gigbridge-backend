@@ -1,10 +1,11 @@
+using Application.Common.InternalServices.Auth.Models;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.InternalServices.Accounts.Services;
 using Application.Common.Interfaces.Time;
-using Application.Features.Auth.Common.Interfaces;
-using Application.Features.Elo.Common.Interfaces;
-using Application.Features.Auth.Common;
+using Application.Common.InternalServices.Auth.Interfaces;
+using Application.Common.InternalServices.Elo.Interfaces;
+using Application.Common.InternalServices.Auth.Services;
 using Application.Features.Auth.GoogleLogin.DTOs;
 using Application.Features.Auth.Shared.DTOs;
 using AutoMapper;

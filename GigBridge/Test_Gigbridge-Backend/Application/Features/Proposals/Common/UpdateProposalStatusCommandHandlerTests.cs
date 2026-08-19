@@ -1,6 +1,6 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces.Time;
-using Application.Features.Notifications.Common.Interfaces;
+using Application.Common.InternalServices.Notifications.Interfaces;
 using Application.Features.Proposals.Common.UpdateProposalStatus.Commands;
 using Application.Features.Proposals.Common.UpdateProposalStatus.Commands.DTOs;
 using Domain.Entities;

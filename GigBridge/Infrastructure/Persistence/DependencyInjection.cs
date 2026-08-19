@@ -1,7 +1,4 @@
 using Application.Common.Interfaces;
-using Application.Features.Wallets.Common.Interfaces;
-using Infrastructure.Persistence.Delivery;
-using Infrastructure.Persistence.Wallets;
 using Infrastructure.Persistence.WorkSignals;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
@@ -27,8 +24,6 @@ internal static class DependencyInjection
                 .AddInterceptors(provider.GetServices<ISaveChangesInterceptor>()));
         services.AddScoped<IApplicationDbContext>(provider =>
             provider.GetRequiredService<GigbridgeDbContext>());
-        services.AddDeliveryPersistence();
-        services.AddScoped<IWalletLedgerService, WalletLedgerService>();
         services.AddWorkSignalListener();
 
         services.AddDataProtection()

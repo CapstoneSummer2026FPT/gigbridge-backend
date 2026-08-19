@@ -39,5 +39,8 @@ public class ProposalDto
     public List<string>? AiSoftSkills { get; set; }
     public string? AiHolisticAdjustmentReason { get; set; }
     public int? AiHolisticAdjustment { get; set; }
+    public bool? AiIsAiGenerated { get; set; }
+    public double? AiConfidenceScore { get; set; }
+    public string? AiDetectionSummary { get; set; }
     public List<GradedQuestionDto>? AiGradedQuestions { get; set; }
 }

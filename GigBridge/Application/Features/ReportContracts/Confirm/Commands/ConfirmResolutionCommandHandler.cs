@@ -1,8 +1,8 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.Time;
-using Application.Features.Chat.Common.Interfaces;
-using Application.Features.Notifications.Common.Interfaces;
+using Application.Common.InternalServices.Chat.Interfaces;
+using Application.Common.InternalServices.Notifications.Interfaces;
 using Application.Features.ReportContracts.Common.DTOs;
 using Application.Features.ReportContracts.Common.Internal;
 using Domain.Entities;

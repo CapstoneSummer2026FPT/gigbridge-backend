@@ -1,8 +1,9 @@
+using Application.Common.InternalServices.ESign.Models;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.Documents;
-using Application.Features.ESign.Common.Interfaces;
-using Application.Features.ESign.Common.Services;
+using Application.Common.InternalServices.ESign.Interfaces;
+using Application.Common.InternalServices.ESign.Services;
 using Application.Features.Contracts.Common.DTOs;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.ESign.Common.DTOs;
@@ -46,6 +47,9 @@ public sealed class PreviewESignPdfCommandHandler(
             : snapshot.Freelancer.UserId == request.UserId
                 ? ESignerRole.Freelancer
                 : throw new ForbiddenAccessException("Only contract participants can preview a signature.");
+        var counterpartParty = signerRole == ESignerRole.Client
+            ? snapshot.Freelancer
+            : snapshot.Client;
 
         var signatures = await context.Set<EsignSignature>()
             .AsNoTracking()
@@ -61,15 +65,36 @@ public sealed class PreviewESignPdfCommandHandler(
             throw new ConflictException("This user has already signed the contract.");
         }
 
-        var storedIdentityCode = await context.Set<User>()
+        var participantIdentityCodes = await context.Set<User>()
             .AsNoTracking()
-            .Where(user => user.UserId == request.UserId)
-            .Select(user => user.IdentityOrTaxCode)
-            .SingleOrDefaultAsync(cancellationToken);
+            .Where(user =>
+                user.UserId == request.UserId ||
+                user.UserId == counterpartParty.UserId)
+            .Select(user => new { user.UserId, user.IdentityOrTaxCode })
+            .ToListAsync(cancellationToken);
+        var storedIdentityCode = participantIdentityCodes
+            .SingleOrDefault(user => user.UserId == request.UserId)
+            ?.IdentityOrTaxCode;
         var identityCode = ContractIdentityCode.Normalize(
             ContractIdentityCode.IsValid(storedIdentityCode)
                 ? storedIdentityCode
                 : request.Request.IdentityOrTaxCode);
+        var counterpartSignatureIdentityCode = signatures
+            .SingleOrDefault(signature =>
+                signature.UserId == counterpartParty.UserId &&
+                signature.Status is (int)ESignSignatureStatus.Pending or
+                    (int)ESignSignatureStatus.Signed)
+            ?.IdentityOrTaxCode;
+        var counterpartStoredIdentityCode = participantIdentityCodes
+            .SingleOrDefault(user => user.UserId == counterpartParty.UserId)
+            ?.IdentityOrTaxCode;
+
+        ContractIdentityCode.EnsureDifferentParties(
+            identityCode,
+            counterpartSignatureIdentityCode,
+            counterpartStoredIdentityCode,
+            counterpartParty.IdentityOrTaxCode);
+
         var existingDraft = signatures.SingleOrDefault(signature =>
             signature.UserId == request.UserId &&
             signature.Status == (int)ESignSignatureStatus.Pending);

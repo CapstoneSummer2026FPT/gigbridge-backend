@@ -1,8 +1,8 @@
+using Application.Common.InternalServices.ESign.Services;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces.Time;
 using Application.Common.Interfaces.Caching;
-using Microsoft.Extensions.Logging.Abstractions;
-using Application.Features.Notifications.Common.Interfaces;
+using Application.Common.InternalServices.Notifications.Interfaces;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.Contracts.Details.Client.Update.Commands;
 using Application.Features.Contracts.Details.Client.Update.DTOs;
@@ -14,6 +14,8 @@ using Application.Features.Contracts.MilestoneReview.Freelancer.RequestChange.Co
 using Application.Features.Contracts.Signing.Common.Sign.Commands;
 using Application.Features.Contracts.Signing.Common.Sign.DTOs;
 using Application.Features.Contracts.Details.Freelancer.RequestChange.DTOs;
+using Application.Features.ESign.Common.PreviewPdf.Commands;
+using Application.Features.ESign.Common.PreviewPdf.DTOs;
 using Domain.Entities;
 using Domain.Enums.Accounts;
 using Domain.Enums.Auditing;
@@ -26,6 +28,7 @@ using Domain.Enums.Notifications;
 using Domain.Enums.Wallets;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using Test_Gigbridge_Backend.TestSupport;
 using NSubstitute;
 
@@ -155,7 +158,7 @@ public class ContractWorkflowTests
         Assert.Equal(createdAt, persistedWorkItem.CreatedAt);
         Assert.Equal(1, (await context.Set<Contract>().SingleAsync()).RevisionNumber);
     }
-    
+
     [Fact]
     public async Task SubmitAndFreelancerConfirm_CreatesEsignDocumentAndPendingEscrow()
     {
@@ -656,7 +659,7 @@ public class ContractWorkflowTests
             CancellationToken.None);
 
         Assert.Equal((int)ContractStatus.PendingSignature, fixture.Contract.Status);
-        Assert.Equal((int)ESignDocumentStatus.PartiallySigned, fixture.EsignDocuments.Entities[0].Status);
+        Assert.Equal((int)ESignDocumentStatus.PendingSignatures, fixture.EsignDocuments.Entities[0].Status);
         Assert.Equal(fixture.ClientSignatureUrl, fixture.EsignSignatures.Entities[0].SignatureImageUrl);
         Assert.Equal("esign/signatures", fixture.MediaService.Uploads[0].Folder);
         Assert.Equal("image/png", fixture.MediaService.Uploads[0].ContentType);
@@ -668,21 +671,11 @@ public class ContractWorkflowTests
         Assert.Null(fixture.GetContractDocumentContent().FinalizedDocumentContent);
         Assert.Empty(fixture.DeliveryOutboxes.Entities);
 
-        await Assert.ThrowsAsync<ConflictException>(() =>
-            handler.Handle(
-                new SignContractCommand(
-                    fixture.ContractId,
-                    fixture.ClientUserId,
-                    new SignContractRequest(SignatureDataUri, null, null, "012345678901", true, "Ver 1.0 Gigbridge", IdentityVerificationTicket),
-                    null,
-                    null),
-                CancellationToken.None));
-
         var result = await handler.Handle(
             new SignContractCommand(
                 fixture.ContractId,
                 fixture.FreelancerUserId,
-                new SignContractRequest(SignatureDataUri, 300, 100, "012345678901", true, "Ver 1.0 Gigbridge", IdentityVerificationTicket),
+                new SignContractRequest(SignatureDataUri, 300, 100, "109876543210", true, "Ver 1.0 Gigbridge", IdentityVerificationTicket),
                 "127.0.0.1",
                 "test"),
             CancellationToken.None);
@@ -699,13 +692,13 @@ public class ContractWorkflowTests
         Assert.Equal(2, fixture.EsignSignatures.Entities.Count);
         Assert.Equal(fixture.FreelancerSignatureUrl, fixture.EsignSignatures.Entities[1].SignatureImageUrl);
         Assert.Equal(
-            "012345678901",
+            "109876543210",
             fixture.Context.Set<User>().Single(user => user.UserId == fixture.FreelancerUserId).IdentityOrTaxCode);
         Assert.Equal(2, fixture.MediaService.Uploads.Count);
         Assert.Equal(4, fixture.GetContractDocumentContent().FinalizedDocumentContent?.Length);
         Assert.Equal(4L, fixture.EsignDocuments.Entities[0].FinalizedDocumentSizeBytes);
 
-        // Two successful signatures (client, freelancer); the ConflictException retry logs nothing.
+        // Finalization records one audit entry for each contract participant.
         Assert.Equal(2, signUserAuditLog.Entries.Count);
         Assert.Equal(fixture.ClientUserId, signUserAuditLog.Entries[0].UserId);
         Assert.Equal(UserRole.Client, signUserAuditLog.Entries[0].Role);
@@ -730,6 +723,185 @@ public class ContractWorkflowTests
             Assert.Equal((int)DeliveryChannel.Email, delivery.Channel);
             Assert.Equal((int)DeliveryOutboxStatus.Pending, delivery.Status);
         });
+    }
+
+    [Fact]
+    public async Task SignContract_RejectsIdentityMatchingCounterpartDraftAfterNormalization()
+    {
+        var fixture = new ContractWorkflowFixture();
+        fixture.MoveToPendingSignatureWithDocument();
+        var auditLog = new CapturingUserAuditLogService();
+        var identityCache = CreateVerifiedIdentityCache();
+        var handler = new SignContractCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopChatRealtimeNotifier(),
+            fixture.MediaService,
+            fixture.DocumentGenerator,
+            fixture.PdfConverter,
+            auditLog,
+            identityCache,
+            NullLogger<SignContractCommandHandler>.Instance);
+
+        await handler.Handle(
+            new SignContractCommand(
+                fixture.ContractId,
+                fixture.ClientUserId,
+                new SignContractRequest(
+                    SignatureDataUri,
+                    300,
+                    100,
+                    "012345678901",
+                    true,
+                    "Ver 1.0 Gigbridge",
+                    IdentityVerificationTicket),
+                "127.0.0.1",
+                "test"),
+            CancellationToken.None);
+
+        var saveChangesCount = fixture.Context.SaveChangesCount;
+        var exception = await Assert.ThrowsAsync<BadRequestException>(() =>
+            handler.Handle(
+                new SignContractCommand(
+                    fixture.ContractId,
+                    fixture.FreelancerUserId,
+                    new SignContractRequest(
+                        SignatureDataUri,
+                        300,
+                        100,
+                        "012 345 678 901",
+                        true,
+                        "Ver 1.0 Gigbridge",
+                        IdentityVerificationTicket),
+                    "127.0.0.1",
+                    "test"),
+                CancellationToken.None));
+
+        Assert.Equal(
+            "The client and freelancer must use different identity or tax codes.",
+            exception.Message);
+        Assert.Equal(saveChangesCount, fixture.Context.SaveChangesCount);
+        Assert.Equal((int)ContractStatus.PendingSignature, fixture.Contract.Status);
+        Assert.NotEqual((int)ESignDocumentStatus.FullySigned, fixture.GetContractDocument().Status);
+        Assert.Single(fixture.EsignSignatures.Entities);
+        Assert.Single(fixture.MediaService.Uploads);
+        Assert.Null(fixture.Context.Set<User>()
+            .Single(user => user.UserId == fixture.FreelancerUserId)
+            .IdentityOrTaxCode);
+        Assert.Null(fixture.GetContractDocumentContent().FinalizedDocumentContent);
+        Assert.Empty(fixture.DocumentGenerator.GenerateCalls);
+        Assert.Empty(fixture.PdfConverter.ConvertCalls);
+        Assert.Empty(fixture.DeliveryOutboxes.Entities);
+        Assert.Empty(auditLog.Entries);
+        await identityCache.Received(1)
+            .GetAndRemoveAsync<bool>(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task SignContract_RejectsIdentityMatchingCounterpartProfile()
+    {
+        var fixture = new ContractWorkflowFixture();
+        fixture.MoveToPendingSignatureWithDocument();
+        fixture.Context.Set<User>()
+            .Single(user => user.UserId == fixture.FreelancerUserId)
+            .IdentityOrTaxCode = "012345678901";
+        var identityCache = CreateVerifiedIdentityCache();
+        var handler = new SignContractCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopChatRealtimeNotifier(),
+            fixture.MediaService,
+            fixture.DocumentGenerator,
+            fixture.PdfConverter,
+            new CapturingUserAuditLogService(),
+            identityCache,
+            NullLogger<SignContractCommandHandler>.Instance);
+
+        var exception = await Assert.ThrowsAsync<BadRequestException>(() =>
+            handler.Handle(
+                new SignContractCommand(
+                    fixture.ContractId,
+                    fixture.ClientUserId,
+                    new SignContractRequest(
+                        SignatureDataUri,
+                        300,
+                        100,
+                        "012 345 678 901",
+                        true,
+                        "Ver 1.0 Gigbridge",
+                        IdentityVerificationTicket),
+                    null,
+                    null),
+                CancellationToken.None));
+
+        Assert.Equal(
+            "The client and freelancer must use different identity or tax codes.",
+            exception.Message);
+        Assert.Equal(0, fixture.Context.SaveChangesCount);
+        Assert.Empty(fixture.EsignSignatures.Entities);
+        Assert.Empty(fixture.MediaService.Uploads);
+        Assert.Null(fixture.Context.Set<User>()
+            .Single(user => user.UserId == fixture.ClientUserId)
+            .IdentityOrTaxCode);
+        await identityCache.DidNotReceive()
+            .GetAndRemoveAsync<bool>(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task PreviewESignPdf_RejectsIdentityMatchingCounterpartBeforeGeneration()
+    {
+        var fixture = new ContractWorkflowFixture();
+        fixture.MoveToPendingSignatureWithDocument();
+        var signHandler = new SignContractCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopChatRealtimeNotifier(),
+            fixture.MediaService,
+            fixture.DocumentGenerator,
+            fixture.PdfConverter,
+            new CapturingUserAuditLogService(),
+            CreateVerifiedIdentityCache(),
+            NullLogger<SignContractCommandHandler>.Instance);
+
+        await signHandler.Handle(
+            new SignContractCommand(
+                fixture.ContractId,
+                fixture.ClientUserId,
+                new SignContractRequest(
+                    SignatureDataUri,
+                    300,
+                    100,
+                    "012345678901",
+                    true,
+                    "Ver 1.0 Gigbridge",
+                    IdentityVerificationTicket),
+                null,
+                null),
+            CancellationToken.None);
+
+        var previewHandler = new PreviewESignPdfCommandHandler(
+            fixture.Context,
+            fixture.DocumentGenerator,
+            fixture.PdfConverter);
+        var exception = await Assert.ThrowsAsync<BadRequestException>(() =>
+            previewHandler.Handle(
+                new PreviewESignPdfCommand(
+                    fixture.GetContractDocument().EsignDocumentsId,
+                    fixture.FreelancerUserId,
+                    new PreviewESignPdfRequest(
+                        SignatureDataUri,
+                        300,
+                        100,
+                        "012 345 678 901"),
+                    null,
+                    null),
+                CancellationToken.None));
+
+        Assert.Equal(
+            "The client and freelancer must use different identity or tax codes.",
+            exception.Message);
+        Assert.Empty(fixture.DocumentGenerator.GenerateCalls);
+        Assert.Empty(fixture.PdfConverter.ConvertCalls);
     }
 
     [Fact]
@@ -869,7 +1041,7 @@ public class ContractWorkflowTests
 
         Assert.Equal((int)ContractStatus.PendingSignature, fixture.Contract.Status);
         Assert.Equal((int)ContractStatus.PendingSignature, result.Status);
-        Assert.Equal((int)ESignDocumentStatus.PartiallySigned, contractDocument.Status);
+        Assert.Equal((int)ESignDocumentStatus.PendingSignatures, contractDocument.Status);
         Assert.Null(result.EscrowId);
         Assert.DoesNotContain(contractSignatures, signature => signature.UserId == fixture.ClientUserId);
         Assert.Contains(contractSignatures, signature =>
@@ -1142,7 +1314,7 @@ public class ContractWorkflowTests
         public TestDbSet<EsignSignature> EsignSignatures { get; }
         public TestDbSet<DeliveryOutbox> DeliveryOutboxes { get; }
 
- 
+
         public void ApplyValidDetails()
         {
 

@@ -1,4 +1,4 @@
-using Application.Features.Chat.Common.Interfaces;
+using Application.Common.InternalServices.Chat.Interfaces;
 
 namespace Test_Gigbridge_Backend.TestSupport;
 

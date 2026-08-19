@@ -1,0 +1,108 @@
+using Application.Common.InternalServices.Premium.Models;
+using Application.Common.Exceptions;
+using Application.Common.Interfaces;
+using Application.Common.Interfaces.Caching;
+using Application.Common.Interfaces.Time;
+using Application.Common.InternalServices.Premium.Interfaces;
+using Application.Common.InternalServices.Premium.Services;
+using Application.Features.Premium.Common;
+using Application.Features.Subscriptions.Common;
+using Domain.Entities;
+using Domain.Enums.Accounts;
+using Microsoft.EntityFrameworkCore;
+
+namespace Application.Common.InternalServices.Premium.Services;
+public sealed class PremiumAccessService : IPremiumAccessService
+{
+    private static readonly TimeSpan CacheDuration = TimeSpan.FromMinutes(5);
+    private readonly IApplicationDbContext _context;
+    private readonly ICacheService _cache;
+    private readonly IDateTimeService _clock;
+
+    public PremiumAccessService(
+        IApplicationDbContext context,
+        ICacheService cache,
+        IDateTimeService clock)
+    {
+        _context = context;
+        _cache = cache;
+        _clock = clock;
+    }
+
+    public async Task<bool> IsPremiumFreelancerAsync(
+        Guid userId,
+        CancellationToken cancellationToken) =>
+        (await GetPremiumBenefitsForRoleAsync(userId, UserRole.Freelancer, cancellationToken)).IsPremium;
+
+    public async Task<bool> IsPremiumClientAsync(
+        Guid userId,
+        CancellationToken cancellationToken) =>
+        (await GetPremiumBenefitsForRoleAsync(userId, UserRole.Client, cancellationToken)).IsPremium;
+
+    public async Task<PremiumBenefitsDto> GetPremiumBenefitsAsync(
+        Guid userId,
+        CancellationToken cancellationToken) =>
+        await GetPremiumBenefitsForRoleAsync(userId, UserRole.Freelancer, cancellationToken);
+
+    private async Task<PremiumBenefitsDto> GetPremiumBenefitsForRoleAsync(
+        Guid userId,
+        UserRole targetRole,
+        CancellationToken cancellationToken)
+    {
+        var key = targetRole == UserRole.Freelancer
+            ? $"premium:access:{userId:N}"
+            : $"premium:access:client:{userId:N}";
+        var cached = await _cache.GetAsync<PremiumBenefitsDto>(key, cancellationToken);
+        if (cached is not null &&
+            cached.IsPremium && cached.PremiumUntil > _clock.UtcNow)
+            return cached;
+        if (cached is not null)
+            await _cache.RemoveAsync(key, cancellationToken);
+
+        var user = await _context.Set<User>()
+            .AsNoTracking()
+            .Where(item => item.UserId == userId)
+            .Select(item => new { item.Role, item.IsEmailVerified })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (user is null)
+            throw new NotFoundException("User", userId);
+
+        var now = _clock.UtcNow;
+        var subscription = await _context.Set<Subscription>()
+            .AsNoTracking()
+            .Where(item => item.UserId == userId)
+            .EffectiveAt(targetRole, now)
+            .OrderByDescending(item => item.EndDate)
+            .Select(item => new { item.EndDate, item.SubscriptionPlans.Name })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        var isPremium = user.Role == (int)targetRole && subscription is not null;
+        var result = new PremiumBenefitsDto(
+            isPremium,
+            user.IsEmailVerified,
+            isPremium && user.IsEmailVerified,
+            isPremium ? subscription!.EndDate : null,
+            isPremium ? subscription!.Name : null);
+
+        if (result.IsPremium)
+            await _cache.SetAsync(key, result, CacheDuration, cancellationToken);
+        return result;
+    }
+
+    public async Task RequirePremiumFreelancerAsync(
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        if (!await IsPremiumFreelancerAsync(userId, cancellationToken))
+            throw new ForbiddenAccessException("An active Premium Freelancer subscription is required.");
+    }
+
+    public async Task RequirePremiumClientAsync(
+        Guid userId,
+        CancellationToken cancellationToken)
+    {
+        if (!await IsPremiumClientAsync(userId, cancellationToken))
+            throw new ForbiddenAccessException("This feature requires a Premium subscription");
+    }
+}

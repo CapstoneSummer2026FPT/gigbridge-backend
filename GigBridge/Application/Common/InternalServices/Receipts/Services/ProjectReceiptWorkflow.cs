@@ -201,13 +201,14 @@ public static class ProjectReceiptWorkflow
                 milestone.DueDate);
         }).ToList();
 
-        var contractCode = (await context.Set<EsignDocument>()
-            .Where(item => item.ContractsId == contractId)
-            .ToListAsync(cancellationToken))
-            .Where(item => item.Status == (int)ESignDocumentStatus.FullySigned)
+        var contractCode = await context.Set<EsignDocument>()
+            .AsNoTracking()
+            .Where(item =>
+                item.ContractsId == contractId &&
+                item.Status == (int)ESignDocumentStatus.FullySigned)
             .OrderByDescending(item => item.FinalizedAt ?? item.CreatedAt)
             .Select(item => item.DocumentCode)
-            .FirstOrDefault();
+            .FirstOrDefaultAsync(cancellationToken);
         if (string.IsNullOrWhiteSpace(contractCode))
         {
             contractCode = $"GB-CTR-{contract.ContractsId:N}".ToUpperInvariant();

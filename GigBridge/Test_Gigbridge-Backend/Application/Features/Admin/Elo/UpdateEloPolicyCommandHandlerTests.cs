@@ -1,7 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.Time;
-using Application.Features.Admin.AuditLogs.Common.Interfaces;
+using Application.Common.InternalServices.Admin.AuditLogs.Interfaces;
 using Application.Features.Admin.Elo.Commands.UpdateEloPolicy;
 using Application.Features.Elo.Common;
 using Application.Features.Elo.DTOs;
