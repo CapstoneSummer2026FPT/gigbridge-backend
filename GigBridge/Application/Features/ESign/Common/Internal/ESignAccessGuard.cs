@@ -32,6 +32,19 @@ internal static class ESignAccessGuard
         return document ?? throw new NotFoundException("E-sign document does not exist.");
     }
 
+    public static async Task<EsignDocumentContent> GetContentAsync(
+        IApplicationDbContext context,
+        Guid documentId,
+        CancellationToken cancellationToken)
+    {
+        var content = await context.Set<EsignDocumentContent>()
+            .FirstOrDefaultAsync(
+                content => content.EsignDocumentsId == documentId,
+                cancellationToken);
+
+        return content ?? throw new NotFoundException("E-sign document content does not exist.");
+    }
+
     public static async Task EnsureOwningClientAsync(
         IApplicationDbContext context,
         JobPost jobPost,

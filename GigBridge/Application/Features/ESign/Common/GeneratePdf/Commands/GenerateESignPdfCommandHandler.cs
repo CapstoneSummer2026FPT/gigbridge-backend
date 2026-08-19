@@ -30,6 +30,8 @@ public sealed class GenerateESignPdfCommandHandler(
             throw new BadRequestException("This document does not use the contract Word template.");
         }
 
+        var content = await ESignAccessGuard.GetContentAsync(context, document.EsignDocumentsId, cancellationToken);
+
         var signatures = await context.Set<EsignSignature>()
             .AsNoTracking()
             .Where(signature =>
@@ -39,15 +41,15 @@ public sealed class GenerateESignPdfCommandHandler(
             .ToListAsync(cancellationToken);
         var signatureCount = signatures.Count;
         var expectedHash = ESignPdfArtifactRevision.ExpectedHash(document);
-        if (document.PdfDocumentContent is { Length: > 0 } &&
+        if (document.PdfDocumentSizeBytes is > 0 &&
             document.PdfSignatureCount == signatureCount &&
             string.Equals(document.PdfDocumentHash, expectedHash, StringComparison.Ordinal) &&
-            !string.IsNullOrWhiteSpace(document.PdfDocumentFileName))
+            !string.IsNullOrWhiteSpace(content.PdfDocumentFileName))
         {
             return ToResponse(document);
         }
 
-        var snapshot = ContractEsignRenderer.GetSnapshot(document);
+        var snapshot = ContractEsignRenderer.GetSnapshot(content);
         var clientSignature = signatures
             .Where(signature => signature.SignerRole == (int)ESignerRole.Client)
             .Select(ContractEsignRenderer.ToSignatureSnapshot)
@@ -85,10 +87,12 @@ public sealed class GenerateESignPdfCommandHandler(
         }
 
         var generatedAt = DateTime.UtcNow;
-        document.PdfDocumentContent = pdf;
-        document.PdfDocumentFileName = ESignPdfArtifactRevision.ContractFileName;
+        content.PdfDocumentContent = pdf;
+        content.PdfDocumentFileName = ESignPdfArtifactRevision.ContractFileName;
         document.PdfSignatureCount = signatureCount;
         document.PdfDocumentHash = expectedHash;
+        document.PdfDocumentSizeBytes = pdf.LongLength;
+        document.ContentRevision++;
         document.UpdatedAt = generatedAt;
         await context.SaveChangesAsync(cancellationToken);
 

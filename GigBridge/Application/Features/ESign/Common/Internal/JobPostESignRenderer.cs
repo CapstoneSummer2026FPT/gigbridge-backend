@@ -35,21 +35,28 @@ internal static class JobPostESignRenderer
 
         var template = await FindTemplateAsync(context, cancellationToken);
         var renderedHtml = Render(template, jobPost);
+        var documentId = Guid.NewGuid();
 
         var document = new EsignDocument
         {
-            EsignDocumentsId = Guid.NewGuid(),
+            EsignDocumentsId = documentId,
             EsignTemplatesId = template.EsignTemplatesId,
             JobPostsId = jobPost.JobPostsId,
             ContractsId = null,
             DocumentCode = $"GB-JOB-{now:yyyyMMdd}-{Guid.NewGuid():N}"[..32].ToUpperInvariant(),
-            RenderedHtmlContent = renderedHtml,
             Status = (int)ESignDocumentStatus.PendingSignatures,
             DocumentHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(renderedHtml))).ToLowerInvariant(),
+            ContentRevision = 1,
             CreatedAt = now
+        };
+        var content = new EsignDocumentContent
+        {
+            EsignDocumentsId = documentId,
+            RenderedHtmlContent = renderedHtml
         };
 
         context.Set<EsignDocument>().Add(document);
+        context.Set<EsignDocumentContent>().Add(content);
 
         return document;
     }

@@ -37,7 +37,13 @@ public static class ProjectReceiptWorkflow
             .ToListAsync(cancellationToken);
         if (existing.Count == 2 && existing.All(item => item.TemplateVersion >= CurrentTemplateVersion))
         {
-            return existing;
+            var fastPathIds = existing.Select(item => item.ProjectReceiptId).ToList();
+            var contentCount = await context.Set<ProjectReceiptContent>()
+                .CountAsync(content => fastPathIds.Contains(content.ProjectReceiptId), cancellationToken);
+            if (contentCount == existing.Count)
+            {
+                return existing;
+            }
         }
 
         var contract = await context.Set<Contract>()
@@ -247,6 +253,13 @@ public static class ProjectReceiptWorkflow
         var freelancerIdentityCode = await ResolveIdentityCodeAsync(
             context, contractId, freelancerUser, cancellationToken);
 
+        var existingIds = existing.Select(item => item.ProjectReceiptId).ToList();
+        var contentByReceiptId = existingIds.Count == 0
+            ? new Dictionary<Guid, ProjectReceiptContent>()
+            : await context.Set<ProjectReceiptContent>()
+                .Where(content => existingIds.Contains(content.ProjectReceiptId))
+                .ToDictionaryAsync(content => content.ProjectReceiptId, cancellationToken);
+
         var clientParty = new ProjectReceiptPartySnapshot(
             clientUser.UserId,
             clientUser.FullName,
@@ -303,11 +316,29 @@ public static class ProjectReceiptWorkflow
 
             if (existingReceipt is not null)
             {
-                if (existingReceipt.TemplateVersion < CurrentTemplateVersion)
+                var isStale = existingReceipt.TemplateVersion < CurrentTemplateVersion;
+                var hasContent = contentByReceiptId.ContainsKey(existingReceipt.ProjectReceiptId);
+                if (isStale || !hasContent)
                 {
-                    existingReceipt.SnapshotJson = json;
-                    existingReceipt.SnapshotHashSha256 = ComputeSha256(json);
-                    QueueTemplateRegeneration(existingReceipt, now);
+                    // A receipt can be at the current template version but still missing its
+                    // content row if it was created by an older app version between the schema
+                    // migration's backfill and this code deploying (see the split migration's
+                    // catch-up backfill for the authoritative fix; this is the in-process
+                    // fallback for any request that lands in that window before the migration
+                    // catches up). Whenever content is missing, the hot row's GenerationStatus /
+                    // PdfSizeBytes can no longer be trusted either — the real PDF bytes lived only
+                    // in the dropped legacy column and are unrecoverable from here — so always
+                    // force full regeneration rather than leaving stale "Ready" status pointing at
+                    // content that doesn't exist.
+                    if (!contentByReceiptId.TryGetValue(existingReceipt.ProjectReceiptId, out var existingContent))
+                    {
+                        existingContent = new ProjectReceiptContent { ProjectReceiptId = existingReceipt.ProjectReceiptId };
+                        context.Set<ProjectReceiptContent>().Add(existingContent);
+                    }
+
+                    existingContent.SnapshotJson = json;
+                    existingContent.SnapshotHashSha256 = ComputeSha256(json);
+                    QueueTemplateRegeneration(existingReceipt, existingContent, now);
                 }
 
                 continue;
@@ -324,25 +355,31 @@ public static class ProjectReceiptWorkflow
                 ReceiptNumber = receiptNumber,
                 TemplateVersion = CurrentTemplateVersion,
                 IssuedAt = issuedAt,
-                SnapshotJson = json,
-                SnapshotHashSha256 = ComputeSha256(json),
                 GenerationStatus = (int)ProjectReceiptGenerationStatus.Pending,
                 NextGenerationAttemptAt = now,
                 NextNotificationAttemptAt = now,
                 EmailStatus = (int)ProjectReceiptEmailStatus.Pending,
                 NextEmailAttemptAt = now,
+                ContentRevision = 1,
                 CreatedAt = now
             };
+            var receiptContent = new ProjectReceiptContent
+            {
+                ProjectReceiptId = receiptId,
+                SnapshotJson = json,
+                SnapshotHashSha256 = ComputeSha256(json)
+            };
             context.Set<ProjectReceipt>().Add(receipt);
+            context.Set<ProjectReceiptContent>().Add(receiptContent);
             created.Add(receipt);
         }
 
         return existing.Concat(created).OrderBy(item => item.ReceiptType).ToList();
     }
 
-    public static ProjectReceiptSnapshot DeserializeSnapshot(ProjectReceipt receipt) =>
-        JsonSerializer.Deserialize<ProjectReceiptSnapshot>(receipt.SnapshotJson, SnapshotJsonOptions)
-        ?? throw new InvalidOperationException($"Receipt {receipt.ProjectReceiptId} has an invalid snapshot.");
+    public static ProjectReceiptSnapshot DeserializeSnapshot(ProjectReceiptContent content) =>
+        JsonSerializer.Deserialize<ProjectReceiptSnapshot>(content.SnapshotJson, SnapshotJsonOptions)
+        ?? throw new InvalidOperationException($"Receipt {content.ProjectReceiptId} has an invalid snapshot.");
 
     private static bool IsFinalRelease(EscrowTransaction transaction) =>
         transaction.GatewayTransactionCode?.StartsWith("ESCROW-FINAL-", StringComparison.Ordinal) == true;
@@ -382,7 +419,7 @@ public static class ProjectReceiptWorkflow
         return allocations;
     }
 
-    private static void QueueTemplateRegeneration(ProjectReceipt receipt, DateTime now)
+    private static void QueueTemplateRegeneration(ProjectReceipt receipt, ProjectReceiptContent content, DateTime now)
     {
         receipt.TemplateVersion = CurrentTemplateVersion;
         receipt.GenerationStatus = (int)ProjectReceiptGenerationStatus.Pending;
@@ -391,12 +428,9 @@ public static class ProjectReceiptWorkflow
         receipt.GenerationLeaseToken = null;
         receipt.GenerationLeaseExpiresAt = null;
         receipt.GenerationLastError = null;
-        receipt.PdfContent = null;
-        receipt.PdfFileName = null;
-        receipt.PdfContentType = null;
         receipt.PdfSizeBytes = null;
-        receipt.PdfHashSha256 = null;
         receipt.GeneratedAt = null;
+        receipt.ContentRevision++;
         receipt.NotificationAttemptCount = 0;
         receipt.NextNotificationAttemptAt = now;
         receipt.NotificationLastError = null;
@@ -407,6 +441,11 @@ public static class ProjectReceiptWorkflow
         receipt.EmailLastError = null;
         receipt.EmailedAt = null;
         receipt.UpdatedAt = now;
+
+        content.PdfContent = null;
+        content.PdfFileName = null;
+        content.PdfContentType = null;
+        content.PdfHashSha256 = null;
     }
 
     private static async Task<string?> ResolveIdentityCodeAsync(

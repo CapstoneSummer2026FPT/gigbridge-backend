@@ -28,13 +28,20 @@ public sealed class DownloadProjectReceiptQueryHandler
             throw new ForbiddenAccessException("You cannot download another user's receipt.");
         }
         if (receipt.GenerationStatus != (int)ProjectReceiptGenerationStatus.Ready ||
-            receipt.PdfContent is not { Length: > 0 })
+            receipt.PdfSizeBytes is not > 0)
+        {
+            throw new ConflictException("The receipt PDF is still being prepared.");
+        }
+        var content = await _context.Set<ProjectReceiptContent>()
+            .AsNoTracking()
+            .FirstOrDefaultAsync(item => item.ProjectReceiptId == request.ReceiptId, cancellationToken);
+        if (content?.PdfContent is not { Length: > 0 })
         {
             throw new ConflictException("The receipt PDF is still being prepared.");
         }
         return new ProjectReceiptDownloadResponse(
-            receipt.PdfContent,
-            receipt.PdfFileName ?? $"GigBridge-{receipt.ReceiptNumber}.pdf",
-            receipt.PdfContentType ?? "application/pdf");
+            content.PdfContent,
+            content.PdfFileName ?? $"GigBridge-{receipt.ReceiptNumber}.pdf",
+            content.PdfContentType ?? "application/pdf");
     }
 }

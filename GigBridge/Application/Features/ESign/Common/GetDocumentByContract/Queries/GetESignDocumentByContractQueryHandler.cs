@@ -12,7 +12,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Application.Features.ESign.Common.GetDocumentByContract.Queries;
 
 public sealed class GetESignDocumentByContractQueryHandler
-    : IRequestHandler<GetESignDocumentByContractQuery, ESignDocumentResponse>
+    : IRequestHandler<GetESignDocumentByContractQuery, ESignDocumentStatusResponse>
 {
     private readonly IApplicationDbContext _context;
 
@@ -21,7 +21,7 @@ public sealed class GetESignDocumentByContractQueryHandler
         _context = context;
     }
 
-    public async Task<ESignDocumentResponse> Handle(
+    public async Task<ESignDocumentStatusResponse> Handle(
         GetESignDocumentByContractQuery request,
         CancellationToken cancellationToken)
     {
@@ -41,7 +41,7 @@ public sealed class GetESignDocumentByContractQueryHandler
             request.UserId,
             cancellationToken);
 
-        return await ESignDocumentProjection.ToResponseAsync(
+        return await ESignDocumentProjection.ToStatusResponseAsync(
             _context,
             document,
             request.UserId,

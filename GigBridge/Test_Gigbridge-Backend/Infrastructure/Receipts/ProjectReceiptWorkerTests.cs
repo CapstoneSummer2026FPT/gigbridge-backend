@@ -4,6 +4,8 @@ using Application.Common.Interfaces.Documents;
 using Application.Common.Interfaces.Email;
 using Application.Common.InternalServices.Receipts.BackgroundJobs;
 using Application.Common.InternalServices.Receipts.Models;
+using Application.Common.InternalServices.WorkSignals.Interfaces;
+using Application.Common.Options;
 using Application.Features.Auth.Shared.DTOs;
 using Application.Features.Notifications.Common.Interfaces;
 using Domain.Entities;
@@ -13,6 +15,7 @@ using Domain.Enums.Contracts;
 using Domain.Enums.Notifications;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using NSubstitute;
 using Test_Gigbridge_Backend.TestSupport;
 
@@ -47,13 +50,9 @@ public sealed class ProjectReceiptWorkerTests
             ReceiptType = (int)ProjectReceiptType.Client,
             ReceiptNumber = "GB-RC-DELIVERY-CLAIM",
             IssuedAt = now,
-            SnapshotJson = "{}",
-            SnapshotHashSha256 = new string('a', 64),
             GenerationStatus = (int)ProjectReceiptGenerationStatus.Ready,
             NextGenerationAttemptAt = now,
-            PdfContent = [0x25, 0x50, 0x44, 0x46],
-            PdfFileName = "receipt.pdf",
-            PdfContentType = "application/pdf",
+            PdfSizeBytes = 4,
             GeneratedAt = now,
             EmailStatus = (int)ProjectReceiptEmailStatus.Pending,
             NextEmailAttemptAt = now.AddMinutes(-1),
@@ -63,6 +62,15 @@ public sealed class ProjectReceiptWorkerTests
         };
         var context = new InMemoryApplicationDbContext();
         context.AddSet(receipt);
+        context.AddSet(new ProjectReceiptContent
+        {
+            ProjectReceiptId = receipt.ProjectReceiptId,
+            SnapshotJson = "{}",
+            SnapshotHashSha256 = new string('a', 64),
+            PdfContent = [0x25, 0x50, 0x44, 0x46],
+            PdfFileName = "receipt.pdf",
+            PdfContentType = "application/pdf"
+        });
         var notifications = context.AddSet<Notification>();
         var blockingEmail = new BlockingEmailService();
         var services = new ServiceCollection()
@@ -72,10 +80,14 @@ public sealed class ProjectReceiptWorkerTests
             .BuildServiceProvider();
         var firstWorker = new ProjectReceiptWorker(
             services.GetRequiredService<IServiceScopeFactory>(),
-            NullLogger<ProjectReceiptWorker>.Instance);
+            NullLogger<ProjectReceiptWorker>.Instance,
+            Options.Create(new WorkSignalOptions()),
+            Substitute.For<IWorkSignalSource>());
         var secondWorker = new ProjectReceiptWorker(
             services.GetRequiredService<IServiceScopeFactory>(),
-            NullLogger<ProjectReceiptWorker>.Instance);
+            NullLogger<ProjectReceiptWorker>.Instance,
+            Options.Create(new WorkSignalOptions()),
+            Substitute.For<IWorkSignalSource>());
 
         var firstDelivery = firstWorker.ProcessOnceAsync(CancellationToken.None);
         await blockingEmail.WaitUntilEnteredAsync().WaitAsync(TimeSpan.FromSeconds(5));
@@ -113,6 +125,9 @@ public sealed class ProjectReceiptWorkerTests
         var second = CreateReadyReceipt(owner, contract, now.AddMinutes(-1), "SECOND");
         var context = new InMemoryApplicationDbContext();
         context.AddSet(first, second);
+        context.AddSet(
+            CreateReadyReceiptContent(first, "FIRST"),
+            CreateReadyReceiptContent(second, "SECOND"));
         var notifications = context.AddSet<Notification>();
         var emailService = Substitute.For<IEmailService>();
         emailService.SendEmailAsync(Arg.Any<EmailRequest>(), Arg.Any<CancellationToken>())
@@ -125,7 +140,9 @@ public sealed class ProjectReceiptWorkerTests
             .BuildServiceProvider();
         var worker = new ProjectReceiptWorker(
             services.GetRequiredService<IServiceScopeFactory>(),
-            NullLogger<ProjectReceiptWorker>.Instance);
+            NullLogger<ProjectReceiptWorker>.Instance,
+            Options.Create(new WorkSignalOptions()),
+            Substitute.For<IWorkSignalSource>());
 
         Assert.True(await worker.ProcessOnceAsync(CancellationToken.None));
 
@@ -168,6 +185,7 @@ public sealed class ProjectReceiptWorkerTests
         var receipt = CreateReadyReceipt(owner, contract, now.AddMinutes(-1), "MAX-RETRIES");
         var context = new InMemoryApplicationDbContext();
         context.AddSet(receipt);
+        context.AddSet(CreateReadyReceiptContent(receipt, "MAX-RETRIES"));
         var notifications = context.AddSet<Notification>();
         var emailService = Substitute.For<IEmailService>();
         emailService.SendEmailAsync(Arg.Any<EmailRequest>(), Arg.Any<CancellationToken>())
@@ -180,7 +198,9 @@ public sealed class ProjectReceiptWorkerTests
             .BuildServiceProvider();
         var worker = new ProjectReceiptWorker(
             services.GetRequiredService<IServiceScopeFactory>(),
-            NullLogger<ProjectReceiptWorker>.Instance);
+            NullLogger<ProjectReceiptWorker>.Instance,
+            Options.Create(new WorkSignalOptions()),
+            Substitute.For<IWorkSignalSource>());
 
         for (var attempt = 1; attempt <= 5; attempt++)
         {
@@ -215,6 +235,7 @@ public sealed class ProjectReceiptWorkerTests
             CreatedAt = now
         };
         var snapshot = CreateSnapshot(owner, contract, now);
+        var snapshotHash = new string('a', 64);
         var receipt = new ProjectReceipt
         {
             ProjectReceiptId = snapshot.ReceiptId,
@@ -223,8 +244,6 @@ public sealed class ProjectReceiptWorkerTests
             ReceiptType = (int)ProjectReceiptType.Client,
             ReceiptNumber = snapshot.ReceiptNumber,
             IssuedAt = now,
-            SnapshotJson = JsonSerializer.Serialize(snapshot, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
-            SnapshotHashSha256 = new string('a', 64),
             GenerationStatus = (int)ProjectReceiptGenerationStatus.Pending,
             NextGenerationAttemptAt = now.AddMinutes(-1),
             EmailStatus = (int)ProjectReceiptEmailStatus.Pending,
@@ -235,9 +254,15 @@ public sealed class ProjectReceiptWorkerTests
         };
         var context = new InMemoryApplicationDbContext();
         context.AddSet(receipt);
+        context.AddSet(new ProjectReceiptContent
+        {
+            ProjectReceiptId = receipt.ProjectReceiptId,
+            SnapshotJson = JsonSerializer.Serialize(snapshot, new JsonSerializerOptions(JsonSerializerDefaults.Web)),
+            SnapshotHashSha256 = snapshotHash
+        });
         var notifications = context.AddSet<Notification>();
         var generator = Substitute.For<IProjectReceiptDocumentGenerator>();
-        generator.Generate(Arg.Any<ProjectReceiptSnapshot>(), receipt.SnapshotHashSha256)
+        generator.Generate(Arg.Any<ProjectReceiptSnapshot>(), snapshotHash)
             .Returns(new GeneratedProjectReceiptDocument([1, 2, 3], "receipt.docx", "application/docx"));
         var pdf = new byte[] { 0x25, 0x50, 0x44, 0x46, 1, 2, 3 };
         var converter = Substitute.For<IWordToPdfConverter>();
@@ -254,13 +279,17 @@ public sealed class ProjectReceiptWorkerTests
             .BuildServiceProvider();
         var worker = new ProjectReceiptWorker(
             services.GetRequiredService<IServiceScopeFactory>(),
-            NullLogger<ProjectReceiptWorker>.Instance);
+            NullLogger<ProjectReceiptWorker>.Instance,
+            Options.Create(new WorkSignalOptions()),
+            Substitute.For<IWorkSignalSource>());
 
         Assert.True(await worker.ProcessOnceAsync(CancellationToken.None));
 
         Assert.Equal((int)ProjectReceiptGenerationStatus.Ready, receipt.GenerationStatus);
         Assert.Equal((int)ProjectReceiptEmailStatus.Failed, receipt.EmailStatus);
-        Assert.Equal(pdf, receipt.PdfContent);
+        var generatedContent = context.Set<ProjectReceiptContent>()
+            .Single(item => item.ProjectReceiptId == receipt.ProjectReceiptId);
+        Assert.Equal(pdf, generatedContent.PdfContent);
         Assert.Equal(1, receipt.GenerationAttemptCount);
         Assert.Equal(1, receipt.EmailAttemptCount);
         Assert.NotNull(receipt.NotificationId);
@@ -324,13 +353,9 @@ public sealed class ProjectReceiptWorkerTests
         ReceiptType = (int)ProjectReceiptType.Client,
         ReceiptNumber = $"GB-RC-{suffix}",
         IssuedAt = createdAt,
-        SnapshotJson = "{}",
-        SnapshotHashSha256 = new string('a', 64),
         GenerationStatus = (int)ProjectReceiptGenerationStatus.Ready,
         NextGenerationAttemptAt = createdAt,
-        PdfContent = [0x25, 0x50, 0x44, 0x46],
-        PdfFileName = $"{suffix}.pdf",
-        PdfContentType = "application/pdf",
+        PdfSizeBytes = 4,
         GeneratedAt = createdAt,
         EmailStatus = (int)ProjectReceiptEmailStatus.Pending,
         NextEmailAttemptAt = createdAt,
@@ -338,6 +363,16 @@ public sealed class ProjectReceiptWorkerTests
         CreatedAt = createdAt,
         Contract = contract,
         OwnerUser = owner
+    };
+
+    private static ProjectReceiptContent CreateReadyReceiptContent(ProjectReceipt receipt, string suffix) => new()
+    {
+        ProjectReceiptId = receipt.ProjectReceiptId,
+        SnapshotJson = "{}",
+        SnapshotHashSha256 = new string('a', 64),
+        PdfContent = [0x25, 0x50, 0x44, 0x46],
+        PdfFileName = $"{suffix}.pdf",
+        PdfContentType = "application/pdf"
     };
 
     private sealed class PersistingNotificationService(

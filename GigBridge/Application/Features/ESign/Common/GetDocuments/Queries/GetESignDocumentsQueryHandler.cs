@@ -158,9 +158,9 @@ public sealed class GetESignDocumentsQueryHandler
                     signature.Status == (int)ESignSignatureStatus.Signed),
                 item.Document.FinalizedAt,
                 item.Document.ExportedPdfUrl,
-                item.Document.FinalizedDocumentContent != null,
+                item.Document.FinalizedDocumentSizeBytes > 0,
                 item.Document.FinalizedDocumentFileName,
-                item.Document.PdfDocumentContent != null &&
+                item.Document.PdfDocumentSizeBytes > 0 &&
                 item.Document.PdfDocumentHash == (item.Document.DocumentHash ?? string.Empty) +
                     (item.Document.ContractsId.HasValue
                         ? ESignPdfArtifactRevision.ContractTemplate

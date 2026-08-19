@@ -4,6 +4,7 @@ using Application.Common.InternalServices.Accounts;
 using Application.Common.InternalServices.Auditing;
 using Application.Common.InternalServices.Delivery;
 using Application.Common.InternalServices.Receipts;
+using Application.Common.InternalServices.WorkSignals;
 using Application.Common.Mappings;
 using Application.Features.Admin.AuditLogs.Common;
 using Application.Features.Admin.Analytics.Common;
@@ -52,6 +53,7 @@ public static class DependencyInjection
         }, typeof(MappingProfile));
         services.AddAccountServices();
         services.AddAuditingServices();
+        services.AddWorkSignalServices(configuration);
         services.AddDeliveryServices(configuration);
         services.AddAdminAuditLogServices();
         services.AddAdminAnalyticsServices(configuration);

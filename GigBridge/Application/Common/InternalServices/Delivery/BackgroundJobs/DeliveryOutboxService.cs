@@ -3,6 +3,8 @@ using Application.Common.Interfaces;
 using Application.Common.Interfaces.Email;
 using Application.Common.InternalServices.Delivery.Interfaces;
 using Application.Common.InternalServices.Delivery.Models;
+using Application.Common.InternalServices.WorkSignals.Interfaces;
+using Application.Common.InternalServices.WorkSignals.Models;
 using Application.Features.ESign.Common.Interfaces;
 using Application.Features.Notifications.Common.Interfaces;
 using Application.Common.Options;
@@ -46,6 +48,8 @@ public sealed class DeliveryOutboxService : BackgroundService
     private readonly IScheduleEmailRenderer _emailRenderer;
     private readonly ISignedEmailRenderer _signedEmailRenderer;
     private readonly DeliveryOutboxOptions _options;
+    private readonly WorkSignalOptions _workSignalOptions;
+    private readonly IWorkSignalSource _workSignal;
     private readonly DeliveryOutboxDatabaseGate _databaseGate;
     private readonly string _frontendBaseUrl;
 
@@ -55,13 +59,17 @@ public sealed class DeliveryOutboxService : BackgroundService
         IConfiguration configuration,
         IScheduleEmailRenderer emailRenderer,
         ISignedEmailRenderer signedEmailRenderer,
-        IOptions<DeliveryOutboxOptions> options)
+        IOptions<DeliveryOutboxOptions> options,
+        IOptions<WorkSignalOptions> workSignalOptions,
+        [FromKeyedServices(WorkSignalChannels.DeliveryOutbox)] IWorkSignalSource workSignal)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
         _emailRenderer = emailRenderer;
         _signedEmailRenderer = signedEmailRenderer;
         _options = options.Value;
+        _workSignalOptions = workSignalOptions.Value;
+        _workSignal = workSignal;
         _databaseGate = new DeliveryOutboxDatabaseGate(_options.MaxConcurrentDbConnections);
         _frontendBaseUrl = (configuration["FrontendBaseUrl"] ?? "http://localhost:5173").TrimEnd('/');
     }
@@ -189,19 +197,85 @@ public sealed class DeliveryOutboxService : BackgroundService
                 _logger.LogError(ex, "Delivery outbox {Channel} batch failed.", channel);
             }
 
-            var delay = processedWork ? activeInterval : idleInterval;
-            idleInterval = processedWork
-                ? activeInterval
-                : NextIdleInterval(idleInterval, maxIdleInterval);
-
             try
             {
-                await Task.Delay(delay, stoppingToken);
+                if (processedWork)
+                {
+                    // A short breather between consecutive batches, not the idle wait — keep this
+                    // even when the work signal is enabled, so a burst of work doesn't hammer the
+                    // claim query back-to-back with no throttle at all.
+                    await Task.Delay(activeInterval, stoppingToken);
+                    idleInterval = activeInterval;
+                    continue;
+                }
+
+                if (_workSignalOptions.Enabled)
+                {
+                    var deadline = await ResolveIdleDeadlineAsync(channel, activeInterval, maxIdleInterval, stoppingToken);
+                    await _workSignal.WaitAsync(deadline, stoppingToken);
+                    idleInterval = activeInterval;
+                }
+                else
+                {
+                    await Task.Delay(idleInterval, stoppingToken);
+                    idleInterval = NextIdleInterval(idleInterval, maxIdleInterval);
+                }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
                 break;
             }
+        }
+    }
+
+    /// <summary>
+    /// Deadline for the idle wait: the next row's <c>NextAttemptAt</c> if one exists and it's
+    /// sooner than <paramref name="maxIdleInterval"/> from now, otherwise the max-idle ceiling.
+    /// Cheap index-only scan, run only when a batch found nothing to claim. This is what lets
+    /// future-dated rows (retry backoff, scheduled reminders) wake the worker exactly on time
+    /// instead of only on the next NOTIFY or the batch-idle ceiling — a naive "NOTIFY + long
+    /// fallback" design would regress latency for those rows compared to the old fixed-interval
+    /// polling.
+    ///
+    /// Clamped to never return sooner than <c>UtcNow + activeInterval</c>: a row can be Pending
+    /// with an overdue NextAttemptAt while another instance holds it via
+    /// <c>FOR UPDATE SKIP LOCKED</c> mid-claim (not yet committed to Processing) — this read sees
+    /// the last-committed Pending/overdue state under READ COMMITTED, so without the clamp the
+    /// resolved deadline would already be in the past, <c>WaitAsync</c> would return immediately,
+    /// and the loop would spin against the database with no delay at all until the other instance
+    /// finishes claiming.
+    /// </summary>
+    private async Task<DateTime> ResolveIdleDeadlineAsync(
+        DeliveryChannel channel,
+        TimeSpan activeInterval,
+        TimeSpan maxIdleInterval,
+        CancellationToken ct)
+    {
+        var ceiling = DateTime.UtcNow.Add(maxIdleInterval);
+        var earliestAllowed = DateTime.UtcNow.Add(activeInterval);
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var context = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
+            var nextDueAt = await context.Set<DeliveryOutbox>()
+                .Where(x => x.Channel == (int)channel && x.Status == (int)DeliveryOutboxStatus.Pending)
+                .OrderBy(x => x.NextAttemptAt)
+                .Select(x => (DateTime?)x.NextAttemptAt)
+                .FirstOrDefaultAsync(ct);
+            var deadline = nextDueAt.HasValue && nextDueAt.Value < ceiling ? nextDueAt.Value : ceiling;
+            return deadline < earliestAllowed ? earliestAllowed : deadline;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(
+                ex,
+                "Failed to resolve the idle deadline for {Channel}; falling back to the max idle interval.",
+                channel);
+            return ceiling;
         }
     }
 
@@ -639,12 +713,35 @@ public sealed class DeliveryOutboxService : BackgroundService
                             .SetProperty(x => x.NextAttemptAt, DateTime.UtcNow)
                             .SetProperty(x => x.ClaimToken, (Guid?)null), timeout.Token);
                 }
+
+                // ExecuteUpdateAsync bypasses the change tracker, so the SaveChanges interceptor
+                // never sees this re-arm — publish explicitly, or a sleeping instance would only
+                // pick these back up at its next deadline instead of immediately.
+                await PublishDeliveryOutboxSignalAsync(scope, timeout.Token);
             }, timeout.Token);
         }
         catch (Exception ex)
         {
             _logger.LogDebug(ex,
                 "Delivery outbox leases could not be released.");
+        }
+    }
+
+    private async Task PublishDeliveryOutboxSignalAsync(IServiceScope scope, CancellationToken ct)
+    {
+        if (!_workSignalOptions.Enabled)
+        {
+            return;
+        }
+
+        try
+        {
+            var publisher = scope.ServiceProvider.GetRequiredService<IWorkSignalPublisher>();
+            await publisher.PublishAsync(WorkSignalChannels.DeliveryOutbox, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to publish the delivery outbox work signal.");
         }
     }
 
@@ -722,6 +819,8 @@ public sealed class DeliveryOutboxService : BackgroundService
         if (recovered > 0)
         {
             _logger.LogWarning("Recovered {Count} expired delivery leases.", recovered);
+            using var scope = _scopeFactory.CreateScope();
+            await PublishDeliveryOutboxSignalAsync(scope, ct);
         }
     }
 
@@ -1064,18 +1163,20 @@ public sealed class DeliveryOutboxService : BackgroundService
 
         var payload = JsonSerializer.Deserialize<ContractEsignDeliveryPayload>(job.Payload, JsonOptions)
             ?? throw new JsonException("Invalid ESign contract delivery payload.");
-        var document = await context.Set<EsignDocument>()
-            .AsNoTracking()
-            .Where(item => item.EsignDocumentsId == payload.DocumentId)
-            .Select(item => new FinalContractArtifact(
-                item.Status,
-                item.DocumentCode,
-                item.PdfDocumentContent,
-                item.PdfDocumentFileName,
-                "application/pdf",
-                item.DocumentHash,
-                item.PdfDocumentHash,
-                item.PdfSignatureCount))
+        var document = await (
+                from item in context.Set<EsignDocument>().AsNoTracking()
+                join content in context.Set<EsignDocumentContent>().AsNoTracking()
+                    on item.EsignDocumentsId equals content.EsignDocumentsId
+                where item.EsignDocumentsId == payload.DocumentId
+                select new FinalContractArtifact(
+                    item.Status,
+                    item.DocumentCode,
+                    content.PdfDocumentContent,
+                    content.PdfDocumentFileName,
+                    "application/pdf",
+                    item.DocumentHash,
+                    item.PdfDocumentHash,
+                    item.PdfSignatureCount))
             .FirstOrDefaultAsync(ct)
             ?? throw new InvalidOperationException("The finalized ESign document no longer exists.");
         if (document.Status != (int)ESignDocumentStatus.FullySigned ||
@@ -1153,8 +1254,7 @@ public sealed class DeliveryOutboxService : BackgroundService
 
     private static bool IsFinalContractPdfReady(EsignDocument document) =>
         document.Status == (int)ESignDocumentStatus.FullySigned &&
-        document.PdfDocumentContent is { Length: > 0 } &&
-        !string.IsNullOrWhiteSpace(document.PdfDocumentFileName) &&
+        document.PdfDocumentSizeBytes is > 0 &&
         document.PdfSignatureCount == 2 &&
         string.Equals(
             document.PdfDocumentHash,

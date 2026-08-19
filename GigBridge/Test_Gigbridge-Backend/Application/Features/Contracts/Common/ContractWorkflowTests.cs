@@ -1,6 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces.Time;
 using Application.Common.Interfaces.Caching;
+using Microsoft.Extensions.Logging.Abstractions;
 using Application.Features.Notifications.Common.Interfaces;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.Contracts.Details.Client.Update.Commands;
@@ -193,7 +194,11 @@ public class ContractWorkflowTests
         Assert.Equal(0m, escrow.FundedAmount);
         Assert.Equal((int)ContractEscrowStatus.PendingFunding, escrow.Status);
         Assert.Single(fixture.EsignDocuments.Entities);
-        Assert.NotNull(fixture.EsignDocuments.Entities[0].ContractSnapshotJson);
+        var confirmedDocumentId = fixture.EsignDocuments.Entities[0].EsignDocumentsId;
+        var confirmedContent = Assert.Single(
+            fixture.Context.Set<EsignDocumentContent>(),
+            item => item.EsignDocumentsId == confirmedDocumentId);
+        Assert.NotNull(confirmedContent.ContractSnapshotJson);
         Assert.Equal((int)ContractStatus.PendingSignature, fixture.Contract.Status);
 
         // Only the first, successful confirmation should have created an audit log entry.
@@ -598,7 +603,8 @@ public class ContractWorkflowTests
             fixture.DocumentGenerator,
             fixture.PdfConverter,
             new CapturingUserAuditLogService(),
-            Substitute.For<ICacheService>());
+            Substitute.For<ICacheService>(),
+            NullLogger<SignContractCommandHandler>.Instance);
 
         var exception = await Assert.ThrowsAsync<BadRequestException>(() => handler.Handle(
             new SignContractCommand(
@@ -637,7 +643,8 @@ public class ContractWorkflowTests
             fixture.DocumentGenerator,
             fixture.PdfConverter,
             signUserAuditLog,
-            CreateVerifiedIdentityCache());
+            CreateVerifiedIdentityCache(),
+            NullLogger<SignContractCommandHandler>.Instance);
 
         await handler.Handle(
             new SignContractCommand(
@@ -658,7 +665,7 @@ public class ContractWorkflowTests
             "012345678901",
             fixture.Context.Set<User>().Single(user => user.UserId == fixture.ClientUserId).IdentityOrTaxCode);
         Assert.Equal(fixture.Now, fixture.EsignSignatures.Entities[0].PolicyAcceptedAt);
-        Assert.Null(fixture.EsignDocuments.Entities[0].FinalizedDocumentContent);
+        Assert.Null(fixture.GetContractDocumentContent().FinalizedDocumentContent);
         Assert.Empty(fixture.DeliveryOutboxes.Entities);
 
         await Assert.ThrowsAsync<ConflictException>(() =>
@@ -695,7 +702,7 @@ public class ContractWorkflowTests
             "012345678901",
             fixture.Context.Set<User>().Single(user => user.UserId == fixture.FreelancerUserId).IdentityOrTaxCode);
         Assert.Equal(2, fixture.MediaService.Uploads.Count);
-        Assert.Equal(4, fixture.EsignDocuments.Entities[0].FinalizedDocumentContent?.Length);
+        Assert.Equal(4, fixture.GetContractDocumentContent().FinalizedDocumentContent?.Length);
         Assert.Equal(4L, fixture.EsignDocuments.Entities[0].FinalizedDocumentSizeBytes);
 
         // Two successful signatures (client, freelancer); the ConflictException retry logs nothing.
@@ -713,7 +720,7 @@ public class ContractWorkflowTests
         Assert.NotEqual(
             generation.DocumentHash,
             ContractEsignRenderer.ComputeFinalHash(
-                fixture.EsignDocuments.Entities[0],
+                fixture.GetContractDocumentContent(),
                 generation.ClientSignature with { PolicyVersion = "changed" },
                 generation.FreelancerSignature));
         Assert.Equal(2, fixture.DeliveryOutboxes.Entities.Count);
@@ -742,7 +749,8 @@ public class ContractWorkflowTests
             fixture.DocumentGenerator,
             fixture.PdfConverter,
             new CapturingUserAuditLogService(),
-            CreateVerifiedIdentityCache());
+            CreateVerifiedIdentityCache(),
+            NullLogger<SignContractCommandHandler>.Instance);
 
         await handler.Handle(
             new SignContractCommand(
@@ -842,7 +850,8 @@ public class ContractWorkflowTests
             fixture.DocumentGenerator,
             fixture.PdfConverter,
             new CapturingUserAuditLogService(),
-            CreateVerifiedIdentityCache());
+            CreateVerifiedIdentityCache(),
+            NullLogger<SignContractCommandHandler>.Instance);
 
         var result = await handler.Handle(
             new SignContractCommand(
@@ -887,7 +896,8 @@ public class ContractWorkflowTests
             fixture.DocumentGenerator,
             fixture.PdfConverter,
             new CapturingUserAuditLogService(),
-            CreateVerifiedIdentityCache());
+            CreateVerifiedIdentityCache(),
+            NullLogger<SignContractCommandHandler>.Instance);
 
         await Assert.ThrowsAsync<BadRequestException>(() =>
             handler.Handle(
@@ -917,7 +927,8 @@ public class ContractWorkflowTests
             fixture.DocumentGenerator,
             fixture.PdfConverter,
             new CapturingUserAuditLogService(),
-            CreateVerifiedIdentityCache());
+            CreateVerifiedIdentityCache(),
+            NullLogger<SignContractCommandHandler>.Instance);
 
         await Assert.ThrowsAsync<BadRequestException>(() =>
             handler.Handle(
@@ -1196,22 +1207,33 @@ public class ContractWorkflowTests
         {
             MoveToPendingSignature();
             var templateId = AddTemplate();
+            var documentId = Guid.NewGuid();
             EsignDocuments.Add(new EsignDocument
             {
-                EsignDocumentsId = Guid.NewGuid(),
+                EsignDocumentsId = documentId,
                 EsignTemplatesId = templateId,
                 JobPostsId = JobPostId,
                 ContractsId = ContractId,
                 DocumentCode = "GB-TEST",
-                RenderedHtmlContent = "<html>contract</html>",
                 Status = (int)ESignDocumentStatus.PendingSignatures,
                 CreatedAt = Now
+            });
+            Context.Set<EsignDocumentContent>().Add(new EsignDocumentContent
+            {
+                EsignDocumentsId = documentId,
+                RenderedHtmlContent = "<html>contract</html>"
             });
         }
 
         public EsignDocument GetContractDocument()
         {
             return EsignDocuments.Entities.Single(document => document.ContractsId == ContractId);
+        }
+
+        public EsignDocumentContent GetContractDocumentContent()
+        {
+            var documentId = GetContractDocument().EsignDocumentsId;
+            return Context.Set<EsignDocumentContent>().Single(item => item.EsignDocumentsId == documentId);
         }
 
         public void AddSignedJobPostDocument()
@@ -1226,10 +1248,14 @@ public class ContractWorkflowTests
                 JobPostsId = JobPostId,
                 ContractsId = null,
                 DocumentCode = "GB-JOB-TEST",
-                RenderedHtmlContent = "<html>job post contract</html>",
                 Status = (int)ESignDocumentStatus.FullySigned,
                 FinalizedAt = Now,
                 CreatedAt = Now
+            });
+            Context.Set<EsignDocumentContent>().Add(new EsignDocumentContent
+            {
+                EsignDocumentsId = documentId,
+                RenderedHtmlContent = "<html>job post contract</html>"
             });
 
             EsignSignatures.Add(new EsignSignature

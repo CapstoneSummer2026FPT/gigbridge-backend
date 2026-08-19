@@ -41,6 +41,8 @@ public sealed class SaveESignPdfCommandHandler(IApplicationDbContext context)
             throw new BadRequestException("Contract PDFs must be generated from the Word template.");
         }
 
+        var content = await ESignAccessGuard.GetContentAsync(context, document.EsignDocumentsId, cancellationToken);
+
         var signedCount = await context.Set<EsignSignature>()
             .CountAsync(signature =>
                 signature.EsignDocumentsId == document.EsignDocumentsId &&
@@ -54,15 +56,17 @@ public sealed class SaveESignPdfCommandHandler(IApplicationDbContext context)
         var now = DateTime.UtcNow;
         var safeBaseName = Path.GetFileNameWithoutExtension(request.FileName);
         if (string.IsNullOrWhiteSpace(safeBaseName)) safeBaseName = document.DocumentCode;
-        document.PdfDocumentContent = request.Content;
-        document.PdfDocumentFileName = $"{safeBaseName}.pdf";
+        content.PdfDocumentContent = request.Content;
+        content.PdfDocumentFileName = $"{safeBaseName}.pdf";
         document.PdfSignatureCount = signedCount;
         document.PdfDocumentHash = ESignPdfArtifactRevision.ExpectedHash(document);
+        document.PdfDocumentSizeBytes = request.Content.LongLength;
+        document.ContentRevision++;
         document.UpdatedAt = now;
         await context.SaveChangesAsync(cancellationToken);
 
         return new ESignPdfArtifactResponse(
             document.EsignDocumentsId,
-            document.PdfDocumentFileName);
+            content.PdfDocumentFileName);
     }
 }
