@@ -112,34 +112,23 @@ internal static class ContractProductHandoffAccess
         Contract contract,
         CancellationToken cancellationToken)
     {
-        var userIds = new List<Guid>();
-
-        var clientUserId = await context.Set<ClientProfile>()
+        var clientUserIds = context.Set<ClientProfile>()
             .AsNoTracking()
             .Where(profile => profile.ClientProfilesId == contract.ClientProfilesId)
-            .Select(profile => (Guid?)profile.UserId)
-            .FirstOrDefaultAsync(cancellationToken);
+            .Select(profile => profile.UserId);
 
-        if (clientUserId.HasValue)
+        if (!contract.FreelancerProfilesId.HasValue)
         {
-            userIds.Add(clientUserId.Value);
+            return await clientUserIds.Distinct().ToListAsync(cancellationToken);
         }
 
-        if (contract.FreelancerProfilesId.HasValue)
-        {
-            var freelancerUserId = await context.Set<FreelancerProfile>()
-                .AsNoTracking()
-                .Where(profile => profile.FreelancerProfilesId == contract.FreelancerProfilesId.Value)
-                .Select(profile => (Guid?)profile.UserId)
-                .FirstOrDefaultAsync(cancellationToken);
+        // Combined into a single SQL UNION round trip instead of two sequential lookups.
+        var freelancerUserIds = context.Set<FreelancerProfile>()
+            .AsNoTracking()
+            .Where(profile => profile.FreelancerProfilesId == contract.FreelancerProfilesId.Value)
+            .Select(profile => profile.UserId);
 
-            if (freelancerUserId.HasValue)
-            {
-                userIds.Add(freelancerUserId.Value);
-            }
-        }
-
-        return userIds.Distinct().ToList();
+        return await clientUserIds.Union(freelancerUserIds).ToListAsync(cancellationToken);
     }
 
     public static Task<Guid?> GetWorkroomConversationIdAsync(

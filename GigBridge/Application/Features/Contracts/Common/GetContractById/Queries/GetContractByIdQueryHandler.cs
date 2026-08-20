@@ -25,8 +25,16 @@ public class GetContractByIdQueryHandler : IRequestHandler<GetContractByIdQuery,
 
     public async Task<ContractDetailResponse> Handle(GetContractByIdQuery request, CancellationToken cancellationToken)
     {
+        // Combined into a single round trip: Contract, ContractEscrow, JobPost, ClientProfile+User,
+        // and FreelancerProfile+User are all single-valued (non-collection) navigations, so
+        // eager-loading them together is a plain set of LEFT JOINs with no row-multiplication risk
+        // — this replaces what used to be 5 separate sequential queries.
         var contract = await _context.Set<Contract>()
             .AsNoTracking()
+            .Include(c => c.ContractEscrow)
+            .Include(c => c.JobPosts)
+            .Include(c => c.ClientProfiles).ThenInclude(cp => cp.User)
+            .Include(c => c.FreelancerProfiles).ThenInclude(fp => fp!.User)
             .FirstOrDefaultAsync(c => c.ContractsId == request.ContractId, cancellationToken);
 
         if (contract is null)
@@ -36,29 +44,10 @@ public class GetContractByIdQueryHandler : IRequestHandler<GetContractByIdQuery,
 
         await EnsureCanViewContract(contract, request.UserId, cancellationToken);
 
-        var escrow = await _context.Set<ContractEscrow>()
-            .AsNoTracking()
-            .FirstOrDefaultAsync(e => e.ContractsId == contract.ContractsId, cancellationToken);
-
-        var jobPost = await _context.Set<JobPost>()
-            .AsNoTracking()
-            .FirstOrDefaultAsync(jp => jp.JobPostsId == contract.JobPostsId, cancellationToken);
-
-        var clientProfile = await _context.Set<ClientProfile>()
-            .AsNoTracking()
-            .Include(cp => cp.User)
-            .FirstOrDefaultAsync(cp => cp.ClientProfilesId == contract.ClientProfilesId, cancellationToken);
-        var clientUser = clientProfile?.User;
-
-        User? freelancerUser = null;
-        if (contract.FreelancerProfilesId.HasValue)
-        {
-            var freelancerProfile = await _context.Set<FreelancerProfile>()
-                .AsNoTracking()
-                .Include(fp => fp.User)
-                .FirstOrDefaultAsync(fp => fp.FreelancerProfilesId == contract.FreelancerProfilesId.Value, cancellationToken);
-            freelancerUser = freelancerProfile?.User;
-        }
+        var escrow = contract.ContractEscrow;
+        var jobPost = contract.JobPosts;
+        var clientUser = contract.ClientProfiles?.User;
+        var freelancerUser = contract.FreelancerProfiles?.User;
 
         var conversationId = await _context.Set<Conversation>()
             .AsNoTracking()
@@ -98,21 +87,28 @@ public class GetContractByIdQueryHandler : IRequestHandler<GetContractByIdQuery,
             return;
         }
 
-        var isOwnerClient = await _context.Set<ClientProfile>()
+        var isOwnerClientQuery = _context.Set<ClientProfile>()
             .AsNoTracking()
-            .AnyAsync(cp => cp.UserId == userId && cp.ClientProfilesId == contract.ClientProfilesId, cancellationToken);
+            .Where(cp => cp.UserId == userId && cp.ClientProfilesId == contract.ClientProfilesId)
+            .Select(cp => 1);
 
-        if (isOwnerClient)
+        bool isParticipant;
+        if (contract.FreelancerProfilesId.HasValue)
         {
-            return;
+            // Combined into a single SQL UNION round trip instead of two sequential AnyAsync calls.
+            var freelancerProfileId = contract.FreelancerProfilesId.Value;
+            var isAttachedFreelancerQuery = _context.Set<FreelancerProfile>()
+                .AsNoTracking()
+                .Where(fp => fp.UserId == userId && fp.FreelancerProfilesId == freelancerProfileId)
+                .Select(fp => 1);
+            isParticipant = await isOwnerClientQuery.Union(isAttachedFreelancerQuery).AnyAsync(cancellationToken);
+        }
+        else
+        {
+            isParticipant = await isOwnerClientQuery.AnyAsync(cancellationToken);
         }
 
-        var isAttachedFreelancer = contract.FreelancerProfilesId.HasValue &&
-            await _context.Set<FreelancerProfile>()
-                .AsNoTracking()
-                .AnyAsync(fp => fp.UserId == userId && fp.FreelancerProfilesId == contract.FreelancerProfilesId.Value, cancellationToken);
-
-        if (isAttachedFreelancer)
+        if (isParticipant)
         {
             return;
         }

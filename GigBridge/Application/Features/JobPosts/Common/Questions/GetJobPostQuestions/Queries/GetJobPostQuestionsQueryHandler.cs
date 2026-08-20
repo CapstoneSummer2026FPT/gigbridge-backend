@@ -3,6 +3,7 @@ using Application.Common.Interfaces;
 using Application.Features.JobPosts.Common.DTOs;
 using Domain.Entities;
 using Domain.Enums.Accounts;
+using Domain.Enums.JobInvitations;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -86,6 +87,33 @@ public class GetJobPostQuestionsQueryHandler
             if (jobPost.Status == 1 && (jobPost.Visibility is null or 0))
             {
                 return;
+            }
+
+            var freelancerProfile = await _context.Set<FreelancerProfile>()
+                .AsNoTracking()
+                .FirstOrDefaultAsync(profile => profile.UserId == request.UserId, cancellationToken);
+
+            if (freelancerProfile is not null)
+            {
+                var hasAccess = await _context.Set<JobPost>()
+                    .AsNoTracking()
+                    .AnyAsync(job =>
+                        job.JobPostsId == jobPost.JobPostsId &&
+                        (
+                            job.Proposals.Any(proposal =>
+                                proposal.FreelancerProfilesId == freelancerProfile.FreelancerProfilesId) ||
+                            job.JobInvitations.Any(invitation =>
+                                invitation.FreelancerProfilesId == freelancerProfile.FreelancerProfilesId &&
+                                invitation.Status != (int)JobInvitationStatus.Declined &&
+                                invitation.Status != (int)JobInvitationStatus.Expired &&
+                                invitation.Status != (int)JobInvitationStatus.Cancelled)
+                        ),
+                        cancellationToken);
+
+                if (hasAccess)
+                {
+                    return;
+                }
             }
 
             throw new ForbiddenAccessException("You do not have permission to view these questions.");

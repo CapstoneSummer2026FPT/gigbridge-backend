@@ -37,7 +37,8 @@ public class NotificationService : INotificationService
         string? content = null,
         Guid? referenceId = null,
         string? referenceType = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string? metadata = null)
     {
         var notification = new Domain.Entities.Notification
         {
@@ -47,6 +48,7 @@ public class NotificationService : INotificationService
             Content = content,
             ReferenceId = referenceId,
             ReferenceType = referenceType,
+            Metadata = metadata,
             IsRead = false,
             CreatedAt = DateTime.UtcNow
         };
