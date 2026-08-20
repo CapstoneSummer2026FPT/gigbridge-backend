@@ -1,5 +1,4 @@
 using Application.Common.Exceptions;
-using Application.Common.Interfaces.Files;
 using Application.Common.Models;
 using Application.Features.Contracts.Milestones.Client.Approve.Commands;
 using Application.Features.Contracts.Milestones.Client.RequestRevision.Commands;
@@ -19,6 +18,7 @@ using Application.Features.Contracts.WorkItems.Freelancer.Update.Commands;
 using Application.Features.Contracts.WorkItems.Freelancer.Update.DTOs;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Application.Common.Models.Files;
 
 namespace Project_API.Controllers.Contracts.Common;
 

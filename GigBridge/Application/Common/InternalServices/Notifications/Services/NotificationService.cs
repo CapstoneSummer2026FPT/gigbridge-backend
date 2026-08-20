@@ -9,6 +9,7 @@ using Domain.Enums.Accounts;
 using Domain.Enums.Notifications;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Application.Common.Models.Email;
 
 namespace Application.Common.InternalServices.Notifications.Services;
 public class NotificationService : INotificationService

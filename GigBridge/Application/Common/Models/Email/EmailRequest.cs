@@ -1,4 +1,4 @@
-namespace Application.Common.Interfaces.Email;
+namespace Application.Common.Models.Email;
 
 public class EmailRequest
 {

@@ -23,6 +23,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Application.Common.Models.Email;
 
 namespace Application.Features.Chat.Common.FinalOffers.Respond.Commands;
 

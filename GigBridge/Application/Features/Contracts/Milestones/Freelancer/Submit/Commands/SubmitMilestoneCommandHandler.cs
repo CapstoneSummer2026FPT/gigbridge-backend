@@ -6,6 +6,7 @@ using Application.Common.Interfaces.Media;
 using Application.Common.Interfaces.Time;
 using Application.Common.InternalServices.Auditing.Interfaces;
 using Application.Common.InternalServices.Chat.Interfaces;
+using Application.Common.Models.Files;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.Contracts.Milestones.Common.DTOs;
 using Application.Features.Contracts.Milestones.Common.Internal;

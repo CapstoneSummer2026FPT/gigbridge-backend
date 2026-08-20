@@ -5,6 +5,7 @@ using Application.Common.Interfaces.Media;
 using Application.Common.Interfaces.Time;
 using Application.Common.InternalServices.Chat.Interfaces;
 using Application.Common.InternalServices.Notifications.Interfaces;
+using Application.Common.Models.Files;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.Contracts.ProductHandoffs.Common;
 using Application.Features.Contracts.ProductHandoffs.Common.DTOs;

@@ -26,6 +26,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Test_Gigbridge_Backend.TestSupport;
+using Application.Common.Models.Email;
 
 namespace Test_Gigbridge_Backend.Application.Features.Proposals.Common;
 

@@ -2,6 +2,7 @@ using Application.Common.Interfaces.Email;
 using Application.Common.InternalServices.Auth.Interfaces;
 using Application.Common.Interfaces.Templates;
 using Application.Features.Auth.Shared.DTOs;
+using Application.Common.Models.Email;
 
 namespace Application.Common.InternalServices.Auth.Services;
 public class AuthEmailSender : IAuthEmailSender

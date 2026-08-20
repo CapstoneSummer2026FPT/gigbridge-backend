@@ -1,6 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces.Files;
 using Application.Common.Interfaces.Media;
+using Application.Common.Models.Files;
 using Application.Features.Chat.Common.Messages.Send.Commands;
 using Application.Features.Chat.Common.Messages.Send.DTOs;
 using MediatR;

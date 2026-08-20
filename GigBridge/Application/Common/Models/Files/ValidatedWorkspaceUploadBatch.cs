@@ -1,6 +1,6 @@
 using System.Collections;
 
-namespace Application.Common.Interfaces.Files;
+namespace Application.Common.Models.Files;
 
 public sealed class ValidatedWorkspaceUploadBatch :
     IReadOnlyList<ValidatedWorkspaceUploadFile>,

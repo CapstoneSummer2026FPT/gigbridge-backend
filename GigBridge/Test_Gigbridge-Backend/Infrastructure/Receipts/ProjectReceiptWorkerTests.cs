@@ -18,6 +18,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 using Test_Gigbridge_Backend.TestSupport;
+using Application.Common.Models.Email;
 
 namespace Test_Gigbridge_Backend.Infrastructure.Receipts;
 
