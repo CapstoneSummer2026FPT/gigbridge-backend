@@ -98,7 +98,7 @@ public class SaveDraftJobPostCommandValidatorTests
             BudgetMax: 1000m,
             Currency: "USD",
             EstimatedDuration: "2-4 weeks",
-            Visibility: 1,
+            Visibility: 0,
             EndDate: DateTime.UtcNow.AddDays(7),
             IsAigenerated: false,
             SkillIds: new List<Guid> { Guid.NewGuid() },

@@ -7,7 +7,6 @@ public static class JobPostEditingGuard
 {
     public const int DraftStatus = 0;
     public const int PublicVisibility = 0;
-    public const int PrivateVisibility = 1;
     public const int InviteOnlyVisibility = 2;
     public const int AdminLockedVisibility = 3;
 
@@ -16,9 +15,6 @@ public static class JobPostEditingGuard
 
     public const string ContentLockedMessage =
         "Published public and invite-only job posts cannot be edited.";
-
-    public const string PrivateTransitionLockedMessage =
-        "Published public and invite-only job posts cannot be changed back to private.";
 
     public const string DraftTransitionLockedMessage =
         "A published job post cannot be changed back to draft.";
@@ -30,7 +26,7 @@ public static class JobPostEditingGuard
             return false;
         }
 
-        return status == DraftStatus || NormalizeVisibility(visibility) == PrivateVisibility;
+        return status == DraftStatus;
     }
 
     public static void EnsureContentCanBeEdited(JobPost jobPost)
@@ -46,19 +42,6 @@ public static class JobPostEditingGuard
     public static void EnsureVisibilityTransitionAllowed(JobPost jobPost, int requestedVisibility)
     {
         EnsureNotAdminLocked(jobPost.Visibility);
-
-        if (jobPost.Status == DraftStatus)
-        {
-            return;
-        }
-
-        var currentVisibility = NormalizeVisibility(jobPost.Visibility);
-        var isPublishedScope = currentVisibility is PublicVisibility or InviteOnlyVisibility;
-
-        if (isPublishedScope && requestedVisibility == PrivateVisibility)
-        {
-            throw new BadRequestException(PrivateTransitionLockedMessage);
-        }
     }
 
     public static void EnsureStatusTransitionAllowed(JobPost jobPost, int requestedStatus)
@@ -70,8 +53,6 @@ public static class JobPostEditingGuard
             throw new BadRequestException(DraftTransitionLockedMessage);
         }
     }
-
-    private static int NormalizeVisibility(int? visibility) => visibility ?? PublicVisibility;
 
     private static void EnsureNotAdminLocked(int? visibility)
     {

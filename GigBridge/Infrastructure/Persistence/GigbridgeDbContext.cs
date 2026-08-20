@@ -1512,7 +1512,7 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
             entity.Property(e => e.Visibility)
                 .HasDefaultValue(0)
-                .HasComment("Enum JobPostVisibility: 0=Public, 1=Private, 2=InviteOnly");
+                .HasComment("Enum JobPostVisibility: 0=Public, 2=InviteOnly");
 
             entity.Property(e => e.CustomSkillNames)
                 .HasColumnType("text[]")

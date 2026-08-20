@@ -74,9 +74,8 @@ public sealed class SaveDraftJobPostCommandValidator
                 .Must(visibility =>
                     !visibility.HasValue ||
                     visibility.Value == 0 ||
-                    visibility.Value == 1 ||
                     visibility.Value == 2)
-                .WithMessage("Visibility must be 0=Public, 1=Private, or 2=InviteOnly.");
+                .WithMessage("Visibility must be 0=Public or 2=InviteOnly.");
 
             RuleFor(x => x.Request.EndDate)
                 .GreaterThan(DateTime.UtcNow)
