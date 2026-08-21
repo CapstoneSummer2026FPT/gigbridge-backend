@@ -31,7 +31,7 @@ public partial class JobPost
     public int Status { get; set; }
 
     /// <summary>
-    /// Enum JobPostVisibility: 0=Public, 1=Private, 2=InviteOnly
+    /// Enum JobPostVisibility: 0=Public, 2=InviteOnly
     /// </summary>
     public int? Visibility { get; set; }
 

@@ -20,7 +20,7 @@ public class UpdateVisibilityJobPostCommandValidator
             .WithMessage("Request body is required.");
 
         RuleFor(x => x.Request.Visibility)
-            .Must(visibility => visibility == 0 || visibility == 1 || visibility == 2)
-            .WithMessage("Visibility must be 0=Public, 1=Private, or 2=InviteOnly.");
+            .Must(visibility => visibility == 0 || visibility == 2)
+            .WithMessage("Visibility must be 0=Public or 2=InviteOnly.");
     }
 }

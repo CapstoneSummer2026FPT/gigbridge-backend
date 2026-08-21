@@ -2983,7 +2983,7 @@ namespace Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
                         .HasDefaultValue(0)
-                        .HasComment("Enum JobPostVisibility: 0=Public, 1=Private, 2=InviteOnly");
+                        .HasComment("Enum JobPostVisibility: 0=Public, 2=InviteOnly");
 
                     b.HasKey("JobPostsId")
                         .HasName("JobPosts_pkey");
