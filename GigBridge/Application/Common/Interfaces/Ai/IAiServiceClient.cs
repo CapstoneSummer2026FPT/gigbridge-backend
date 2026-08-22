@@ -33,6 +33,12 @@ public interface IAiServiceClient
     Task<VettingEvaluationResponseDto> AnalyzeVettingAsync(
         AnalyzeVettingRequestDto request,
         CancellationToken cancellationToken = default);
+    Task<CandidateJudgingResponseDto> EvaluateCandidateAsync(
+        CandidateJudgingRequestDto request,
+        CancellationToken cancellationToken = default);
+    Task<BatchCandidateJudgingResponseDto> EvaluateCandidateBatchAsync(
+        BatchCandidateJudgingRequestDto request,
+        CancellationToken cancellationToken = default);
     Task<AiChatBoxResponseDto> QueryChatBoxAsync(
         AiChatBoxRequestDto request,
         CancellationToken cancellationToken = default);

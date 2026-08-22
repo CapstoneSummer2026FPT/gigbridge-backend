@@ -32,6 +32,13 @@ public class ProposalDto
 
     // AI Judging Metrics
     public int? AiScore { get; set; }
+    public double? AiTechnicalQualityScore { get; set; }
+    public double? AiValueScore { get; set; }
+    public string? AiVerdictBadge { get; set; }
+    public string? AiQualityBand { get; set; }
+    public double? AiSavingsRatioPercent { get; set; }
+    public double? AiScopeCompletenessPercent { get; set; }
+    public string? AiFullEvaluationJson { get; set; }
     public string? AiSummary { get; set; }
     public bool? AiRecommendedHire { get; set; }
     public DateTime? AiEvaluatedAt { get; set; }

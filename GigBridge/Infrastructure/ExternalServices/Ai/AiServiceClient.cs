@@ -266,6 +266,34 @@ public class AiServiceClient : IAiServiceClient
             cancellationToken);
     }
 
+    public async Task<CandidateJudgingResponseDto> EvaluateCandidateAsync(
+        CandidateJudgingRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient.PostAsJsonAsync(
+            "api/ai/eval/candidate-judging",
+            request,
+            cancellationToken);
+
+        return await ReadAiResponseAsync<CandidateJudgingResponseDto>(
+            response,
+            cancellationToken);
+    }
+
+    public async Task<BatchCandidateJudgingResponseDto> EvaluateCandidateBatchAsync(
+        BatchCandidateJudgingRequestDto request,
+        CancellationToken cancellationToken = default)
+    {
+        using var response = await _httpClient.PostAsJsonAsync(
+            "api/ai/eval/candidate-judging/batch",
+            request,
+            cancellationToken);
+
+        return await ReadAiResponseAsync<BatchCandidateJudgingResponseDto>(
+            response,
+            cancellationToken);
+    }
+
     public async Task<AiChatBoxResponseDto> QueryChatBoxAsync(
         AiChatBoxRequestDto request,
         CancellationToken cancellationToken = default)
