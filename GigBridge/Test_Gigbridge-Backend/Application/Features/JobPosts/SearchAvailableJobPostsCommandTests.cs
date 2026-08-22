@@ -9,6 +9,23 @@ public sealed class SearchAvailableJobPostsCommandTests
     private static readonly DateTime Now = new(2026, 8, 1, 12, 0, 0, DateTimeKind.Utc);
 
     [Fact]
+    public void Open_and_visible_filter_excludes_expired_open_jobs()
+    {
+        var openNoDeadline = Job("No deadline", "Engineering", [], Now, true, status: 1, visibility: 0);
+        var openFutureDeadline = Job("Future deadline", "Engineering", [], Now, true, status: 1, visibility: 0);
+        openFutureDeadline.EndDate = Now.AddDays(1);
+        var openExpired = Job("Expired", "Engineering", [], Now, true, status: 1, visibility: 0);
+        openExpired.EndDate = Now.AddDays(-1);
+        var closedExpired = Job("Closed", "Engineering", [], Now, true, status: 2, visibility: 0);
+        closedExpired.EndDate = Now.AddDays(-1);
+
+        var result = SearchAvailableJobPostsCommandHandler.ApplyOpenAndVisibleFilter(
+            new[] { openNoDeadline, openFutureDeadline, openExpired, closedExpired }.AsQueryable(), Now).ToList();
+
+        Assert.Equal(new[] { openNoDeadline, openFutureDeadline }, result);
+    }
+
+    [Fact]
     public void Browse_filters_are_applied_to_the_full_query()
     {
         var matching = Job("Frontend role", "Engineering", ["React"], Now.AddDays(-2), aiGenerated: true);
