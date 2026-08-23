@@ -184,8 +184,46 @@ public sealed class EscrowBalanceSourceWorkflowTests
         Assert.Equal(50m, client.HeldTokens);
         Assert.Equal(50m, client.AvailableTokens);
         Assert.Equal(0m, client.WithdrawableTokens);
+        Assert.Equal(0m, escrow.DepositedTokens);
+        Assert.Equal(0m, escrow.EarnedTokens);
         Assert.Equal((int)WalletBalanceSource.HeldDeposited,
             Assert.Single(transactions.Entities).BalanceSource);
+    }
+
+    [Fact]
+    public void Release_LegacyEscrowWithoutSourceTrackingDoesNotPersistNegativeComposition()
+    {
+        var context = new InMemoryApplicationDbContext();
+        context.AddSet<WalletTransaction>();
+        var contractId = Guid.NewGuid();
+        var client = new UserWallet
+        {
+            UserWalletsId = Guid.NewGuid(),
+            UserId = Guid.NewGuid(),
+            HeldTokens = 50m
+        };
+        var freelancer = new UserWallet
+        {
+            UserWalletsId = Guid.NewGuid(),
+            UserId = Guid.NewGuid()
+        };
+        var escrow = new ContractEscrow
+        {
+            ContractEscrowId = Guid.NewGuid(),
+            ContractsId = contractId,
+            FundedAmount = 50m,
+            DepositedTokens = 0m,
+            EarnedTokens = 0m
+        };
+
+        ContractEscrowWalletWorkflow.Release(
+            context, client, freelancer, escrow, contractId, null,
+            50m, "release-legacy", "InternalTokenWallet", "Legacy release", Now);
+
+        Assert.Equal(0m, client.HeldTokens);
+        Assert.Equal(50m, freelancer.WithdrawableTokens);
+        Assert.Equal(0m, escrow.DepositedTokens);
+        Assert.Equal(0m, escrow.EarnedTokens);
     }
 
     [Fact]

@@ -102,18 +102,88 @@ public sealed class RealtimeRevisionSaveChangesInterceptor : SaveChangesIntercep
         CancellationToken cancellationToken)
     {
         var changes = new Dictionary<Guid, (int Delta, HashSet<Guid> Conversations)>();
+        var changedConversationIds = new HashSet<Guid>();
+
+        AddChangedConversationIds(
+            changedConversationIds,
+            context.ChangeTracker.Entries<Conversation>(),
+            entry => entry.Entity.ConversationsId);
+        AddChangedConversationIds(
+            changedConversationIds,
+            context.ChangeTracker.Entries<ConversationParticipant>(),
+            entry => entry.Entity.ConversationsId);
+        AddChangedConversationIds(
+            changedConversationIds,
+            context.ChangeTracker.Entries<Message>(),
+            entry => entry.Entity.ConversationsId);
+        AddChangedConversationIds(
+            changedConversationIds,
+            context.ChangeTracker.Entries<NegotiationMilestoneDraft>(),
+            entry => entry.Entity.ConversationsId);
+        AddChangedConversationIds(
+            changedConversationIds,
+            context.ChangeTracker.Entries<NegotiationOffer>(),
+            entry => entry.Entity.ConversationsId);
+
         foreach (var entry in context.ChangeTracker.Entries<ConversationParticipant>())
         {
-            if (entry.State != EntityState.Modified ||
-                !entry.Property(participant => participant.UnreadCount).IsModified)
-                continue;
-            var original = entry.Property(participant => participant.UnreadCount).OriginalValue;
-            var delta = entry.Entity.UnreadCount - original;
             if (!changes.TryGetValue(entry.Entity.UserId, out var change))
                 change = (0, []);
-            change.Delta += delta;
-            change.Conversations.Add(entry.Entity.ConversationsId);
+
+            if (entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)
+                change.Conversations.Add(entry.Entity.ConversationsId);
+
+            if (entry.State == EntityState.Modified &&
+                entry.Property(participant => participant.UnreadCount).IsModified)
+            {
+                var original = entry.Property(participant => participant.UnreadCount).OriginalValue;
+                change.Delta += entry.Entity.UnreadCount - original;
+            }
+
             changes[entry.Entity.UserId] = change;
+        }
+
+        if (changedConversationIds.Count > 0)
+        {
+            var persistedParticipants = await context.Set<ConversationParticipant>()
+                .AsNoTracking()
+                .Where(participant =>
+                    changedConversationIds.Contains(participant.ConversationsId) &&
+                    participant.LeftAt == null &&
+                    participant.DeletedAt == null)
+                .Select(participant => new { participant.ConversationsId, participant.UserId })
+                .ToListAsync(cancellationToken);
+
+            var activeParticipants = persistedParticipants
+                .GroupBy(participant => (participant.ConversationsId, participant.UserId))
+                .ToDictionary(group => group.Key, group => group.First());
+
+            foreach (var entry in context.ChangeTracker.Entries<ConversationParticipant>()
+                         .Where(entry => changedConversationIds.Contains(entry.Entity.ConversationsId)))
+            {
+                var key = (entry.Entity.ConversationsId, entry.Entity.UserId);
+                if (entry.State == EntityState.Deleted ||
+                    entry.Entity.LeftAt.HasValue ||
+                    entry.Entity.DeletedAt.HasValue)
+                {
+                    activeParticipants.Remove(key);
+                    continue;
+                }
+
+                activeParticipants[key] = new
+                {
+                    entry.Entity.ConversationsId,
+                    entry.Entity.UserId
+                };
+            }
+
+            foreach (var participant in activeParticipants.Values)
+            {
+                if (!changes.TryGetValue(participant.UserId, out var change))
+                    change = (0, []);
+                change.Conversations.Add(participant.ConversationsId);
+                changes[participant.UserId] = change;
+            }
         }
 
         foreach (var (userId, change) in changes)
@@ -130,6 +200,19 @@ public sealed class RealtimeRevisionSaveChangesInterceptor : SaveChangesIntercep
             AddOutbox(context, userId, DeliveryOutboxType.ConversationInboxRevision,
                 state.ConversationRevision,
                 $"conversation-inbox:{userId:N}:{state.ConversationRevision}", payload, now);
+        }
+    }
+
+    private static void AddChangedConversationIds<TEntity>(
+        HashSet<Guid> conversationIds,
+        IEnumerable<EntityEntry<TEntity>> entries,
+        Func<EntityEntry<TEntity>, Guid> getConversationId)
+        where TEntity : class
+    {
+        foreach (var entry in entries)
+        {
+            if (entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)
+                conversationIds.Add(getConversationId(entry));
         }
     }
 

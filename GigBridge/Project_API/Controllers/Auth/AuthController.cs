@@ -118,10 +118,10 @@ public class AuthController : BaseApiController
         if (string.IsNullOrEmpty(refreshToken))
             return Unauthorized(ApiResponse<object>.Error(401, "Refresh token is missing. Please log in again."));
 
-        var (loginData, newRefreshToken, newRefreshTokenExpiry) = await Mediator.Send(new RefreshTokenCommand(request.AccessToken, refreshToken));
+        var result = await Mediator.Send(new RefreshTokenCommand(request.AccessToken, refreshToken));
 
-        SetRefreshTokenCookie(newRefreshToken, newRefreshTokenExpiry);
-        return Ok(ApiResponse<LoginResponse>.Ok(loginData, "Token refreshed successfully"));
+        SetRefreshTokenCookie(result.RefreshToken, result.RefreshTokenExpiry);
+        return Ok(ApiResponse<LoginResponse>.Ok(result.LoginData, "Token refreshed successfully"));
     }
 
     [HttpPost("change-password")]
@@ -168,8 +168,10 @@ public class AuthController : BaseApiController
             HttpOnly = true,
             Secure = true,
             SameSite = SameSiteMode.None,
+            Path = "/api/auth",
             Expires = expires
         };
         Response.Cookies.Append("refreshToken", refreshToken, cookieOptions);
     }
+
 }

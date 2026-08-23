@@ -172,6 +172,7 @@ public sealed class PremiumExpiryWorker : BackgroundService
         var now = DateTime.UtcNow;
 
         var due = await context.Set<Subscription>()
+            .AsNoTracking()
             .Include(item => item.SubscriptionPlans)
             .Include(item => item.User)
             .Where(item => item.Status == SubscriptionStatus.Active &&
@@ -182,6 +183,7 @@ public sealed class PremiumExpiryWorker : BackgroundService
 
         foreach (var subscription in due)
         {
+            var renewalCommitted = false;
             try
             {
                 await using var transaction = await context.BeginTransactionAsync(cancellationToken);
@@ -213,9 +215,8 @@ public sealed class PremiumExpiryWorker : BackgroundService
                     .AnyAsync(cancellationToken);
                 if (hasReplacement)
                 {
-                    subscription.AutoRenew = false;
-                    subscription.UpdatedAt = now;
-                    await context.SaveChangesAsync(cancellationToken);
+                    await DisableAutoRenewAsync(
+                        context, subscription.SubscriptionsId, now, cancellationToken);
                     await transaction.CommitAsync(cancellationToken);
                     continue;
                 }
@@ -231,15 +232,14 @@ public sealed class PremiumExpiryWorker : BackgroundService
                     JsonSerializer.Serialize(new { subscriptionId = candidate.SubscriptionsId, autoRenew = true }),
                     cancellationToken);
 
-                subscription.AutoRenew = false;
-                subscription.UpdatedAt = now;
+                await DisableAutoRenewAsync(
+                    context, subscription.SubscriptionsId, now, cancellationToken);
                 var startsAt = now;
                 var renewed = new Subscription
                 {
                     SubscriptionsId = Guid.NewGuid(),
                     UserId = candidate.UserId,
                     SubscriptionPlansId = candidate.SubscriptionPlansId,
-                    SubscriptionPlans = candidate.SubscriptionPlans,
                     Status = SubscriptionStatus.Active,
                     StartDate = startsAt,
                     EndDate = startsAt.AddDays(candidate.SubscriptionPlans.DurationInDays),
@@ -250,23 +250,38 @@ public sealed class PremiumExpiryWorker : BackgroundService
                 context.Set<Subscription>().Add(renewed);
                 await context.SaveChangesAsync(cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
+                renewalCommitted = true;
 
-                var isClient = subscription.User.Role == (int)UserRole.Client;
+                var isClient = candidate.User.Role == (int)UserRole.Client;
                 var cacheKey = isClient
-                    ? $"premium:access:client:{subscription.UserId:N}"
-                    : $"premium:access:{subscription.UserId:N}";
+                    ? $"premium:access:client:{candidate.UserId:N}"
+                    : $"premium:access:{candidate.UserId:N}";
                 var premiumName = isClient ? "Client Premium" : "Freelancer Premium";
                 await cache.RemoveAsync(cacheKey, cancellationToken);
                 await notifications.CreateNotificationAsync(
-                    subscription.UserId, NotificationType.SubscriptionActivated,
+                    candidate.UserId, NotificationType.SubscriptionActivated,
                     $"{premiumName} auto-renewed through {renewed.EndDate:yyyy-MM-dd}",
                     null, renewed.SubscriptionsId, nameof(Subscription), cancellationToken);
             }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
             catch (Exception exception)
             {
-                subscription.AutoRenew = false;
-                subscription.UpdatedAt = now;
-                await context.SaveChangesAsync(cancellationToken);
+                if (renewalCommitted)
+                {
+                    _logger.LogWarning(exception,
+                        "Premium subscription {SubscriptionId} renewed, but post-commit cache or notification processing failed",
+                        subscription.SubscriptionsId);
+                    continue;
+                }
+
+                // A failed SaveChanges leaves Added entities in the tracker. Clear them before
+                // recording the failure, otherwise EF retries the failed renewal graph here.
+                context.ResetChangeTracker();
+                await DisableAutoRenewAsync(
+                    context, subscription.SubscriptionsId, now, cancellationToken);
                 _logger.LogWarning(exception, "Could not auto-renew Premium subscription {SubscriptionId}", subscription.SubscriptionsId);
                 await notifications.CreateNotificationAsync(
                     subscription.UserId, NotificationType.SubscriptionCancelled,
@@ -275,5 +290,30 @@ public sealed class PremiumExpiryWorker : BackgroundService
                     subscription.SubscriptionsId, nameof(Subscription), cancellationToken);
             }
         }
+    }
+
+    private static async Task DisableAutoRenewAsync(
+        IApplicationDbContext context,
+        Guid subscriptionId,
+        DateTime now,
+        CancellationToken cancellationToken)
+    {
+        if (context.SupportsRelationalBulkOperations)
+        {
+            await context.Set<Subscription>()
+                .TagWith("Premium.AutoRenew.Disable")
+                .Where(item => item.SubscriptionsId == subscriptionId && item.AutoRenew == true)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(item => item.AutoRenew, false)
+                    .SetProperty(item => item.UpdatedAt, now), cancellationToken);
+            return;
+        }
+
+        var subscription = await context.Set<Subscription>()
+            .FirstOrDefaultAsync(item => item.SubscriptionsId == subscriptionId, cancellationToken);
+        if (subscription is null) return;
+        subscription.AutoRenew = false;
+        subscription.UpdatedAt = now;
+        await context.SaveChangesAsync(cancellationToken);
     }
 }

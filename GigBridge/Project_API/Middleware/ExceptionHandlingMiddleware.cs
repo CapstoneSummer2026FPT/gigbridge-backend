@@ -34,10 +34,17 @@ public class ExceptionHandlingMiddleware
         }
         catch (Exception ex)
         {
-            if (ex is not ValidationException &&
+            if (ex is UnauthorizedAccessException)
+            {
+                _logger.LogInformation(
+                    "Authentication rejected for {Method} {Path}: {Message}",
+                    context.Request.Method,
+                    context.Request.Path,
+                    ex.Message);
+            }
+            else if (ex is not ValidationException &&
                 ex is not ConflictException &&
                 ex is not BadRequestException &&
-                ex is not UnauthorizedAccessException &&
                 ex is not NotFoundException &&
                 ex is not ExternalServiceException &&
                 ex is not ForbiddenAccessException)
