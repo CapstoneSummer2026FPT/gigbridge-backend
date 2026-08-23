@@ -70,12 +70,45 @@ public class JudgeAllProposalsCommandHandler : IRequestHandler<JudgeAllProposals
 
         int maxBatch = request.BatchSize <= 0 || request.BatchSize > 20 ? 10 : request.BatchSize;
 
-        // 3. Fetch proposals for this job post (Status != Draft) that have not been judged yet
+        // 3. Fetch JobPost details including original milestones and questions
+        var jobPostDetails = await _context.Set<JobPost>()
+            .AsNoTracking()
+            .Include(j => j.JobPostSkills).ThenInclude(js => js.Skills)
+            .Include(j => j.JobPostMilestonePlans)
+            .Include(j => j.JobPostQuestions)
+            .FirstOrDefaultAsync(j => j.JobPostsId == request.JobPostId, cancellationToken);
+
+        var baselineDto = new JobPostBaselineInputDto
+        {
+            JobId = jobPostDetails?.JobPostsId.ToString() ?? request.JobPostId.ToString(),
+            JobTitle = jobPostDetails?.Title ?? string.Empty,
+            JobDescription = jobPostDetails?.Description ?? string.Empty,
+            RequiredSkills = jobPostDetails?.JobPostSkills.Select(js => js.Skills.Name).ToList() ?? new List<string>(),
+            BudgetMin = (double?)(jobPostDetails?.BudgetMin),
+            BudgetMax = (double?)(jobPostDetails?.BudgetMax),
+            EstimatedDuration = jobPostDetails?.EstimatedDuration,
+            OriginalMilestones = jobPostDetails?.JobPostMilestonePlans.Select(m => new JobPostMilestoneInputDto
+            {
+                OrderIndex = m.OrderIndex,
+                Title = m.Title,
+                Description = m.Description,
+                Amount = (double)m.Amount,
+                EstimatedDuration = m.EstimatedDuration,
+                Deliverables = m.Deliverables
+            }).OrderBy(m => m.OrderIndex).ToList() ?? new List<JobPostMilestoneInputDto>(),
+            VettingQuestions = jobPostDetails?.JobPostQuestions.Select(q => q.QuestionText).ToList() ?? new List<string>()
+        };
+
+        // 4. Fetch proposals for this job post (Status != Draft) that have not been judged yet
         var unjudgedProposals = await _context.Set<Proposal>()
             .Include(p => p.FreelancerProfiles)
+                .ThenInclude(f => f.User)
             .Include(p => p.JobPosts)
                 .ThenInclude(j => j.JobPostSkills)
                     .ThenInclude(js => js.Skills)
+            .Include(p => p.ProposalMilestonePlans)
+            .Include(p => p.ProposalAnswers)
+                .ThenInclude(pa => pa.JobPostQuestions)
             .Include(p => p.ProposalAiJudging)
             .Where(p => p.JobPostsId == request.JobPostId && p.Status != 0 && p.ProposalAiJudging == null)
             .OrderBy(p => p.SubmittedAt)
@@ -92,120 +125,138 @@ public class JudgeAllProposalsCommandHandler : IRequestHandler<JudgeAllProposals
             };
         }
 
+        // 5. Build proposal offer DTOs for batch evaluation
+        var proposalOfferDtos = unjudgedProposals.Select(proposal => new ProposalOfferInputDto
+        {
+            ProposalId = proposal.ProposalsId.ToString(),
+            FreelancerId = proposal.FreelancerProfiles.UserId.ToString(),
+            FreelancerName = proposal.FreelancerProfiles.User?.FullName ?? "Freelancer",
+            ProposedBudget = (double)(proposal.ProposedBudget ?? 0m),
+            ProposedDuration = proposal.ProposedDuration,
+            CoverLetter = proposal.CoverLetter,
+            AnalysisSummary = proposal.AnalysisSummary,
+            SolutionApproach = proposal.SolutionApproach,
+            EditedMilestones = proposal.ProposalMilestonePlans.Select(m => new ProposalMilestoneInputDto
+            {
+                OrderIndex = m.OrderIndex,
+                Title = m.Title,
+                Description = m.Description,
+                Amount = (double)m.Amount,
+                EstimatedDuration = m.EstimatedDuration,
+                Deliverables = m.Deliverables
+            }).OrderBy(m => m.OrderIndex).ToList(),
+            VettingQaAnswers = proposal.ProposalAnswers.Select(pa => new QuestionAnswerPairInputDto
+            {
+                QuestionIndex = pa.JobPostQuestions.OrderIndex,
+                QuestionText = pa.JobPostQuestions.QuestionText,
+                CandidateAnswer = pa.AnswerText
+            }).OrderBy(q => q.QuestionIndex).ToList()
+        }).ToList();
+
+        var batchRequest = new BatchCandidateJudgingRequestDto
+        {
+            JobPostBaseline = baselineDto,
+            Proposals = proposalOfferDtos,
+            BatchChunkSize = 3
+        };
+
         int processedCount = 0;
 
-        // 4. Process proposals in the batch
-        foreach (var proposal in unjudgedProposals)
+        try
         {
-            var answers = await _context.Set<ProposalAnswer>()
-                .AsNoTracking()
-                .Include(pa => pa.JobPostQuestions)
-                .Where(pa => pa.ProposalsId == proposal.ProposalsId)
-                .ToListAsync(cancellationToken);
+            var batchResponse = await _aiServiceClient.EvaluateCandidateBatchAsync(batchRequest, cancellationToken);
 
-            if (!answers.Any() || answers.All(pa => string.IsNullOrWhiteSpace(pa.AnswerText)))
+            var responseMap = batchResponse.JudgedProposals.ToDictionary(j => j.ProposalId);
+
+            foreach (var proposal in unjudgedProposals)
             {
-                var emptyJudging = new ProposalAiJudging
+                var pIdStr = proposal.ProposalsId.ToString();
+                if (responseMap.TryGetValue(pIdStr, out var evalResult))
                 {
-                    ProposalAiJudgingsId = Guid.NewGuid(),
-                    ProposalId = proposal.ProposalsId,
-                    Score = 0,
-                    Summary = "No answers submitted to vetting questions.",
-                    RecommendedHire = false,
-                    TechnicalSkillsJson = "[]",
-                    SoftSkillsJson = "[]",
-                    HolisticAdjustment = 0,
-                    HolisticAdjustmentReason = "No answers submitted.",
-                    GradedQuestionsJson = "[]",
-                    EvaluatedAt = DateTime.UtcNow
-                };
+                    var calc = evalResult.DeterministicCalculations;
+                    var fullJson = System.Text.Json.JsonSerializer.Serialize(evalResult);
 
-                if (proposal.ProposalAiJudging != null)
-                {
-                    proposal.ProposalAiJudging.Score = 0;
-                    proposal.ProposalAiJudging.Summary = "No answers submitted to vetting questions.";
-                    proposal.ProposalAiJudging.RecommendedHire = false;
-                    proposal.ProposalAiJudging.TechnicalSkillsJson = "[]";
-                    proposal.ProposalAiJudging.SoftSkillsJson = "[]";
-                    proposal.ProposalAiJudging.HolisticAdjustment = 0;
-                    proposal.ProposalAiJudging.HolisticAdjustmentReason = "No answers submitted.";
-                    proposal.ProposalAiJudging.GradedQuestionsJson = "[]";
-                    proposal.ProposalAiJudging.EvaluatedAt = DateTime.UtcNow;
-                }
-                else
-                {
-                    _context.Set<ProposalAiJudging>().Add(emptyJudging);
-                    proposal.ProposalAiJudging = emptyJudging;
-                }
+                    int scoreInt = (int)Math.Round(calc.OverallTechnicalQualityTQ);
+                    bool recommended = calc.VerdictBadge == "top_value" || calc.VerdictBadge == "top_technical";
+                    string summaryText = $"Technical Quality: {calc.OverallTechnicalQualityTQ:F1} ({calc.QualityInterpretationBand}) | Value Score: {calc.FinalValueScoreVS:F1} | Badge: {calc.VerdictBadge}";
 
-                processedCount++;
-                continue;
-            }
-
-            var requestDto = new AnalyzeVettingRequestDto
-            {
-                FreelancerId = proposal.FreelancerProfiles.UserId.ToString(),
-                JobTitle = proposal.JobPosts.Title,
-                JobDescription = proposal.JobPosts.Description,
-                JobSkills = proposal.JobPosts.JobPostSkills.Select(js => js.Skills.Name).ToList(),
-                QaPairs = answers.Select(pa => new QuestionAnswerPairDto
-                {
-                    QuestionIndex = pa.JobPostQuestions.OrderIndex,
-                    QuestionText = pa.JobPostQuestions.QuestionText,
-                    CandidateAnswer = pa.AnswerText
-                }).OrderBy(q => q.QuestionIndex).ToList()
-            };
-
-            try
-            {
-                var evalResult = await _aiServiceClient.AnalyzeVettingAsync(requestDto, cancellationToken);
-
-                var techSkillsJson = System.Text.Json.JsonSerializer.Serialize(evalResult.TechnicalSkills ?? new List<string>());
-                var softSkillsJson = System.Text.Json.JsonSerializer.Serialize(evalResult.SoftSkills ?? new List<string>());
-                var gradedQuestionsJson = System.Text.Json.JsonSerializer.Serialize(evalResult.GradedQuestions ?? new List<GradedQuestionDto>());
-
-                if (proposal.ProposalAiJudging != null)
-                {
-                    proposal.ProposalAiJudging.Score = evalResult.Score;
-                    proposal.ProposalAiJudging.Summary = evalResult.Summary ?? string.Empty;
-                    proposal.ProposalAiJudging.RecommendedHire = evalResult.RecommendedHire;
-                    proposal.ProposalAiJudging.TechnicalSkillsJson = techSkillsJson;
-                    proposal.ProposalAiJudging.SoftSkillsJson = softSkillsJson;
-                    proposal.ProposalAiJudging.HolisticAdjustment = evalResult.HolisticAdjustment;
-                    proposal.ProposalAiJudging.HolisticAdjustmentReason = evalResult.HolisticAdjustmentReason;
-                    proposal.ProposalAiJudging.GradedQuestionsJson = gradedQuestionsJson;
-                    proposal.ProposalAiJudging.EvaluatedAt = DateTime.UtcNow;
-                }
-                else
-                {
-                    var newJudging = new ProposalAiJudging
+                    var gradedQuestionsList = evalResult.LlmQualitativeEvaluation?.ScreeningQa?.Select(qa =>
                     {
-                        ProposalAiJudgingsId = Guid.NewGuid(),
-                        ProposalId = proposal.ProposalsId,
-                        Score = evalResult.Score,
-                        Summary = evalResult.Summary ?? string.Empty,
-                        RecommendedHire = evalResult.RecommendedHire,
-                        TechnicalSkillsJson = techSkillsJson,
-                        SoftSkillsJson = softSkillsJson,
-                        HolisticAdjustment = evalResult.HolisticAdjustment,
-                        HolisticAdjustmentReason = evalResult.HolisticAdjustmentReason,
-                        GradedQuestionsJson = gradedQuestionsJson,
-                        EvaluatedAt = DateTime.UtcNow
-                    };
+                        double qScore = Math.Round(
+                            (qa.AnswerCorrectness?.Score ?? 0) * 0.40 +
+                            (qa.TechnicalReasoning?.Score ?? 0) * 0.25 +
+                            (qa.Relevance?.Score ?? 0) * 0.15 +
+                            (qa.Depth?.Score ?? 0) * 0.10 +
+                            (qa.PracticalExamples?.Score ?? 0) * 0.10
+                        );
 
-                    _context.Set<ProposalAiJudging>().Add(newJudging);
-                    proposal.ProposalAiJudging = newJudging;
+                        var feedbackList = new List<string>();
+                        if (qa.AnswerCorrectness?.Evidence?.Count > 0)
+                            feedbackList.Add("Accuracy: " + string.Join("; ", qa.AnswerCorrectness.Evidence.Select(e => e.Assessment)));
+                        if (qa.TechnicalReasoning?.Evidence?.Count > 0)
+                            feedbackList.Add("Reasoning: " + string.Join("; ", qa.TechnicalReasoning.Evidence.Select(e => e.Assessment)));
+
+                        return new
+                        {
+                            questionIndex = qa.QuestionIndex,
+                            questionText = qa.QuestionText,
+                            candidateAnswer = qa.CandidateAnswer,
+                            score = (int)qScore,
+                            feedback = feedbackList.Count > 0 ? string.Join(" | ", feedbackList) : "Đánh giá chi tiết dựa trên mức độ chính xác và lập luận kỹ thuật."
+                        };
+                    }).ToList();
+
+                    string gradedQuestionsJson = System.Text.Json.JsonSerializer.Serialize(gradedQuestionsList);
+
+                    if (proposal.ProposalAiJudging != null)
+                    {
+                        proposal.ProposalAiJudging.Score = scoreInt;
+                        proposal.ProposalAiJudging.Summary = summaryText;
+                        proposal.ProposalAiJudging.RecommendedHire = recommended;
+                        proposal.ProposalAiJudging.TechnicalQualityScore = calc.OverallTechnicalQualityTQ;
+                        proposal.ProposalAiJudging.ValueScore = calc.FinalValueScoreVS;
+                        proposal.ProposalAiJudging.VerdictBadge = calc.VerdictBadge;
+                        proposal.ProposalAiJudging.QualityBand = calc.QualityInterpretationBand;
+                        proposal.ProposalAiJudging.SavingsRatioPercent = calc.SavingsRatioPercent;
+                        proposal.ProposalAiJudging.ScopeCompletenessPercent = calc.ScopeCompletenessPercent;
+                        proposal.ProposalAiJudging.GradedQuestionsJson = gradedQuestionsJson;
+                        proposal.ProposalAiJudging.FullEvaluationJson = fullJson;
+                        proposal.ProposalAiJudging.EvaluatedAt = DateTime.UtcNow;
+                    }
+                    else
+                    {
+                        var newJudging = new ProposalAiJudging
+                        {
+                            ProposalAiJudgingsId = Guid.NewGuid(),
+                            ProposalId = proposal.ProposalsId,
+                            Score = scoreInt,
+                            Summary = summaryText,
+                            RecommendedHire = recommended,
+                            TechnicalQualityScore = calc.OverallTechnicalQualityTQ,
+                            ValueScore = calc.FinalValueScoreVS,
+                            VerdictBadge = calc.VerdictBadge,
+                            QualityBand = calc.QualityInterpretationBand,
+                            SavingsRatioPercent = calc.SavingsRatioPercent,
+                            ScopeCompletenessPercent = calc.ScopeCompletenessPercent,
+                            GradedQuestionsJson = gradedQuestionsJson,
+                            FullEvaluationJson = fullJson,
+                            EvaluatedAt = DateTime.UtcNow
+                        };
+
+                        _context.Set<ProposalAiJudging>().Add(newJudging);
+                        proposal.ProposalAiJudging = newJudging;
+                    }
+
+                    processedCount++;
                 }
+            }
 
-                processedCount++;
-            }
-            catch
-            {
-                // If AI call fails for a proposal, log and continue batch
-            }
+            await _context.SaveChangesAsync(cancellationToken);
         }
-
-        await _context.SaveChangesAsync(cancellationToken);
+        catch
+        {
+            // If batch evaluation fails, return current status
+        }
 
         var totalRemaining = await _context.Set<Proposal>()
             .CountAsync(p => p.JobPostsId == request.JobPostId && p.Status != 0 && p.ProposalAiJudging == null, cancellationToken);

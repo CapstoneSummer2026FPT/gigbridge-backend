@@ -64,6 +64,13 @@ internal static class ProposalProjection
 
             // AI Judging Fields
             AiScore = judging?.Score,
+            AiTechnicalQualityScore = judging?.TechnicalQualityScore,
+            AiValueScore = judging?.ValueScore,
+            AiVerdictBadge = judging?.VerdictBadge,
+            AiQualityBand = judging?.QualityBand,
+            AiSavingsRatioPercent = judging?.SavingsRatioPercent,
+            AiScopeCompletenessPercent = judging?.ScopeCompletenessPercent,
+            AiFullEvaluationJson = judging?.FullEvaluationJson,
             AiSummary = judging?.Summary,
             AiRecommendedHire = judging?.RecommendedHire,
             AiEvaluatedAt = judging?.EvaluatedAt,

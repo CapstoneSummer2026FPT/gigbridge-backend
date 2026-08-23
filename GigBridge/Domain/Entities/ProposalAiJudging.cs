@@ -24,6 +24,20 @@ public class ProposalAiJudging
 
     public string? GradedQuestionsJson { get; set; }
 
+    public double TechnicalQualityScore { get; set; }
+
+    public double ValueScore { get; set; }
+
+    public string? VerdictBadge { get; set; }
+
+    public string? QualityBand { get; set; }
+
+    public double SavingsRatioPercent { get; set; }
+
+    public double ScopeCompletenessPercent { get; set; }
+
+    public string? FullEvaluationJson { get; set; }
+
     public DateTime EvaluatedAt { get; set; }
 
     public DateTime? UpdatedAt { get; set; }
