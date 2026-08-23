@@ -4,6 +4,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Application.Common.Exceptions;
+using Sentry;
 
 namespace Project_API.Middleware;
 
@@ -47,6 +48,18 @@ public class ExceptionHandlingMiddleware
             {
                 _logger.LogWarning("Business exception occurred: {Message}", ex.Message);
             }
+
+            if (ex is ExternalServiceException ||
+                ex is not ValidationException and
+                    not ConflictException and
+                    not BadRequestException and
+                    not UnauthorizedAccessException and
+                    not NotFoundException and
+                    not ForbiddenAccessException)
+            {
+                SentrySdk.CaptureException(ex);
+            }
+
             await HandleExceptionAsync(context, ex);
         }
     }

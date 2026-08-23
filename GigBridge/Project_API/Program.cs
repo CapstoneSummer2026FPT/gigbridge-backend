@@ -17,6 +17,32 @@ using Project_API.Services.SystemTracking;
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddScoped<Application.Common.InternalServices.Admin.AuditLogs.Interfaces.IRequestMetadataAccessor, Project_API.Services.RequestMetadataAccessor>();
 
+var sentryDsn = builder.Configuration["Sentry:Dsn"]?.Trim();
+if (!string.IsNullOrWhiteSpace(sentryDsn))
+{
+    var configuredSentryEnvironment = builder.Configuration["Sentry:Environment"]?.Trim();
+    var configuredSentryRelease = builder.Configuration["Sentry:Release"]?.Trim();
+    builder.WebHost.UseSentry(options =>
+    {
+        options.Dsn = sentryDsn;
+        options.Environment = string.IsNullOrWhiteSpace(configuredSentryEnvironment)
+            ? builder.Environment.EnvironmentName.ToLowerInvariant()
+            : configuredSentryEnvironment;
+        options.Release = string.IsNullOrWhiteSpace(configuredSentryRelease)
+            ? null
+            : configuredSentryRelease;
+        options.SendDefaultPii = false;
+        // ExceptionHandlingMiddleware explicitly captures server exceptions. Keep
+        // ILogger entries as breadcrumbs so the same exception is not sent twice.
+        options.MinimumEventLevel = LogLevel.None;
+        options.MinimumBreadcrumbLevel = LogLevel.Information;
+        options.TracesSampleRate = Math.Clamp(
+            builder.Configuration.GetValue<double?>("Sentry:TracesSampleRate") ?? 0d,
+            0d,
+            1d);
+    });
+}
+
 if (builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Testing"))
 {
     builder.Logging.ClearProviders();
@@ -53,6 +79,13 @@ if (!string.IsNullOrWhiteSpace(redisConnectionString))
 
 builder.Services.AddSingleton<SystemTrackingStore>();
 builder.Services.AddSingleton<ISystemTrackingReader>(provider => provider.GetRequiredService<SystemTrackingStore>());
+builder.Services.Configure<SentryMonitoringOptions>(
+    builder.Configuration.GetSection(SentryMonitoringOptions.SectionName));
+builder.Services.AddMemoryCache();
+builder.Services.AddHttpClient<ISystemErrorSource, SentryIssueErrorSource>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(8);
+});
 
 var app = builder.Build();
 

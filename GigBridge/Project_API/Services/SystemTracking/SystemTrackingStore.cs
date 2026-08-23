@@ -114,7 +114,12 @@ public sealed class SystemTrackingStore : ISystemTrackingReader
                 0,
                 0,
                 0,
-                []));
+                []),
+            new ErrorMonitoringStatus(
+                false,
+                false,
+                "sentry",
+                "Sentry issue monitoring is not configured."));
     }
 
     private static IReadOnlyList<SystemAlert> BuildAlerts(

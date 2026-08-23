@@ -69,5 +69,17 @@ services:
       - AiService__BaseUrl=${AI_SERVICE_BASE_URL}
       - AiService__ApiKey=${AI_SERVICE_API_KEY}
 
+      # Sentry capture and read-only admin issue feed
+      - Sentry__Dsn=${SENTRY_BACKEND_DSN:-}
+      - Sentry__Environment=${SENTRY_ENVIRONMENT:-production}
+      - Sentry__Release=${SENTRY_RELEASE:-}
+      - Sentry__TracesSampleRate=${SENTRY_TRACES_SAMPLE_RATE:-0}
+      - SentryMonitoring__Organization=${SENTRY_ORGANIZATION:-}
+      - SentryMonitoring__AuthToken=${SENTRY_MONITORING_AUTH_TOKEN:-}
+      - SentryMonitoring__Environment=${SENTRY_ENVIRONMENT:-production}
+      - SentryMonitoring__ProjectIds__0=${SENTRY_FRONTEND_PROJECT_ID:-}
+      - SentryMonitoring__ProjectIds__1=${SENTRY_BACKEND_PROJECT_ID:-}
+      - SentryMonitoring__ProjectIds__2=${SENTRY_AI_PROJECT_ID:-}
+
     ports:
       - "127.0.0.1:8080:8080" # Exposed locally; Nginx routes public traffic
