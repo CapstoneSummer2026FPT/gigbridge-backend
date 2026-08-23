@@ -33,8 +33,7 @@ public sealed class SearchAvailableJobPostsCommandHandler
     {
         var legacy = new GetAvailableJobPostsQuery(request.PageIndex, request.PageSize, request.Search,
             request.SkillIds, request.BudgetMin, request.BudgetMax, request.SortBy, request.SortDesc);
-        var query = _context.Set<JobPost>().AsNoTracking()
-            .Where(x => x.Status == 1 && (x.Visibility == null || x.Visibility == 0));
+        var query = ApplyOpenAndVisibleFilter(_context.Set<JobPost>().AsNoTracking(), _clock.UtcNow);
         query = GetAvailableJobPostsQueryHandler.ApplyFilters(query, legacy);
         query = ApplyBrowseFilters(query, request, _clock.UtcNow);
         var total = await query.LongCountAsync(cancellationToken);
@@ -78,6 +77,12 @@ public sealed class SearchAvailableJobPostsCommandHandler
 
         return new PagedJobSearchResponse(JobPostProjection.ToSummaryDtos(jobs, _clock.UtcNow, aiInterviewIds),
             total, pageIndex, pageSize, eventId);
+    }
+
+    internal static IQueryable<JobPost> ApplyOpenAndVisibleFilter(IQueryable<JobPost> query, DateTime now)
+    {
+        return query.Where(x => x.Status == 1 && (x.Visibility == null || x.Visibility == 0)
+            && (x.EndDate == null || x.EndDate > now));
     }
 
     internal static IQueryable<JobPost> ApplyBrowseFilters(
