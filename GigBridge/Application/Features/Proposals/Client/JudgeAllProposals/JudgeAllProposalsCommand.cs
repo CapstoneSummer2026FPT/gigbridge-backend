@@ -102,6 +102,7 @@ public class JudgeAllProposalsCommandHandler : IRequestHandler<JudgeAllProposals
         // 4. Fetch proposals for this job post (Status != Draft) that have not been judged yet
         var unjudgedProposals = await _context.Set<Proposal>()
             .Include(p => p.FreelancerProfiles)
+                .ThenInclude(f => f.User)
             .Include(p => p.JobPosts)
                 .ThenInclude(j => j.JobPostSkills)
                     .ThenInclude(js => js.Skills)
@@ -179,6 +180,34 @@ public class JudgeAllProposalsCommandHandler : IRequestHandler<JudgeAllProposals
                     bool recommended = calc.VerdictBadge == "top_value" || calc.VerdictBadge == "top_technical";
                     string summaryText = $"Technical Quality: {calc.OverallTechnicalQualityTQ:F1} ({calc.QualityInterpretationBand}) | Value Score: {calc.FinalValueScoreVS:F1} | Badge: {calc.VerdictBadge}";
 
+                    var gradedQuestionsList = evalResult.LlmQualitativeEvaluation?.ScreeningQa?.Select(qa =>
+                    {
+                        double qScore = Math.Round(
+                            (qa.AnswerCorrectness?.Score ?? 0) * 0.40 +
+                            (qa.TechnicalReasoning?.Score ?? 0) * 0.25 +
+                            (qa.Relevance?.Score ?? 0) * 0.15 +
+                            (qa.Depth?.Score ?? 0) * 0.10 +
+                            (qa.PracticalExamples?.Score ?? 0) * 0.10
+                        );
+
+                        var feedbackList = new List<string>();
+                        if (qa.AnswerCorrectness?.Evidence?.Count > 0)
+                            feedbackList.Add("Accuracy: " + string.Join("; ", qa.AnswerCorrectness.Evidence.Select(e => e.Assessment)));
+                        if (qa.TechnicalReasoning?.Evidence?.Count > 0)
+                            feedbackList.Add("Reasoning: " + string.Join("; ", qa.TechnicalReasoning.Evidence.Select(e => e.Assessment)));
+
+                        return new
+                        {
+                            questionIndex = qa.QuestionIndex,
+                            questionText = qa.QuestionText,
+                            candidateAnswer = qa.CandidateAnswer,
+                            score = (int)qScore,
+                            feedback = feedbackList.Count > 0 ? string.Join(" | ", feedbackList) : "Đánh giá chi tiết dựa trên mức độ chính xác và lập luận kỹ thuật."
+                        };
+                    }).ToList();
+
+                    string gradedQuestionsJson = System.Text.Json.JsonSerializer.Serialize(gradedQuestionsList);
+
                     if (proposal.ProposalAiJudging != null)
                     {
                         proposal.ProposalAiJudging.Score = scoreInt;
@@ -190,6 +219,7 @@ public class JudgeAllProposalsCommandHandler : IRequestHandler<JudgeAllProposals
                         proposal.ProposalAiJudging.QualityBand = calc.QualityInterpretationBand;
                         proposal.ProposalAiJudging.SavingsRatioPercent = calc.SavingsRatioPercent;
                         proposal.ProposalAiJudging.ScopeCompletenessPercent = calc.ScopeCompletenessPercent;
+                        proposal.ProposalAiJudging.GradedQuestionsJson = gradedQuestionsJson;
                         proposal.ProposalAiJudging.FullEvaluationJson = fullJson;
                         proposal.ProposalAiJudging.EvaluatedAt = DateTime.UtcNow;
                     }
@@ -208,6 +238,7 @@ public class JudgeAllProposalsCommandHandler : IRequestHandler<JudgeAllProposals
                             QualityBand = calc.QualityInterpretationBand,
                             SavingsRatioPercent = calc.SavingsRatioPercent,
                             ScopeCompletenessPercent = calc.ScopeCompletenessPercent,
+                            GradedQuestionsJson = gradedQuestionsJson,
                             FullEvaluationJson = fullJson,
                             EvaluatedAt = DateTime.UtcNow
                         };
