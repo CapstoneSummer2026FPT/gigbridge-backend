@@ -65,9 +65,9 @@ public sealed class DependencyInjectionConfigurationTests
 {
     [Theory]
     [InlineData("Development", null, 0)]
-    [InlineData("Production", null, 8)]
+    [InlineData("Production", null, 9)]
     [InlineData("Production", "false", 0)]
-    [InlineData("Development", "true", 8)]
+    [InlineData("Development", "true", 9)]
     public void ApplicationWorkers_RespectEnvironmentAndExplicitOverride(
         string environment,
         string? enabled,
@@ -90,7 +90,7 @@ public sealed class DependencyInjectionConfigurationTests
         services.AddApplicationServices(new ConfigurationBuilder().Build());
 
         Assert.Equal(
-            8,
+            9,
             services.Count(descriptor => descriptor.ServiceType == typeof(IHostedService)));
     }
 
