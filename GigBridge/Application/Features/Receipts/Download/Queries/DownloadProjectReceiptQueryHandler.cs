@@ -1,6 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Features.Receipts.Common.DTOs;
+using Application.Common.InternalServices.Receipts.Services;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
@@ -32,16 +33,15 @@ public sealed class DownloadProjectReceiptQueryHandler
         {
             throw new ConflictException("The receipt PDF is still being prepared.");
         }
-        var content = await _context.Set<ProjectReceiptContent>()
-            .AsNoTracking()
-            .FirstOrDefaultAsync(item => item.ProjectReceiptId == request.ReceiptId, cancellationToken);
-        if (content?.PdfContent is not { Length: > 0 })
+        var content = await ProjectReceiptArtifactStorage.GetPdfAsync(
+            _context, request.ReceiptId, "Download", cancellationToken);
+        if (content?.Content is not { Length: > 0 })
         {
             throw new ConflictException("The receipt PDF is still being prepared.");
         }
         return new ProjectReceiptDownloadResponse(
-            content.PdfContent,
-            content.PdfFileName ?? $"GigBridge-{receipt.ReceiptNumber}.pdf",
-            content.PdfContentType ?? "application/pdf");
+            content.Content,
+            string.IsNullOrWhiteSpace(content.FileName) ? $"GigBridge-{receipt.ReceiptNumber}.pdf" : content.FileName,
+            content.MimeType);
     }
 }

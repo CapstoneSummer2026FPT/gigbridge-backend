@@ -65,6 +65,7 @@ builder.Services.AddTrustedProxyForwarding();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddScoped<IChatRealtimeNotifier, SignalRChatRealtimeNotifier>();
+builder.Services.AddScoped<IUserRealtimeEventSender, SignalRChatRealtimeNotifier>();
 builder.Services.AddScoped<INotificationSender, SignalRNotificationSender>();
 
 var signalRBuilder = builder.Services.AddSignalR();

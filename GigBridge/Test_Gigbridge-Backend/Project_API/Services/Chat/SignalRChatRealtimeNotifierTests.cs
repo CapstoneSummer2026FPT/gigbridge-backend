@@ -1,3 +1,4 @@
+using Application.Common.InternalServices.Chat.Interfaces;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -65,5 +66,32 @@ public sealed class SignalRChatRealtimeNotifierTests
             "ConversationUpdated",
             Arg.Any<object?[]>(),
             CancellationToken.None);
+    }
+
+    [Fact]
+    public async Task ReliableRealtimeSender_PropagatesHubFailureForOutboxRetry()
+    {
+        var hubContext = Substitute.For<IHubContext<ChatHub>>();
+        var clients = Substitute.For<IHubClients>();
+        var clientProxy = Substitute.For<IClientProxy>();
+        hubContext.Clients.Returns(clients);
+        var userId = Guid.NewGuid();
+        clients.User(userId.ToString()).Returns(clientProxy);
+        clientProxy.SendCoreAsync(
+                Arg.Any<string>(),
+                Arg.Any<object?[]>(),
+                Arg.Any<CancellationToken>())
+            .Returns(Task.FromException(new InvalidOperationException("hub unavailable")));
+        IUserRealtimeEventSender sender = new SignalRChatRealtimeNotifier(
+            hubContext,
+            Substitute.For<ILogger<SignalRChatRealtimeNotifier>>());
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(() => sender.SendAsync(
+            userId,
+            "ESignDocumentRevisionChanged",
+            new { documentId = Guid.NewGuid(), revision = 4 },
+            CancellationToken.None));
+
+        Assert.Equal("hub unavailable", exception.Message);
     }
 }

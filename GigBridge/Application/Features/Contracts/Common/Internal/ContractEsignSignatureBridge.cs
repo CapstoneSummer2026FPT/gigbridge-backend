@@ -1,5 +1,6 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
+using Application.Common.InternalServices.ESign.Services;
 using Domain.Entities;
 using Domain.Enums.ESign;
 using Microsoft.EntityFrameworkCore;
@@ -72,7 +73,12 @@ internal static class ContractEsignSignatureBridge
 
         document.Status = (int)ESignDocumentStatus.FullySigned;
         document.FinalizedAt ??= now;
-        document.UpdatedAt = now;
+        ESignDocumentRevision.Advance(document, now);
+        await ESignDocumentRevision.EnqueueAsync(
+            context,
+            document,
+            now,
+            cancellationToken);
 
         return document;
     }

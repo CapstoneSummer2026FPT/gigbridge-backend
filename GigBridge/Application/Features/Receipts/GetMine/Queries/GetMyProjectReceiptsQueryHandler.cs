@@ -44,7 +44,8 @@ public sealed class GetMyProjectReceiptsQueryHandler
                     item.GenerationStatus == (int)ProjectReceiptGenerationStatus.Ready &&
                     item.EmailStatus == (int)ProjectReceiptEmailStatus.Failed,
                 item.GeneratedAt,
-                item.EmailedAt))
+                item.EmailedAt,
+                item.Revision))
             .ToListAsync(cancellationToken);
         return new PaginatedList<ProjectReceiptSummaryResponse>(
             receipts,

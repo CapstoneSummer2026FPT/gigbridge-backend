@@ -21,7 +21,7 @@ namespace Application.Common.InternalServices.Chat.BackgroundJobs;
 public class GoogleMeetProvisioningWorker : BackgroundService
 {
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(5);
-    private static readonly TimeSpan MaxIdlePollInterval = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan MaxIdlePollInterval = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan LeaseDuration = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan LeaseMonitorInterval = TimeSpan.FromSeconds(15);
     private static readonly TimeSpan MaxIdleLeaseMonitorInterval = TimeSpan.FromMinutes(1);

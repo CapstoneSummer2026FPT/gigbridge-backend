@@ -42,3 +42,35 @@ public sealed record ESignDocumentStatusResponse(
     DateTime? UpdatedAt,
     IReadOnlyList<ESignSignatureResponse> Signatures,
     int ContentRevision);
+
+public sealed record ESignDocumentLightweightStatusResponse(
+    Guid DocumentId,
+    Guid? ContractId,
+    int Status,
+    int Revision,
+    DateTime CreatedAt,
+    DateTime? UpdatedAt,
+    DateTime? ExpiresAt,
+    DateTime? FinalizedAt,
+    int? CurrentUserSignerRole,
+    bool CanCurrentUserSign,
+    bool HasDocxArtifact,
+    bool HasPdfArtifact,
+    long? PdfSizeBytes,
+    string? SemanticHash,
+    int SignatureCount,
+    IReadOnlyList<ESignSignerStatusResponse> Signatures);
+
+public sealed record ESignSignerStatusResponse(
+    Guid SignatureId,
+    Guid DocumentId,
+    Guid UserId,
+    int SignerRole,
+    int Status,
+    bool IsDraftValid,
+    DateTime? SignedAt,
+    DateTime? DraftSubmittedAt,
+    string? SignatureImageUrl,
+    int? SignatureWidth,
+    int? SignatureHeight,
+    string? IdentityOrTaxCode);

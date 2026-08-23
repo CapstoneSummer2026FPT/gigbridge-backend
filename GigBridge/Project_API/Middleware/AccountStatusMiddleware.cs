@@ -1,10 +1,11 @@
 using System.Security.Claims;
 using System.Text.Json;
 using Application.Common.Interfaces;
+using Application.Common.Interfaces.Caching;
+using Application.Common.InternalServices.Accounts.Models;
 using Application.Common.InternalServices.Accounts.Services;
 using Application.Common.Interfaces.Time;
 using Application.Common.Models;
-using Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 
 namespace Project_API.Middleware;
@@ -21,7 +22,9 @@ public class AccountStatusMiddleware
     public async Task InvokeAsync(
         HttpContext context,
         IApplicationDbContext dbContext,
-        IDateTimeService dateTimeService)
+        IDateTimeService dateTimeService,
+        ICacheService cache,
+        ILogger<AccountStatusMiddleware> logger)
     {
         if (context.User.Identity?.IsAuthenticated != true)
         {
@@ -48,18 +51,59 @@ public class AccountStatusMiddleware
             return;
         }
 
-        var user = await dbContext.Set<User>()
-            .Where(existingUser => existingUser.UserId == userId)
-            .FirstOrDefaultAsync(context.RequestAborted);
-
+        var cacheKey = AccountAccessCache.Key(userId);
+        AccountAccessState? user = null;
+        try
+        {
+            user = await cache.GetAsync<AccountAccessState>(cacheKey, context.RequestAborted);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            logger.LogWarning(exception, "Account access cache read failed for {UserId}; using PostgreSQL fallback.", userId);
+        }
         if (user is null)
+        {
+            user = await dbContext.Set<Domain.Entities.User>()
+                .AsNoTracking()
+                .TagWith("Account.AccessStatus")
+                .Where(existingUser => existingUser.UserId == userId)
+                .Select(existingUser => new AccountAccessState(
+                    true,
+                    existingUser.IsActive,
+                    existingUser.AccountStatus,
+                    existingUser.SuspendedUntil))
+                .FirstOrDefaultAsync(context.RequestAborted)
+                ?? new AccountAccessState(false, false, 0, null);
+            await TryCacheAsync(cache, cacheKey, user, userId, logger, context.RequestAborted);
+        }
+
+        if (!user.Exists)
         {
             await WriteUnauthorizedAsync(context, "Account does not exist.");
             return;
         }
 
-        if (UserAccountEnforcement.NormalizeExpiredSuspension(user, dateTimeService.UtcNow))
-            await dbContext.SaveChangesAsync(context.RequestAborted);
+        if (user.AccountStatus == (int)Domain.Enums.Accounts.AccountStatus.Suspended &&
+            user.SuspendedUntil.HasValue && user.SuspendedUntil.Value <= dateTimeService.UtcNow)
+        {
+            await dbContext.Set<Domain.Entities.User>()
+                .Where(existingUser => existingUser.UserId == userId &&
+                    existingUser.AccountStatus == (int)Domain.Enums.Accounts.AccountStatus.Suspended &&
+                    existingUser.SuspendedUntil <= dateTimeService.UtcNow)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(existingUser => existingUser.AccountStatus,
+                        (int)Domain.Enums.Accounts.AccountStatus.Active)
+                    .SetProperty(existingUser => existingUser.SuspendedAt, (DateTime?)null)
+                    .SetProperty(existingUser => existingUser.SuspendedUntil, (DateTime?)null)
+                    .SetProperty(existingUser => existingUser.SuspensionReason, (string?)null),
+                    context.RequestAborted);
+            user = user with
+            {
+                AccountStatus = (int)Domain.Enums.Accounts.AccountStatus.Active,
+                SuspendedUntil = null
+            };
+            await TryCacheAsync(cache, cacheKey, user, userId, logger, context.RequestAborted);
+        }
 
         if (!user.IsActive || user.AccountStatus == (int)Domain.Enums.Accounts.AccountStatus.Banned)
         {
@@ -75,6 +119,24 @@ public class AccountStatusMiddleware
         }
 
         await _next(context);
+    }
+
+    private static async Task TryCacheAsync(
+        ICacheService cache,
+        string cacheKey,
+        AccountAccessState state,
+        Guid userId,
+        ILogger logger,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await cache.SetAsync(cacheKey, state, AccountAccessCache.Duration, cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            logger.LogWarning(exception, "Account access cache write failed for {UserId}.", userId);
+        }
     }
 
     private static bool IsSignalRNegotiateRequest(HttpRequest request)

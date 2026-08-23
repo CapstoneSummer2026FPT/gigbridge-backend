@@ -4,6 +4,7 @@ using Application.Common.InternalServices.Chat.Services;
 using Application.Common.InternalServices.ESign.Models;
 using Application.Common.InternalServices.ESign.Services;
 using Application.Common.InternalServices.Notifications.Models;
+using Application.Common.InternalServices.Realtime.Models;
 using System.Text.Json;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.Email;
@@ -43,8 +44,8 @@ namespace Application.Common.InternalServices.Delivery.BackgroundJobs;
 public sealed class DeliveryOutboxService : BackgroundService
 {
     internal static readonly TimeSpan DueDeliveryPollInterval = TimeSpan.FromSeconds(1);
-    private static readonly TimeSpan RealtimeMaxIdlePollInterval = TimeSpan.FromSeconds(15);
-    private static readonly TimeSpan EmailMaxIdlePollInterval = TimeSpan.FromMinutes(1);
+    private static readonly TimeSpan RealtimeMaxIdlePollInterval = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan EmailMaxIdlePollInterval = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan BackfillRetryInterval = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan[] RetryDelays =
         [TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(15), TimeSpan.FromHours(1), TimeSpan.FromHours(6)];
@@ -433,6 +434,14 @@ public sealed class DeliveryOutboxService : BackgroundService
             {
                 DeliveryOutboxType.MilestoneSubmission =>
                     await PrepareMilestoneSubmissionEmailAsync(context, lease, job, ct),
+                DeliveryOutboxType.ESignDocumentRevision =>
+                    PrepareESignDocumentRevision(lease, job),
+                DeliveryOutboxType.NotificationStateRevision =>
+                    PrepareRevisionEvent<NotificationStateChangedPayload>(lease, job, RealtimeRevisionEvents.NotificationStateChanged),
+                DeliveryOutboxType.ConversationInboxRevision =>
+                    PrepareRevisionEvent<ConversationInboxRevisionChangedPayload>(lease, job, RealtimeRevisionEvents.ConversationInboxRevisionChanged),
+                DeliveryOutboxType.ProjectReceiptRevision =>
+                    PrepareRevisionEvent<ProjectReceiptRevisionChangedPayload>(lease, job, RealtimeRevisionEvents.ProjectReceiptRevisionChanged),
                 _ => await PrepareFinalContractEmailAsync(context, lease, job, ct)
             };
         }
@@ -463,6 +472,45 @@ public sealed class DeliveryOutboxService : BackgroundService
             default:
                 throw new InvalidOperationException($"Unsupported delivery channel {job.Channel}.");
         }
+    }
+
+    private static PreparedDelivery PrepareESignDocumentRevision(
+        DeliveryOutboxLease lease,
+        DeliveryOutbox job)
+    {
+        if (job.Channel != (int)DeliveryChannel.NotificationRealtime)
+        {
+            throw new InvalidOperationException("ESign revision outbox deliveries require the realtime channel.");
+        }
+
+        var payload = JsonSerializer.Deserialize<ESignDocumentRevisionDeliveryPayload>(job.Payload, JsonOptions)
+            ?? throw new JsonException("Invalid ESign document revision delivery payload.");
+        if (payload.Revision != job.EventSequence ||
+            payload.ChangeKind is not (ESignDocumentRevision.UpsertChangeKind or ESignDocumentRevision.DeletedChangeKind))
+        {
+            throw new JsonException("Invalid ESign document revision sequence or change kind.");
+        }
+
+        return PreparedDelivery.ForRealtimeEvent(
+            lease,
+            job.DeliveryKey,
+            job.AttemptCount,
+            job.RecipientUserId,
+            ESignDocumentRevision.ChangedEventName,
+            payload);
+    }
+
+    private static PreparedDelivery PrepareRevisionEvent<TPayload>(
+        DeliveryOutboxLease lease,
+        DeliveryOutbox job,
+        string eventName)
+    {
+        if (job.Channel != (int)DeliveryChannel.NotificationRealtime)
+            throw new InvalidOperationException("Revision outbox deliveries require the realtime channel.");
+        var payload = JsonSerializer.Deserialize<TPayload>(job.Payload, JsonOptions)
+            ?? throw new JsonException("Invalid realtime revision payload.");
+        return PreparedDelivery.ForRealtimeEvent(
+            lease, job.DeliveryKey, job.AttemptCount, job.RecipientUserId, eventName, payload);
     }
 
     private async Task<PreparedDelivery?> PrepareScheduledNotificationAsync(
@@ -566,6 +614,17 @@ public sealed class DeliveryOutboxService : BackgroundService
                     delivery.Notification,
                     ct);
             }
+            else if (delivery.RealtimePayload is not null &&
+                     delivery.RealtimeUserId.HasValue &&
+                     !string.IsNullOrWhiteSpace(delivery.RealtimeEventName))
+            {
+                var sender = scope.ServiceProvider.GetRequiredService<IUserRealtimeEventSender>();
+                await sender.SendAsync(
+                    delivery.RealtimeUserId.Value,
+                    delivery.RealtimeEventName,
+                    delivery.RealtimePayload,
+                    ct);
+            }
             else
             {
                 throw new InvalidOperationException(
@@ -648,6 +707,7 @@ public sealed class DeliveryOutboxService : BackgroundService
 
     private void LogOutcome(DeliveryOutcome outcome, int updated)
     {
+        var isEsignRevision = outcome.DeliveryKey.StartsWith("esign-revision:", StringComparison.Ordinal);
         if (updated == 0)
         {
             _logger.LogInformation(
@@ -658,6 +718,10 @@ public sealed class DeliveryOutboxService : BackgroundService
 
         if (outcome.Succeeded)
         {
+            if (isEsignRevision)
+            {
+                ESignTelemetry.RecordRevisionEvent("delivered");
+            }
             _logger.LogInformation(
                 "Delivery {DeliveryKey} completed successfully.",
                 outcome.DeliveryKey);
@@ -666,6 +730,10 @@ public sealed class DeliveryOutboxService : BackgroundService
 
         if (outcome.DeadLettered)
         {
+            if (isEsignRevision)
+            {
+                ESignTelemetry.RecordRevisionEvent("dead_lettered");
+            }
             _logger.LogError(outcome.Exception,
                 "Delivery {DeliveryKey} dead-lettered after {Attempts} attempts.",
                 outcome.DeliveryKey,
@@ -673,6 +741,10 @@ public sealed class DeliveryOutboxService : BackgroundService
         }
         else
         {
+            if (isEsignRevision)
+            {
+                ESignTelemetry.RecordRevisionEvent("retried");
+            }
             _logger.LogWarning(outcome.Exception,
                 "Delivery {DeliveryKey} failed; attempt {Attempt} scheduled for {NextAttemptAt}.",
                 outcome.DeliveryKey,
@@ -1185,22 +1257,34 @@ public sealed class DeliveryOutboxService : BackgroundService
 
         var payload = JsonSerializer.Deserialize<ContractEsignDeliveryPayload>(job.Payload, JsonOptions)
             ?? throw new JsonException("Invalid ESign contract delivery payload.");
-        var document = await (
-                from item in context.Set<EsignDocument>().AsNoTracking()
-                join content in context.Set<EsignDocumentContent>().AsNoTracking()
-                    on item.EsignDocumentsId equals content.EsignDocumentsId
-                where item.EsignDocumentsId == payload.DocumentId
-                select new FinalContractArtifact(
-                    item.Status,
-                    item.DocumentCode,
-                    content.PdfDocumentContent,
-                    content.PdfDocumentFileName,
-                    "application/pdf",
-                    item.DocumentHash,
-                    item.PdfDocumentHash,
-                    item.PdfSignatureCount))
+        var documentMetadata = await context.Set<EsignDocument>()
+            .AsNoTracking()
+            .Where(item => item.EsignDocumentsId == payload.DocumentId)
+            .Select(item => new
+            {
+                item.Status,
+                item.DocumentCode,
+                item.DocumentHash,
+                item.PdfDocumentHash,
+                item.PdfSignatureCount
+            })
             .FirstOrDefaultAsync(ct)
             ?? throw new InvalidOperationException("The finalized ESign document no longer exists.");
+        var pdfArtifact = await ESignArtifactStorage.GetAsync(
+            context,
+            payload.DocumentId,
+            ESignArtifactType.Pdf,
+            "ESign.Artifact.Pdf.Email",
+            ct);
+        var document = new FinalContractArtifact(
+            documentMetadata.Status,
+            documentMetadata.DocumentCode,
+            pdfArtifact?.Content,
+            pdfArtifact?.FileName,
+            pdfArtifact?.MimeType,
+            documentMetadata.DocumentHash,
+            documentMetadata.PdfDocumentHash,
+            documentMetadata.PdfSignatureCount);
         if (document.Status != (int)ESignDocumentStatus.FullySigned ||
             document.Content is not { Length: > 0 } ||
             string.IsNullOrWhiteSpace(document.FileName) ||
@@ -1418,14 +1502,17 @@ public sealed class DeliveryOutboxService : BackgroundService
         int AttemptCount,
         EmailRequest? Email,
         Guid? NotificationUserId,
-        NotificationDto? Notification)
+        NotificationDto? Notification,
+        Guid? RealtimeUserId,
+        string? RealtimeEventName,
+        object? RealtimePayload)
     {
         public static PreparedDelivery ForEmail(
             DeliveryOutboxLease lease,
             string deliveryKey,
             int attemptCount,
             EmailRequest email) =>
-            new(lease, deliveryKey, attemptCount, email, null, null);
+            new(lease, deliveryKey, attemptCount, email, null, null, null, null, null);
 
         public static PreparedDelivery ForNotification(
             DeliveryOutboxLease lease,
@@ -1433,7 +1520,16 @@ public sealed class DeliveryOutboxService : BackgroundService
             int attemptCount,
             Guid userId,
             NotificationDto notification) =>
-            new(lease, deliveryKey, attemptCount, null, userId, notification);
+            new(lease, deliveryKey, attemptCount, null, userId, notification, null, null, null);
+
+        public static PreparedDelivery ForRealtimeEvent(
+            DeliveryOutboxLease lease,
+            string deliveryKey,
+            int attemptCount,
+            Guid userId,
+            string eventName,
+            object payload) =>
+            new(lease, deliveryKey, attemptCount, null, null, null, userId, eventName, payload);
     }
 
     private sealed record PreparedDeliveryBatch(

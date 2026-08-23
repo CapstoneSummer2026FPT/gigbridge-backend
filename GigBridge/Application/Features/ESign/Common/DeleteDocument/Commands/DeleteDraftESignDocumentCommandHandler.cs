@@ -1,5 +1,6 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
+using Application.Common.InternalServices.ESign.Services;
 using Domain.Entities;
 using Domain.Enums.Accounts;
 using Domain.Enums.ESign;
@@ -54,6 +55,14 @@ public sealed class DeleteDraftESignDocumentCommandHandler
             throw new ConflictException("Only unsigned draft e-sign documents can be deleted.");
         }
 
+        var now = DateTime.UtcNow;
+        ESignDocumentRevision.Advance(document, now);
+        await ESignDocumentRevision.EnqueueAsync(
+            _context,
+            document,
+            now,
+            cancellationToken,
+            ESignDocumentRevision.DeletedChangeKind);
         _context.Set<EsignDocument>().Remove(document);
         await _context.SaveChangesAsync(cancellationToken);
         return true;

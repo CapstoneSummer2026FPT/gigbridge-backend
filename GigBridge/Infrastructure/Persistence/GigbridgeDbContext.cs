@@ -23,6 +23,8 @@ namespace Infrastructure.Persistence;
 
 public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDataProtectionKeyContext
 {
+    public bool SupportsRelationalBulkOperations => true;
+
     public GigbridgeDbContext(DbContextOptions<GigbridgeDbContext> options)
         : base(options)
     {
@@ -71,6 +73,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
     public virtual DbSet<ProjectReceipt> ProjectReceipts { get; set; }
 
     public virtual DbSet<ProjectReceiptContent> ProjectReceiptContents { get; set; }
+    public virtual DbSet<ProjectReceiptArtifact> ProjectReceiptArtifacts { get; set; }
+    public virtual DbSet<UserRealtimeState> UserRealtimeStates { get; set; }
 
     public virtual DbSet<Conversation> Conversations { get; set; }
 
@@ -101,6 +105,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
     public virtual DbSet<EsignDocument> EsignDocuments { get; set; }
 
     public virtual DbSet<EsignDocumentContent> EsignDocumentContents { get; set; }
+
+    public virtual DbSet<EsignDocumentArtifact> EsignDocumentArtifacts { get; set; }
 
     public virtual DbSet<EsignSignature> EsignSignatures { get; set; }
 
@@ -472,6 +478,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
                 .HasMaxLength(2000);
             entity.Property(e => e.ContentRevision)
                 .HasDefaultValue(0);
+            entity.Property(e => e.Revision)
+                .HasDefaultValue(0);
             entity.Property(e => e.EmailStatus)
                 .HasComment("Enum ProjectReceiptEmailStatus: 0=Pending, 1=Delivered, 2=Failed");
             entity.Property(e => e.EmailLastError)
@@ -524,6 +532,38 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
                 .WithOne(r => r.Content)
                 .HasForeignKey<ProjectReceiptContent>(e => e.ProjectReceiptId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ProjectReceiptArtifact>(entity =>
+        {
+            entity.ToTable("ProjectReceiptArtifacts", table =>
+            {
+                table.HasCheckConstraint("CK_ProjectReceiptArtifacts_ArtifactType", "\"ArtifactType\" = 1");
+                table.HasCheckConstraint("CK_ProjectReceiptArtifacts_SizeBytes", "\"SizeBytes\" = octet_length(\"Content\") AND \"SizeBytes\" > 0");
+            });
+            entity.HasKey(e => e.ProjectReceiptArtifactId);
+            entity.HasIndex(e => new { e.ProjectReceiptId, e.ArtifactType }).IsUnique();
+            entity.Property(e => e.ProjectReceiptArtifactId).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.Content).HasColumnType("bytea").IsRequired();
+            entity.Property(e => e.FileName).HasMaxLength(255).IsRequired();
+            entity.Property(e => e.MimeType).HasMaxLength(150).IsRequired();
+            entity.Property(e => e.ContentHashSha256).HasMaxLength(64).IsFixedLength().IsRequired();
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.HasOne(e => e.ProjectReceipt).WithMany(e => e.Artifacts)
+                .HasForeignKey(e => e.ProjectReceiptId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<UserRealtimeState>(entity =>
+        {
+            entity.ToTable("UserRealtimeStates");
+            entity.HasKey(e => e.UserId);
+            entity.Property(e => e.NotificationRevision).HasDefaultValue(0);
+            entity.Property(e => e.NotificationUnreadCount).HasDefaultValue(0);
+            entity.Property(e => e.ConversationRevision).HasDefaultValue(0);
+            entity.Property(e => e.ConversationUnreadCount).HasDefaultValue(0);
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("now()");
+            entity.HasOne(e => e.User).WithOne(e => e.RealtimeState)
+                .HasForeignKey<UserRealtimeState>(e => e.UserId).OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<ContractWorkItem>(entity =>
@@ -1158,6 +1198,31 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
                 .HasForeignKey<EsignDocumentContent>(e => e.EsignDocumentsId)
                 .OnDelete(DeleteBehavior.Cascade)
                 .HasConstraintName("ESignDocumentContents_eDoc_ESignDocumentsId_fkey");
+        });
+
+        modelBuilder.Entity<EsignDocumentArtifact>(entity =>
+        {
+            entity.HasKey(e => e.EsignDocumentArtifactId)
+                .HasName("ESignDocumentArtifacts_pkey");
+
+            entity.ToTable("ESignDocumentArtifacts");
+
+            entity.HasIndex(e => new { e.EsignDocumentsId, e.ArtifactType },
+                    "ESignDocumentArtifacts_eDoc_Type_key")
+                .IsUnique();
+
+            entity.Property(e => e.EsignDocumentArtifactId)
+                .HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.Content).HasColumnType("bytea").IsRequired();
+            entity.Property(e => e.FileName).HasMaxLength(255).IsRequired();
+            entity.Property(e => e.MimeType).HasMaxLength(150).IsRequired();
+            entity.Property(e => e.ContentHashSha256).HasMaxLength(64).IsFixedLength().IsRequired();
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+
+            entity.HasOne(e => e.EsignDocument).WithMany(d => d.Artifacts)
+                .HasForeignKey(e => e.EsignDocumentsId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("ESignDocumentArtifacts_eDoc_ESignDocumentsId_fkey");
         });
 
         modelBuilder.Entity<EsignSignature>(entity =>
