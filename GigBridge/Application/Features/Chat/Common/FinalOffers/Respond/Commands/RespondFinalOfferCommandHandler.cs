@@ -9,6 +9,7 @@ using Application.Features.Chat.Common.FinalOffers.Respond.DTOs;
 using Application.Common.InternalServices.Chat.Email;
 using Application.Common.InternalServices.Chat.Models;
 using Application.Features.Chat.Common.Messages.Send.DTOs;
+using Application.Features.Chat.Common.Negotiations.Realtime;
 using Application.Features.JobPosts.Common;
 using Application.Features.Proposals.Common;
 using Application.Features.Premium.Client.SmartTalentMatching.Feedback;
@@ -132,7 +133,7 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
         {
             case FinalOfferResponse.Accept:
                 response = await AcceptOffer(offer, conversation, command.UserId, now, cancellationToken);
-                eventName = "ContractDraftUpdated";
+                eventName = NegotiationRealtimeEvents.ContractDraftUpdated;
                 break;
             case FinalOfferResponse.RequestChange:
                 eventName = ChangeOfferStatus(
@@ -168,17 +169,7 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
             .Distinct()
             .ToArray();
 
-        await _chatRealtimeNotifier.SendUsersEventAsync(
-            participantUserIds,
-            "FinalOfferResponded",
-            new
-            {
-                offerId = offer.NegotiationOfferId,
-                status = offer.Status,
-                response = command.Request.Response.ToString()
-            },
-            cancellationToken);
-
+        MessageResponse? messageResponse = null;
         if (conversation.LastMessageId.HasValue)
         {
             var lastMessage = await _context.Set<Message>()
@@ -189,17 +180,41 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
 
             if (lastMessage is not null)
             {
-                var messageResponse = ToMessageResponse(lastMessage);
+                messageResponse = ToMessageResponse(lastMessage);
 
-                await SendConversationUpdatedEvents(
-                    activeParticipants,
+                await _chatRealtimeNotifier.SendUsersEventAsync(
+                    participantUserIds,
+                    "ReceiveMessage",
                     messageResponse,
-                    messageResponse.SentAt,
                     cancellationToken);
+
             }
         }
 
-        if (eventName == "ContractDraftUpdated")
+        await _chatRealtimeNotifier.SendUsersEventAsync(
+            participantUserIds,
+            NegotiationRealtimeEvents.FinalOfferResponded,
+            new
+            {
+                conversationId = conversation.ConversationsId,
+                offerId = offer.NegotiationOfferId,
+                status = offer.Status,
+                response = command.Request.Response.ToString(),
+                contractId = response.ContractId,
+                messageId = messageResponse?.MessageId
+            },
+            cancellationToken);
+
+        if (messageResponse is not null)
+        {
+            await SendConversationUpdatedEvents(
+                activeParticipants,
+                messageResponse,
+                messageResponse.SentAt,
+                cancellationToken);
+        }
+
+        if (eventName == NegotiationRealtimeEvents.ContractDraftUpdated)
         {
             await _chatRealtimeNotifier.SendUsersEventAsync(
                 participantUserIds,

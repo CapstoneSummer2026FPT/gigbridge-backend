@@ -120,10 +120,11 @@ public class NegotiationFlowCommandHandlerTests
     {
         var fixture = new NegotiationFixture();
         fixture.AddConversationWithParticipants();
+        var realtimeNotifier = Substitute.For<IChatRealtimeNotifier>();
         var handler = new CreateFinalOfferCommandHandler(
             fixture.Context,
             new FixedDateTimeService(fixture.Now),
-            new NoopChatRealtimeNotifier());
+            realtimeNotifier);
 
         var ex = await Assert.ThrowsAsync<BadRequestException>(() =>
             handler.Handle(
@@ -141,6 +142,7 @@ public class NegotiationFlowCommandHandlerTests
         Assert.Equal("At least one milestone is required for a final offer.", ex.Message);
         Assert.Empty(fixture.Offers.Entities);
         Assert.Empty(fixture.Messages.Entities);
+        Assert.Empty(realtimeNotifier.ReceivedCalls());
     }
 
     [Fact]
@@ -232,7 +234,8 @@ public class NegotiationFlowCommandHandlerTests
         fixture.AddConversationWithParticipants();
         var handler = new UpdateNegotiationMilestonePlanCommandHandler(
             fixture.Context,
-            new FixedDateTimeService(fixture.Now));
+            new FixedDateTimeService(fixture.Now),
+            new NoopChatRealtimeNotifier());
 
         var exception = await Assert.ThrowsAsync<BadRequestException>(() =>
             handler.Handle(
@@ -244,6 +247,37 @@ public class NegotiationFlowCommandHandlerTests
 
         Assert.Contains("no longer open", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Empty(fixture.NegotiationDrafts.Entities);
+    }
+
+    [Fact]
+    public async Task UpdateNegotiationMilestonePlan_SuccessNotifiesEveryParticipant()
+    {
+        var fixture = new NegotiationFixture();
+        fixture.AddConversationWithParticipants();
+        var realtimeNotifier = Substitute.For<IChatRealtimeNotifier>();
+        var handler = new UpdateNegotiationMilestonePlanCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            realtimeNotifier);
+
+        var result = await handler.Handle(
+            new UpdateNegotiationMilestonePlanCommand(
+                fixture.ConversationId,
+                fixture.ClientUserId,
+                new UpdateNegotiationMilestonePlanRequest(CreatePlan(600m, 900m))),
+            CancellationToken.None);
+
+        Assert.Equal(2, result.Count);
+        await realtimeNotifier.Received(1).SendUsersEventAsync(
+            Arg.Is<IReadOnlyCollection<Guid>>(userIds =>
+                userIds.Count == 2 &&
+                userIds.Contains(fixture.ClientUserId) &&
+                userIds.Contains(fixture.FreelancerUserId)),
+            "NegotiationMilestonePlanUpdated",
+            Arg.Is<object>(payload =>
+                Equals(GetPropertyValue(payload, "ConversationId"), fixture.ConversationId) &&
+                Equals(GetPropertyValue(payload, "UpdatedByUserId"), fixture.ClientUserId)),
+            Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -312,6 +346,20 @@ public class NegotiationFlowCommandHandlerTests
         Assert.Equal(
             contract.ContractsId,
             workflowPayload.GetType().GetProperty("contractId")?.GetValue(workflowPayload));
+        var realtimeEventNames = realtimeNotifier.ReceivedCalls()
+            .Select(call => call.GetArguments().ElementAtOrDefault(1) as string)
+            .Where(name => name is not null)
+            .ToList();
+        Assert.True(realtimeEventNames.IndexOf("ReceiveMessage") < realtimeEventNames.IndexOf("FinalOfferResponded"));
+        Assert.True(realtimeEventNames.IndexOf("FinalOfferResponded") < realtimeEventNames.IndexOf("ConversationUpdated"));
+        Assert.True(realtimeEventNames.IndexOf("ConversationUpdated") < realtimeEventNames.IndexOf("ContractDraftUpdated"));
+        var responseCall = realtimeNotifier.ReceivedCalls().Single(call =>
+            Equals(call.GetArguments()[1], "FinalOfferResponded"));
+        var responsePayload = responseCall.GetArguments()[2]
+            ?? throw new InvalidOperationException("FinalOfferResponded payload was null.");
+        Assert.Equal(fixture.ConversationId, GetPropertyValue(responsePayload, "conversationId"));
+        Assert.Equal(contract.ContractsId, GetPropertyValue(responsePayload, "contractId"));
+        Assert.NotNull(GetPropertyValue(responsePayload, "messageId"));
         await notifications.Received(1).CreateNotificationAsync(
             fixture.FreelancerUserId,
             NotificationType.ContractStarted,
@@ -325,6 +373,46 @@ public class NegotiationFlowCommandHandlerTests
                 email.To == "freelancer@example.com" &&
                 email.Subject == "Accepted" &&
                 email.IsHtml),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(FinalOfferResponse.RequestChange, NegotiationOfferStatus.ChangeRequested)]
+    [InlineData(FinalOfferResponse.Decline, NegotiationOfferStatus.Rejected)]
+    public async Task RespondFinalOffer_NonAcceptResponsesPushMessageAndScopedOfferEvent(
+        FinalOfferResponse response,
+        NegotiationOfferStatus expectedStatus)
+    {
+        var fixture = new NegotiationFixture();
+        fixture.AddConversationWithParticipants();
+        fixture.AddOfferWithSnapshot(1500m, 600m, 900m);
+        var realtimeNotifier = Substitute.For<IChatRealtimeNotifier>();
+        var handler = new RespondFinalOfferCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            realtimeNotifier);
+
+        await handler.Handle(
+            new RespondFinalOfferCommand(
+                fixture.FreelancerUserId,
+                new RespondFinalOfferRequest(fixture.OfferId, response, null)),
+            CancellationToken.None);
+
+        Assert.Equal((int)expectedStatus, fixture.Offers.Entities[0].Status);
+        var eventNames = realtimeNotifier.ReceivedCalls()
+            .Select(call => call.GetArguments().ElementAtOrDefault(1) as string)
+            .Where(name => name is not null)
+            .ToList();
+        Assert.True(eventNames.IndexOf("ReceiveMessage") < eventNames.IndexOf("FinalOfferResponded"));
+        Assert.True(eventNames.IndexOf("FinalOfferResponded") < eventNames.IndexOf("ConversationUpdated"));
+        await realtimeNotifier.Received(1).SendUsersEventAsync(
+            Arg.Any<IReadOnlyCollection<Guid>>(),
+            "FinalOfferResponded",
+            Arg.Is<object>(payload =>
+                Equals(GetPropertyValue(payload, "conversationId"), fixture.ConversationId) &&
+                Equals(GetPropertyValue(payload, "offerId"), fixture.OfferId) &&
+                Equals(GetPropertyValue(payload, "status"), (int)expectedStatus) &&
+                GetPropertyValue(payload, "messageId") is Guid),
             Arg.Any<CancellationToken>());
     }
 
@@ -373,11 +461,12 @@ public class NegotiationFlowCommandHandlerTests
         fixture.JobPost.Status = 2;
         fixture.AddConversationWithParticipants();
         fixture.AddOfferWithSnapshot(1500m, 600m, 900m);
+        var realtimeNotifier = Substitute.For<IChatRealtimeNotifier>();
 
         var handler = new RespondFinalOfferCommandHandler(
             fixture.Context,
             new FixedDateTimeService(fixture.Now),
-            new NoopChatRealtimeNotifier());
+            realtimeNotifier);
 
         var exception = await Assert.ThrowsAsync<BadRequestException>(() =>
             handler.Handle(
@@ -393,6 +482,7 @@ public class NegotiationFlowCommandHandlerTests
         Assert.Equal((int)NegotiationOfferStatus.PendingFreelancerConfirmation, fixture.Offers.Entities[0].Status);
         Assert.Empty(fixture.Contracts.Entities);
         Assert.Empty(fixture.Escrows.Entities);
+        Assert.Empty(realtimeNotifier.ReceivedCalls());
     }
 
     [Fact]
@@ -636,6 +726,7 @@ public class NegotiationFlowCommandHandlerTests
         {
             Title = $"Milestone {index + 1}",
             Amount = amount,
+            EstimatedDuration = "1 week",
             Deliverables = $"Deliverable {index + 1}",
             AcceptanceCriteria = $"Acceptance criteria {index + 1}",
             OrderIndex = index,

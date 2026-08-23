@@ -1,8 +1,10 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.Time;
+using Application.Common.InternalServices.Chat.Interfaces;
 using Application.Common.InternalServices.Scheduling;
 using Application.Features.Chat.Common.Negotiations.MilestonePlans.DTOs;
+using Application.Features.Chat.Common.Negotiations.Realtime;
 using Application.Features.JobPosts.Common;
 using Application.Features.Proposals.Common;
 using Domain.Entities;
@@ -17,11 +19,16 @@ public sealed class UpdateNegotiationMilestonePlanCommandHandler
 {
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
+    private readonly IChatRealtimeNotifier _chatRealtimeNotifier;
 
-    public UpdateNegotiationMilestonePlanCommandHandler(IApplicationDbContext context, IDateTimeService dateTimeService)
+    public UpdateNegotiationMilestonePlanCommandHandler(
+        IApplicationDbContext context,
+        IDateTimeService dateTimeService,
+        IChatRealtimeNotifier chatRealtimeNotifier)
     {
         _context = context;
         _dateTimeService = dateTimeService;
+        _chatRealtimeNotifier = chatRealtimeNotifier;
     }
 
     public async Task<IReadOnlyCollection<NegotiationMilestoneDto>> Handle(
@@ -106,7 +113,7 @@ public sealed class UpdateNegotiationMilestonePlanCommandHandler
         _context.Set<NegotiationMilestoneDraft>().AddRange(drafts);
         await _context.SaveChangesAsync(cancellationToken);
 
-        return drafts.Select(item => new NegotiationMilestoneDto
+        var result = drafts.Select(item => new NegotiationMilestoneDto
         {
             Id = item.NegotiationMilestoneDraftId,
             Title = item.Title,
@@ -127,6 +134,24 @@ public sealed class UpdateNegotiationMilestonePlanCommandHandler
                 OrderIndex = workItem.OrderIndex
             }).ToList()
         }).ToList();
+
+        var participantUserIds = await _context.Set<ConversationParticipant>()
+            .AsNoTracking()
+            .Where(participant =>
+                participant.ConversationsId == command.ConversationId &&
+                participant.LeftAt == null &&
+                participant.DeletedAt == null)
+            .Select(participant => participant.UserId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        await _chatRealtimeNotifier.SendUsersEventAsync(
+            participantUserIds,
+            NegotiationRealtimeEvents.MilestonePlanUpdated,
+            new NegotiationMilestonePlanUpdatedPayload(command.ConversationId, command.UserId, now),
+            cancellationToken);
+
+        return result;
     }
 
     private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
