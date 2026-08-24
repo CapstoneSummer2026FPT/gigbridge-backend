@@ -103,10 +103,10 @@ public sealed class GetMySignedESignDocumentsQueryHandler
                     signature.Status == (int)ESignSignatureStatus.Signed),
                 document.FinalizedAt,
                 document.ExportedPdfUrl,
-                document.FinalizedDocumentSizeBytes > 0,
+                (document.FinalizedDocumentSizeBytes ?? 0) > 0,
                 document.FinalizedDocumentFileName,
-                document.PdfDocumentSizeBytes > 0 &&
-                document.PdfDocumentHash == (document.DocumentHash ?? string.Empty) +
+                (document.PdfDocumentSizeBytes ?? 0) > 0 &&
+                (document.PdfDocumentHash ?? string.Empty) == (document.DocumentHash ?? string.Empty) +
                     (document.ContractsId.HasValue
                         ? ESignPdfArtifactRevision.ContractTemplate
                         : ESignPdfArtifactRevision.ClientRendered) &&
