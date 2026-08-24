@@ -60,14 +60,19 @@ public sealed class UpdateContractWorkItemCommandHandler
                     _context.Set<Milestone>().Where(m => m.ContractsId == contract.ContractsId))
                 .ToListAsync(cancellationToken);
 
-            var currentIndex = milestones.FindIndex(m => m.MilestonesId == milestone.MilestonesId);
-            if (currentIndex > 0)
+            var hasApprovedEarlyStart = await _context.Set<MilestoneEarlyStartRequest>().AnyAsync(
+                request => request.MilestonesId == milestone.MilestonesId &&
+                           request.Status == (int)MilestoneEarlyStartRequestStatus.Approved,
+                cancellationToken);
+
+            if (!MilestoneWorkflowGuard.IsEligibleToStart(milestone, milestones, hasApprovedEarlyStart))
             {
-                var previousMilestone = milestones[currentIndex - 1];
-                if (previousMilestone.Status == (int)MilestoneStatus.Pending)
-                {
-                    throw new BadRequestException($"Cannot start work on milestone '{milestone.Title}' until previous milestone '{previousMilestone.Title}' is unlocked or started.");
-                }
+                var currentIndex = milestones.FindIndex(m => m.MilestonesId == milestone.MilestonesId);
+                var previousTitle = currentIndex > 0 ? milestones[currentIndex - 1].Title : null;
+                throw new BadRequestException(
+                    previousTitle is not null
+                        ? $"Cannot start work on milestone '{milestone.Title}' until previous milestone '{previousTitle}' is approved, or an early start request is approved."
+                        : $"Cannot start work on milestone '{milestone.Title}' yet.");
             }
 
             milestone.Status = (int)MilestoneStatus.InProgress;
