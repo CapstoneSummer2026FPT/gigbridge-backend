@@ -8,5 +8,6 @@ namespace Domain.Enums.Delivery;
 public enum DeliveryOutboxType
 {
     FinalContractEmail = 0,
-    MilestoneSubmission = 1
+    MilestoneSubmission = 1,
+    GenericNotification = 2
 }
