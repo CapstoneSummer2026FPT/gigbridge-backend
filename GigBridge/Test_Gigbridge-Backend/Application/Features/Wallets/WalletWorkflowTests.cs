@@ -9,6 +9,7 @@ using Application.Features.Admin.AdminCredit.Commands;
 using Application.Features.Admin.AdminCredit.DTOs;
 using Application.Features.Wallets.Common.BankAccounts.Create;
 using Application.Features.Wallets.Common.BankAccounts.Get;
+using Application.Features.Wallets.Common.BankAccounts.Update;
 using Application.Features.Wallets.Common.DTOs;
 using Application.Features.Wallets.Common.TopUps.Confirm.Commands;
 using Application.Features.Wallets.Common.TopUps.Create.Commands;
@@ -414,7 +415,13 @@ public class WalletWorkflowTests
         var result = await handler.Handle(
             new CreateBankAccountCommand(
                 fixture.FreelancerUserId,
-                new CreateBankAccountRequest("970436", "VCB", "Vietcombank", "1234 5678 9012", "NGUYEN VAN A", true)),
+                new CreateBankAccountRequest(
+                    "970436",
+                    "1234 5678 9012",
+                    "NGUYEN VAN A",
+                    true,
+                    "SPOOFED",
+                    "Spoofed bank")),
             CancellationToken.None);
 
         var account = Assert.Single(fixture.BankAccounts.Entities);
@@ -422,6 +429,103 @@ public class WalletWorkflowTests
         Assert.Equal("protected:123456789012", account.AccountNumberEncrypted);
         Assert.NotEqual("123456789012", account.AccountNumberEncrypted);
         Assert.True(account.IsDefault);
+        Assert.Equal("VCB", account.BankCode);
+        Assert.Equal("Vietcombank", account.BankName);
+    }
+
+    [Fact]
+    public async Task BankAccount_CreateRejectsUnsupportedBinWithoutWritingAccount()
+    {
+        var fixture = new WalletFixture();
+        var handler = new CreateBankAccountCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new FakeBankAccountProtector(),
+            new FakeSupportedBankDirectory());
+
+        await Assert.ThrowsAsync<BadRequestException>(() =>
+            handler.Handle(
+                new CreateBankAccountCommand(
+                    fixture.FreelancerUserId,
+                    new CreateBankAccountRequest("000000", "123456789", "NGUYEN VAN A")),
+                CancellationToken.None));
+
+        Assert.Empty(fixture.BankAccounts.Entities);
+    }
+
+    [Fact]
+    public async Task BankAccount_CreateDoesNotWriteWhenDirectoryIsUnavailable()
+    {
+        var fixture = new WalletFixture();
+        var handler = new CreateBankAccountCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new FakeBankAccountProtector(),
+            new UnavailableSupportedBankDirectory());
+
+        await Assert.ThrowsAsync<ExternalServiceException>(() =>
+            handler.Handle(
+                new CreateBankAccountCommand(
+                    fixture.FreelancerUserId,
+                    new CreateBankAccountRequest("970436", "123456789", "NGUYEN VAN A")),
+                CancellationToken.None));
+
+        Assert.Empty(fixture.BankAccounts.Entities);
+    }
+
+    [Fact]
+    public async Task BankAccount_UpdateCanonicalizesBankIdentityFromDirectory()
+    {
+        var fixture = new WalletFixture();
+        var account = fixture.SeedBankAccount();
+        account.BankCode = "OLD";
+        account.BankName = "Old bank name";
+        var handler = new UpdateBankAccountCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now.AddMinutes(1)),
+            new FakeBankAccountProtector(),
+            new FakeSupportedBankDirectory());
+
+        var result = await handler.Handle(
+            new UpdateBankAccountCommand(
+                fixture.FreelancerUserId,
+                account.BankAccountId,
+                new UpdateBankAccountRequest(
+                    "970436",
+                    "SPOOFED",
+                    "Spoofed bank",
+                    null,
+                    "NGUYEN VAN B",
+                    null)),
+            CancellationToken.None);
+
+        Assert.Equal("VCB", result.BankCode);
+        Assert.Equal("Vietcombank", result.BankName);
+        Assert.Equal("NGUYEN VAN B", result.AccountName);
+    }
+
+    [Fact]
+    public async Task BankAccount_SetDefaultStillWorksWhenDirectoryIsUnavailable()
+    {
+        var fixture = new WalletFixture();
+        var account = fixture.SeedBankAccount();
+        account.IsDefault = false;
+        var handler = new UpdateBankAccountCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now.AddMinutes(1)),
+            new FakeBankAccountProtector(),
+            new UnavailableSupportedBankDirectory());
+
+        var result = await handler.Handle(
+            new UpdateBankAccountCommand(
+                fixture.FreelancerUserId,
+                account.BankAccountId,
+                new UpdateBankAccountRequest(null, null, null, null, null, true)),
+            CancellationToken.None);
+
+        Assert.True(result.IsDefault);
+        Assert.Equal("VCB", result.BankCode);
+        Assert.Equal("Vietcombank", result.BankName);
     }
 
     [Fact]
@@ -1024,6 +1128,12 @@ public class WalletWorkflowTests
         public Task<IReadOnlyList<SupportedBank>> GetBanksAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<SupportedBank>>(
                 [new SupportedBank("970436", "VCB", "Vietcombank", "Vietcombank", null)]);
+    }
+
+    private sealed class UnavailableSupportedBankDirectory : ISupportedBankDirectory
+    {
+        public Task<IReadOnlyList<SupportedBank>> GetBanksAsync(CancellationToken cancellationToken) =>
+            throw new ExternalServiceException("Bank directory unavailable.");
     }
 
     private sealed class FixedDateTimeService : IDateTimeService

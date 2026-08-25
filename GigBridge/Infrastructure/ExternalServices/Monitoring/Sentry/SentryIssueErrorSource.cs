@@ -2,14 +2,14 @@ using System.Globalization;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
-using Application.Common.InternalServices.Admin.SystemTracking.Interfaces;
-using Application.Common.InternalServices.Admin.SystemTracking.Models;
+using Application.Features.Admin.SystemTracking.Common.Interfaces;
+using Application.Features.Admin.SystemTracking.Common.Models;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 
-namespace Project_API.Services.SystemTracking;
+namespace Infrastructure.ExternalServices.Monitoring.Sentry;
 
-public sealed class SentryIssueErrorSource(
+internal sealed class SentryIssueErrorSource(
     HttpClient httpClient,
     IMemoryCache cache,
     IOptions<SentryMonitoringOptions> options,
@@ -155,7 +155,11 @@ public sealed class SentryIssueErrorSource(
     private SystemErrorLog? MapIssue(SentryIssueDto issue)
     {
         if (string.IsNullOrWhiteSpace(issue.Id) ||
-            !DateTimeOffset.TryParse(issue.LastSeen, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out var lastSeen))
+            !DateTimeOffset.TryParse(
+                issue.LastSeen,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.AssumeUniversal,
+                out var lastSeen))
         {
             return null;
         }
@@ -165,7 +169,11 @@ public sealed class SentryIssueErrorSource(
             CultureInfo.InvariantCulture,
             DateTimeStyles.AssumeUniversal,
             out var firstSeen);
-        var count = int.TryParse(issue.Count, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedCount)
+        var count = int.TryParse(
+            issue.Count,
+            NumberStyles.Integer,
+            CultureInfo.InvariantCulture,
+            out var parsedCount)
             ? Math.Max(1, parsedCount)
             : 1;
         var service = issue.Project?.Slug ?? issue.Project?.Name ?? "unknown-service";

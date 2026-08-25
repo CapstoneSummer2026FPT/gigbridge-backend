@@ -9,8 +9,6 @@ internal static class BankAccountWorkflow
     public static async Task<SupportedBank> ResolveBankAsync(
         ISupportedBankDirectory directory,
         string bankBin,
-        string bankCode,
-        string bankName,
         CancellationToken cancellationToken)
     {
         var normalizedBin = bankBin.Trim();
@@ -21,17 +19,12 @@ internal static class BankAccountWorkflow
 
         var banks = await directory.GetBanksAsync(cancellationToken);
         var matched = banks.FirstOrDefault(bank => bank.Bin == normalizedBin);
-        if (banks.Count > 0 && matched is null)
+        if (matched is null)
         {
             throw new BadRequestException("Bank BIN is not supported.");
         }
 
-        return matched ?? new SupportedBank(
-            normalizedBin,
-            NormalizeText(bankCode, "Bank code", 30).ToUpperInvariant(),
-            NormalizeText(bankCode, "Bank code", 30).ToUpperInvariant(),
-            NormalizeText(bankName, "Bank name", 120),
-            null);
+        return matched;
     }
 
     public static string NormalizeAccountNumber(string accountNumber)

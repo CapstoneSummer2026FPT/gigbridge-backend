@@ -58,8 +58,6 @@ public sealed class UpdateBankAccountCommandHandler :
                 cancellationToken);
 
         var changesRouting = !string.IsNullOrWhiteSpace(command.Request.BankBin) ||
-            !string.IsNullOrWhiteSpace(command.Request.BankCode) ||
-            !string.IsNullOrWhiteSpace(command.Request.BankName) ||
             !string.IsNullOrWhiteSpace(command.Request.AccountNumber);
         if (hasPendingWithdrawal && changesRouting)
         {
@@ -77,15 +75,14 @@ public sealed class UpdateBankAccountCommandHandler :
             accountNumberIsValid = false;
         }
 
-        if (!string.IsNullOrWhiteSpace(command.Request.BankBin) ||
-            !string.IsNullOrWhiteSpace(command.Request.BankCode) ||
-            !string.IsNullOrWhiteSpace(command.Request.BankName))
+        var changesBankDetails = !string.IsNullOrWhiteSpace(command.Request.BankBin) ||
+            !string.IsNullOrWhiteSpace(command.Request.AccountNumber) ||
+            !string.IsNullOrWhiteSpace(command.Request.AccountName);
+        if (changesBankDetails)
         {
             var bank = await BankAccountWorkflow.ResolveBankAsync(
                 _bankDirectory,
                 command.Request.BankBin ?? account.BankBin ?? string.Empty,
-                command.Request.BankCode ?? account.BankCode,
-                command.Request.BankName ?? account.BankName,
                 cancellationToken);
             account.BankBin = bank.Bin;
             account.BankCode = bank.Code;
