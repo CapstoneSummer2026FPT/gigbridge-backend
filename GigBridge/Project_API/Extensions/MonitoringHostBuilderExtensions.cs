@@ -3,7 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
-namespace Infrastructure;
+namespace Project_API;
 
 public static class MonitoringHostBuilderExtensions
 {

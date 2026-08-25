@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Project_API;
 
 namespace Test_Gigbridge_Backend.Infrastructure.ExternalServices.Monitoring.Sentry;
 
