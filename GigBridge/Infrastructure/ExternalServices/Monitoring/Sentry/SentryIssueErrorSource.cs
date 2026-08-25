@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 using Application.Features.Admin.SystemTracking.Common.Interfaces;
 using Application.Features.Admin.SystemTracking.Common.Models;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Infrastructure.ExternalServices.Monitoring.Sentry;
