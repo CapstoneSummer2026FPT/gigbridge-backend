@@ -276,4 +276,24 @@ internal static class MilestoneWorkflowGuard
             next.UpdatedAt = now;
         }
     }
+
+    /// <summary>
+    /// True if a Pending milestone is allowed to transition to InProgress right now: every
+    /// milestone before it (by SortOrder) is Approved or Completed, or the freelancer holds an
+    /// Approved early-start request for this specific milestone. This is the single source of
+    /// truth for "can this milestone start" shared by UpdateContractWorkItemCommandHandler
+    /// (freelancer starting via work item update) and RespondMilestoneEarlyStartCommandHandler
+    /// (client approving early start).
+    /// </summary>
+    public static bool IsEligibleToStart(
+        Milestone candidate,
+        IReadOnlyList<Milestone> orderedMilestones,
+        bool hasApprovedEarlyStartRequest)
+    {
+        var allPriorApproved = orderedMilestones
+            .Where(previous => (previous.SortOrder ?? 0) < (candidate.SortOrder ?? 0))
+            .All(previous => previous.Status is (int)MilestoneStatus.Approved or (int)MilestoneStatus.Completed);
+
+        return allPriorApproved || hasApprovedEarlyStartRequest;
+    }
 }

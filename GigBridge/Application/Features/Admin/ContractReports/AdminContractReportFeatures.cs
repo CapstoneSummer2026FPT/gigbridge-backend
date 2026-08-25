@@ -18,6 +18,7 @@ using Domain.Enums.Notifications;
 using Domain.Enums.Reports;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace Application.Features.Admin.ContractReports;
 
@@ -184,8 +185,8 @@ public sealed class AdminContractReportMutationHandler :
     IRequestHandler<RequestContractReportInformationCommand, AdminContractReportDetail>, IRequestHandler<CloseContractReportCommand, AdminContractReportDetail>,
     IRequestHandler<DismissContractReportCommand, AdminContractReportDetail>, IRequestHandler<LinkContractReportDisputeCommand, AdminContractReportDetail>
 {
-    private readonly IApplicationDbContext _context; private readonly IAdminAuditService _audit; private readonly IMediator _mediator; private readonly IDateTimeService _clock; private readonly INotificationService _notifications;
-    public AdminContractReportMutationHandler(IApplicationDbContext context, IAdminAuditService audit, IMediator mediator, IDateTimeService clock, INotificationService notifications) { _context = context; _audit = audit; _mediator = mediator; _clock = clock; _notifications = notifications; }
+    private readonly IApplicationDbContext _context; private readonly IAdminAuditService _audit; private readonly IMediator _mediator; private readonly IDateTimeService _clock; private readonly INotificationService _notifications; private readonly ILogger<AdminContractReportMutationHandler> _logger;
+    public AdminContractReportMutationHandler(IApplicationDbContext context, IAdminAuditService audit, IMediator mediator, IDateTimeService clock, INotificationService notifications, ILogger<AdminContractReportMutationHandler> logger) { _context = context; _audit = audit; _mediator = mediator; _clock = clock; _notifications = notifications; _logger = logger; }
     public async Task<AdminContractReportDetail> Handle(AssignContractReportCommand q, CancellationToken ct)
     {
         await using var tx = await Begin(q.ActorAdminId, q.ReportId, ct); var r = await Load(q.ReportId, ct); EnsureOpen(r);
@@ -210,7 +211,7 @@ public sealed class AdminContractReportMutationHandler :
         var rows = targets.Distinct().Select(target => new ReportContractInformationRequest { InformationRequestId = Guid.NewGuid(), RequestId = q.Request.RequestId, ReportContractId = r.ReportContractId, RequestedByAdminId = q.AdminId, TargetUserId = target, Message = q.Request.Message.Trim(), RequestedEvidenceOrClarification = q.Request.RequestedEvidenceOrClarification?.Trim(), DueAt = q.Request.DueAt, Status = (int)ContractReportInformationRequestStatus.Pending, CreatedAt = _clock.UtcNow }).ToList();
         _context.Set<ReportContractInformationRequest>().AddRange(rows); r.AssignedAdminId ??= q.AdminId; r.AssignedAt ??= _clock.UtcNow; r.AdminReviewStatus = (int)ContractReportAdminStatus.AwaitingInformation; r.UpdatedAt = _clock.UtcNow;
         _audit.Add(q.AdminId, AdminAuditActions.ContractReportInformationRequested, nameof(ReportContract), r.ReportContractId, null, new { q.Request.RequestId, targets, q.Request.DueAt, r.ContractId, r.ReporterId, r.RespondentId }); await SaveCommit(tx, ct);
-        foreach (var target in targets) { try { await _notifications.CreateNotificationAsync(target, NotificationType.ReportUpdate, "Additional contract report information requested", q.Request.Message.Trim(), r.ReportContractId, nameof(ReportContract), ct); } catch { } }
+        foreach (var target in targets) { try { await _notifications.CreateNotificationAsync(target, NotificationType.ReportUpdate, "Additional contract report information requested", q.Request.Message.Trim(), r.ReportContractId, nameof(ReportContract), ct); } catch (Exception ex) when (ex is not OperationCanceledException) { _logger.LogWarning(ex, "Failed to notify user {UserId} about contract report {ReportContractId} information request.", target, r.ReportContractId); } }
         return await Detail(r.ReportContractId, ct);
     }
     public async Task<AdminContractReportDetail> Handle(CloseContractReportCommand q, CancellationToken ct)

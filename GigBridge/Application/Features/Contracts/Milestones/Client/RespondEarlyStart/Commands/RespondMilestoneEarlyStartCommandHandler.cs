@@ -1,6 +1,8 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.Time;
+using Application.Common.InternalServices.Chat.Interfaces;
+using Application.Features.Contracts.Common.Internal;
 using Application.Features.Contracts.Milestones.Common.DTOs;
 using Application.Features.Contracts.Milestones.Common.Internal;
 using Domain.Entities;
@@ -15,10 +17,14 @@ public sealed class RespondMilestoneEarlyStartCommandHandler
 {
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _clock;
-    public RespondMilestoneEarlyStartCommandHandler(IApplicationDbContext context, IDateTimeService clock)
+    private readonly IChatRealtimeNotifier? _realtimeNotifier;
+
+    public RespondMilestoneEarlyStartCommandHandler(
+        IApplicationDbContext context, IDateTimeService clock, IChatRealtimeNotifier? realtimeNotifier = null)
     {
         _context = context;
         _clock = clock;
+        _realtimeNotifier = realtimeNotifier;
     }
 
     public async Task<MilestoneEarlyStartRequestDto> Handle(RespondMilestoneEarlyStartCommand command, CancellationToken cancellationToken)
@@ -52,7 +58,42 @@ public sealed class RespondMilestoneEarlyStartCommandHandler
             milestone.UpdatedAt = now;
         }
         contract.UpdatedAt = now;
+
+        var systemMessage = await ContractConversationEvents.AddSystemMessageAsync(
+            _context,
+            contract.ContractsId,
+            command.Request.Approve
+                ? $"Client approved early start for milestone: {milestone.Title}."
+                : $"Client rejected early start for milestone: {milestone.Title}.",
+            now,
+            cancellationToken);
+
         await _context.SaveChangesAsync(cancellationToken);
+
+        if (_realtimeNotifier is not null)
+        {
+            var participantIds = await MilestoneWorkflowGuard.GetParticipantUserIdsAsync(_context, contract, cancellationToken);
+            await _realtimeNotifier.SendUsersEventAsync(
+                participantIds,
+                "EarlyStartResponded",
+                new
+                {
+                    contractId = contract.ContractsId,
+                    milestoneId = milestone.MilestonesId,
+                    requestId = request.MilestoneEarlyStartRequestId,
+                    approved = command.Request.Approve,
+                    milestoneStatus = milestone.Status
+                },
+                cancellationToken);
+
+            if (systemMessage is not null)
+            {
+                var messagePayload = ContractConversationEvents.ToRealtimePayload(systemMessage);
+                await _realtimeNotifier.SendUsersEventAsync(participantIds, "ReceiveMessage", messagePayload, cancellationToken);
+                await _realtimeNotifier.SendConversationEventAsync(systemMessage.ConversationsId, "ReceiveMessage", messagePayload, cancellationToken);
+            }
+        }
+
         return new MilestoneEarlyStartRequestDto(request.MilestoneEarlyStartRequestId, request.ContractsId, request.MilestonesId,
             request.Reason, request.ResponseNote, request.Status, request.CreatedAt, request.RespondedAt);
     }

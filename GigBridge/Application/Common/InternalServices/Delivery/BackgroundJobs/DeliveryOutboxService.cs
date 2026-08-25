@@ -433,6 +433,8 @@ public sealed class DeliveryOutboxService : BackgroundService
             {
                 DeliveryOutboxType.MilestoneSubmission =>
                     await PrepareMilestoneSubmissionEmailAsync(context, lease, job, ct),
+                DeliveryOutboxType.GenericNotification =>
+                    await PrepareGenericNotificationAsync(context, lease, job, ct),
                 _ => await PrepareFinalContractEmailAsync(context, lease, job, ct)
             };
         }
@@ -518,6 +520,56 @@ public sealed class DeliveryOutboxService : BackgroundService
             job.AttemptCount,
             payload.UserId,
             ToNotificationDto(notification));
+    }
+
+    private async Task<PreparedDelivery?> PrepareGenericNotificationAsync(
+        IApplicationDbContext context,
+        DeliveryOutboxLease lease,
+        DeliveryOutbox job,
+        CancellationToken ct)
+    {
+        var payload = JsonSerializer.Deserialize<GenericNotificationDeliveryPayload>(job.Payload, JsonOptions)
+            ?? throw new JsonException("Invalid generic notification delivery payload.");
+
+        if (payload.NotificationId.HasValue)
+        {
+            var notification = await context.Set<Notification>()
+                .FirstOrDefaultAsync(x => x.NotificationsId == payload.NotificationId.Value, ct);
+            if (notification is null)
+            {
+                _logger.LogWarning(
+                    "Notification {NotificationId} for delivery {DeliveryKey} was not found; marking the delivery as completed.",
+                    payload.NotificationId,
+                    job.DeliveryKey);
+                return null;
+            }
+
+            return PreparedDelivery.ForNotification(
+                lease, job.DeliveryKey, job.AttemptCount, payload.UserId, ToNotificationDto(notification));
+        }
+
+        if (payload.BroadcastNotificationRecipientId.HasValue)
+        {
+            var recipient = await context.Set<BroadcastNotificationRecipient>()
+                .Include(x => x.BroadcastNotification)
+                .FirstOrDefaultAsync(
+                    x => x.BroadcastNotificationRecipientId == payload.BroadcastNotificationRecipientId.Value, ct);
+            if (recipient is null)
+            {
+                _logger.LogWarning(
+                    "Broadcast notification recipient {RecipientId} for delivery {DeliveryKey} was not found; marking the delivery as completed.",
+                    payload.BroadcastNotificationRecipientId,
+                    job.DeliveryKey);
+                return null;
+            }
+
+            return PreparedDelivery.ForNotification(
+                lease, job.DeliveryKey, job.AttemptCount, payload.UserId,
+                ToNotificationDto(recipient.BroadcastNotification, recipient));
+        }
+
+        throw new InvalidOperationException(
+            $"Generic notification delivery {job.DeliveryKey} has neither a notification nor a broadcast recipient reference.");
     }
 
     private async Task<IReadOnlyList<DeliveryOutcome>> DispatchBatchAsync(
@@ -1331,6 +1383,25 @@ public sealed class DeliveryOutboxService : BackgroundService
         IsRead = notification.IsRead ?? false,
         ReadAt = notification.ReadAt,
         CreatedAt = notification.CreatedAt
+    };
+
+    private static NotificationDto ToNotificationDto(
+        BroadcastNotification notification,
+        BroadcastNotificationRecipient recipient) => new()
+    {
+        Id = notification.BroadcastNotificationId,
+        Source = "Broadcast",
+        BroadcastNotificationId = notification.BroadcastNotificationId,
+        BroadcastRecipientId = recipient.BroadcastNotificationRecipientId,
+        ReadTargetId = recipient.BroadcastNotificationRecipientId,
+        Type = (NotificationType)notification.Type,
+        Title = notification.Title,
+        Content = notification.Content,
+        ReferenceId = notification.ReferenceId,
+        ReferenceType = notification.ReferenceType,
+        IsRead = recipient.IsRead ?? false,
+        ReadAt = recipient.ReadAt,
+        CreatedAt = recipient.CreatedAt
     };
 
     private static bool IsPermanentFailure(Exception exception) =>

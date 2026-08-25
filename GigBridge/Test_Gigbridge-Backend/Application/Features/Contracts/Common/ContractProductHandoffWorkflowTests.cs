@@ -77,6 +77,84 @@ public class ContractProductHandoffWorkflowTests
         var conversationEvent = Assert.Single(realtime.ConversationEvents);
         Assert.Equal("ReceiveMessage", conversationEvent.EventName);
         Assert.Equal(message.ConversationsId, conversationEvent.ConversationId);
+
+        // The freelancer must also receive the chat message via the direct per-user push,
+        // not only the SignalR group push - otherwise a client whose connection hasn't
+        // (re)joined the conversation group yet would silently miss it live.
+        var receiveMessageUsersEvent = Assert.Single(
+            realtime.UsersEvents, evt => evt.EventName == "ReceiveMessage");
+        Assert.Contains(fixture.ClientUserId, receiveMessageUsersEvent.UserIds);
+        Assert.Contains(fixture.FreelancerUserId, receiveMessageUsersEvent.UserIds);
+    }
+
+    [Fact]
+    public async Task AcknowledgeHandoff_PushesReceiveMessageLiveToClient()
+    {
+        var fixture = new ContractProductHandoffFixture();
+        var submitHandler = fixture.CreateSubmitHandler();
+        var handoff = await submitHandler.Handle(
+            new SubmitContractProductHandoffCommand(
+                fixture.ContractId,
+                fixture.ClientUserId,
+                null,
+                "https://example.com/product",
+                null),
+            CancellationToken.None);
+
+        var realtime = new CapturingChatRealtimeNotifier();
+        var acknowledgeHandler = fixture.CreateAcknowledgeHandler(realtime);
+
+        await acknowledgeHandler.Handle(
+            new AcknowledgeContractProductHandoffCommand(
+                fixture.ContractId,
+                handoff.ContractProductHandoffId,
+                fixture.FreelancerUserId),
+            CancellationToken.None);
+
+        var acknowledgedMessage = Assert.Single(
+            fixture.Context.Set<Message>().ToList(),
+            message => message.Content == "Freelancer received product materials.");
+
+        var conversationEvent = Assert.Single(
+            realtime.ConversationEvents, evt => evt.EventName == "ReceiveMessage");
+        Assert.Equal(acknowledgedMessage.ConversationsId, conversationEvent.ConversationId);
+
+        var usersEvent = Assert.Single(realtime.UsersEvents, evt => evt.EventName == "ReceiveMessage");
+        Assert.Contains(fixture.ClientUserId, usersEvent.UserIds);
+        Assert.Contains(fixture.FreelancerUserId, usersEvent.UserIds);
+    }
+
+    [Fact]
+    public async Task SubmitHandoff_SystemMessageExcludesDisputeConversation()
+    {
+        var fixture = new ContractProductHandoffFixture();
+        var disputeConversation = new Conversation
+        {
+            ConversationsId = Guid.NewGuid(),
+            ConversationType = (int)ConversationType.Dispute,
+            ContractsId = fixture.ContractId,
+            CreatedByUserId = fixture.ClientUserId,
+            Status = (int)ConversationStatus.Active,
+            CreatedAt = fixture.Now,
+            LastMessageAt = fixture.Now.AddMinutes(30),
+        };
+        var workroomConversation = fixture.Context.Set<Conversation>()
+            .Single(conversation => conversation.ConversationType == (int)ConversationType.ContractWorkroom);
+        fixture.Context.Set<Conversation>().Add(disputeConversation);
+
+        var handler = fixture.CreateSubmitHandler();
+
+        await handler.Handle(
+            new SubmitContractProductHandoffCommand(
+                fixture.ContractId,
+                fixture.ClientUserId,
+                null,
+                "https://example.com/product",
+                null),
+            CancellationToken.None);
+
+        var message = Assert.Single(fixture.Context.Set<Message>().ToList());
+        Assert.Equal(workroomConversation.ConversationsId, message.ConversationsId);
     }
 
     [Fact]
@@ -388,12 +466,13 @@ public class ContractProductHandoffWorkflowTests
                 new WorkspaceUploadFilePolicy());
         }
 
-        public AcknowledgeContractProductHandoffCommandHandler CreateAcknowledgeHandler()
+        public AcknowledgeContractProductHandoffCommandHandler CreateAcknowledgeHandler(
+            IChatRealtimeNotifier? realtimeNotifier = null)
         {
             return new AcknowledgeContractProductHandoffCommandHandler(
                 Context,
                 new FixedDateTimeService(Now.AddMinutes(1)),
-                new NoopChatRealtimeNotifier());
+                realtimeNotifier ?? new NoopChatRealtimeNotifier());
         }
     }
 

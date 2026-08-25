@@ -16,7 +16,9 @@ internal static class ContractConversationEvents
         string? metadata = null)
     {
         var conversation = await context.Set<Conversation>()
-            .Where(conversation => conversation.ContractsId == contractId)
+            .Where(conversation =>
+                conversation.ContractsId == contractId &&
+                conversation.ConversationType != (int)ConversationType.Dispute)
             .OrderByDescending(conversation => conversation.LastMessageAt ?? conversation.CreatedAt)
             .FirstOrDefaultAsync(cancellationToken);
 
