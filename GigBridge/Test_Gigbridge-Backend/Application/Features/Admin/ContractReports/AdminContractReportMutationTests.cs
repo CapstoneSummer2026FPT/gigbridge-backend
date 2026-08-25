@@ -73,7 +73,8 @@ public sealed class AdminContractReportMutationTests
         var contract = new Contract { ContractsId = contractId, Title = "Contract", Status = (int)ContractStatus.Active, ClientProfiles = new ClientProfile { UserId = reporter.UserId }, FreelancerProfiles = new FreelancerProfile { UserId = respondent.UserId } }; context.AddSet(contract);
         var audit = Substitute.For<IAdminAuditService>(); var mediator = Substitute.For<IMediator>(); var notifications = Substitute.For<INotificationService>();
         var clock = Substitute.For<IDateTimeService>(); clock.UtcNow.Returns(DateTime.UtcNow);
-        return (new(context, audit, mediator, clock, notifications), context, audit, mediator, report, admin, respondent);
+        var logger = Substitute.For<Microsoft.Extensions.Logging.ILogger<AdminContractReportMutationHandler>>();
+        return (new(context, audit, mediator, clock, notifications, logger), context, audit, mediator, report, admin, respondent);
     }
     private static User User(UserRole role) => new() { UserId = Guid.NewGuid(), FullName = role.ToString(), Email = $"{role}@test.local", Role = (int)role, IsActive = true, AccountStatus = (int)AccountStatus.Active };
 }

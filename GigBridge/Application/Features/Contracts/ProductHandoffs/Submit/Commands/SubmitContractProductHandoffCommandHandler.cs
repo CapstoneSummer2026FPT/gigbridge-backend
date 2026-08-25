@@ -165,10 +165,21 @@ public sealed class SubmitContractProductHandoffCommandHandler :
 
                 if (systemMessage is not null)
                 {
+                    var messagePayload = ContractConversationEvents.ToRealtimePayload(systemMessage);
+
+                    if (participantUserIds.Count > 0)
+                    {
+                        await _chatRealtimeNotifier.SendUsersEventAsync(
+                            participantUserIds,
+                            "ReceiveMessage",
+                            messagePayload,
+                            cancellationToken);
+                    }
+
                     await _chatRealtimeNotifier.SendConversationEventAsync(
                         systemMessage.ConversationsId,
                         "ReceiveMessage",
-                        ContractConversationEvents.ToRealtimePayload(systemMessage),
+                        messagePayload,
                         cancellationToken);
                 }
 

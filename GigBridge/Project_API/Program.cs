@@ -44,13 +44,29 @@ builder.Services.AddScoped<IUserRealtimeEventSender, SignalRChatRealtimeNotifier
 builder.Services.AddScoped<INotificationSender, SignalRNotificationSender>();
 
 var signalRBuilder = builder.Services.AddSignalR();
-var redisConnectionString = builder.Configuration.GetConnectionString("Redis");
+var redisConnectionString = Environment.GetEnvironmentVariable("REDIS_CONNECTION_STRING")
+    ?? builder.Configuration["Redis:ConnectionString"]
+    ?? builder.Configuration.GetConnectionString("Redis");
+
 if (!string.IsNullOrWhiteSpace(redisConnectionString))
 {
-    signalRBuilder.AddStackExchangeRedis(redisConnectionString, options =>
+    var redisOptions = StackExchange.Redis.ConfigurationOptions.Parse(redisConnectionString);
+    redisOptions.AbortOnConnectFail = false;
+    redisOptions.ConnectTimeout = 10000;
+    redisOptions.KeepAlive = 60;
+    redisOptions.SyncTimeout = 10000;
+
+    var redisConnection = StackExchange.Redis.ConnectionMultiplexer.Connect(redisOptions);
+
+    signalRBuilder.AddStackExchangeRedis(options =>
     {
+        options.ConnectionFactory = async writer => await Task.FromResult(redisConnection);
         options.Configuration.ChannelPrefix = StackExchange.Redis.RedisChannel.Literal("GigBridge_SignalR");
     });
+}
+else
+{
+    Console.WriteLine("[WARNING] Redis connection string is empty or missing! SignalR backplane disabled.");
 }
 
 builder.Services.AddSingleton<SystemTrackingStore>();
