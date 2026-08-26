@@ -1,3 +1,4 @@
+using Application.Common.Constants;
 using Application.Common.Interfaces;
 using Application.Features.Reports.Common;
 using Application.Features.Reports.Common.DTOs;
@@ -21,7 +22,7 @@ public class GetReportsQueryHandler : IRequestHandler<GetReportsQuery, ReportsRe
     public async Task<ReportsResponse> Handle(GetReportsQuery request, CancellationToken cancellationToken)
     {
         var page = Math.Max(request.Page, 1);
-        var pageSize = Math.Clamp(request.PageSize, 1, 100);
+        var pageSize = Math.Clamp(request.PageSize, 1, PaginationDefaults.MaxPageSize);
         var query = _context.Set<Report>()
             .AsNoTracking()
             .Include(report => report.Reporter)

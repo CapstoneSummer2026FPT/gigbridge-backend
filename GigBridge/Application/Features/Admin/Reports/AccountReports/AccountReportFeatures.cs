@@ -1,4 +1,5 @@
 using Application.Common.InternalServices.Accounts.Models;
+using Application.Common.Constants;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.InternalServices.Accounts.Interfaces;
@@ -37,7 +38,7 @@ public sealed class AccountReportQueryHandler : IRequestHandler<GetAccountReport
 
     public async Task<PaginatedList<AccountReportListItemDto>> Handle(GetAccountReportsQuery q, CancellationToken ct)
     {
-        var page = Math.Max(q.Page, 1); var size = Math.Clamp(q.PageSize, 1, 100); var query = Base();
+        var page = Math.Max(q.Page, 1); var size = Math.Clamp(q.PageSize, 1, PaginationDefaults.MaxPageSize); var query = Base();
         if (q.Status.HasValue) query = query.Where(x => x.Report.Status == (int)q.Status);
         if (q.Type.HasValue) query = query.Where(x => x.Report.Type == (int)q.Type);
         if (q.ReporterId.HasValue) query = query.Where(x => x.Report.ReporterId == q.ReporterId);

@@ -1,3 +1,4 @@
+using Application.Common.Constants;
 using Application.Common.Interfaces;
 using Application.Features.Admin.Users.GetAllUser.DTOs;
 using Application.Features.Admin.Users.Shared.DTOs;
@@ -25,7 +26,7 @@ public class GetAllUsersQueryHandler : IRequestHandler<GetAllUsersQuery, GetAllU
     public async Task<GetAllUsersResponse> Handle(GetAllUsersQuery request, CancellationToken cancellationToken)
     {
         var page = Math.Max(request.Page, 1);
-        var pageSize = Math.Clamp(request.PageSize, 1, 100);
+        var pageSize = Math.Clamp(request.PageSize, 1, PaginationDefaults.MaxPageSize);
         var query = ApplyFilters(
             _context.Set<User>().AsNoTracking().Where(user => user.Provider != "System"),
             request.Search,

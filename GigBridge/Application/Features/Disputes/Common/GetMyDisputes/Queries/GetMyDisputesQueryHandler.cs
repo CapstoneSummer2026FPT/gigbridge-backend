@@ -1,3 +1,4 @@
+using Application.Common.Constants;
 using Application.Common.Interfaces;
 using Application.Features.Disputes.Common.DTOs;
 using Application.Features.Disputes.Common.Internal;
@@ -19,7 +20,7 @@ public sealed class GetMyDisputesQueryHandler : IRequestHandler<GetMyDisputesQue
     public async Task<MyDisputesResponse> Handle(GetMyDisputesQuery request, CancellationToken cancellationToken)
     {
         var page = Math.Max(request.Page, 1);
-        var pageSize = Math.Clamp(request.PageSize, 1, 100);
+        var pageSize = Math.Clamp(request.PageSize, 1, PaginationDefaults.MaxPageSize);
 
         var clientProfile = await _context.Set<ClientProfile>()
             .AsNoTracking()

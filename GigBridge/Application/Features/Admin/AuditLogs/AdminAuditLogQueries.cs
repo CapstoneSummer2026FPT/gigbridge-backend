@@ -1,3 +1,4 @@
+using Application.Common.Constants;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Models;
@@ -27,7 +28,7 @@ public sealed class AdminAuditLogQueryHandler :
 
     public async Task<PaginatedList<AdminAuditLogDto>> Handle(GetAdminAuditLogsQuery request, CancellationToken ct)
     {
-        var page = Math.Max(1, request.Page); var size = Math.Clamp(request.PageSize, 1, 100);
+        var page = Math.Max(1, request.Page); var size = Math.Clamp(request.PageSize, 1, PaginationDefaults.MaxPageSize);
         var query = _context.Set<AdminAuditLog>().AsNoTracking().Include(x => x.Admin).AsQueryable();
         if (request.AdminId.HasValue) query = query.Where(x => x.AdminId == request.AdminId);
         if (!string.IsNullOrWhiteSpace(request.Action)) query = query.Where(x => x.Action == request.Action);

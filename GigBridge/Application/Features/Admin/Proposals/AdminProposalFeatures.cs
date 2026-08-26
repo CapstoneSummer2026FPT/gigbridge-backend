@@ -1,4 +1,5 @@
 using Domain.Enums.Proposals;
+using Application.Common.Constants;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.Time;
@@ -91,7 +92,7 @@ public sealed class AdminProposalQueryHandler :
         if (q.ModerationStatus is < 0 or > 1) throw new BadRequestException("Moderation status is invalid.");
         if (q.MinBudget < 0 || q.MaxBudget < 0 || (q.MinBudget.HasValue && q.MaxBudget.HasValue && q.MinBudget > q.MaxBudget)) throw new BadRequestException("Budget range is invalid.");
         if (q.SubmittedFrom > q.SubmittedTo || q.UpdatedFrom > q.UpdatedTo) throw new BadRequestException("Date range is invalid.");
-        var page = Math.Max(1, q.PageIndex ?? q.Page); var size = Math.Clamp(q.PageSize, 1, 100);
+        var page = Math.Max(1, q.PageIndex ?? q.Page); var size = Math.Clamp(q.PageSize, 1, PaginationDefaults.MaxPageSize);
         var query = _context.Set<Proposal>().AsNoTracking().AsQueryable();
         if (!string.IsNullOrWhiteSpace(q.Search)) { var s = q.Search.Trim().ToLower(); var guid = Guid.TryParse(s, out var id) ? id : Guid.Empty; query = query.Where(x => x.ProposalsId == guid || x.JobPosts.Title.ToLower().Contains(s) || x.JobPosts.ClientProfiles.User.FullName.ToLower().Contains(s) || x.FreelancerProfiles.User.FullName.ToLower().Contains(s)); }
         if (q.LifecycleStatus.HasValue) query = query.Where(x => x.Status == q.LifecycleStatus);

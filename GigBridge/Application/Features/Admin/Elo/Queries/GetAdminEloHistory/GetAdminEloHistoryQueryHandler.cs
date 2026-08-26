@@ -1,3 +1,4 @@
+using Application.Common.Constants;
 using Application.Common.Interfaces;
 using Application.Common.Models;
 using Application.Features.Admin.Elo.DTOs;
@@ -20,7 +21,7 @@ public sealed class GetAdminEloHistoryQueryHandler :
         CancellationToken cancellationToken)
     {
         var page = Math.Max(1, query.Page);
-        var size = Math.Clamp(query.PageSize, 1, 100);
+        var size = Math.Clamp(query.PageSize, 1, PaginationDefaults.MaxPageSize);
         var filter = EloHistoryFilters.ParseOrDefault(query.Filter);
 
         var rows = _context.Set<UserEloPointTransaction>()
