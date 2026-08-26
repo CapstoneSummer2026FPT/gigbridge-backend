@@ -85,6 +85,8 @@ public sealed class GetAiTalentMatchesQueryHandler(
         catch (Exception exception) when (
             exception is ExternalServiceException or HttpRequestException or TaskCanceledException)
         {
+            logger.LogWarning(exception,
+                "AI talent matching failed for run {TalentMatchRunId}.", run.TalentMatchRunId);
             stopwatch.Stop();
             run.Status = (int)TalentMatchRunStatus.Failed;
             run.CompletedAt = clock.UtcNow;
