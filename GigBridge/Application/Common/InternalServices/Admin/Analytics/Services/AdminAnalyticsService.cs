@@ -1,8 +1,8 @@
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
-using Application.Common.Constants;
 using Application.Common.Interfaces;
+using Application.Common.Models;
 using Application.Common.Interfaces.Time;
 using Application.Common.InternalServices.Admin.Analytics.Models;
 using Application.Common.InternalServices.Admin.Analytics.Interfaces;
@@ -397,7 +397,7 @@ public sealed class AdminAnalyticsService : IAdminAnalyticsService
         if (TryDecodeCursor(filter.Cursor, out var cursorAt, out var cursorId))
             query = query.Where(x => (x.CompletedAt ?? x.CreatedAt) < cursorAt ||
                 ((x.CompletedAt ?? x.CreatedAt) == cursorAt && x.WalletTransactionsId.CompareTo(cursorId) < 0));
-        var pageSize = Math.Clamp(filter.PageSize, 1, PaginationDefaults.MaxPageSize);
+        var pageSize = Math.Clamp(filter.PageSize, 1, PaginatedQuery.MaxPageSize);
         var transactions = await query.Include(x => x.User).Include(x => x.Contract)
             .OrderByDescending(x => x.CompletedAt ?? x.CreatedAt).ThenByDescending(x => x.WalletTransactionsId)
             .Take(pageSize + 1).ToListAsync(cancellationToken);

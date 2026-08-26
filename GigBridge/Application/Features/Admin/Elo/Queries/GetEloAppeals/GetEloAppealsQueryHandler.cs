@@ -1,4 +1,3 @@
-using Application.Common.Constants;
 using Application.Common.Interfaces;
 using Application.Common.Models;
 using Application.Features.Admin.Elo.DTOs;
@@ -20,7 +19,7 @@ public sealed class GetEloAppealsQueryHandler :
         CancellationToken cancellationToken)
     {
         var page = Math.Max(1, query.Page);
-        var size = Math.Clamp(query.PageSize, 1, PaginationDefaults.MaxPageSize);
+        var size = Math.Clamp(query.PageSize, 1, PaginatedQuery.MaxPageSize);
 
         var rows = _context.Set<EloPointAppeal>()
             .AsNoTracking()

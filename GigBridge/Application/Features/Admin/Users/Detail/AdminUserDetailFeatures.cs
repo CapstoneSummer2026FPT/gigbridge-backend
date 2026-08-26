@@ -1,5 +1,4 @@
 using Application.Common.InternalServices.Accounts.Models;
-using Application.Common.Constants;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.InternalServices.Accounts.Interfaces;
@@ -90,7 +89,7 @@ public sealed class AdminUserDetailQueryHandler :
             u.FreelancerProfile.PortfolioItems.Where(x => x.ProjectUrl != null).Select(x => x.ProjectUrl!).ToList(),
             u.FreelancerProfile.WorkExperiences.Select(x => $"{x.Title} · {x.CompanyName}").ToList());
     private static async Task<PaginatedList<T>> Page<T>(IQueryable<T> query, int page, int size, CancellationToken ct)
-    { page = Math.Max(page, 1); size = Math.Clamp(size, 1, PaginationDefaults.MaxPageSize); var count = await query.CountAsync(ct); var rows = await query.Skip((page - 1) * size).Take(size).ToListAsync(ct); return new(rows, count, page, size); }
+    { page = Math.Max(page, 1); size = Math.Clamp(size, 1, PaginatedQuery.MaxPageSize); var count = await query.CountAsync(ct); var rows = await query.Skip((page - 1) * size).Take(size).ToListAsync(ct); return new(rows, count, page, size); }
 }
 
 public sealed record AdminEnforcementRequest(Guid RequestId, UserViolationType ViolationType, string Reason, string? Description, DateTime? SuspendedUntil);

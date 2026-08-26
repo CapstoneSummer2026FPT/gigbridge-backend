@@ -1,5 +1,4 @@
 using Application.Common.InternalServices.Contracts.Services;
-using Application.Common.Constants;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.Time;
@@ -75,7 +74,7 @@ public sealed class AdminContractReportQueryHandler :
 
     public async Task<PaginatedList<AdminContractReportListItem>> Handle(GetAdminContractReportsQuery q, CancellationToken ct)
     {
-        var page = Math.Max(1, q.Page); var size = Math.Clamp(q.PageSize, 1, PaginationDefaults.MaxPageSize);
+        var page = Math.Max(1, q.Page); var size = Math.Clamp(q.PageSize, 1, PaginatedQuery.MaxPageSize);
         var query = _context.Set<ReportContract>().AsNoTracking().AsQueryable();
         if (!string.IsNullOrWhiteSpace(q.Search)) { var s = q.Search.Trim().ToLower(); query = query.Where(x => x.Description.ToLower().Contains(s) || x.Contract.Title.ToLower().Contains(s) || x.Reporter.FullName.ToLower().Contains(s) || (x.Respondent != null && x.Respondent.FullName.ToLower().Contains(s))); }
         if (q.Status.HasValue) query = query.Where(x => x.Status == q.Status);
