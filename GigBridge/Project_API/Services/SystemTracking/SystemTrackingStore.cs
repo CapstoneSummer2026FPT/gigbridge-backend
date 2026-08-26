@@ -1,6 +1,6 @@
 using System.Diagnostics;
-using Application.Common.InternalServices.Admin.SystemTracking.Models;
-using Application.Common.InternalServices.Admin.SystemTracking.Interfaces;
+using Application.Features.Admin.SystemTracking.Common.Interfaces;
+using Application.Features.Admin.SystemTracking.Common.Models;
 
 namespace Project_API.Services.SystemTracking;
 

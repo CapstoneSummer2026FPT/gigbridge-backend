@@ -109,7 +109,12 @@ public sealed class SubmitESignSignatureCommandHandler
 
         document.Status = (int)ESignDocumentStatus.FullySigned;
         document.FinalizedAt = now;
-        document.UpdatedAt = now;
+        ESignDocumentRevision.Advance(document, now);
+        await ESignDocumentRevision.EnqueueAsync(
+            _context,
+            document,
+            now,
+            cancellationToken);
 
         await _context.SaveChangesAsync(cancellationToken);
 

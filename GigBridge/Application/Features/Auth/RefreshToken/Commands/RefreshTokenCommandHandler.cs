@@ -33,12 +33,22 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, (
     public async Task<(LoginResponse LoginData, string RefreshToken, DateTime RefreshTokenExpiry)> Handle(RefreshTokenCommand request, CancellationToken cancellationToken)
     {
         var userId = GetUserIdFromAccessToken(request.AccessToken);
+        await using var transaction = await _context.BeginTransactionAsync(cancellationToken);
+        await transaction.AcquireTransactionLockAsync(
+            AccountEnforcementLock.ForUser(userId),
+            cancellationToken,
+            "Auth.RefreshToken.Rotate");
+
+        // Reload only after taking the per-user lock. Otherwise two refresh requests can
+        // validate the same old token, both return success, and immediately invalidate
+        // one of the newly issued tokens when the second SaveChanges wins.
         var user = await LoadUserAsync(userId, cancellationToken);
 
         EnsureRefreshTokenIsValid(user, request.RefreshToken);
 
         var newRefreshToken = RotateRefreshToken(user);
         await _context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         return (new LoginResponse
         {

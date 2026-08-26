@@ -14,7 +14,7 @@ internal static class JobPostESignRenderer
 {
     public const string TemplateCode = "JOB_POST_CLIENT_COMMITMENT";
 
-    public static async Task<EsignDocument> EnsureDocumentAsync(
+    public static async Task<(EsignDocument Document, bool Created)> EnsureDocumentAsync(
         IApplicationDbContext context,
         JobPost jobPost,
         DateTime now,
@@ -29,7 +29,7 @@ internal static class JobPostESignRenderer
 
         if (existing is not null)
         {
-            return existing;
+            return (existing, false);
         }
 
         var template = await FindTemplateAsync(context, cancellationToken);
@@ -45,7 +45,7 @@ internal static class JobPostESignRenderer
             DocumentCode = $"GB-JOB-{now:yyyyMMdd}-{Guid.NewGuid():N}"[..32].ToUpperInvariant(),
             Status = (int)ESignDocumentStatus.PendingSignatures,
             DocumentHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(renderedHtml))).ToLowerInvariant(),
-            ContentRevision = 1,
+            ContentRevision = 0,
             CreatedAt = now
         };
         var content = new EsignDocumentContent
@@ -57,7 +57,7 @@ internal static class JobPostESignRenderer
         context.Set<EsignDocument>().Add(document);
         context.Set<EsignDocumentContent>().Add(content);
 
-        return document;
+        return (document, true);
     }
 
     private static async Task<EsignTemplate> FindTemplateAsync(

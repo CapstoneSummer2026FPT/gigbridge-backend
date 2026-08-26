@@ -31,7 +31,10 @@ public sealed class GenerateESignPdfCommandHandler(
             throw new BadRequestException("This document does not use the contract Word template.");
         }
 
-        var content = await ESignAccessGuard.GetContentAsync(context, document.EsignDocumentsId, cancellationToken);
+        var content = await ESignDocumentContentStorage.GetAsync(
+            context,
+            document.EsignDocumentsId,
+            cancellationToken);
 
         var signatures = await context.Set<EsignSignature>()
             .AsNoTracking()
@@ -44,8 +47,7 @@ public sealed class GenerateESignPdfCommandHandler(
         var expectedHash = ESignPdfArtifactRevision.ExpectedHash(document);
         if (document.PdfDocumentSizeBytes is > 0 &&
             document.PdfSignatureCount == signatureCount &&
-            string.Equals(document.PdfDocumentHash, expectedHash, StringComparison.Ordinal) &&
-            !string.IsNullOrWhiteSpace(content.PdfDocumentFileName))
+            string.Equals(document.PdfDocumentHash, expectedHash, StringComparison.Ordinal))
         {
             return ToResponse(document);
         }
@@ -70,10 +72,15 @@ public sealed class GenerateESignPdfCommandHandler(
             wordDocument.FileName,
             cancellationToken);
 
+        await using var transaction = await context.BeginTransactionAsync(cancellationToken);
+        await transaction.AcquireTransactionLockAsync(
+            ESignDocumentLock.ForDocument(document.EsignDocumentsId),
+            cancellationToken);
+
         var currentDocument = await context.Set<EsignDocument>()
             .AsNoTracking()
             .Where(item => item.EsignDocumentsId == document.EsignDocumentsId)
-            .Select(item => new { item.DocumentHash })
+            .Select(item => new { item.DocumentHash, item.ContentRevision })
             .SingleAsync(cancellationToken);
         var currentSignatureCount = await context.Set<EsignSignature>()
             .AsNoTracking()
@@ -82,20 +89,33 @@ public sealed class GenerateESignPdfCommandHandler(
                 signature.Status == (int)ESignSignatureStatus.Signed,
                 cancellationToken);
         if (currentSignatureCount != signatureCount ||
+            currentDocument.ContentRevision != document.ContentRevision ||
             !string.Equals(currentDocument.DocumentHash, document.DocumentHash, StringComparison.Ordinal))
         {
             throw new ConflictException("The document signatures changed while the PDF was being prepared. Please retry.");
         }
 
         var generatedAt = DateTime.UtcNow;
-        content.PdfDocumentContent = pdf;
-        content.PdfDocumentFileName = ESignPdfArtifactRevision.ContractFileName;
         document.PdfSignatureCount = signatureCount;
         document.PdfDocumentHash = expectedHash;
         document.PdfDocumentSizeBytes = pdf.LongLength;
-        document.ContentRevision++;
-        document.UpdatedAt = generatedAt;
+        ESignDocumentRevision.Advance(document, generatedAt);
+        await ESignDocumentRevision.EnqueueAsync(
+            context,
+            document,
+            generatedAt,
+            cancellationToken);
+        await ESignArtifactStorage.UpsertAsync(
+            context,
+            document,
+            ESignArtifactType.Pdf,
+            pdf,
+            ESignPdfArtifactRevision.ContractFileName,
+            "application/pdf",
+            generatedAt,
+            cancellationToken);
         await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         return ToResponse(document);
     }

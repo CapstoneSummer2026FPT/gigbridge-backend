@@ -23,6 +23,7 @@ using Domain.Enums.Chat;
 using Domain.Enums.Contracts;
 using Domain.Enums.Contracts.Escrow;
 using Domain.Enums.Contracts.Milestones;
+using Domain.Enums.Delivery;
 using Domain.Enums.ESign;
 using Domain.Enums.Notifications;
 using Domain.Enums.Wallets;
@@ -669,7 +670,12 @@ public class ContractWorkflowTests
             fixture.Context.Set<User>().Single(user => user.UserId == fixture.ClientUserId).IdentityOrTaxCode);
         Assert.Equal(fixture.Now, fixture.EsignSignatures.Entities[0].PolicyAcceptedAt);
         Assert.Null(fixture.GetContractDocumentContent().FinalizedDocumentContent);
-        Assert.Empty(fixture.DeliveryOutboxes.Entities);
+        Assert.Equal(2, fixture.DeliveryOutboxes.Entities.Count);
+        Assert.All(fixture.DeliveryOutboxes.Entities, delivery =>
+        {
+            Assert.Equal((int)DeliveryOutboxType.ESignDocumentRevision, delivery.DeliveryType);
+            Assert.Equal((int)DeliveryChannel.NotificationRealtime, delivery.Channel);
+        });
 
         var result = await handler.Handle(
             new SignContractCommand(
@@ -716,13 +722,22 @@ public class ContractWorkflowTests
                 fixture.GetContractDocumentContent(),
                 generation.ClientSignature with { PolicyVersion = "changed" },
                 generation.FreelancerSignature));
-        Assert.Equal(2, fixture.DeliveryOutboxes.Entities.Count);
-        Assert.All(fixture.DeliveryOutboxes.Entities, delivery =>
+        var emailDeliveries = fixture.DeliveryOutboxes.Entities
+            .Where(delivery => delivery.Channel == (int)DeliveryChannel.Email)
+            .ToList();
+        Assert.Equal(2, emailDeliveries.Count);
+        Assert.All(emailDeliveries, delivery =>
         {
             Assert.Null(delivery.ScheduleId);
             Assert.Equal((int)DeliveryChannel.Email, delivery.Channel);
             Assert.Equal((int)DeliveryOutboxStatus.Pending, delivery.Status);
         });
+        var revisionDeliveries = fixture.DeliveryOutboxes.Entities
+            .Where(delivery => delivery.DeliveryType == (int)DeliveryOutboxType.ESignDocumentRevision)
+            .ToList();
+        Assert.Equal(4, revisionDeliveries.Count);
+        Assert.All(revisionDeliveries, delivery =>
+            Assert.Equal((int)DeliveryChannel.NotificationRealtime, delivery.Channel));
     }
 
     [Fact]
@@ -791,7 +806,9 @@ public class ContractWorkflowTests
         Assert.Null(fixture.GetContractDocumentContent().FinalizedDocumentContent);
         Assert.Empty(fixture.DocumentGenerator.GenerateCalls);
         Assert.Empty(fixture.PdfConverter.ConvertCalls);
-        Assert.Empty(fixture.DeliveryOutboxes.Entities);
+        Assert.Equal(2, fixture.DeliveryOutboxes.Entities.Count);
+        Assert.All(fixture.DeliveryOutboxes.Entities, delivery =>
+            Assert.Equal((int)DeliveryOutboxType.ESignDocumentRevision, delivery.DeliveryType));
         Assert.Empty(auditLog.Entries);
         await identityCache.Received(1)
             .GetAndRemoveAsync<bool>(Arg.Any<string>(), Arg.Any<CancellationToken>());

@@ -50,22 +50,27 @@ public sealed class DownloadESignDocumentQueryHandler
             throw new ConflictException("The current PDF has not been prepared yet.");
         }
 
-        var content = await ESignAccessGuard.GetContentAsync(_context, document.EsignDocumentsId, cancellationToken);
-        if (content.PdfDocumentContent is not { Length: > 0 })
+        var artifact = await ESignArtifactStorage.GetAsync(
+            _context,
+            document.EsignDocumentsId,
+            ESignArtifactType.Pdf,
+            "ESign.Artifact.Pdf.Download",
+            cancellationToken);
+        if (artifact?.Content is not { Length: > 0 })
         {
             throw new ConflictException("The current PDF has not been prepared yet.");
         }
 
         var fileName = document.ContractsId.HasValue
             ? ESignPdfArtifactRevision.ContractFileName
-            : Path.GetFileName(content.PdfDocumentFileName);
+            : Path.GetFileName(artifact.FileName);
         if (string.IsNullOrWhiteSpace(fileName))
         {
             fileName = $"{document.DocumentCode}.pdf";
         }
 
         return new ESignDocumentDownloadResponse(
-            content.PdfDocumentContent,
+            artifact.Content,
             fileName,
             "application/pdf");
     }

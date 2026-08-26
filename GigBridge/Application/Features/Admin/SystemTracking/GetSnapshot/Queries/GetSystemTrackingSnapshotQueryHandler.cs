@@ -1,5 +1,5 @@
-using Application.Common.InternalServices.Admin.SystemTracking.Models;
-using Application.Common.InternalServices.Admin.SystemTracking.Interfaces;
+using Application.Features.Admin.SystemTracking.Common.Interfaces;
+using Application.Features.Admin.SystemTracking.Common.Models;
 using MediatR;
 
 namespace Application.Features.Admin.SystemTracking.GetSnapshot.Queries;

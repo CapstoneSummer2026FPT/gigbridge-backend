@@ -4,6 +4,7 @@ using Application.Features.Receipts.Download.Queries;
 using Application.Features.Receipts.GetMine.Queries;
 using Application.Features.Receipts.Prepare.Commands;
 using Application.Features.Receipts.Retry.Commands;
+using Application.Features.Receipts.GetStatus.Queries;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Project_API.Controllers;
@@ -46,6 +47,24 @@ public sealed class ProjectReceiptsController : BaseApiController
         Response.Headers.CacheControl = "private, no-store";
         Response.Headers.Pragma = "no-cache";
         return File(result.Content, result.ContentType, result.FileName);
+    }
+
+    [HttpGet("receipts/{receiptId:guid}/status")]
+    public async Task<IActionResult> GetStatus(Guid receiptId, CancellationToken cancellationToken)
+    {
+        if (!TryGetCurrentUserId(out var userId)) return InvalidTokenResponse();
+        var result = await Mediator.Send(
+            new GetProjectReceiptStatusQuery(userId, ReceiptId: receiptId), cancellationToken);
+        return Ok(ApiResponse<ProjectReceiptSummaryResponse>.Ok(result, "Project receipt status retrieved."));
+    }
+
+    [HttpGet("contracts/{contractId:guid}/receipt/status")]
+    public async Task<IActionResult> GetStatusByContract(Guid contractId, CancellationToken cancellationToken)
+    {
+        if (!TryGetCurrentUserId(out var userId)) return InvalidTokenResponse();
+        var result = await Mediator.Send(
+            new GetProjectReceiptStatusQuery(userId, ContractId: contractId), cancellationToken);
+        return Ok(ApiResponse<ProjectReceiptSummaryResponse>.Ok(result, "Project receipt status retrieved."));
     }
 
     [HttpPost("receipts/{receiptId:guid}/retry")]

@@ -1,4 +1,5 @@
 using Application.Common.Models;
+using Application.Common.InternalServices.ESign.Services;
 using Application.Features.ESign.Common.DTOs;
 using Application.Features.ESign.Client.CreateDocumentFromJobPost.Commands;
 using Application.Features.ESign.Client.GetDocumentByJobPost.Queries;
@@ -12,15 +13,17 @@ using Application.Features.ESign.Common.GeneratePdf.Commands;
 using Application.Features.ESign.Common.SavePdf.Commands;
 using Application.Features.ESign.Common.PreviewPdf.Commands;
 using Application.Features.ESign.Common.PreviewPdf.DTOs;
+using Application.Features.ESign.Common.GetDocumentStatusByContract.Queries;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Text.Json;
 
 namespace Project_API.Controllers.ESign.Common;
 
 [ApiController]
 [Route("api/ESign")]
 [Authorize]
-public sealed class ESignController : BaseApiController
+public sealed class ESignController(ILogger<ESignController> logger) : BaseApiController
 {
     [HttpGet("documents/{documentId:guid}")]
     public async Task<IActionResult> GetDocument(Guid documentId)
@@ -32,7 +35,9 @@ public sealed class ESignController : BaseApiController
 
         var result = await Mediator.Send(new GetESignDocumentQuery(documentId, userId));
 
-        return Ok(ApiResponse<ESignDocumentResponse>.Ok(result, "E-sign document retrieved"));
+        var response = ApiResponse<ESignDocumentResponse>.Ok(result, "E-sign document retrieved");
+        LogResponse("ESign.Document", result.DocumentId, response);
+        return Ok(response);
     }
 
     [HttpGet("documents/by-job/{jobPostId:guid}")]
@@ -58,7 +63,26 @@ public sealed class ESignController : BaseApiController
 
         var result = await Mediator.Send(new Application.Features.ESign.Common.GetDocumentByContract.Queries.GetESignDocumentByContractQuery(contractId, userId));
 
-        return Ok(ApiResponse<ESignDocumentStatusResponse>.Ok(result, "E-sign document retrieved"));
+        var response = ApiResponse<ESignDocumentStatusResponse>.Ok(result, "E-sign document retrieved");
+        LogResponse("ESign.Document.ByContract", result.DocumentId, response);
+        return Ok(response);
+    }
+
+    [HttpGet("documents/by-contract/{contractId:guid}/status")]
+    public async Task<IActionResult> GetDocumentStatusByContract(Guid contractId)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return InvalidTokenResponse();
+        }
+
+        var result = await Mediator.Send(new GetESignDocumentStatusByContractQuery(contractId, userId));
+        Response.Headers["X-ESign-Revision"] = result.Revision.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var response = ApiResponse<ESignDocumentLightweightStatusResponse>.Ok(
+            result,
+            "E-sign document status retrieved");
+        LogResponse("ESign.Status", result.DocumentId, response);
+        return Ok(response);
     }
 
     [HttpGet("documents/my-signed")]
@@ -110,6 +134,13 @@ public sealed class ESignController : BaseApiController
         }
 
         var result = await Mediator.Send(new DownloadESignDocumentQuery(documentId, userId));
+        ESignTelemetry.RecordEndpoint("ESign.Artifact.Pdf.Download", result.Content.LongLength);
+        logger.LogInformation(
+            "ESign endpoint completed. Endpoint={Endpoint} DocumentId={DocumentId} ResponseBytes={ResponseBytes} ArtifactType={ArtifactType}",
+            "ESign.Artifact.Pdf.Download",
+            documentId,
+            result.Content.LongLength,
+            "Pdf");
         Response.Headers.CacheControl = "private, no-store";
         Response.Headers.Pragma = "no-cache";
         return File(result.Content, result.ContentType, result.FileName);
@@ -211,5 +242,16 @@ public sealed class ESignController : BaseApiController
                 Request.Headers.UserAgent.ToString()));
 
         return Ok(ApiResponse<ESignSignatureResponse>.Ok(result, "E-sign document signed"));
+    }
+
+    private void LogResponse<T>(string endpoint, Guid documentId, ApiResponse<T> response)
+    {
+        var responseBytes = JsonSerializer.SerializeToUtf8Bytes(response).LongLength;
+        ESignTelemetry.RecordEndpoint(endpoint, responseBytes);
+        logger.LogInformation(
+            "ESign endpoint completed. Endpoint={Endpoint} DocumentId={DocumentId} ResponseBytes={ResponseBytes}",
+            endpoint,
+            documentId,
+            responseBytes);
     }
 }

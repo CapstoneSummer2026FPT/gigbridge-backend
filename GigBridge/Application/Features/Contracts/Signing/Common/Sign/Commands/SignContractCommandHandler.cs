@@ -93,7 +93,7 @@ public sealed class SignContractCommandHandler :
 
         var signerRole = await ResolveSignerRoleAsync(contract, command.UserId, cancellationToken);
         var now = _dateTimeService.UtcNow;
-        var (document, content) = await ContractEsignRenderer.EnsureDocumentAsync(
+        var (document, content, _) = await ContractEsignRenderer.EnsureDocumentAsync(
             _context, _documentGenerator, contract, now, cancellationToken);
         var snapshot = ContractEsignRenderer.GetSnapshot(content);
 
@@ -200,9 +200,18 @@ public sealed class SignContractCommandHandler :
 
         document.Status = (int)ESignDocumentStatus.PendingSignatures;
         document.UpdatedAt = now;
-        document.ContentRevision++;
-        ClearFinalArtifact(document, content);
-        InvalidatePdfArtifact(document, content);
+        ClearFinalArtifact(document);
+        InvalidatePdfArtifact(document);
+        await ESignArtifactStorage.DeleteAsync(
+            _context,
+            document.EsignDocumentsId,
+            ESignArtifactType.FinalizedDocx,
+            cancellationToken);
+        await ESignArtifactStorage.DeleteAsync(
+            _context,
+            document.EsignDocumentsId,
+            ESignArtifactType.Pdf,
+            cancellationToken);
 
         await _context.SaveChangesAsync(cancellationToken);
 
@@ -220,6 +229,10 @@ public sealed class SignContractCommandHandler :
         var isFullySigned = clientDraft is not null && freelancerDraft is not null;
 
         Guid? escrowId = null;
+        byte[]? finalizedDocument = null;
+        string? finalizedDocumentFileName = null;
+        string? finalizedDocumentMimeType = null;
+        byte[]? finalizedPdf = null;
 
         if (isFullySigned)
         {
@@ -227,7 +240,13 @@ public sealed class SignContractCommandHandler :
                 snapshot,
                 clientDraft!.IdentityOrTaxCode,
                 freelancerDraft!.IdentityOrTaxCode);
-            content.ContractSnapshotJson = JsonSerializer.Serialize(finalSnapshot, JsonOptions);
+            var finalSnapshotJson = JsonSerializer.Serialize(finalSnapshot, JsonOptions);
+            await ESignDocumentContentStorage.UpdateSnapshotAsync(
+                _context,
+                document.EsignDocumentsId,
+                finalSnapshotJson,
+                cancellationToken);
+            content = content with { ContractSnapshotJson = finalSnapshotJson };
 
             foreach (var signature in new[] { clientDraft, freelancerDraft })
             {
@@ -247,25 +266,23 @@ public sealed class SignContractCommandHandler :
                 freelancerSignature,
                 documentHash,
                 cancellationToken);
-            var finalizedPdf = await _pdfConverter.ConvertAsync(
+            finalizedPdf = await _pdfConverter.ConvertAsync(
                 finalized.Content,
                 finalized.FileName,
                 cancellationToken);
 
             document.DocumentHash = documentHash;
-            content.FinalizedDocumentContent = finalized.Content;
             document.FinalizedDocumentFileName = finalized.FileName;
-            content.FinalizedDocumentMimeType = finalized.MimeType;
             document.FinalizedDocumentSizeBytes = finalized.Content.LongLength;
             document.Status = (int)ESignDocumentStatus.FullySigned;
             document.FinalizedAt = now;
             document.UpdatedAt = now;
-            content.PdfDocumentContent = finalizedPdf;
-            content.PdfDocumentFileName = ESignPdfArtifactRevision.ContractFileName;
             document.PdfDocumentHash = $"{documentHash}{ESignPdfArtifactRevision.ContractTemplate}";
             document.PdfSignatureCount = 2;
             document.PdfDocumentSizeBytes = finalizedPdf.LongLength;
-            document.ContentRevision++;
+            finalizedDocument = finalized.Content;
+            finalizedDocumentFileName = finalized.FileName;
+            finalizedDocumentMimeType = finalized.MimeType;
 
             AddFinalContractEmail(finalSnapshot, document.EsignDocumentsId, finalSnapshot.Client, now);
             AddFinalContractEmail(finalSnapshot, document.EsignDocumentsId, finalSnapshot.Freelancer, now);
@@ -301,6 +318,39 @@ public sealed class SignContractCommandHandler :
                     relatedEntityId: document.EsignDocumentsId,
                     relatedEntityType: nameof(EsignDocument));
             }
+        }
+
+        ESignDocumentRevision.Advance(document, now);
+        await ESignDocumentRevision.EnqueueAsync(
+            _context,
+            document,
+            now,
+            cancellationToken);
+
+        if (isFullySigned &&
+            finalizedDocument is not null &&
+            finalizedDocumentFileName is not null &&
+            finalizedDocumentMimeType is not null &&
+            finalizedPdf is not null)
+        {
+            await ESignArtifactStorage.UpsertAsync(
+                _context,
+                document,
+                ESignArtifactType.FinalizedDocx,
+                finalizedDocument,
+                finalizedDocumentFileName,
+                finalizedDocumentMimeType,
+                now,
+                cancellationToken);
+            await ESignArtifactStorage.UpsertAsync(
+                _context,
+                document,
+                ESignArtifactType.Pdf,
+                finalizedPdf,
+                ESignPdfArtifactRevision.ContractFileName,
+                "application/pdf",
+                now,
+                cancellationToken);
         }
 
         await _context.SaveChangesAsync(cancellationToken);
@@ -381,19 +431,15 @@ public sealed class SignContractCommandHandler :
         signature.PolicyAcceptedAt.HasValue &&
         string.Equals(signature.PolicyVersion, policyVersion, StringComparison.Ordinal);
 
-    private static void InvalidatePdfArtifact(EsignDocument document, EsignDocumentContent content)
+    private static void InvalidatePdfArtifact(EsignDocument document)
     {
-        content.PdfDocumentContent = null;
-        content.PdfDocumentFileName = null;
         document.PdfDocumentHash = null;
         document.PdfSignatureCount = 0;
         document.PdfDocumentSizeBytes = null;
     }
 
-    private static void ClearFinalArtifact(EsignDocument document, EsignDocumentContent content)
+    private static void ClearFinalArtifact(EsignDocument document)
     {
-        content.FinalizedDocumentContent = null;
-        content.FinalizedDocumentMimeType = null;
         document.FinalizedDocumentFileName = null;
         document.FinalizedDocumentSizeBytes = null;
         document.FinalizedAt = null;

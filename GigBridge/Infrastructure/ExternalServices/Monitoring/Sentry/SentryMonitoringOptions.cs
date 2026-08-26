@@ -1,8 +1,8 @@
-namespace Project_API.Services.SystemTracking;
+namespace Infrastructure.ExternalServices.Monitoring.Sentry;
 
-public sealed class SentryMonitoringOptions
+internal sealed class SentryMonitoringOptions
 {
-    public const string SectionName = "SentryMonitoring";
+    internal const string SectionName = "SentryMonitoring";
 
     public string BaseUrl { get; set; } = "https://sentry.io/api/0/";
     public string Organization { get; set; } = string.Empty;

@@ -40,8 +40,9 @@ public partial class EsignDocument
     public long? PdfDocumentSizeBytes { get; set; }
 
     /// <summary>
-    /// Bumped every time the paired <see cref="EsignDocumentContent"/> row changes, so callers can
-    /// detect content changes without loading the heavy columns themselves.
+    /// Monotonic aggregate revision. Bumped once for every externally observable document,
+    /// signature, status, or artifact mutation so clients can resynchronize without polling
+    /// document content.
     /// </summary>
     public int ContentRevision { get; set; }
 
@@ -52,6 +53,8 @@ public partial class EsignDocument
     public virtual Contract? Contracts { get; set; }
 
     public virtual EsignDocumentContent? Content { get; set; }
+
+    public virtual ICollection<EsignDocumentArtifact> Artifacts { get; set; } = new List<EsignDocumentArtifact>();
 
     public virtual EsignTemplate EsignTemplates { get; set; } = null!;
 

@@ -4,7 +4,7 @@ using Project_API.Hubs;
 
 namespace Project_API.Services.Chat;
 
-public class SignalRChatRealtimeNotifier : IChatRealtimeNotifier
+public class SignalRChatRealtimeNotifier : IChatRealtimeNotifier, IUserRealtimeEventSender
 {
     private readonly IHubContext<ChatHub> _hubContext;
     private readonly ILogger<SignalRChatRealtimeNotifier> _logger;
@@ -92,4 +92,13 @@ public class SignalRChatRealtimeNotifier : IChatRealtimeNotifier
                 userIds.Count);
         }
     }
+
+    Task IUserRealtimeEventSender.SendAsync(
+        Guid userId,
+        string eventName,
+        object payload,
+        CancellationToken cancellationToken) =>
+        _hubContext.Clients
+            .User(userId.ToString())
+            .SendAsync(eventName, payload, cancellationToken);
 }

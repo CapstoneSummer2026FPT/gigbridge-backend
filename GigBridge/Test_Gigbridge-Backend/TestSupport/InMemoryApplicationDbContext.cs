@@ -10,6 +10,8 @@ namespace Test_Gigbridge_Backend.TestSupport;
 
 internal sealed class InMemoryApplicationDbContext : IApplicationDbContext
 {
+    public bool SupportsRelationalBulkOperations => false;
+
     private readonly Dictionary<Type, object> _sets = new();
 
     public TestDbSet<TEntity> AddSet<TEntity>(params TEntity[] entities)
@@ -90,7 +92,9 @@ internal sealed class NoopApplicationDbContextTransaction : IApplicationDbContex
 
     public Task AcquireTransactionLockAsync(
         long lockKey,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? lockPurpose = null,
+        string callerFilePath = "")
     {
         _onAcquireLock?.Invoke(lockKey);
         return Task.CompletedTask;

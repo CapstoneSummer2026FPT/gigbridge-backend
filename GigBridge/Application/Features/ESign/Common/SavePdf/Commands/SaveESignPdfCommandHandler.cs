@@ -28,6 +28,11 @@ public sealed class SaveESignPdfCommandHandler(IApplicationDbContext context)
             throw new BadRequestException("A valid PDF file of 20 MB or less is required.");
         }
 
+        await using var transaction = await context.BeginTransactionAsync(cancellationToken);
+        await transaction.AcquireTransactionLockAsync(
+            ESignDocumentLock.ForDocument(request.DocumentId),
+            cancellationToken);
+
         var document = await ESignAccessGuard.GetDocumentAsync(
             context,
             request.DocumentId,
@@ -42,8 +47,6 @@ public sealed class SaveESignPdfCommandHandler(IApplicationDbContext context)
             throw new BadRequestException("Contract PDFs must be generated from the Word template.");
         }
 
-        var content = await ESignAccessGuard.GetContentAsync(context, document.EsignDocumentsId, cancellationToken);
-
         var signedCount = await context.Set<EsignSignature>()
             .CountAsync(signature =>
                 signature.EsignDocumentsId == document.EsignDocumentsId &&
@@ -57,17 +60,26 @@ public sealed class SaveESignPdfCommandHandler(IApplicationDbContext context)
         var now = DateTime.UtcNow;
         var safeBaseName = Path.GetFileNameWithoutExtension(request.FileName);
         if (string.IsNullOrWhiteSpace(safeBaseName)) safeBaseName = document.DocumentCode;
-        content.PdfDocumentContent = request.Content;
-        content.PdfDocumentFileName = $"{safeBaseName}.pdf";
+        var fileName = $"{safeBaseName}.pdf";
         document.PdfSignatureCount = signedCount;
         document.PdfDocumentHash = ESignPdfArtifactRevision.ExpectedHash(document);
         document.PdfDocumentSizeBytes = request.Content.LongLength;
-        document.ContentRevision++;
-        document.UpdatedAt = now;
+        ESignDocumentRevision.Advance(document, now);
+        await ESignDocumentRevision.EnqueueAsync(context, document, now, cancellationToken);
+        await ESignArtifactStorage.UpsertAsync(
+            context,
+            document,
+            ESignArtifactType.Pdf,
+            request.Content,
+            fileName,
+            "application/pdf",
+            now,
+            cancellationToken);
         await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         return new ESignPdfArtifactResponse(
             document.EsignDocumentsId,
-            content.PdfDocumentFileName);
+            fileName);
     }
 }

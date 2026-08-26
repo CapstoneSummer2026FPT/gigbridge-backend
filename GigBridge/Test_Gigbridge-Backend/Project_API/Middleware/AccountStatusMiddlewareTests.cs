@@ -1,8 +1,10 @@
 using System.Security.Claims;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.Time;
+using Application.Common.Interfaces.Caching;
 using Domain.Entities;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Project_API.Middleware;
 using Test_Gigbridge_Backend.TestSupport;
@@ -28,7 +30,9 @@ public sealed class AccountStatusMiddlewareTests
         await middleware.InvokeAsync(
             context,
             database,
-            Substitute.For<IDateTimeService>());
+            Substitute.For<IDateTimeService>(),
+            Substitute.For<ICacheService>(),
+            NullLogger<AccountStatusMiddleware>.Instance);
 
         Assert.True(nextCalled);
         database.DidNotReceive().Set<User>();
@@ -59,7 +63,39 @@ public sealed class AccountStatusMiddlewareTests
         await middleware.InvokeAsync(
             context,
             database,
-            Substitute.For<IDateTimeService>());
+            Substitute.For<IDateTimeService>(),
+            Substitute.For<ICacheService>(),
+            NullLogger<AccountStatusMiddleware>.Instance);
+
+        Assert.True(nextCalled);
+    }
+
+    [Fact]
+    public async Task InvokeAsync_WhenCacheIsUnavailable_FallsBackToDatabase()
+    {
+        var userId = Guid.NewGuid();
+        var context = CreateAuthenticatedContext(userId);
+        var database = new InMemoryApplicationDbContext();
+        database.AddSet(new User
+        {
+            UserId = userId,
+            Email = "cache-fallback@example.com",
+            FullName = "Cache Fallback",
+            IsActive = true
+        });
+        var nextCalled = false;
+        var middleware = new AccountStatusMiddleware(_ =>
+        {
+            nextCalled = true;
+            return Task.CompletedTask;
+        });
+
+        await middleware.InvokeAsync(
+            context,
+            database,
+            Substitute.For<IDateTimeService>(),
+            new ThrowingCacheService(),
+            NullLogger<AccountStatusMiddleware>.Instance);
 
         Assert.True(nextCalled);
     }
@@ -71,5 +107,18 @@ public sealed class AccountStatusMiddlewareTests
             [new Claim(ClaimTypes.NameIdentifier, userId.ToString())],
             authenticationType: "Test"));
         return context;
+    }
+
+    private sealed class ThrowingCacheService : ICacheService
+    {
+        public Task<T?> GetAsync<T>(string key, CancellationToken cancellationToken = default) =>
+            Task.FromException<T?>(new InvalidOperationException("Redis unavailable"));
+
+        public Task SetAsync<T>(string key, T value, TimeSpan? expiration = null,
+            CancellationToken cancellationToken = default) =>
+            Task.FromException(new InvalidOperationException("Redis unavailable"));
+
+        public Task RemoveAsync(string key, CancellationToken cancellationToken = default) =>
+            Task.FromException(new InvalidOperationException("Redis unavailable"));
     }
 }

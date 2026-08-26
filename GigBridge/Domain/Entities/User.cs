@@ -118,6 +118,8 @@ public partial class User
 
     public virtual ICollection<Notification> Notifications { get; set; } = new List<Notification>();
 
+    public virtual UserRealtimeState? RealtimeState { get; set; }
+
     public virtual ICollection<Schedule> CreatedSchedules { get; set; } = new List<Schedule>();
 
     public virtual ICollection<Schedule> CancelledSchedules { get; set; } = new List<Schedule>();

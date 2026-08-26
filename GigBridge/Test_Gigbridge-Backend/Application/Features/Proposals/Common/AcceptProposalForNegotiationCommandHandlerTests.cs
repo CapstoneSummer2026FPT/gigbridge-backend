@@ -88,6 +88,15 @@ public class AcceptProposalForNegotiationCommandHandlerTests
         Assert.Empty(fixture.EscrowTransactions.Entities);
 
         // Assert realtime notification called
+        await _chatRealtimeNotifier.Received(1).SendUsersEventAsync(
+            Arg.Is<IReadOnlyCollection<Guid>>(userIds =>
+                userIds.Count == 2 &&
+                userIds.Contains(fixture.ClientUserId) &&
+                userIds.Contains(fixture.FreelancerUserId)),
+            "NegotiationMilestonePlanUpdated",
+            Arg.Any<object>(),
+            Arg.Any<CancellationToken>());
+
         await _notificationService.Received(1).CreateNotificationAsync(
             fixture.FreelancerUserId,
             NotificationType.ProposalStatusChanged,

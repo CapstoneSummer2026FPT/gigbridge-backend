@@ -9,5 +9,9 @@ public enum DeliveryOutboxType
 {
     FinalContractEmail = 0,
     MilestoneSubmission = 1,
-    GenericNotification = 2
+    ESignDocumentRevision = 2,
+    NotificationStateRevision = 3,
+    ConversationInboxRevision = 4,
+    ProjectReceiptRevision = 5,
+    GenericNotification = 6
 }
