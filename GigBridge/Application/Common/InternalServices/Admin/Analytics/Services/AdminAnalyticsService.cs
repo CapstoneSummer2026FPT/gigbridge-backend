@@ -257,7 +257,7 @@ public sealed class AdminAnalyticsService : IAdminAnalyticsService
             Kpi("premiumRevenue", subscriptionVnd + promotionRevenueVnd,
                 previousSubscriptionVnd + previousPromotionRevenueVnd, "VND"),
             Kpi("activePaidUsers", activePaidUsers, previousActive, "users"),
-            Kpi("paidFeatureUsers", usage.Where(x => x.UserId != null).Select(x => x.UserId).Distinct().Count(), 0, "users"),
+            Kpi("paidFeatureUsers", usage.Select(x => x.UserId).Distinct().Count(id => id != null), 0, "users"),
             Kpi("promotionCtr", datedImpressions == 0 ? 0 : datedClicks * 100m / datedImpressions, 0, "percent")
         };
         return new PremiumAnalyticsResponse(
