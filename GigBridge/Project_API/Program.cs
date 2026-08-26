@@ -68,7 +68,9 @@ if (!string.IsNullOrWhiteSpace(redisConnectionString))
 }
 else
 {
-    Console.WriteLine("[WARNING] Redis connection string is empty or missing! SignalR backplane disabled.");
+    using var startupLoggerFactory = LoggerFactory.Create(logging => logging.AddConsole());
+    startupLoggerFactory.CreateLogger("Startup")
+        .LogWarning("Redis connection string is empty or missing! SignalR backplane disabled.");
 }
 
 builder.Services.AddSingleton<SystemTrackingStore>();

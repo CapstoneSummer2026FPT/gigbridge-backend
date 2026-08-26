@@ -74,7 +74,7 @@ public sealed class AdminContractReportQueryHandler :
 
     public async Task<PaginatedList<AdminContractReportListItem>> Handle(GetAdminContractReportsQuery q, CancellationToken ct)
     {
-        var page = Math.Max(1, q.Page); var size = Math.Clamp(q.PageSize, 1, 100);
+        var page = Math.Max(1, q.Page); var size = Math.Clamp(q.PageSize, 1, PaginatedQuery.MaxPageSize);
         var query = _context.Set<ReportContract>().AsNoTracking().AsQueryable();
         if (!string.IsNullOrWhiteSpace(q.Search)) { var s = q.Search.Trim().ToLower(); query = query.Where(x => x.Description.ToLower().Contains(s) || x.Contract.Title.ToLower().Contains(s) || x.Reporter.FullName.ToLower().Contains(s) || (x.Respondent != null && x.Respondent.FullName.ToLower().Contains(s))); }
         if (q.Status.HasValue) query = query.Where(x => x.Status == q.Status);
@@ -244,7 +244,7 @@ public sealed class AdminContractReportMutationHandler :
     }
     private async Task<IApplicationDbContextTransaction> Begin(Guid adminId, Guid reportId, CancellationToken ct) { await EnsureAdmin(adminId, ct); var tx = await _context.BeginTransactionAsync(ct); await tx.AcquireTransactionLockAsync(ReportContractLock.ForReport(reportId), ct); return tx; }
     private async Task EnsureAdmin(Guid id, CancellationToken ct) { if (!await _context.Set<User>().AsNoTracking().AnyAsync(x => x.UserId == id && x.Role == (int)UserRole.Admin && x.IsActive && x.AccountStatus == (int)AccountStatus.Active, ct)) throw new ForbiddenAccessException("An active administrator account is required."); }
-    private Task<ReportContract> Load(Guid id, CancellationToken ct) => _context.Set<ReportContract>().FirstOrDefaultAsync(x => x.ReportContractId == id, ct).ContinueWith(t => t.Result ?? throw new NotFoundException("Contract report does not exist."), ct);
+    private async Task<ReportContract> Load(Guid id, CancellationToken ct) => await _context.Set<ReportContract>().FirstOrDefaultAsync(x => x.ReportContractId == id, ct) ?? throw new NotFoundException("Contract report does not exist.");
     private static void EnsureOpen(ReportContract r) { if (AdminContractReportQueryHandler.IsFinal(r.AdminReviewStatus)) throw new ConflictException("This Contract Report is already finalized."); }
     private void AddOptionalNote(ReportContract r, Guid adminId, string? content) { if (!string.IsNullOrWhiteSpace(content)) _context.Set<ReportContractAdminNote>().Add(new() { ReportContractAdminNoteId = Guid.NewGuid(), ReportContractId = r.ReportContractId, AdminUserId = adminId, Content = content.Trim(), CreatedAt = _clock.UtcNow }); }
     private static object Snapshot(ReportContract r) => new { r.ContractId, r.ReporterId, r.RespondentId, r.Status, r.AdminReviewStatus, r.AdminResolutionAction, r.AdminResolutionNote, r.AssignedAdminId, r.ResolvedAt };

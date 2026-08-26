@@ -1,4 +1,5 @@
 using Application.Common.Interfaces;
+using Application.Common.Models;
 using Application.Features.JobPosts.Public.GetAvailableJobPosts.DTOs;
 using Domain.Entities;
 using Domain.Services;
@@ -216,7 +217,7 @@ public class GetAllJobPostsQueryHandler : IRequestHandler<GetAllJobPostsQuery, A
 
     private static int NormalizePageSize(int pageSize)
     {
-        return Math.Clamp(pageSize, 1, 100);
+        return Math.Clamp(pageSize, 1, PaginatedQuery.MaxPageSize);
     }
 
     private sealed record AdminJobPostListRow(

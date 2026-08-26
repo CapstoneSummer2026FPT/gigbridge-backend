@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using Application.Common.Interfaces;
+using Application.Common.Models;
 using Application.Common.Interfaces.Time;
 using Application.Common.InternalServices.Admin.Analytics.Models;
 using Application.Common.InternalServices.Admin.Analytics.Interfaces;
@@ -257,7 +258,7 @@ public sealed class AdminAnalyticsService : IAdminAnalyticsService
             Kpi("premiumRevenue", subscriptionVnd + promotionRevenueVnd,
                 previousSubscriptionVnd + previousPromotionRevenueVnd, "VND"),
             Kpi("activePaidUsers", activePaidUsers, previousActive, "users"),
-            Kpi("paidFeatureUsers", usage.Where(x => x.UserId != null).Select(x => x.UserId).Distinct().Count(), 0, "users"),
+            Kpi("paidFeatureUsers", usage.Select(x => x.UserId).Distinct().Count(id => id != null), 0, "users"),
             Kpi("promotionCtr", datedImpressions == 0 ? 0 : datedClicks * 100m / datedImpressions, 0, "percent")
         };
         return new PremiumAnalyticsResponse(
@@ -396,7 +397,7 @@ public sealed class AdminAnalyticsService : IAdminAnalyticsService
         if (TryDecodeCursor(filter.Cursor, out var cursorAt, out var cursorId))
             query = query.Where(x => (x.CompletedAt ?? x.CreatedAt) < cursorAt ||
                 ((x.CompletedAt ?? x.CreatedAt) == cursorAt && x.WalletTransactionsId.CompareTo(cursorId) < 0));
-        var pageSize = Math.Clamp(filter.PageSize, 1, 100);
+        var pageSize = Math.Clamp(filter.PageSize, 1, PaginatedQuery.MaxPageSize);
         var transactions = await query.Include(x => x.User).Include(x => x.Contract)
             .OrderByDescending(x => x.CompletedAt ?? x.CreatedAt).ThenByDescending(x => x.WalletTransactionsId)
             .Take(pageSize + 1).ToListAsync(cancellationToken);
