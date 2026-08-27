@@ -41,6 +41,7 @@ public class GetNotificationsQueryHandler : IRequestHandler<GetNotificationsQuer
         }
 
         var personalQuery = personalEntityQuery
+            .TagWith("Notification.List")
             .Select(n => new NotificationDto
             {
                 Id = n.NotificationsId,

@@ -18,6 +18,7 @@ using Application.Common.InternalServices.Notifications;
 using Application.Common.InternalServices.Premium;
 using Application.Common.InternalServices.Proposals;
 using Application.Common.InternalServices.Receipts;
+using Application.Common.InternalServices.Realtime;
 using Application.Common.InternalServices.Reviews;
 using Application.Common.InternalServices.Wallets;
 using Application.Common.InternalServices.WorkSignals;
@@ -54,6 +55,7 @@ public static class DependencyInjection
         }, typeof(MappingProfile));
         services.AddAccountServices();
         services.AddAuditingServices();
+        services.AddRealtimeRevisionServices();
         services.AddWorkSignalServices(configuration);
         services.AddDeliveryServices(configuration);
         services.AddAdminAuditLogServices();

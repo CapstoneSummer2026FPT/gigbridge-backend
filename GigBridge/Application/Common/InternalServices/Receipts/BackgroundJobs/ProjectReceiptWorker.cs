@@ -26,7 +26,7 @@ public sealed class ProjectReceiptWorker : BackgroundService
     private const int MaxAttempts = 5;
     private const long WorkerLock = 0x5245434549505457;
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(10);
-    private static readonly TimeSpan MaxIdlePollInterval = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan MaxIdlePollInterval = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan LeaseDuration = TimeSpan.FromMinutes(3);
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<ProjectReceiptWorker> _logger;
@@ -248,9 +248,8 @@ public sealed class ProjectReceiptWorker : BackgroundService
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
-        var content = await context.Set<ProjectReceiptContent>()
-            .AsNoTracking()
-            .FirstOrDefaultAsync(item => item.ProjectReceiptId == receipt.ProjectReceiptId, cancellationToken)
+        var content = await ProjectReceiptArtifactStorage.GetSnapshotAsync(
+            context, receipt.ProjectReceiptId, cancellationToken)
             ?? throw new InvalidOperationException($"Receipt {receipt.ProjectReceiptId} is missing its content row.");
 
         return new GenerationClaim(
@@ -288,14 +287,10 @@ public sealed class ProjectReceiptWorker : BackgroundService
                     item.GenerationStatus == (int)ProjectReceiptGenerationStatus.Processing,
                     cancellationToken);
             if (receipt is null) return;
-            var content = await context.Set<ProjectReceiptContent>()
-                .FirstOrDefaultAsync(item => item.ProjectReceiptId == receipt.ProjectReceiptId, cancellationToken)
-                ?? throw new InvalidOperationException($"Receipt {receipt.ProjectReceiptId} is missing its content row.");
             var now = DateTime.UtcNow;
-            content.PdfContent = pdf;
-            content.PdfFileName = $"GigBridge-{receipt.ReceiptNumber}.pdf";
-            content.PdfContentType = "application/pdf";
-            content.PdfHashSha256 = Convert.ToHexString(SHA256.HashData(pdf)).ToLowerInvariant();
+            await ProjectReceiptArtifactStorage.UpsertPdfAsync(
+                context, receipt, pdf, $"GigBridge-{receipt.ReceiptNumber}.pdf",
+                "application/pdf", now, cancellationToken);
             receipt.PdfSizeBytes = pdf.LongLength;
             receipt.GeneratedAt = now;
             receipt.GenerationStatus = (int)ProjectReceiptGenerationStatus.Ready;
@@ -464,8 +459,6 @@ public sealed class ProjectReceiptWorker : BackgroundService
         using var scope = _scopeFactory.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
         var receipt = await context.Set<ProjectReceipt>()
-            .Include(item => item.OwnerUser)
-            .Include(item => item.Contract)
             .FirstOrDefaultAsync(item => item.ProjectReceiptId == receiptId, cancellationToken);
         if (receipt is null || receipt.GenerationStatus != (int)ProjectReceiptGenerationStatus.Ready ||
             receipt.EmailStatus == (int)ProjectReceiptEmailStatus.Delivered ||
@@ -476,10 +469,21 @@ public sealed class ProjectReceiptWorker : BackgroundService
             return;
         }
 
-        var content = await context.Set<ProjectReceiptContent>()
+        var emailTarget = await context.Set<ProjectReceipt>()
             .AsNoTracking()
-            .FirstOrDefaultAsync(item => item.ProjectReceiptId == receiptId, cancellationToken);
-        if (content?.PdfContent is not { Length: > 0 } || string.IsNullOrWhiteSpace(content.PdfFileName))
+            .TagWith("Receipt.Email.Target")
+            .Where(item => item.ProjectReceiptId == receiptId)
+            .Select(item => new
+            {
+                item.OwnerUser.Email,
+                item.OwnerUser.FullName,
+                ContractTitle = item.Contract.Title
+            })
+            .SingleAsync(cancellationToken);
+
+        var content = await ProjectReceiptArtifactStorage.GetPdfAsync(
+            context, receiptId, "Email", cancellationToken);
+        if (content?.Content is not { Length: > 0 } || string.IsNullOrWhiteSpace(content.FileName))
         {
             return;
         }
@@ -494,20 +498,20 @@ public sealed class ProjectReceiptWorker : BackgroundService
                 : "payment receipt";
             await email.SendEmailAsync(new EmailRequest
             {
-                To = receipt.OwnerUser.Email,
+                To = emailTarget.Email,
                 Subject = $"[GigBridge] Your {roleLabel} is ready",
-                Body = $"<p>Hello {System.Net.WebUtility.HtmlEncode(receipt.OwnerUser.FullName)},</p>" +
-                    $"<p>Your {roleLabel} for <strong>{System.Net.WebUtility.HtmlEncode(receipt.Contract.Title)}</strong> is attached.</p>",
-                TextBody = $"Hello {receipt.OwnerUser.FullName}, your {roleLabel} for {receipt.Contract.Title} is attached.",
+                Body = $"<p>Hello {System.Net.WebUtility.HtmlEncode(emailTarget.FullName)},</p>" +
+                    $"<p>Your {roleLabel} for <strong>{System.Net.WebUtility.HtmlEncode(emailTarget.ContractTitle)}</strong> is attached.</p>",
+                TextBody = $"Hello {emailTarget.FullName}, your {roleLabel} for {emailTarget.ContractTitle} is attached.",
                 IsHtml = true,
                 IdempotencyKey = $"project-receipt-{receipt.ProjectReceiptId:N}",
                 MessageId = $"<project-receipt-{receipt.ProjectReceiptId:N}@gigbridge.local>",
                 ByteAttachments =
                 [
                     new EmailByteAttachment(
-                        content.PdfFileName,
-                        content.PdfContent,
-                        content.PdfContentType ?? "application/pdf")
+                        content.FileName,
+                        content.Content,
+                        content.MimeType)
                 ]
             }, cancellationToken);
             receipt.EmailStatus = (int)ProjectReceiptEmailStatus.Delivered;

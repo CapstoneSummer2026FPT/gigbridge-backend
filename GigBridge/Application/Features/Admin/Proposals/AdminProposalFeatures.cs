@@ -91,9 +91,15 @@ public sealed class AdminProposalQueryHandler :
         if (q.ModerationStatus is < 0 or > 1) throw new BadRequestException("Moderation status is invalid.");
         if (q.MinBudget < 0 || q.MaxBudget < 0 || (q.MinBudget.HasValue && q.MaxBudget.HasValue && q.MinBudget > q.MaxBudget)) throw new BadRequestException("Budget range is invalid.");
         if (q.SubmittedFrom > q.SubmittedTo || q.UpdatedFrom > q.UpdatedTo) throw new BadRequestException("Date range is invalid.");
-        var page = Math.Max(1, q.PageIndex ?? q.Page); var size = Math.Clamp(q.PageSize, 1, 100);
+        var page = Math.Max(1, q.PageIndex ?? q.Page);
+        var size = Math.Clamp(q.PageSize, 1, PaginatedQuery.MaxPageSize);
         var query = _context.Set<Proposal>().AsNoTracking().AsQueryable();
-        if (!string.IsNullOrWhiteSpace(q.Search)) { var s = q.Search.Trim().ToLower(); var guid = Guid.TryParse(s, out var id) ? id : Guid.Empty; query = query.Where(x => x.ProposalsId == guid || x.JobPosts.Title.ToLower().Contains(s) || x.JobPosts.ClientProfiles.User.FullName.ToLower().Contains(s) || x.FreelancerProfiles.User.FullName.ToLower().Contains(s)); }
+        if (!string.IsNullOrWhiteSpace(q.Search))
+        {
+            var s = q.Search.Trim().ToLower();
+            var guid = Guid.TryParse(s, out var id) ? id : Guid.Empty;
+            query = query.Where(x => x.ProposalsId == guid || x.JobPosts.Title.ToLower().Contains(s) || x.JobPosts.ClientProfiles.User.FullName.ToLower().Contains(s) || x.FreelancerProfiles.User.FullName.ToLower().Contains(s));
+        }
         if (q.LifecycleStatus.HasValue) query = query.Where(x => x.Status == q.LifecycleStatus);
         if (q.ModerationStatus.HasValue) query = query.Where(x => x.ModerationStatus == q.ModerationStatus);
         if (q.ClientId.HasValue) query = query.Where(x => x.JobPosts.ClientProfiles.UserId == q.ClientId);
@@ -132,7 +138,8 @@ public sealed class AdminProposalQueryHandler :
             .Include(x => x.ProposalWorkBreakdownItems).Include(x => x.ProposalAiJudging)
             .Include(x => x.ProposalInterviewReviewSession).Include(x => x.AdminNotes).ThenInclude(x => x.AdminUser)
             .FirstOrDefaultAsync(x => x.ProposalsId == q.ProposalId, ct) ?? throw new NotFoundException("Proposal does not exist.");
-        var clientUser = p.JobPosts.ClientProfiles.User; var freelancerUser = p.FreelancerProfiles.User;
+        var clientUser = p.JobPosts.ClientProfiles.User;
+        var freelancerUser = p.FreelancerProfiles.User;
         var reports = await _context.Set<Report>().AsNoTracking().Where(r => (r.ReportedEntityType == "JobPost" && r.ReportedEntityId == p.JobPostsId) || (r.ReportedEntityType == "User" && (r.ReportedEntityId == clientUser.UserId || r.ReportedEntityId == freelancerUser.UserId))).OrderByDescending(r => r.CreatedAt).ToListAsync(ct);
         var offers = await _context.Set<NegotiationOffer>().AsNoTracking().Include(x => x.ClientProfiles).ThenInclude(x => x.User).Include(x => x.FreelancerProfiles).ThenInclude(x => x.User).Include(x => x.NegotiationOfferMilestones).ThenInclude(x => x.WorkItems).Where(x => x.ProposalsId == p.ProposalsId).OrderBy(x => x.CreatedAt).ToListAsync(ct);
         var contract = await _context.Set<Contract>().AsNoTracking().Include(x => x.ContractEscrow).Include(x => x.Milestones).Include(x => x.ReportContracts).Include(x => x.Disputes).FirstOrDefaultAsync(x => x.ProposalsId == p.ProposalsId, ct);
@@ -144,7 +151,12 @@ public sealed class AdminProposalQueryHandler :
         var reportCounts = await _context.Set<Report>().AsNoTracking().Where(x => x.ReportedEntityType == "User" && (x.ReportedEntityId == clientUser.UserId || x.ReportedEntityId == freelancerUser.UserId)).GroupBy(x => x.ReportedEntityId).Select(x => new { Id = x.Key, Count = x.Count() }).ToDictionaryAsync(x => x.Id, x => x.Count, ct);
         async Task<AdminProposalParty> Party(User u, string? summary, IReadOnlyList<string> skills, int? elo) => new(u.UserId, u.FullName, u.Avatar, summary, u.AccountStatus, u.IsActive, u.IsFlagged, u.ViolationCount, reportCounts.GetValueOrDefault(u.UserId), skills, elo, await _context.Set<Subscription>().AnyAsync(s => s.UserId == u.UserId && s.Status == SubscriptionStatus.Active && s.EndDate > DateTime.UtcNow, ct));
         var freelancerElo = await _context.Set<UserEloScore>().AsNoTracking().Where(x => x.UserId == freelancerUser.UserId).Select(x => (int?)x.CurrentPoints).FirstOrDefaultAsync(ct);
-        var answers = p.JobPosts.JobPostQuestions.OrderBy(x => x.OrderIndex).Select(question => { var a = p.ProposalAnswers.FirstOrDefault(x => x.JobPostQuestionsId == question.JobPostQuestionsId); var t = p.ProposalQuestionTimers.FirstOrDefault(x => x.JobPostQuestionsId == question.JobPostQuestionsId); return new AdminProposalQuestion(question.JobPostQuestionsId, question.QuestionText, question.OrderIndex, question.IsRequired, a?.AnswerText, a?.UpdatedAt ?? a?.CreatedAt, t?.StartedAt, t?.CompletedAt, t?.IsLocked); }).ToList();
+        var answers = p.JobPosts.JobPostQuestions.OrderBy(x => x.OrderIndex).Select(question =>
+        {
+            var a = p.ProposalAnswers.FirstOrDefault(x => x.JobPostQuestionsId == question.JobPostQuestionsId);
+            var t = p.ProposalQuestionTimers.FirstOrDefault(x => x.JobPostQuestionsId == question.JobPostQuestionsId);
+            return new AdminProposalQuestion(question.JobPostQuestionsId, question.QuestionText, question.OrderIndex, question.IsRequired, a?.AnswerText, a?.UpdatedAt ?? a?.CreatedAt, t?.StartedAt, t?.CompletedAt, t?.IsLocked);
+        }).ToList();
         var milestones = p.ProposalMilestonePlans.OrderBy(x => x.OrderIndex).Select(x => new AdminProposalMilestone(x.ProposalMilestonePlansId, x.Title, x.Description, x.Amount, x.EstimatedDuration, x.DueDate, x.Deliverables, x.AcceptanceCriteria, x.OrderIndex, x.WorkItems.OrderBy(w => w.OrderIndex).Select(Work).ToList())).ToList();
         AdminProposalAi? ai = definition is null && p.ProposalAiJudging is null ? null : new(definition?.AiInterviewDefinitionsId, definition is null ? null : (int)definition.Status, attempt?.AiInterviewAttemptsId, attempt is null ? null : (int)attempt.Status, attempt?.StartedAt, attempt?.CompletedAt, attempt?.OverallScore, attempt?.CompatibilityScore, attempt?.EvaluationSummary, attempt?.RecommendedHire, attempt?.Answers.OrderBy(x => x.QuestionIndex).Select(x => new AdminProposalAiAnswer(x.QuestionIndex, x.QuestionText, x.Transcript, x.Score)).ToList() ?? [], p.ProposalAiJudging?.Score, p.ProposalAiJudging?.Summary, p.ProposalAiJudging?.EvaluatedAt, p.ProposalInterviewReviewSession?.StartedAt, p.ProposalInterviewReviewSession?.CompletedAt, p.ProposalInterviewReviewSession?.IsLocked);
         var offerDtos = offers.Select(o => new AdminProposalNegotiationOffer(o.NegotiationOfferId, o.ConversationsId, o.Status == 0 ? o.ClientProfiles.UserId : o.FreelancerProfiles.UserId, o.Status == 0 ? o.ClientProfiles.User.FullName : o.FreelancerProfiles.User.FullName, o.Status == 0 ? o.ClientProfiles.User.Avatar : o.FreelancerProfiles.User.Avatar, o.FinalPrice, o.StartDate, o.EndDate, o.ScopeSummary, o.Status, o.CreatedAt, o.RespondedAt, o.NegotiationOfferMilestones.OrderBy(m => m.OrderIndex).Select(m => new AdminProposalNegotiationMilestone(m.Title, m.Description, m.Amount, m.EstimatedDuration, m.DueDate, m.WorkItems.OrderBy(w => w.OrderIndex).Select(w => new AdminProposalWorkItem(w.NegotiationOfferWorkItemId, w.Title, w.Description, w.Deliverables, w.EstimatedDuration, w.OrderIndex)).ToList())).ToList())).ToList();
@@ -162,28 +174,67 @@ public sealed record AddProposalAdminNoteCommand(Guid AdminId, Guid ProposalId, 
 
 public sealed class AdminProposalMutationHandler : IRequestHandler<InvalidateProposalCommand, AdminProposalDetail>, IRequestHandler<RestoreProposalCommand, AdminProposalDetail>, IRequestHandler<AddProposalAdminNoteCommand, AdminProposalDetail>
 {
-    private readonly IApplicationDbContext _context; private readonly IAdminAuditService _audit; private readonly IDateTimeService _clock; private readonly IMediator _mediator;
-    public AdminProposalMutationHandler(IApplicationDbContext context, IAdminAuditService audit, IDateTimeService clock, IMediator mediator) { _context = context; _audit = audit; _clock = clock; _mediator = mediator; }
+    private readonly IApplicationDbContext _context;
+    private readonly IAdminAuditService _audit;
+    private readonly IDateTimeService _clock;
+    private readonly IMediator _mediator;
+
+    public AdminProposalMutationHandler(IApplicationDbContext context, IAdminAuditService audit, IDateTimeService clock, IMediator mediator)
+    {
+        _context = context;
+        _audit = audit;
+        _clock = clock;
+        _mediator = mediator;
+    }
     public async Task<AdminProposalDetail> Handle(InvalidateProposalCommand q, CancellationToken ct) => await Change(q.AdminId, q.ProposalId, true, q.Request.Reason, q.Request.InternalNote, ct);
     public async Task<AdminProposalDetail> Handle(RestoreProposalCommand q, CancellationToken ct) => await Change(q.AdminId, q.ProposalId, false, q.Request.Reason, q.Request.InternalNote, ct);
     public async Task<AdminProposalDetail> Handle(AddProposalAdminNoteCommand q, CancellationToken ct)
     {
-        var content = Required(q.Content, "Internal note", 5000); await using var tx = await _context.BeginTransactionAsync(ct); await tx.AcquireTransactionLockAsync(ProposalModerationLock.For(q.ProposalId), ct);
+        var content = Required(q.Content, "Internal note", 5000);
+        await using var tx = await _context.BeginTransactionAsync(ct);
+        await tx.AcquireTransactionLockAsync(ProposalModerationLock.For(q.ProposalId), ct);
         if (!await _context.Set<Proposal>().AnyAsync(x => x.ProposalsId == q.ProposalId, ct)) throw new NotFoundException("Proposal does not exist.");
-        var note = new ProposalAdminNote { ProposalAdminNoteId = Guid.NewGuid(), ProposalId = q.ProposalId, AdminUserId = q.AdminId, Content = content, CreatedAt = _clock.UtcNow, IsActive = true }; _context.Set<ProposalAdminNote>().Add(note);
-        _audit.Add(q.AdminId, AdminAuditActions.ProposalInternalNoteAdded, nameof(Proposal), q.ProposalId, null, new { noteId = note.ProposalAdminNoteId, content }); await _context.SaveChangesAsync(ct); await tx.CommitAsync(ct); return await _mediator.Send(new GetAdminProposalAggregateQuery(q.ProposalId), ct);
+        var note = new ProposalAdminNote { ProposalAdminNoteId = Guid.NewGuid(), ProposalId = q.ProposalId, AdminUserId = q.AdminId, Content = content, CreatedAt = _clock.UtcNow, IsActive = true };
+        _context.Set<ProposalAdminNote>().Add(note);
+        _audit.Add(q.AdminId, AdminAuditActions.ProposalInternalNoteAdded, nameof(Proposal), q.ProposalId, null, new { noteId = note.ProposalAdminNoteId, content });
+        await _context.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+        return await _mediator.Send(new GetAdminProposalAggregateQuery(q.ProposalId), ct);
     }
     private async Task<AdminProposalDetail> Change(Guid adminId, Guid proposalId, bool invalidate, string reasonValue, string? note, CancellationToken ct)
     {
-        var reason = Required(reasonValue, "Reason", 2000); await using var tx = await _context.BeginTransactionAsync(ct); await tx.AcquireTransactionLockAsync(ProposalModerationLock.For(proposalId), ct);
-        var p = await _context.Set<Proposal>().FirstOrDefaultAsync(x => x.ProposalsId == proposalId, ct) ?? throw new NotFoundException("Proposal does not exist."); var old = p.ModerationStatus;
+        var reason = Required(reasonValue, "Reason", 2000);
+        await using var tx = await _context.BeginTransactionAsync(ct);
+        await tx.AcquireTransactionLockAsync(ProposalModerationLock.For(proposalId), ct);
+        var p = await _context.Set<Proposal>().FirstOrDefaultAsync(x => x.ProposalsId == proposalId, ct) ?? throw new NotFoundException("Proposal does not exist.");
+        var old = p.ModerationStatus;
         if (invalidate && old == (int)ProposalModerationStatus.Invalidated) throw new ConflictException("Proposal is already invalidated.");
         if (!invalidate && old == (int)ProposalModerationStatus.Active) throw new ConflictException("Proposal is already active.");
-        if (invalidate) { p.ModerationStatus = (int)ProposalModerationStatus.Invalidated; p.InvalidatedByAdminId = adminId; p.InvalidatedAt = _clock.UtcNow; p.InvalidationReason = reason; }
-        else { p.ModerationStatus = (int)ProposalModerationStatus.Active; p.InvalidatedByAdminId = null; p.InvalidatedAt = null; /* retain InvalidationReason as latest moderation evidence */ }
+        if (invalidate)
+        {
+            p.ModerationStatus = (int)ProposalModerationStatus.Invalidated;
+            p.InvalidatedByAdminId = adminId;
+            p.InvalidatedAt = _clock.UtcNow;
+            p.InvalidationReason = reason;
+        }
+        else
+        {
+            p.ModerationStatus = (int)ProposalModerationStatus.Active;
+            p.InvalidatedByAdminId = null;
+            p.InvalidatedAt = null; // retain InvalidationReason as latest moderation evidence
+        }
         if (!string.IsNullOrWhiteSpace(note)) _context.Set<ProposalAdminNote>().Add(new ProposalAdminNote { ProposalAdminNoteId = Guid.NewGuid(), ProposalId = proposalId, AdminUserId = adminId, Content = Required(note, "Internal note", 5000), CreatedAt = _clock.UtcNow, IsActive = true });
         _audit.Add(adminId, invalidate ? AdminAuditActions.ProposalInvalidated : AdminAuditActions.ProposalRestored, nameof(Proposal), proposalId, new { moderationStatus = old, lifecycleStatus = p.Status }, new { moderationStatus = p.ModerationStatus, lifecycleStatus = p.Status, reason, p.JobPostsId, p.FreelancerProfilesId, contractId = await _context.Set<Contract>().Where(x => x.ProposalsId == proposalId).Select(x => (Guid?)x.ContractsId).FirstOrDefaultAsync(ct) });
-        await _context.SaveChangesAsync(ct); await tx.CommitAsync(ct); return await _mediator.Send(new GetAdminProposalAggregateQuery(proposalId), ct);
+        await _context.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+        return await _mediator.Send(new GetAdminProposalAggregateQuery(proposalId), ct);
     }
-    private static string Required(string? value, string field, int max) { if (string.IsNullOrWhiteSpace(value)) throw new BadRequestException($"{field} is required."); var result = value.Trim(); if (result.Length > max) throw new BadRequestException($"{field} must not exceed {max} characters."); return result; }
+
+    private static string Required(string? value, string field, int max)
+    {
+        if (string.IsNullOrWhiteSpace(value)) throw new BadRequestException($"{field} is required.");
+        var result = value.Trim();
+        if (result.Length > max) throw new BadRequestException($"{field} must not exceed {max} characters.");
+        return result;
+    }
 }

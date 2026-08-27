@@ -47,7 +47,6 @@ public static class ESignTemplateInitializationExtensions
                 ALTER TABLE ""ProposalAiJudgings"" ADD COLUMN IF NOT EXISTS ""FullEvaluationJson"" text NULL;
             ");
 
-
             var hasActiveFixedPriceTemplate = await context.EsignTemplates
                 .AnyAsync(template =>
                     template.TemplateCode == FixedPriceTemplateCode &&

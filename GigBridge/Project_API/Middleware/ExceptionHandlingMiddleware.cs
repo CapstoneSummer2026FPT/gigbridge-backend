@@ -4,7 +4,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Application.Common.Exceptions;
-using Sentry;
+using Application.Common.Interfaces.Monitoring;
 
 namespace Project_API.Middleware;
 
@@ -19,7 +19,9 @@ public class ExceptionHandlingMiddleware
         _logger = logger;
     }
 
-    public async Task InvokeAsync(HttpContext context)
+    public async Task InvokeAsync(
+        HttpContext context,
+        IEnumerable<IExceptionReporter> exceptionReporters)
     {
         try
         {
@@ -34,10 +36,17 @@ public class ExceptionHandlingMiddleware
         }
         catch (Exception ex)
         {
-            if (ex is not ValidationException &&
+            if (ex is UnauthorizedAccessException)
+            {
+                _logger.LogInformation(
+                    "Authentication rejected for {Method} {Path}: {Message}",
+                    context.Request.Method,
+                    context.Request.Path,
+                    ex.Message);
+            }
+            else if (ex is not ValidationException &&
                 ex is not ConflictException &&
                 ex is not BadRequestException &&
-                ex is not UnauthorizedAccessException &&
                 ex is not NotFoundException &&
                 ex is not ExternalServiceException &&
                 ex is not ForbiddenAccessException)
@@ -57,10 +66,30 @@ public class ExceptionHandlingMiddleware
                     not NotFoundException and
                     not ForbiddenAccessException)
             {
-                SentrySdk.CaptureException(ex);
+                CaptureException(ex, exceptionReporters);
             }
 
             await HandleExceptionAsync(context, ex);
+        }
+    }
+
+    private void CaptureException(
+        Exception exception,
+        IEnumerable<IExceptionReporter> exceptionReporters)
+    {
+        foreach (var reporter in exceptionReporters)
+        {
+            try
+            {
+                reporter.CaptureException(exception);
+            }
+            catch (Exception reportingException)
+            {
+                _logger.LogWarning(
+                    reportingException,
+                    "An exception reporter failed while capturing {ExceptionType}.",
+                    exception.GetType().Name);
+            }
         }
     }
 

@@ -10,7 +10,7 @@ internal static class DependencyInjection
         services.AddHttpClient<ISupportedBankDirectory, VietQrBankDirectory>(client =>
         {
             client.BaseAddress = new Uri("https://api.vietqr.io/");
-            client.Timeout = TimeSpan.FromSeconds(10);
+            client.Timeout = TimeSpan.FromSeconds(5);
         });
         return services;
     }

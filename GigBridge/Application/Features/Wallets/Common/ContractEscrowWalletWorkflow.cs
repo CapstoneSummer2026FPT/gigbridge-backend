@@ -237,8 +237,11 @@ internal static class ContractEscrowWalletWorkflow
         ContractEscrow escrow,
         (decimal Deposited, decimal Earned) split)
     {
-        escrow.DepositedTokens -= split.Deposited;
-        escrow.EarnedTokens -= split.Earned;
+        // Legacy escrows created before source tracking use a 0/0 composition and
+        // SplitByEscrowComposition treats their outgoing amount as deposited. Do not
+        // persist a negative source balance while consuming that compatibility split.
+        escrow.DepositedTokens = Math.Max(0m, escrow.DepositedTokens - split.Deposited);
+        escrow.EarnedTokens = Math.Max(0m, escrow.EarnedTokens - split.Earned);
     }
 
     private static WalletBalanceSource ToHeldSource((decimal Deposited, decimal Earned) split) =>

@@ -17,7 +17,7 @@ internal static class ContractEsignRenderer
     public const string PolicyVersion = "Ver 1.0 Gigbridge";
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
-    public static async Task<(EsignDocument Document, EsignDocumentContent Content)> EnsureDocumentAsync(
+    public static async Task<(EsignDocument Document, ESignDocumentContentData Content, bool Changed)> EnsureDocumentAsync(
         IApplicationDbContext context,
         IContractEsignDocumentGenerator documentGenerator,
         Contract contract,
@@ -34,14 +34,16 @@ internal static class ContractEsignRenderer
 
         var existingContent = existing is null
             ? null
-            : await context.Set<EsignDocumentContent>()
-                .FirstOrDefaultAsync(content => content.EsignDocumentsId == existing.EsignDocumentsId, cancellationToken);
+            : await ESignDocumentContentStorage.FindAsync(
+                context,
+                existing.EsignDocumentsId,
+                cancellationToken);
 
         if (existing is not null && existingContent is not null &&
             (!string.IsNullOrWhiteSpace(existingContent.ContractSnapshotJson) ||
              existing.Status == (int)ESignDocumentStatus.FullySigned))
         {
-            return (existing, existingContent);
+            return (existing, existingContent, false);
         }
 
         var template = existing is null
@@ -116,18 +118,32 @@ internal static class ContractEsignRenderer
 
         if (existing is not null)
         {
-            var content = existingContent ?? new EsignDocumentContent { EsignDocumentsId = existing.EsignDocumentsId };
+            var content = new ESignDocumentContentData(
+                existing.EsignDocumentsId,
+                preview,
+                snapshotJson);
             if (existingContent is null)
             {
-                context.Set<EsignDocumentContent>().Add(content);
+                context.Set<EsignDocumentContent>().Add(new EsignDocumentContent
+                {
+                    EsignDocumentsId = existing.EsignDocumentsId,
+                    RenderedHtmlContent = preview,
+                    ContractSnapshotJson = snapshotJson
+                });
+            }
+            else
+            {
+                await ESignDocumentContentStorage.UpdateTextAsync(
+                    context,
+                    existing.EsignDocumentsId,
+                    preview,
+                    snapshotJson,
+                    cancellationToken);
             }
 
-            content.ContractSnapshotJson = snapshotJson;
-            content.RenderedHtmlContent = preview;
             existing.DocumentHash = snapshotHash;
             existing.UpdatedAt = now;
-            existing.ContentRevision++;
-            return (existing, content);
+            return (existing, content, true);
         }
 
         var document = new EsignDocument
@@ -139,7 +155,7 @@ internal static class ContractEsignRenderer
             DocumentCode = documentCode,
             Status = (int)ESignDocumentStatus.PendingSignatures,
             DocumentHash = snapshotHash,
-            ContentRevision = 1,
+            ContentRevision = 0,
             CreatedAt = now
         };
         var newContent = new EsignDocumentContent
@@ -151,10 +167,13 @@ internal static class ContractEsignRenderer
 
         context.Set<EsignDocument>().Add(document);
         context.Set<EsignDocumentContent>().Add(newContent);
-        return (document, newContent);
+        return (document, new ESignDocumentContentData(
+            documentId,
+            preview,
+            snapshotJson), true);
     }
 
-    public static ContractDocumentSnapshot GetSnapshot(EsignDocumentContent content)
+    public static ContractDocumentSnapshot GetSnapshot(ESignDocumentContentData content)
     {
         if (string.IsNullOrWhiteSpace(content.ContractSnapshotJson))
         {
@@ -164,6 +183,12 @@ internal static class ContractEsignRenderer
         return JsonSerializer.Deserialize<ContractDocumentSnapshot>(content.ContractSnapshotJson, JsonOptions)
             ?? throw new BadRequestException("The ESign contract snapshot is invalid.");
     }
+
+    internal static ContractDocumentSnapshot GetSnapshot(EsignDocumentContent content) =>
+        GetSnapshot(new ESignDocumentContentData(
+            content.EsignDocumentsId,
+            content.RenderedHtmlContent,
+            content.ContractSnapshotJson));
 
     public static ContractSignatureSnapshot ToSignatureSnapshot(EsignSignature signature)
     {
@@ -218,10 +243,22 @@ internal static class ContractEsignRenderer
         };
 
     public static string ComputeFinalHash(
-        EsignDocumentContent content,
+        ESignDocumentContentData content,
         ContractSignatureSnapshot clientSignature,
         ContractSignatureSnapshot freelancerSignature) =>
         Hash($"{JsonSerializer.Serialize(GetSnapshot(content), JsonOptions)}\n{JsonSerializer.Serialize(clientSignature, JsonOptions)}\n{JsonSerializer.Serialize(freelancerSignature, JsonOptions)}");
+
+    internal static string ComputeFinalHash(
+        EsignDocumentContent content,
+        ContractSignatureSnapshot clientSignature,
+        ContractSignatureSnapshot freelancerSignature) =>
+        ComputeFinalHash(
+            new ESignDocumentContentData(
+                content.EsignDocumentsId,
+                content.RenderedHtmlContent,
+                content.ContractSnapshotJson),
+            clientSignature,
+            freelancerSignature);
 
     private static ContractDocumentSnapshot BuildSnapshot(
         Guid documentId,

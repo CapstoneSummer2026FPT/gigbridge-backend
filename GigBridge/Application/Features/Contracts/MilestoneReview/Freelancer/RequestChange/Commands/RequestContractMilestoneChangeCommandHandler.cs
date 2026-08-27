@@ -5,6 +5,7 @@ using Application.Common.InternalServices.Chat.Interfaces;
 using Application.Common.InternalServices.Notifications.Interfaces;
 using Application.Features.Contracts.Common.DTOs;
 using Application.Features.Contracts.Common.Internal;
+using Application.Common.InternalServices.ESign.Services;
 using Domain.Entities;
 using Domain.Enums.Contracts;
 using Domain.Enums.ESign;
@@ -53,6 +54,8 @@ public sealed class RequestContractMilestoneChangeCommandHandler :
 
         await ContractParticipantGuard.EnsureFreelancerAsync(_context, contract, command.UserId, cancellationToken);
 
+        await using var transaction = await _context.BeginTransactionAsync(cancellationToken);
+
         var now = _dateTimeService.UtcNow;
         contract.Status = (int)ContractStatus.PendingContractDetails;
         contract.UpdatedAt = now;
@@ -85,7 +88,28 @@ public sealed class RequestContractMilestoneChangeCommandHandler :
         foreach (var document in documents)
         {
             document.Status = (int)ESignDocumentStatus.Voided;
-            document.UpdatedAt = now;
+            document.FinalizedAt = null;
+            document.FinalizedDocumentFileName = null;
+            document.FinalizedDocumentSizeBytes = null;
+            document.PdfDocumentHash = null;
+            document.PdfSignatureCount = 0;
+            document.PdfDocumentSizeBytes = null;
+            await ESignArtifactStorage.DeleteAsync(
+                _context,
+                document.EsignDocumentsId,
+                ESignArtifactType.FinalizedDocx,
+                cancellationToken);
+            await ESignArtifactStorage.DeleteAsync(
+                _context,
+                document.EsignDocumentsId,
+                ESignArtifactType.Pdf,
+                cancellationToken);
+            ESignDocumentRevision.Advance(document, now);
+            await ESignDocumentRevision.EnqueueAsync(
+                _context,
+                document,
+                now,
+                cancellationToken);
         }
 
         var message = string.IsNullOrWhiteSpace(command.Request.Reason)
@@ -100,6 +124,7 @@ public sealed class RequestContractMilestoneChangeCommandHandler :
             cancellationToken);
 
         await _context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         var clientUserId = await _context.Set<ClientProfile>()
             .Where(profile => profile.ClientProfilesId == contract.ClientProfilesId)

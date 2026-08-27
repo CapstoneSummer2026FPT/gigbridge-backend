@@ -1,9 +1,11 @@
 using Application;
 using Application.Common.Interfaces.Identity;
+using Application.Common.InternalServices.Admin.AuditLogs.Interfaces;
 using Application.Common.InternalServices.Chat.Interfaces;
 using Application.Common.InternalServices.Notifications.Interfaces;
-using Application.Common.InternalServices.Admin.SystemTracking.Interfaces;
+using Application.Features.Admin.SystemTracking.Common.Interfaces;
 using Infrastructure;
+using Project_API;
 using Project_API.Extensions;
 using Project_API.Hubs;
 using Project_API.Middleware;
@@ -15,33 +17,8 @@ using Project_API.Services.SystemTracking;
 
 // Multi-node load balancing enabled with Redis SignalR Backplane
 var builder = WebApplication.CreateBuilder(args);
-builder.Services.AddScoped<Application.Common.InternalServices.Admin.AuditLogs.Interfaces.IRequestMetadataAccessor, Project_API.Services.RequestMetadataAccessor>();
-
-var sentryDsn = builder.Configuration["Sentry:Dsn"]?.Trim();
-if (!string.IsNullOrWhiteSpace(sentryDsn))
-{
-    var configuredSentryEnvironment = builder.Configuration["Sentry:Environment"]?.Trim();
-    var configuredSentryRelease = builder.Configuration["Sentry:Release"]?.Trim();
-    builder.WebHost.UseSentry(options =>
-    {
-        options.Dsn = sentryDsn;
-        options.Environment = string.IsNullOrWhiteSpace(configuredSentryEnvironment)
-            ? builder.Environment.EnvironmentName.ToLowerInvariant()
-            : configuredSentryEnvironment;
-        options.Release = string.IsNullOrWhiteSpace(configuredSentryRelease)
-            ? null
-            : configuredSentryRelease;
-        options.SendDefaultPii = false;
-        // ExceptionHandlingMiddleware explicitly captures server exceptions. Keep
-        // ILogger entries as breadcrumbs so the same exception is not sent twice.
-        options.MinimumEventLevel = LogLevel.None;
-        options.MinimumBreadcrumbLevel = LogLevel.Information;
-        options.TracesSampleRate = Math.Clamp(
-            builder.Configuration.GetValue<double?>("Sentry:TracesSampleRate") ?? 0d,
-            0d,
-            1d);
-    });
-}
+builder.Services.AddScoped<IRequestMetadataAccessor, Project_API.Services.RequestMetadataAccessor>();
+builder.WebHost.UseInfrastructureMonitoring(builder.Configuration, builder.Environment);
 
 if (builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Testing"))
 {
@@ -52,7 +29,7 @@ if (builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Te
 
 builder.Services.AddControllers();
 
-// Layer registrations (Clean Architecture)
+// Layer registrations
 builder.Services.AddApplicationServices(builder.Configuration); 
 builder.Services.AddInfrastructureServices(builder.Configuration);
 
@@ -65,6 +42,7 @@ builder.Services.AddTrustedProxyForwarding();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddScoped<IChatRealtimeNotifier, SignalRChatRealtimeNotifier>();
+builder.Services.AddScoped<IUserRealtimeEventSender, SignalRChatRealtimeNotifier>();
 builder.Services.AddScoped<INotificationSender, SignalRNotificationSender>();
 
 var signalRBuilder = builder.Services.AddSignalR();
@@ -90,18 +68,13 @@ if (!string.IsNullOrWhiteSpace(redisConnectionString))
 }
 else
 {
-    Console.WriteLine("[WARNING] Redis connection string is empty or missing! SignalR backplane disabled.");
+    using var startupLoggerFactory = LoggerFactory.Create(logging => logging.AddConsole());
+    startupLoggerFactory.CreateLogger("Startup")
+        .LogWarning("Redis connection string is empty or missing! SignalR backplane disabled.");
 }
 
 builder.Services.AddSingleton<SystemTrackingStore>();
 builder.Services.AddSingleton<ISystemTrackingReader>(provider => provider.GetRequiredService<SystemTrackingStore>());
-builder.Services.Configure<SentryMonitoringOptions>(
-    builder.Configuration.GetSection(SentryMonitoringOptions.SectionName));
-builder.Services.AddMemoryCache();
-builder.Services.AddHttpClient<ISystemErrorSource, SentryIssueErrorSource>(client =>
-{
-    client.Timeout = TimeSpan.FromSeconds(8);
-});
 
 var app = builder.Build();
 

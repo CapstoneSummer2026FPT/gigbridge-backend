@@ -24,7 +24,7 @@ public class RequestLoggingMiddlewareTests
             _ => throw new NotFoundException("Resource was not found."),
             NullLogger<ExceptionHandlingMiddleware>.Instance);
         var requestLoggingMiddleware = new RequestLoggingMiddleware(
-            exceptionHandlingMiddleware.InvokeAsync,
+            request => exceptionHandlingMiddleware.InvokeAsync(request, []),
             NullLogger<RequestLoggingMiddleware>.Instance);
 
         var clientProxy = Substitute.For<IClientProxy>();

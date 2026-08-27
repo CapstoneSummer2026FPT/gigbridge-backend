@@ -39,6 +39,7 @@ public sealed class ProjectReceipt
     /// detect content changes without loading the heavy columns themselves.
     /// </summary>
     public int ContentRevision { get; set; }
+    public int Revision { get; set; }
 
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
@@ -47,4 +48,5 @@ public sealed class ProjectReceipt
     public User OwnerUser { get; set; } = null!;
     public Notification? Notification { get; set; }
     public ProjectReceiptContent? Content { get; set; }
+    public ICollection<ProjectReceiptArtifact> Artifacts { get; set; } = new List<ProjectReceiptArtifact>();
 }

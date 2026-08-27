@@ -2,6 +2,7 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.Time;
 using Application.Common.InternalServices.Chat.Interfaces;
+using Application.Features.Chat.Common.Negotiations.Realtime;
 using Application.Features.JobPosts.Common;
 using Domain.Entities;
 using Domain.Enums.Chat;
@@ -91,6 +92,11 @@ public class OpenNegotiationFromInviteCommandHandler
                 existingConversation.ConversationsId,
                 existingConversation.LastMessageAt,
                 cancellationToken);
+            await NotifyMilestonePlanUpdated(
+                existingConversation.ConversationsId,
+                command.UserId,
+                _dateTimeService.UtcNow,
+                cancellationToken);
 
             return existingConversation.ConversationsId;
         }
@@ -159,8 +165,36 @@ public class OpenNegotiationFromInviteCommandHandler
             conversation.ConversationsId,
             conversation.LastMessageAt,
             cancellationToken);
+        await NotifyMilestonePlanUpdated(
+            conversation.ConversationsId,
+            command.UserId,
+            now,
+            cancellationToken);
 
         return conversation.ConversationsId;
+    }
+
+    private async Task NotifyMilestonePlanUpdated(
+        Guid conversationId,
+        Guid updatedByUserId,
+        DateTime updatedAt,
+        CancellationToken cancellationToken)
+    {
+        var participantUserIds = await _context.Set<ConversationParticipant>()
+            .AsNoTracking()
+            .Where(participant =>
+                participant.ConversationsId == conversationId &&
+                participant.LeftAt == null &&
+                participant.DeletedAt == null)
+            .Select(participant => participant.UserId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        await _chatRealtimeNotifier.SendUsersEventAsync(
+            participantUserIds,
+            NegotiationRealtimeEvents.MilestonePlanUpdated,
+            new NegotiationMilestonePlanUpdatedPayload(conversationId, updatedByUserId, updatedAt),
+            cancellationToken);
     }
 
     private async Task NotifyConversationUpdated(

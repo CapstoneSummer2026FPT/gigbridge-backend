@@ -40,7 +40,10 @@ public sealed class PreviewESignPdfCommandHandler(
             throw new BadRequestException("This document does not use the contract Word template.");
         }
 
-        var content = await ESignAccessGuard.GetContentAsync(context, document.EsignDocumentsId, cancellationToken);
+        var content = await ESignDocumentContentStorage.GetAsync(
+            context,
+            document.EsignDocumentsId,
+            cancellationToken);
         var snapshot = ContractEsignRenderer.GetSnapshot(content);
         var signerRole = snapshot.Client.UserId == request.UserId
             ? ESignerRole.Client

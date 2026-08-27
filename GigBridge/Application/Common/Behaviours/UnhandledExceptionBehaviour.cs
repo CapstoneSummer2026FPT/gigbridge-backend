@@ -28,10 +28,18 @@ public class UnhandledExceptionBehaviour<TRequest, TResponse> : IPipelineBehavio
         {
             var requestName = typeof(TRequest).Name;
 
-            if (ex is not ValidationException &&
+            if (ex is UnauthorizedAccessException)
+            {
+                // Invalid/expired credentials are an expected 401 outcome. The HTTP
+                // middleware records the rejection once without a duplicate stack trace.
+                _logger.LogDebug(
+                    "GigBridge Request: Authentication rejected for Request {Name}: {Message}",
+                    requestName,
+                    ex.Message);
+            }
+            else if (ex is not ValidationException &&
                 ex is not ConflictException &&
                 ex is not BadRequestException &&
-                ex is not UnauthorizedAccessException &&
                 ex is not NotFoundException &&
                 ex is not ExternalServiceException &&
                 ex is not ForbiddenAccessException)
