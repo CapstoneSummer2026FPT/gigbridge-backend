@@ -121,9 +121,11 @@ internal static class ServiceFeeWorkflow
     /// <summary>
     /// Reverses a previously charged service fee (looked up by the original charge's
     /// idempotency key), crediting the same deposited/earned split back to the payer's
-    /// wallet and recording an offsetting <see cref="PlatformRevenueEvent"/>. Used when a
-    /// contract is cancelled before it became active, so the fee never should have been
-    /// retained. Idempotent: replays return the already-recorded refund amount.
+    /// wallet and removing the platform revenue event it originally recorded (revenue
+    /// rows are constrained to non-negative amounts, so a reversal is expressed by
+    /// deleting the original row rather than inserting a negative counter-entry). Used
+    /// when a contract is cancelled before it became active, so the fee never should
+    /// have been retained. Idempotent: replays return the already-recorded refund amount.
     /// </summary>
     public static async Task<decimal> RefundAsync(
         IApplicationDbContext context,
@@ -205,23 +207,10 @@ internal static class ServiceFeeWorkflow
                 revenueEvent => revenueEvent.WalletTransactionId == originalCharge.WalletTransactionsId,
                 cancellationToken);
 
-        context.Set<PlatformRevenueEvent>().Add(new PlatformRevenueEvent
+        if (originalRevenueEvent is not null)
         {
-            PlatformRevenueEventId = Guid.NewGuid(),
-            Source = originalRevenueEvent?.Source ?? PlatformRevenueSource.ContractReleaseFee,
-            WalletTransactionId = refundTransaction.WalletTransactionsId,
-            PayerUserId = userId,
-            ContractId = contractId,
-            SourceEntityType = nameof(WalletTransaction),
-            SourceEntityId = refundTransaction.WalletTransactionsId,
-            SourceReference = refundIdempotencyKey,
-            GigCoinAmount = -originalCharge.TokenAmount,
-            VndEquivalent = -TokenWalletRules.ToVnd(originalCharge.TokenAmount),
-            VndPerGigCoin = TokenWalletRules.VndPerToken,
-            OccurredAt = now,
-            RecordedAt = now,
-            Metadata = "{\"rate\":0.01,\"capture\":\"reversal\"}"
-        });
+            context.Set<PlatformRevenueEvent>().Remove(originalRevenueEvent);
+        }
 
         return originalCharge.TokenAmount;
     }
