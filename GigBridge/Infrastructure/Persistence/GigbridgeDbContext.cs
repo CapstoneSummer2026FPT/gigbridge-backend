@@ -398,7 +398,12 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
             entity.HasIndex(e => new { e.FreelancerProfilesId, e.Status }, "IX_Contracts_FreelancerProfilesId_Status");
 
-            entity.HasIndex(e => e.JobPostsId, "IX_Contracts_JobPostsId").IsUnique();
+            // Partial unique index: a job post may accumulate multiple Cancelled contracts
+            // over successive negotiation attempts, but only ever one non-Cancelled contract
+            // at a time (ContractStatus.Cancelled = 9).
+            entity.HasIndex(e => e.JobPostsId, "IX_Contracts_JobPostsId")
+                .IsUnique()
+                .HasFilter("\"Status\" <> 9");
 
             entity.HasIndex(e => e.Status, "IX_Contracts_Status");
 

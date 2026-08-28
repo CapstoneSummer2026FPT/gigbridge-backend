@@ -1,4 +1,5 @@
 using Application.Common.Models;
+using Application.Features.Contracts.Cancellation.Common.Cancel.Commands;
 using Application.Features.Contracts.Common.DTOs;
 using Application.Features.Contracts.Completion.Client.Commands;
 using Application.Features.Contracts.Completion.Client.DTOs;
@@ -120,6 +121,19 @@ public sealed class ContractsWorkflowController : BaseApiController
                 Request.Headers.UserAgent.ToString()));
 
         return Ok(ApiResponse<ContractWorkflowResponse>.Ok(result, "Contract signed"));
+    }
+
+    [HttpPost("{contractId}/cancel")]
+    public async Task<IActionResult> Cancel(Guid contractId)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return InvalidTokenResponse();
+        }
+
+        var result = await Mediator.Send(new CancelContractCommand(contractId, userId));
+
+        return Ok(ApiResponse<ContractWorkflowResponse>.Ok(result, "Contract cancelled"));
     }
 
     [HttpPost("{contractId}/milestones/accept")]

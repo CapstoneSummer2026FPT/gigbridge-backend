@@ -277,6 +277,25 @@ public sealed class ResolveAdminDisputeCommandHandler :
         contract.Status = command.ContractAction == AdminContractAction.Resume
             ? (int)ContractStatus.Active : (int)ContractStatus.Cancelled;
         contract.UpdatedAt = now;
+
+        if (command.ContractAction == AdminContractAction.Terminate)
+        {
+            // The offer that produced this contract must give up its "Accepted" slot too — the
+            // DB enforces at most one Accepted offer per job post
+            // (UX_NegotiationOffers_AcceptedPerJobPost), so leaving it Accepted would
+            // permanently block any future offer on this job post.
+            var acceptedOffer = await _context.Set<NegotiationOffer>()
+                .FirstOrDefaultAsync(
+                    offer =>
+                        offer.ContractsId == contract.ContractsId &&
+                        offer.Status == (int)NegotiationOfferStatus.Accepted,
+                    cancellationToken);
+            if (acceptedOffer is not null)
+            {
+                acceptedOffer.Status = (int)NegotiationOfferStatus.Cancelled;
+                acceptedOffer.RespondedAt = now;
+            }
+        }
         dispute.Status = (int)DisputeStatus.Resolved;
         dispute.Resolution = (int)command.Resolution;
         dispute.ResolutionNote = command.ResolutionNote.Trim();

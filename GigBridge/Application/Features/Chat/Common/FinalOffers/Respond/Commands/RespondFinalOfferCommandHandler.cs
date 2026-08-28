@@ -370,7 +370,11 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
         }
 
         var existingContract = await _context.Set<Contract>()
-            .AnyAsync(contract => contract.JobPostsId == offer.JobPostsId, cancellationToken);
+            .AnyAsync(
+                contract =>
+                    contract.JobPostsId == offer.JobPostsId &&
+                    contract.Status != (int)ContractStatus.Cancelled,
+                cancellationToken);
         if (existingContract) throw new ConflictException("A contract already exists for this job post.");
 
         var jobPost = await _context.Set<JobPost>()
@@ -467,20 +471,6 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
             contract.ContractsId,
             now,
             cancellationToken);
-
-        if (offer.ProposalsId.HasValue)
-        {
-            var proposal = await _context.Set<Proposal>()
-                .FirstOrDefaultAsync(
-                    proposal => proposal.ProposalsId == offer.ProposalsId.Value,
-                    cancellationToken);
-
-            if (proposal is not null)
-            {
-                proposal.Status = 3;
-                proposal.UpdatedAt = now;
-            }
-        }
 
         var otherPendingOffers = await _context.Set<NegotiationOffer>()
             .Where(otherOffer =>

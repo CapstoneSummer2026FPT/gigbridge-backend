@@ -14,6 +14,7 @@ using Application.Features.Chat.Common.Messages.Send.DTOs;
 using Application.Features.Chat.Common.Negotiations.MilestonePlans.Commands;
 using Application.Features.Chat.Common.Negotiations.StartFromProposal.Commands;
 using Application.Features.Chat.Common.Negotiations.MilestonePlans.DTOs;
+using Application.Features.Contracts.Cancellation.Common.Cancel.Commands;
 using Application.Features.Proposals.Common.AcceptForNegotiation.Commands;
 using Domain.Entities;
 using Domain.Enums.Accounts;
@@ -24,6 +25,7 @@ using Domain.Enums.Notifications;
 using MediatR;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Test_Gigbridge_Backend.TestSupport;
 using Application.Common.Models.Email;
@@ -284,6 +286,7 @@ public class NegotiationFlowCommandHandlerTests
     public async Task RespondFinalOffer_AcceptCreatesContractForPlanConfirmationWithoutEscrow()
     {
         var fixture = new NegotiationFixture();
+        fixture.Proposal.Status = 2; // Shortlisted — negotiation already pulled it out of Pending.
         fixture.AddConversationWithParticipants();
         var waitlistedProposal = new Proposal
         {
@@ -331,7 +334,9 @@ public class NegotiationFlowCommandHandlerTests
         Assert.Equal(fixture.ProposalId, contract.ProposalsId);
         Assert.Equal(1500m, contract.TotalBudget);
         Assert.Equal((int)ContractStatus.PendingContractConfirmation, contract.Status);
-        Assert.Equal(3, fixture.Proposal.Status);
+        // Accepting the final offer no longer flips Proposal.Status to Accepted — that now
+        // happens only once escrow is funded and the contract goes Active.
+        Assert.Equal(2, fixture.Proposal.Status);
         Assert.Equal(1, waitlistedProposal.Status);
         Assert.Equal(contract.ContractsId, result.ContractId);
         Assert.Equal((int)ContractStatus.PendingContractConfirmation, result.ContractStatus);
@@ -515,6 +520,130 @@ public class NegotiationFlowCommandHandlerTests
         Assert.All(fixture.Milestones.Entities, milestone => Assert.False(string.IsNullOrWhiteSpace(milestone.AcceptanceCriteria)));
         Assert.Equal(2, fixture.Milestones.Entities.Sum(milestone => milestone.WorkItems.Count));
         Assert.Empty(fixture.Escrows.Entities);
+    }
+
+    [Fact]
+    public async Task RespondFinalOffer_AcceptSucceedsAfterEarlierContractOnSameJobPostWasCancelled()
+    {
+        var fixture = new NegotiationFixture();
+        fixture.AddConversationWithParticipants();
+
+        // A previous negotiation on this same job post was accepted and its contract created.
+        var cancelledContractId = Guid.NewGuid();
+        fixture.Contracts.Add(new Contract
+        {
+            ContractsId = cancelledContractId,
+            JobPostsId = fixture.JobPostId,
+            ClientProfilesId = fixture.ClientProfileId,
+            Title = "Cancelled attempt",
+            TotalBudget = 500m,
+            Status = (int)ContractStatus.PendingSignature,
+            CreatedAt = fixture.Now.AddMinutes(-5)
+        });
+        var priorOffer = new NegotiationOffer
+        {
+            NegotiationOfferId = Guid.NewGuid(),
+            ConversationsId = Guid.NewGuid(),
+            JobPostsId = fixture.JobPostId,
+            ContractsId = cancelledContractId,
+            ClientProfilesId = fixture.ClientProfileId,
+            FreelancerProfilesId = Guid.NewGuid(),
+            FinalPrice = 500m,
+            Status = (int)NegotiationOfferStatus.Accepted,
+            CreatedAt = fixture.Now.AddMinutes(-5),
+            RespondedAt = fixture.Now.AddMinutes(-5)
+        };
+        fixture.Offers.Add(priorOffer);
+
+        // The client cancels that stalled contract — this must release the offer's Accepted
+        // slot, or no other offer on this job post could ever be accepted again
+        // (UX_NegotiationOffers_AcceptedPerJobPost allows only one Accepted offer per job post).
+        var cancelHandler = new CancelContractCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopChatRealtimeNotifier(),
+            new NoopNotificationService(),
+            new CapturingUserAuditLogService(),
+            NullLogger<CancelContractCommandHandler>.Instance);
+        await cancelHandler.Handle(
+            new CancelContractCommand(cancelledContractId, fixture.ClientUserId),
+            CancellationToken.None);
+
+        Assert.Equal((int)NegotiationOfferStatus.Cancelled, priorOffer.Status);
+
+        fixture.AddOfferWithSnapshot(1500m, 600m, 900m);
+
+        var handler = new RespondFinalOfferCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopChatRealtimeNotifier());
+
+        var result = await handler.Handle(
+            new RespondFinalOfferCommand(
+                fixture.FreelancerUserId,
+                new RespondFinalOfferRequest(
+                    fixture.OfferId,
+                    FinalOfferResponse.Accept,
+                    null)),
+            CancellationToken.None);
+
+        Assert.NotNull(result.ContractId);
+        Assert.Equal((int)NegotiationOfferStatus.Accepted, fixture.Offers.Entities.Single(o => o.NegotiationOfferId == fixture.OfferId).Status);
+        var newContract = Assert.Single(fixture.Contracts.Entities, c => c.ContractsId != cancelledContractId);
+        Assert.Equal((int)ContractStatus.PendingContractConfirmation, newContract.Status);
+    }
+
+    [Fact]
+    public async Task RespondFinalOffer_AcceptStillRejectsWhenEarlierAcceptedOffersContractIsNotCancelled()
+    {
+        var fixture = new NegotiationFixture();
+        fixture.AddConversationWithParticipants();
+
+        var activeContractId = Guid.NewGuid();
+        fixture.Contracts.Add(new Contract
+        {
+            ContractsId = activeContractId,
+            JobPostsId = fixture.JobPostId,
+            ClientProfilesId = fixture.ClientProfileId,
+            Title = "Already in progress",
+            TotalBudget = 500m,
+            Status = (int)ContractStatus.PendingContractConfirmation,
+            CreatedAt = fixture.Now
+        });
+        fixture.Offers.Add(new NegotiationOffer
+        {
+            NegotiationOfferId = Guid.NewGuid(),
+            ConversationsId = Guid.NewGuid(),
+            JobPostsId = fixture.JobPostId,
+            ContractsId = activeContractId,
+            ClientProfilesId = fixture.ClientProfileId,
+            FreelancerProfilesId = Guid.NewGuid(),
+            FinalPrice = 500m,
+            Status = (int)NegotiationOfferStatus.Accepted,
+            CreatedAt = fixture.Now,
+            RespondedAt = fixture.Now
+        });
+
+        fixture.AddOfferWithSnapshot(1500m, 600m, 900m);
+
+        var handler = new RespondFinalOfferCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopChatRealtimeNotifier());
+
+        var exception = await Assert.ThrowsAsync<ConflictException>(() =>
+            handler.Handle(
+                new RespondFinalOfferCommand(
+                    fixture.FreelancerUserId,
+                    new RespondFinalOfferRequest(
+                        fixture.OfferId,
+                        FinalOfferResponse.Accept,
+                        null)),
+                CancellationToken.None));
+
+        Assert.Contains("already been accepted", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal((int)NegotiationOfferStatus.PendingFreelancerConfirmation, fixture.Offers.Entities.Single(o => o.NegotiationOfferId == fixture.OfferId).Status);
+        Assert.Single(fixture.Contracts.Entities); // no second contract was created
     }
 
     private static object? GetPropertyValue(object instance, string propertyName)

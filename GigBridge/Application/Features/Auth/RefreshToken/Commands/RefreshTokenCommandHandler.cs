@@ -7,27 +7,39 @@ using AutoMapper;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using System.Security.Claims;
 
 namespace Application.Features.Auth.RefreshToken.Commands;
 
 public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, (LoginResponse LoginData, string RefreshToken, DateTime RefreshTokenExpiry)>
 {
+    /// <summary>
+    /// How long a just-superseded refresh token stays acceptable after rotation. Absorbs
+    /// legitimate concurrent refresh attempts (e.g. two browser tabs of the same session
+    /// racing on the same httpOnly cookie) without weakening rotation/revocation for a
+    /// genuinely stale or reused token, which is rejected once this window elapses.
+    /// </summary>
+    private static readonly TimeSpan RefreshTokenGracePeriod = TimeSpan.FromSeconds(30);
+
     private readonly IApplicationDbContext _context;
     private readonly IJwtService _jwtService;
     private readonly IDateTimeService _dateTimeService;
     private readonly IMapper _mapper;
+    private readonly ILogger<RefreshTokenCommandHandler> _logger;
 
     public RefreshTokenCommandHandler(
         IApplicationDbContext context,
         IJwtService jwtService,
         IDateTimeService dateTimeService,
-        IMapper mapper)
+        IMapper mapper,
+        ILogger<RefreshTokenCommandHandler> logger)
     {
         _context = context;
         _jwtService = jwtService;
         _dateTimeService = dateTimeService;
         _mapper = mapper;
+        _logger = logger;
     }
 
     public async Task<(LoginResponse LoginData, string RefreshToken, DateTime RefreshTokenExpiry)> Handle(RefreshTokenCommand request, CancellationToken cancellationToken)
@@ -49,6 +61,11 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, (
         var newRefreshToken = RotateRefreshToken(user);
         await _context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+
+        _logger.LogInformation(
+            "Refresh token rotated for user {UserId} (role {Role}).",
+            user.UserId,
+            user.Role);
 
         return (new LoginResponse
         {
@@ -93,23 +110,50 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, (
     private void EnsureRefreshTokenIsValid(User user, string refreshToken)
     {
         var incomingHash = _jwtService.HashRefreshToken(refreshToken);
+        var now = _dateTimeService.UtcNow;
 
-        if (user.RefreshTokenHash != incomingHash)
+        var matchesCurrent = user.RefreshTokenHash == incomingHash;
+        var matchesRecentPrevious =
+            !matchesCurrent &&
+            user.PreviousRefreshTokenHash is not null &&
+            user.PreviousRefreshTokenHash == incomingHash &&
+            user.PreviousRefreshTokenGraceExpiresAt is DateTime graceExpiresAt &&
+            graceExpiresAt >= now;
+
+        if (!matchesCurrent && !matchesRecentPrevious)
         {
+            _logger.LogWarning(
+                "Refresh rejected for user {UserId}: token does not match the current or recently-rotated token.",
+                user.UserId);
             throw new UnauthorizedAccessException("Invalid refresh token");
         }
 
-        if (user.RefreshTokenExpiry < _dateTimeService.UtcNow)
+        if (matchesCurrent && user.RefreshTokenExpiry < now)
         {
+            _logger.LogWarning("Refresh rejected for user {UserId}: current refresh token expired.", user.UserId);
             throw new UnauthorizedAccessException("Refresh token expired");
+        }
+
+        if (matchesRecentPrevious)
+        {
+            _logger.LogInformation(
+                "Refresh accepted for user {UserId} via rotation grace window (concurrent refresh, e.g. a sibling browser tab).",
+                user.UserId);
         }
     }
 
     private string RotateRefreshToken(User user)
     {
+        var now = _dateTimeService.UtcNow;
+
+        // Preserve the just-superseded token for a short grace window instead of discarding
+        // it immediately, so a second legitimate concurrent refresh still succeeds.
+        user.PreviousRefreshTokenHash = user.RefreshTokenHash;
+        user.PreviousRefreshTokenGraceExpiresAt = now.Add(RefreshTokenGracePeriod);
+
         var refreshToken = _jwtService.GenerateRefreshToken();
         user.RefreshTokenHash = _jwtService.HashRefreshToken(refreshToken);
-        user.RefreshTokenExpiry = _dateTimeService.UtcNow.AddMinutes(_jwtService.GetRefreshTokenExpiryMinutes());
+        user.RefreshTokenExpiry = now.AddMinutes(_jwtService.GetRefreshTokenExpiryMinutes());
         return refreshToken;
     }
 }

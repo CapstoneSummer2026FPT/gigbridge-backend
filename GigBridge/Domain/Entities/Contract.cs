@@ -30,6 +30,10 @@ public partial class Contract
 
     public DateTime? CompletedAt { get; set; }
 
+    public DateTime? CancelledAt { get; set; }
+
+    public Guid? CancelledByUserId { get; set; }
+
     /// <summary>
     /// v1.2: URL bản hợp đồng lao động e-sign PDF khi có tranh chấp thanh toán
     /// </summary>

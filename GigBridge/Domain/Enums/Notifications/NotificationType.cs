@@ -28,5 +28,6 @@ public enum NotificationType
     EloPointsUpdated = 22,
     EloAppealStatusChanged = 23,
     ReceiptReady = 24,
-    ReceiptFailed = 25
+    ReceiptFailed = 25,
+    ContractCancelled = 26
 }
