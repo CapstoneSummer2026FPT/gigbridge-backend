@@ -15,6 +15,7 @@ using Domain.Enums.Contracts;
 using Domain.Enums.Contracts.Escrow;
 using Domain.Enums.Contracts.Milestones;
 using Domain.Enums.Notifications;
+using Domain.Enums.Proposals;
 using Domain.Enums.Wallets;
 using Domain.Services;
 using MediatR;
@@ -107,6 +108,7 @@ public sealed class FundContractEscrowCommandHandler :
         {
             contract.Status = (int)ContractStatus.Active;
             await StartFirstMilestoneAsync(contract.ContractsId, now, cancellationToken);
+            await FinalizeProposalOutcomeAsync(contract.JobPostsId, contract.ProposalsId, now, cancellationToken);
             await _context.SaveChangesAsync(cancellationToken);
             return new FundContractEscrowResponse(
                 contract.ContractsId,
@@ -181,6 +183,7 @@ public sealed class FundContractEscrowCommandHandler :
         contract.Status = (int)ContractStatus.Active;
         contract.UpdatedAt = now;
         await StartFirstMilestoneAsync(contract.ContractsId, now, cancellationToken);
+        await FinalizeProposalOutcomeAsync(contract.JobPostsId, contract.ProposalsId, now, cancellationToken);
 
         var holdBalanceSource = WalletBalanceAudit.ResolveSource(
             fundingUsage.DepositedAmount,
@@ -335,6 +338,43 @@ public sealed class FundContractEscrowCommandHandler :
             first.Status = (int)MilestoneStatus.InProgress;
             first.StartedAt = now;
             first.UpdatedAt = now;
+        }
+    }
+
+    /// <summary>
+    /// Marks the negotiation as won: the negotiated proposal (if any) becomes Accepted, and
+    /// every other Pending/Shortlisted proposal for the same job post is rejected. This is the
+    /// single point Proposal.Status reaches Accepted — earlier stages (negotiation, final-offer
+    /// acceptance, signing) leave it at Shortlisted so a cancelled contract needs no restoration.
+    /// </summary>
+    private async Task FinalizeProposalOutcomeAsync(
+        Guid jobPostId,
+        Guid? acceptedProposalId,
+        DateTime now,
+        CancellationToken cancellationToken)
+    {
+        if (acceptedProposalId.HasValue)
+        {
+            var acceptedProposal = await _context.Set<Proposal>()
+                .FirstOrDefaultAsync(proposal => proposal.ProposalsId == acceptedProposalId.Value, cancellationToken);
+            if (acceptedProposal is not null)
+            {
+                acceptedProposal.Status = (int)ProposalStatus.Accepted;
+                acceptedProposal.UpdatedAt = now;
+            }
+        }
+
+        var siblingProposals = await _context.Set<Proposal>()
+            .Where(proposal =>
+                proposal.JobPostsId == jobPostId &&
+                proposal.ProposalsId != acceptedProposalId &&
+                (proposal.Status == (int)ProposalStatus.Pending || proposal.Status == (int)ProposalStatus.Shortlisted))
+            .ToListAsync(cancellationToken);
+
+        foreach (var proposal in siblingProposals)
+        {
+            proposal.Status = (int)ProposalStatus.Rejected;
+            proposal.UpdatedAt = now;
         }
     }
 }
