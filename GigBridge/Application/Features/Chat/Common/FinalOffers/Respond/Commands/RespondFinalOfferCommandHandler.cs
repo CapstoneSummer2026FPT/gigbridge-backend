@@ -361,11 +361,7 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
                 existingOffer =>
                     existingOffer.JobPostsId == offer.JobPostsId &&
                     existingOffer.NegotiationOfferId != offer.NegotiationOfferId &&
-                    existingOffer.Status == (int)NegotiationOfferStatus.Accepted &&
-                    (existingOffer.ContractsId == null ||
-                     _context.Set<Contract>().Any(contract =>
-                         contract.ContractsId == existingOffer.ContractsId &&
-                         contract.Status != (int)ContractStatus.Cancelled)),
+                    existingOffer.Status == (int)NegotiationOfferStatus.Accepted,
                 cancellationToken);
 
         if (alreadyAccepted)

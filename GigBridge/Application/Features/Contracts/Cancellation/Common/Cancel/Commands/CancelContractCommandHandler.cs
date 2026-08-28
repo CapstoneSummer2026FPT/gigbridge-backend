@@ -11,6 +11,7 @@ using Application.Features.Wallets.Common;
 using Domain.Entities;
 using Domain.Enums.Accounts;
 using Domain.Enums.Auditing;
+using Domain.Enums.Chat;
 using Domain.Enums.Contracts;
 using Domain.Enums.Notifications;
 using MediatR;
@@ -106,6 +107,21 @@ public sealed class CancelContractCommandHandler :
         contract.CancelledAt = now;
         contract.CancelledByUserId = command.UserId;
         contract.UpdatedAt = now;
+
+        // The offer that produced this contract must give up its "Accepted" slot too — the DB
+        // enforces at most one Accepted offer per job post (UX_NegotiationOffers_AcceptedPerJobPost),
+        // so leaving it Accepted would permanently block any future offer on this job post.
+        var acceptedOffer = await _context.Set<NegotiationOffer>()
+            .FirstOrDefaultAsync(
+                offer =>
+                    offer.ContractsId == contract.ContractsId &&
+                    offer.Status == (int)NegotiationOfferStatus.Accepted,
+                cancellationToken);
+        if (acceptedOffer is not null)
+        {
+            acceptedOffer.Status = (int)NegotiationOfferStatus.Cancelled;
+            acceptedOffer.RespondedAt = now;
+        }
 
         if (freelancerProfile is not null)
         {

@@ -14,6 +14,7 @@ using Application.Features.Chat.Common.Messages.Send.DTOs;
 using Application.Features.Chat.Common.Negotiations.MilestonePlans.Commands;
 using Application.Features.Chat.Common.Negotiations.StartFromProposal.Commands;
 using Application.Features.Chat.Common.Negotiations.MilestonePlans.DTOs;
+using Application.Features.Contracts.Cancellation.Common.Cancel.Commands;
 using Application.Features.Proposals.Common.AcceptForNegotiation.Commands;
 using Domain.Entities;
 using Domain.Enums.Accounts;
@@ -24,6 +25,7 @@ using Domain.Enums.Notifications;
 using MediatR;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Test_Gigbridge_Backend.TestSupport;
 using Application.Common.Models.Email;
@@ -521,13 +523,12 @@ public class NegotiationFlowCommandHandlerTests
     }
 
     [Fact]
-    public async Task RespondFinalOffer_AcceptSucceedsWhenEarlierAcceptedOffersContractWasCancelled()
+    public async Task RespondFinalOffer_AcceptSucceedsAfterEarlierContractOnSameJobPostWasCancelled()
     {
         var fixture = new NegotiationFixture();
         fixture.AddConversationWithParticipants();
 
-        // A previous negotiation on this same job post was accepted and its contract created,
-        // but that contract was later cancelled (e.g. the freelancer stalled on signing).
+        // A previous negotiation on this same job post was accepted and its contract created.
         var cancelledContractId = Guid.NewGuid();
         fixture.Contracts.Add(new Contract
         {
@@ -536,10 +537,10 @@ public class NegotiationFlowCommandHandlerTests
             ClientProfilesId = fixture.ClientProfileId,
             Title = "Cancelled attempt",
             TotalBudget = 500m,
-            Status = (int)ContractStatus.Cancelled,
-            CreatedAt = fixture.Now
+            Status = (int)ContractStatus.PendingSignature,
+            CreatedAt = fixture.Now.AddMinutes(-5)
         });
-        fixture.Offers.Add(new NegotiationOffer
+        var priorOffer = new NegotiationOffer
         {
             NegotiationOfferId = Guid.NewGuid(),
             ConversationsId = Guid.NewGuid(),
@@ -549,9 +550,26 @@ public class NegotiationFlowCommandHandlerTests
             FreelancerProfilesId = Guid.NewGuid(),
             FinalPrice = 500m,
             Status = (int)NegotiationOfferStatus.Accepted,
-            CreatedAt = fixture.Now,
-            RespondedAt = fixture.Now
-        });
+            CreatedAt = fixture.Now.AddMinutes(-5),
+            RespondedAt = fixture.Now.AddMinutes(-5)
+        };
+        fixture.Offers.Add(priorOffer);
+
+        // The client cancels that stalled contract — this must release the offer's Accepted
+        // slot, or no other offer on this job post could ever be accepted again
+        // (UX_NegotiationOffers_AcceptedPerJobPost allows only one Accepted offer per job post).
+        var cancelHandler = new CancelContractCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopChatRealtimeNotifier(),
+            new NoopNotificationService(),
+            new CapturingUserAuditLogService(),
+            NullLogger<CancelContractCommandHandler>.Instance);
+        await cancelHandler.Handle(
+            new CancelContractCommand(cancelledContractId, fixture.ClientUserId),
+            CancellationToken.None);
+
+        Assert.Equal((int)NegotiationOfferStatus.Cancelled, priorOffer.Status);
 
         fixture.AddOfferWithSnapshot(1500m, 600m, 900m);
 

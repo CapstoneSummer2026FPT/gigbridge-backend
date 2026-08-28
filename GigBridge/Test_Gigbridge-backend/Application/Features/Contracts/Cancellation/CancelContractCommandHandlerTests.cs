@@ -5,6 +5,7 @@ using Application.Features.Contracts.Cancellation.Common.Cancel.Commands;
 using Domain.Entities;
 using Domain.Enums.Accounts;
 using Domain.Enums.Auditing;
+using Domain.Enums.Chat;
 using Domain.Enums.Contracts;
 using Domain.Enums.Notifications;
 using Domain.Enums.Wallets;
@@ -84,6 +85,25 @@ public class CancelContractCommandHandlerTests
         Assert.Equal(2, notifications.Notifications.Count);
         Assert.All(notifications.Notifications, notification =>
             Assert.Equal(NotificationType.ContractCancelled, notification.Type));
+    }
+
+    [Fact]
+    public async Task Cancel_ReleasesTheAcceptedNegotiationOfferSlotForTheJobPost()
+    {
+        // UX_NegotiationOffers_AcceptedPerJobPost allows at most one Accepted offer per job
+        // post, forever. Cancelling the contract must flip the originating offer away from
+        // Accepted, or no future offer on the same job post could ever be accepted again.
+        var fixture = new CancelContractFixture();
+        var offer = fixture.AddAcceptedOffer();
+        var handler = CreateHandler(
+            fixture, out _, out _, out _, nowOverride: fixture.Now.AddMinutes(5));
+
+        await handler.Handle(
+            new CancelContractCommand(fixture.ContractId, fixture.ClientUserId),
+            CancellationToken.None);
+
+        Assert.Equal((int)NegotiationOfferStatus.Cancelled, offer.Status);
+        Assert.Equal(fixture.Now.AddMinutes(5), offer.RespondedAt);
     }
 
     [Fact]
@@ -198,6 +218,7 @@ public class CancelContractCommandHandlerTests
         public Contract Contract { get; }
         public TestDbSet<UserWallet> Wallets { get; }
         public TestDbSet<WalletTransaction> WalletTransactions { get; }
+        public TestDbSet<NegotiationOffer> Offers { get; }
 
         public CancelContractFixture()
         {
@@ -221,6 +242,26 @@ public class CancelContractCommandHandlerTests
             Context.AddSet<PlatformRevenueEvent>();
             Wallets = Context.AddSet<UserWallet>();
             WalletTransactions = Context.AddSet<WalletTransaction>();
+            Offers = Context.AddSet<NegotiationOffer>();
+        }
+
+        public NegotiationOffer AddAcceptedOffer()
+        {
+            var offer = new NegotiationOffer
+            {
+                NegotiationOfferId = Guid.NewGuid(),
+                ConversationsId = Guid.NewGuid(),
+                JobPostsId = JobPostId,
+                ContractsId = ContractId,
+                ClientProfilesId = ClientProfileId,
+                FreelancerProfilesId = FreelancerProfileId,
+                FinalPrice = 1_000m,
+                Status = (int)NegotiationOfferStatus.Accepted,
+                CreatedAt = Now,
+                RespondedAt = Now
+            };
+            Offers.Add(offer);
+            return offer;
         }
 
         public void ChargeFreelancerAcceptFee()
