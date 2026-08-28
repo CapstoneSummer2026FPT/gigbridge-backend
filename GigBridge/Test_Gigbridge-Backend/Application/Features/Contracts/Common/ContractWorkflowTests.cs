@@ -1,4 +1,4 @@
-using Application.Common.InternalServices.ESign.Services;
+﻿using Application.Common.InternalServices.ESign.Services;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces.Time;
 using Application.Common.Interfaces.Caching;
@@ -370,7 +370,7 @@ public class ContractWorkflowTests
             new FundContractEscrowCommand(fixture.ContractId, fixture.ClientUserId),
             CancellationToken.None);
 
-        // Funding 200 G-coin: -202 available (200 hold + 2 fee), +200 held. No ÷1000.
+        // Funding 200 G-coin: -202 available (200 hold + 2 fee), +200 held. No Ã·1000.
         var wallet = fixture.Wallets.Entities[0];
         Assert.Equal(0m, wallet.AvailableTokens);
         Assert.Equal(200m, wallet.HeldTokens);
@@ -509,6 +509,120 @@ public class ContractWorkflowTests
         Assert.Equal(2, fixture.Context.Set<JobPost>().Single().Status);
         Assert.Equal(2, fixture.WalletTransactions.Entities.Count);
         Assert.Single(fixture.EscrowTransactions.Entities);
+    }
+
+    [Fact]
+    public async Task FundEscrow_ActivatingContract_AcceptsLinkedProposalAndRejectsSiblings()
+    {
+        var fixture = new ContractWorkflowFixture();
+        fixture.MoveToPendingSignatureWithDocument();
+        fixture.MarkDocumentFullySigned();
+        fixture.Wallets.Add(new UserWallet
+        {
+            UserWalletsId = fixture.WalletId,
+            UserId = fixture.ClientUserId,
+            AvailableTokens = 1_010m,
+            HeldTokens = 0m,
+            CreatedAt = fixture.Now
+        });
+
+        var negotiatedProposalId = Guid.NewGuid();
+        fixture.Contract.ProposalsId = negotiatedProposalId;
+        fixture.Proposals.Add(new Proposal
+        {
+            ProposalsId = negotiatedProposalId,
+            JobPostsId = fixture.JobPostId,
+            FreelancerProfilesId = fixture.FreelancerProfileId,
+            Status = 2, // Shortlisted
+            SubmittedAt = fixture.Now
+        });
+        var pendingSiblingId = Guid.NewGuid();
+        fixture.Proposals.Add(new Proposal
+        {
+            ProposalsId = pendingSiblingId,
+            JobPostsId = fixture.JobPostId,
+            FreelancerProfilesId = Guid.NewGuid(),
+            Status = 1, // Pending
+            SubmittedAt = fixture.Now
+        });
+        var shortlistedSiblingId = Guid.NewGuid();
+        fixture.Proposals.Add(new Proposal
+        {
+            ProposalsId = shortlistedSiblingId,
+            JobPostsId = fixture.JobPostId,
+            FreelancerProfilesId = Guid.NewGuid(),
+            Status = 2, // Shortlisted
+            SubmittedAt = fixture.Now
+        });
+        var otherJobPostProposalId = Guid.NewGuid();
+        fixture.Proposals.Add(new Proposal
+        {
+            ProposalsId = otherJobPostProposalId,
+            JobPostsId = Guid.NewGuid(), // different job post â€” must be untouched
+            FreelancerProfilesId = Guid.NewGuid(),
+            Status = 1, // Pending
+            SubmittedAt = fixture.Now
+        });
+
+        var handler = new FundContractEscrowCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopNotificationService(),
+            new NoopChatRealtimeNotifier(),
+            new CapturingUserAuditLogService());
+
+        var result = await handler.Handle(
+            new FundContractEscrowCommand(fixture.ContractId, fixture.ClientUserId),
+            CancellationToken.None);
+
+        Assert.Equal((int)ContractStatus.Active, result.ContractStatus);
+        Assert.Equal(3, fixture.Proposals.Entities.Single(p => p.ProposalsId == negotiatedProposalId).Status);
+        Assert.Equal(4, fixture.Proposals.Entities.Single(p => p.ProposalsId == pendingSiblingId).Status);
+        Assert.Equal(4, fixture.Proposals.Entities.Single(p => p.ProposalsId == shortlistedSiblingId).Status);
+        Assert.Equal(1, fixture.Proposals.Entities.Single(p => p.ProposalsId == otherJobPostProposalId).Status);
+    }
+
+    [Fact]
+    public async Task FundEscrow_SelfHealAlreadyFundedEscrow_AlsoFinalizesProposalOutcome()
+    {
+        var fixture = new ContractWorkflowFixture();
+        fixture.MoveToFullySignedPendingEscrow();
+        fixture.Escrows.Entities[0].Status = (int)ContractEscrowStatus.Funded;
+
+        var negotiatedProposalId = Guid.NewGuid();
+        fixture.Contract.ProposalsId = negotiatedProposalId;
+        fixture.Proposals.Add(new Proposal
+        {
+            ProposalsId = negotiatedProposalId,
+            JobPostsId = fixture.JobPostId,
+            FreelancerProfilesId = fixture.FreelancerProfileId,
+            Status = 2, // Shortlisted
+            SubmittedAt = fixture.Now
+        });
+        var pendingSiblingId = Guid.NewGuid();
+        fixture.Proposals.Add(new Proposal
+        {
+            ProposalsId = pendingSiblingId,
+            JobPostsId = fixture.JobPostId,
+            FreelancerProfilesId = Guid.NewGuid(),
+            Status = 1, // Pending
+            SubmittedAt = fixture.Now
+        });
+
+        var handler = new FundContractEscrowCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopNotificationService(),
+            new NoopChatRealtimeNotifier(),
+            new CapturingUserAuditLogService());
+
+        var result = await handler.Handle(
+            new FundContractEscrowCommand(fixture.ContractId, fixture.ClientUserId),
+            CancellationToken.None);
+
+        Assert.Equal((int)ContractStatus.Active, result.ContractStatus);
+        Assert.Equal(3, fixture.Proposals.Entities.Single(p => p.ProposalsId == negotiatedProposalId).Status);
+        Assert.Equal(4, fixture.Proposals.Entities.Single(p => p.ProposalsId == pendingSiblingId).Status);
     }
 
     [Fact]
@@ -1299,6 +1413,7 @@ public class ContractWorkflowTests
             EsignDocuments = Context.AddSet<EsignDocument>();
             EsignSignatures = Context.AddSet<EsignSignature>();
             DeliveryOutboxes = Context.AddSet<DeliveryOutbox>();
+            Proposals = Context.AddSet<Proposal>();
         }
 
         public InMemoryApplicationDbContext Context { get; } = new();
@@ -1330,6 +1445,7 @@ public class ContractWorkflowTests
         public TestDbSet<EsignDocument> EsignDocuments { get; }
         public TestDbSet<EsignSignature> EsignSignatures { get; }
         public TestDbSet<DeliveryOutbox> DeliveryOutboxes { get; }
+        public TestDbSet<Proposal> Proposals { get; }
 
 
         public void ApplyValidDetails()

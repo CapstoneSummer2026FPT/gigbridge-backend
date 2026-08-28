@@ -64,6 +64,7 @@ public static class ServiceCollectionExtensions
         });
 
         return services;
+
     }
 
     public static IServiceCollection AddSwaggerWithBearerAuth(this IServiceCollection services)
