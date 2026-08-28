@@ -83,6 +83,16 @@ public partial class User
     public string? RefreshTokenHash { get; set; }
     public DateTime? RefreshTokenExpiry { get; set; }
 
+    /// <summary>
+    /// The refresh token hash superseded by the most recent rotation, kept valid for a short
+    /// grace window (see <see cref="PreviousRefreshTokenGraceExpiresAt"/>) so a second legitimate
+    /// concurrent refresh (e.g. a sibling browser tab racing on the same httpOnly cookie) still
+    /// succeeds instead of being rejected as an invalid token.
+    /// </summary>
+    public string? PreviousRefreshTokenHash { get; set; }
+
+    public DateTime? PreviousRefreshTokenGraceExpiresAt { get; set; }
+
 
     public virtual ICollection<AdminAuditLog> AdminAuditLogs { get; set; } = new List<AdminAuditLog>();
 
