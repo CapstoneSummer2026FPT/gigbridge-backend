@@ -10,5 +10,6 @@ public enum AuditUserActionType
     MilestoneApproved = 5,
     ReportCreated = 6,
     DisputeCreated = 7,
-    DisputeEscalated = 8
+    DisputeEscalated = 8,
+    ContractCancelled = 9
 }
