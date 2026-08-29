@@ -304,7 +304,7 @@ public class BatchCandidateJudgingRequestDto
     public List<ProposalOfferInputDto> Proposals { get; set; } = new();
 
     [JsonPropertyName("batch_chunk_size")]
-    public int BatchChunkSize { get; set; } = 3;
+    public int BatchChunkSize { get; set; } = 1;
 }
 
 public class CandidateJudgingResponseDto
