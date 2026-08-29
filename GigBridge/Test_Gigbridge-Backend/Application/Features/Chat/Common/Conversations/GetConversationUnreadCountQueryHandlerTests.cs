@@ -15,6 +15,7 @@ public sealed class GetConversationUnreadCountQueryHandlerTests
             Participant(userId, unreadCount: 2),
             Participant(userId, unreadCount: 3),
             Participant(userId, unreadCount: 50, deletedAt: DateTime.UtcNow),
+            Participant(userId, unreadCount: 75, leftAt: DateTime.UtcNow),
             Participant(Guid.NewGuid(), unreadCount: 100));
         var handler = new GetConversationUnreadCountQueryHandler(context);
 
@@ -42,7 +43,8 @@ public sealed class GetConversationUnreadCountQueryHandlerTests
     private static ConversationParticipant Participant(
         Guid userId,
         int unreadCount,
-        DateTime? deletedAt = null)
+        DateTime? deletedAt = null,
+        DateTime? leftAt = null)
     {
         return new ConversationParticipant
         {
@@ -51,7 +53,8 @@ public sealed class GetConversationUnreadCountQueryHandlerTests
             UserId = userId,
             JoinedAt = DateTime.UtcNow.AddDays(-1),
             UnreadCount = unreadCount,
-            DeletedAt = deletedAt
+            DeletedAt = deletedAt,
+            LeftAt = leftAt
         };
     }
 }
