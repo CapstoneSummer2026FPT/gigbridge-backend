@@ -177,7 +177,7 @@ public class JudgeAllProposalsCommandHandler : IRequestHandler<JudgeAllProposals
                     var fullJson = System.Text.Json.JsonSerializer.Serialize(evalResult);
 
                     int scoreInt = (int)Math.Round(calc.OverallTechnicalQualityTQ);
-                    bool recommended = calc.VerdictBadge == "top_value" || calc.VerdictBadge == "top_technical";
+                    bool recommended = calc.VerdictBadge != "high_risk";
                     string summaryText = $"Technical Quality: {calc.OverallTechnicalQualityTQ:F1} ({calc.QualityInterpretationBand}) | Value Score: {calc.FinalValueScoreVS:F1} | Badge: {calc.VerdictBadge}";
 
                     var gradedQuestionsList = evalResult.LlmQualitativeEvaluation?.ScreeningQa?.Select(qa =>
