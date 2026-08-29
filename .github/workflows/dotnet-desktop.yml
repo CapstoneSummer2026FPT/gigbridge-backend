@@ -19,6 +19,41 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Validate Nginx configuration
+        shell: bash
+        run: |
+          set -eu
+
+          nginx_test_root="$(mktemp -d)"
+          mkdir -p "$nginx_test_root/conf.d" "$nginx_test_root/certs"
+
+          openssl req -x509 -nodes -newkey rsa:2048 -days 1 \
+            -subj "/CN=api.gigbridge.id.vn" \
+            -keyout "$nginx_test_root/certs/privkey.pem" \
+            -out "$nginx_test_root/certs/fullchain.pem" \
+            > /dev/null 2>&1
+
+          sed \
+            -e 's#/etc/letsencrypt/live/api.gigbridge.id.vn/fullchain.pem#/etc/nginx/test-certs/fullchain.pem#' \
+            -e 's#/etc/letsencrypt/live/api.gigbridge.id.vn/privkey.pem#/etc/nginx/test-certs/privkey.pem#' \
+            -e '/include \/etc\/letsencrypt\/options-ssl-nginx.conf/d' \
+            -e '/ssl_dhparam \/etc\/letsencrypt\/ssl-dhparams.pem/d' \
+            GigBridge/nginx.conf > "$nginx_test_root/conf.d/gigbridge.conf"
+
+          cat > "$nginx_test_root/nginx.conf" <<'EOF'
+          events {}
+          http {
+              include /etc/nginx/mime.types;
+              include /etc/nginx/conf.d/*.conf;
+          }
+          EOF
+
+          docker run --rm \
+            --volume "$nginx_test_root/nginx.conf:/etc/nginx/nginx.conf:ro" \
+            --volume "$nginx_test_root/conf.d:/etc/nginx/conf.d:ro" \
+            --volume "$nginx_test_root/certs:/etc/nginx/test-certs:ro" \
+            nginx:stable-alpine nginx -t
+
       - name: Lowercase Owner Name
         run: |
           echo "OWNER_LC=${OWNER,,}" >> ${GITHUB_ENV}
@@ -45,17 +80,82 @@ jobs:
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
+    env:
+      NGINX_SITE_PATH: ${{ vars.NGINX_SITE_PATH || '/etc/nginx/sites-available/gigbridge' }}
+      NGINX_STAGE_DIR: /tmp/gigbridge-nginx-${{ github.run_id }}
     steps:
-      - name: Deploy to AWS EC2 via SSH
-        uses: appleboy/ssh-action@v1.0.3
+      - name: Checkout deployment configuration
+        uses: actions/checkout@v4
+
+      - name: Stage Nginx configuration on gateway
+        uses: appleboy/scp-action@v1.0.0
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
+          source: GigBridge/nginx.conf
+          target: ${{ env.NGINX_STAGE_DIR }}
+          strip_components: 1
+
+      - name: Deploy to AWS EC2 via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          NGINX_SITE_PATH: ${{ env.NGINX_SITE_PATH }}
+          NGINX_STAGE_DIR: ${{ env.NGINX_STAGE_DIR }}
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          envs: NGINX_SITE_PATH,NGINX_STAGE_DIR
           script: |
             set -eu
             cd ~/app
+
+            nginx_candidate="$NGINX_STAGE_DIR/nginx.conf"
+
+            if [ ! -f "$nginx_candidate" ]; then
+              echo "Staged Nginx configuration was not found."
+              exit 1
+            fi
+
+            if [ ! -f "$NGINX_SITE_PATH" ]; then
+              echo "Active Nginx site was not found at $NGINX_SITE_PATH."
+              echo "Set the NGINX_SITE_PATH repository variable to the enabled GigBridge site file."
+              exit 1
+            fi
+
+            nginx_active_path="$(readlink -f -- "$NGINX_SITE_PATH")"
+            nginx_backup="${nginx_active_path}.previous"
+
             echo "${{ secrets.DEPLOY_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             docker compose pull web-api
             SENTRY_RELEASE=${{ github.sha }} docker compose up -d web-api
+
+            restore_nginx() {
+              sudo cp -- "$nginx_backup" "$nginx_active_path"
+              sudo nginx -t
+              sudo systemctl reload nginx
+            }
+
+            sudo cp -- "$nginx_active_path" "$nginx_backup"
+            sudo install -m 0644 "$nginx_candidate" "$nginx_active_path"
+
+            if ! sudo nginx -t; then
+              echo "Nginx validation failed; restoring the previous site configuration."
+              restore_nginx
+              exit 1
+            fi
+
+            if ! sudo systemctl reload nginx; then
+              echo "Nginx reload failed; restoring the previous site configuration."
+              restore_nginx
+              exit 1
+            fi
+
+            if ! curl --fail --silent --show-error --max-time 15 https://api.gigbridge.id.vn/health > /dev/null; then
+              echo "Gateway health check failed; restoring the previous site configuration."
+              restore_nginx
+              exit 1
+            fi
+
             docker image prune -f
