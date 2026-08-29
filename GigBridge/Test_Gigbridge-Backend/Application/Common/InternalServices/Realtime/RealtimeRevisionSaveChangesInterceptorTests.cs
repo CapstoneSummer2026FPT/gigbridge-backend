@@ -117,6 +117,30 @@ public sealed class RealtimeRevisionSaveChangesInterceptorTests
     }
 
     [Fact]
+    public async Task ConversationUnreadChange_RepairsDriftedRealtimeCountFromAuthoritativeParticipants()
+    {
+        var fixture = await CreateFixture();
+        await using var context = CreateContext(fixture.DatabaseName, fixture.Root, withInterceptor: true);
+        var conversation = await context.Conversations.SingleAsync();
+        var freelancer = await context.ConversationParticipants.SingleAsync(participant =>
+            participant.UserId == fixture.FreelancerUserId);
+
+        conversation.UpdatedAt = DateTime.UtcNow;
+        await context.SaveChangesAsync();
+
+        var freelancerState = await context.UserRealtimeStates.SingleAsync(state =>
+            state.UserId == fixture.FreelancerUserId);
+
+        freelancerState.ConversationUnreadCount = 3;
+        await context.SaveChangesAsync();
+
+        freelancer.UnreadCount = 1;
+        await context.SaveChangesAsync();
+
+        Assert.Equal(1, freelancerState.ConversationUnreadCount);
+    }
+
+    [Fact]
     public async Task OfferCreationAndEveryResponseStatus_BumpOncePerParticipantPerSave()
     {
         var fixture = await CreateFixture();

@@ -24,6 +24,7 @@ public sealed class GetConversationUnreadCountQueryHandler
             .AsNoTracking()
             .Where(participant =>
                 participant.UserId == request.UserId &&
+                participant.LeftAt == null &&
                 participant.DeletedAt == null)
             .SumAsync(participant => (int?)participant.UnreadCount, cancellationToken) ?? 0;
 
