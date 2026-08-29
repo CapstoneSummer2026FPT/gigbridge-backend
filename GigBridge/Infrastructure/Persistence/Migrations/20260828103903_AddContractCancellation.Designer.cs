@@ -3,6 +3,7 @@ using System;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(GigbridgeDbContext))]
-    partial class GigbridgeDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260828103903_AddContractCancellation")]
+    partial class AddContractCancellation
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -679,8 +682,7 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "FreelancerProfilesId", "Status" }, "IX_Contracts_FreelancerProfilesId_Status");
 
                     b.HasIndex(new[] { "JobPostsId" }, "IX_Contracts_JobPostsId")
-                        .IsUnique()
-                        .HasFilter("\"Status\" <> 9");
+                        .IsUnique();
 
                     b.HasIndex(new[] { "Status" }, "IX_Contracts_Status");
 
@@ -6258,12 +6260,6 @@ namespace Infrastructure.Persistence.Migrations
                         .HasMaxLength(5)
                         .HasColumnType("character varying(5)")
                         .HasDefaultValueSql("'vi'::character varying");
-
-                    b.Property<DateTime?>("PreviousRefreshTokenGraceExpiresAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("PreviousRefreshTokenHash")
-                        .HasColumnType("text");
 
                     b.Property<string>("Provider")
                         .HasColumnType("text");

@@ -19,7 +19,8 @@ public static class WalletTransactionDirection
     public static bool IsCredit(int type, int balanceSource) => (WalletTransactionType)type switch
     {
         WalletTransactionType.AdminCredit or WalletTransactionType.TopUp
-            or WalletTransactionType.EscrowRefund or WalletTransactionType.WithdrawalRefund => true,
+            or WalletTransactionType.EscrowRefund or WalletTransactionType.WithdrawalRefund
+            or WalletTransactionType.ServiceFeeRefund => true,
         WalletTransactionType.EscrowRelease => balanceSource == (int)WalletBalanceSource.Earned,
         _ => false
     };

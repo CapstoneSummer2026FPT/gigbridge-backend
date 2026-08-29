@@ -57,6 +57,10 @@ public class UpdateProposalCommandHandler : IRequestHandler<UpdateProposalComman
         UpdateProposalCommand command,
         CancellationToken cancellationToken)
     {
+        await using var transaction = await _context.BeginTransactionAsync(cancellationToken);
+        await transaction.AcquireTransactionLockAsync(
+            ProposalLock.ForProposal(command.ProposalId), cancellationToken);
+
         var freelancerProfile = await _context.Set<FreelancerProfile>()
             .FirstOrDefaultAsync(
                 profile => profile.UserId == command.UserId,
@@ -128,23 +132,21 @@ public class UpdateProposalCommandHandler : IRequestHandler<UpdateProposalComman
                     : null))
             .ToList();
 
+        // RemoveRange already marks these entities Deleted. Do not also Clear() the
+        // loaded navigation collections afterward: because ProposalWorkBreakdownItem's
+        // FK to ProposalMilestonePlan is SetNull (not Cascade), doing so re-triggers EF
+        // Core relationship fixup on the already-Deleted work items, flipping their
+        // tracked state and causing the generated DELETE to affect 0 rows (surfaced as
+        // a spurious DbUpdateConcurrencyException on every edit past the first).
         _context.Set<ProposalWorkBreakdownItem>().RemoveRange(proposal.ProposalWorkBreakdownItems);
         _context.Set<ProposalMilestonePlan>().RemoveRange(proposal.ProposalMilestonePlans);
 
-        proposal.ProposalMilestonePlans.Clear();
-        foreach (var milestone in newMilestonePlans)
-        {
-            proposal.ProposalMilestonePlans.Add(milestone);
-        }
-
-        proposal.ProposalWorkBreakdownItems.Clear();
-        foreach (var item in newWorkItems)
-        {
-            proposal.ProposalWorkBreakdownItems.Add(item);
-        }
+        _context.Set<ProposalMilestonePlan>().AddRange(newMilestonePlans);
+        _context.Set<ProposalWorkBreakdownItem>().AddRange(newWorkItems);
 
         proposal.UpdatedAt = _dateTimeService.UtcNow;
 
         await _context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
     }
 }
