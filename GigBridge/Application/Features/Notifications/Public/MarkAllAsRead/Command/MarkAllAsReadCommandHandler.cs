@@ -23,7 +23,7 @@ public class MarkAllAsReadCommandHandler : IRequestHandler<MarkAllAsReadCommand>
         var now = DateTime.UtcNow;
         await using var transaction = await _context.BeginTransactionAsync(cancellationToken);
         await transaction.AcquireTransactionLockAsync(
-            RealtimeStateLockFor(request.UserId),
+            RealtimeRevisionLock.ForUser(request.UserId),
             cancellationToken,
             "Notification.MarkAllAsRead");
 
@@ -92,7 +92,4 @@ public class MarkAllAsReadCommandHandler : IRequestHandler<MarkAllAsReadCommand>
 
         await transaction.CommitAsync(cancellationToken);
     }
-
-    private static long RealtimeStateLockFor(Guid userId) =>
-        BitConverter.ToInt64(userId.ToByteArray(), 0) ^ 0x4E4F544946595254;
 }
