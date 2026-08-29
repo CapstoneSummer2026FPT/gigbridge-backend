@@ -95,6 +95,23 @@ public sealed class RefreshTokenCommandHandlerTests
         jwt.DidNotReceive().GenerateRefreshToken();
     }
 
+    [Fact]
+    public async Task Handle_DuplicateCookieCandidates_UsesTheCurrentToken()
+    {
+        var fixture = new RefreshFixture(UserRole.Client);
+        var handler = fixture.CreateHandler();
+
+        var result = await handler.Handle(
+            new RefreshTokenCommand(
+                RefreshFixture.AccessToken,
+                "stale-legacy-token",
+                ["stale-legacy-token", fixture.CurrentRawToken]),
+            CancellationToken.None);
+
+        Assert.NotNull(result.RefreshToken);
+        Assert.NotEqual(fixture.CurrentRawToken, result.RefreshToken);
+    }
+
     /// <summary>
     /// Regression coverage for the refresh-token rotation grace window: a second legitimate
     /// concurrent refresh (e.g. a sibling browser tab presenting the just-rotated-out token)

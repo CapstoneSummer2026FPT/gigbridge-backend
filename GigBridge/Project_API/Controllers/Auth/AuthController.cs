@@ -5,6 +5,7 @@ using Application.Features.Auth.GoogleLogin.Commands;
 using Application.Features.Auth.GoogleLogin.DTOs;
 using Application.Features.Auth.Login.Commands;
 using Application.Features.Auth.Login.DTOs;
+using Application.Features.Auth.Logout.Commands;
 using Application.Features.Auth.RefreshToken.Commands;
 using Application.Features.Auth.RefreshToken.DTOs;
 using Application.Features.Auth.Register.Commands;
@@ -33,6 +34,8 @@ namespace Project_API.Controllers.Auth;
 [Route("api/[controller]")]
 public class AuthController : BaseApiController
 {
+    private const int MaximumRefreshTokenCookieCandidates = 8;
+
     [HttpPost("register")]
     [EnableRateLimiting(AuthRateLimitPolicies.Account)]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request)
@@ -114,14 +117,27 @@ public class AuthController : BaseApiController
     [EnableRateLimiting(AuthRateLimitPolicies.Refresh)]
     public async Task<IActionResult> Refresh([FromBody] TokenRequest request)
     {
-         var refreshToken = Request.Cookies["refreshToken"];
-        if (string.IsNullOrEmpty(refreshToken))
+        var refreshTokens = GetRefreshTokenCandidates();
+        if (refreshTokens.Count == 0)
             return Unauthorized(ApiResponse<object>.Error(401, "Refresh token is missing. Please log in again."));
 
-        var result = await Mediator.Send(new RefreshTokenCommand(request.AccessToken, refreshToken));
+        var result = await Mediator.Send(new RefreshTokenCommand(
+            request.AccessToken,
+            refreshTokens[0],
+            refreshTokens));
 
         SetRefreshTokenCookie(result.RefreshToken, result.RefreshTokenExpiry);
         return Ok(ApiResponse<LoginResponse>.Ok(result.LoginData, "Token refreshed successfully"));
+    }
+
+    [HttpPost("logout")]
+    [EnableRateLimiting(AuthRateLimitPolicies.Refresh)]
+    public async Task<IActionResult> Logout()
+    {
+        await Mediator.Send(new LogoutCommand(GetRefreshTokenCandidates()));
+        DeleteAllRefreshTokenCookies();
+
+        return Ok(ApiResponse<object?>.Ok(null, "Logout successful"));
     }
 
     [HttpPost("change-password")]
@@ -163,6 +179,9 @@ public class AuthController : BaseApiController
 
     private void SetRefreshTokenCookie(string refreshToken, DateTime expires)
     {
+        DeleteRefreshTokenCookie("/");
+        DeleteRefreshTokenCookie("/api");
+
         var cookieOptions = new CookieOptions
         {
             HttpOnly = true,
@@ -172,6 +191,89 @@ public class AuthController : BaseApiController
             Expires = expires
         };
         Response.Cookies.Append("refreshToken", refreshToken, cookieOptions);
+    }
+
+    private IReadOnlyList<string> GetRefreshTokenCandidates()
+    {
+        var refreshTokens = new List<string>();
+
+        // A production release changed the cookie path from "/" to "/api/auth".
+        // Browsers can therefore send both cookies with the same name until the old one
+        // expires. Preserve every value so Application can validate the current token
+        // instead of depending on duplicate-cookie parser ordering.
+        foreach (var header in Request.Headers.Cookie)
+        {
+            if (string.IsNullOrEmpty(header))
+            {
+                continue;
+            }
+
+            foreach (var segment in header.Split(';', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var separatorIndex = segment.IndexOf('=');
+                if (separatorIndex <= 0 ||
+                    !segment[..separatorIndex].Trim().Equals("refreshToken", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                var encodedValue = segment[(separatorIndex + 1)..].Trim().Trim('"');
+                if (encodedValue.Length == 0)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    AddRefreshTokenCandidate(refreshTokens, Uri.UnescapeDataString(encodedValue));
+                }
+                catch (UriFormatException)
+                {
+                    // Ignore malformed legacy cookie values. The canonical parsed cookie
+                    // below remains available when ASP.NET Core can decode it safely.
+                }
+            }
+        }
+
+        if (Request.Cookies.TryGetValue("refreshToken", out var parsedRefreshToken))
+        {
+            AddRefreshTokenCandidate(refreshTokens, parsedRefreshToken);
+        }
+
+        return refreshTokens;
+    }
+
+    private static void AddRefreshTokenCandidate(List<string> candidates, string? refreshToken)
+    {
+        if (candidates.Count < MaximumRefreshTokenCookieCandidates &&
+            !string.IsNullOrWhiteSpace(refreshToken) &&
+            !candidates.Contains(refreshToken, StringComparer.Ordinal))
+        {
+            candidates.Add(refreshToken);
+        }
+    }
+
+    private void DeleteAllRefreshTokenCookies()
+    {
+        DeleteRefreshTokenCookie("/api/auth");
+        DeleteRefreshTokenCookie("/api");
+        DeleteRefreshTokenCookie("/");
+    }
+
+    private void DeleteRefreshTokenCookie(string path)
+    {
+        // Append each tombstone explicitly. Response.Cookies.Delete can replace an
+        // earlier Set-Cookie header with the same name, which would leave cookies at
+        // the other legacy paths alive.
+        Response.Cookies.Append("refreshToken", string.Empty, new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = true,
+            SameSite = SameSiteMode.None,
+            Path = path,
+            Expires = DateTimeOffset.UnixEpoch,
+            MaxAge = TimeSpan.Zero
+        });
     }
 
 }

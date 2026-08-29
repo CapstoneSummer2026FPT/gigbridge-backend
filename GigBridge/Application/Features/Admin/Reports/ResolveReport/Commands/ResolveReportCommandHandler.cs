@@ -109,6 +109,8 @@ public class ResolveReportCommandHandler : IRequestHandler<ResolveReportCommand>
                 user.BanReason = moderationNote;
                 user.RefreshTokenHash = null;
                 user.RefreshTokenExpiry = null;
+                user.PreviousRefreshTokenHash = null;
+                user.PreviousRefreshTokenGraceExpiresAt = null;
                 user.UpdatedAt = _dateTimeService.UtcNow;
                 break;
 
