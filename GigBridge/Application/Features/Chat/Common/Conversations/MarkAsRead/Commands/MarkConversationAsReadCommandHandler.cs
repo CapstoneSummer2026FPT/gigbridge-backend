@@ -67,8 +67,9 @@ public class MarkConversationAsReadCommandHandler
             !IsVisibleToParticipant(message, request.UserId, participant.ParticipantRole))
             throw new ForbiddenAccessException("This dispute message is not visible to you.");
 
+        var readAt = _dateTimeService.UtcNow;
         participant.LastReadMessageId = request.MessageId;
-        participant.LastReadAt = _dateTimeService.UtcNow;
+        participant.LastReadAt = readAt;
         participant.UnreadCount = 0;
 
         await _context.SaveChangesAsync(cancellationToken);
@@ -80,6 +81,18 @@ public class MarkConversationAsReadCommandHandler
                 cancellationToken);
 
         var lastMessage = await GetLastMessageResponse(conversation, participant, cancellationToken);
+
+        await _chatRealtimeNotifier.SendConversationEventAsync(
+            request.ConversationId,
+            "ConversationRead",
+            new
+            {
+                conversationId = request.ConversationId,
+                userId = request.UserId,
+                messageId = request.MessageId,
+                readAt
+            },
+            cancellationToken);
 
         await _chatRealtimeNotifier.SendUserEventAsync(
             request.UserId,

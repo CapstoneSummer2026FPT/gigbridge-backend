@@ -11,15 +11,23 @@ public sealed class GetConversationInboxStatusQueryHandler(IApplicationDbContext
 {
     public async Task<RealtimeStatusResponse> Handle(GetConversationInboxStatusQuery request, CancellationToken ct)
     {
-        var state = await context.Set<UserRealtimeState>().AsNoTracking()
+        var revision = await context.Set<UserRealtimeState>().AsNoTracking()
             .TagWith("Chat.InboxStatus")
             .Where(item => item.UserId == request.UserId)
-            .Select(item => new RealtimeStatusResponse(item.ConversationRevision, item.ConversationUnreadCount))
+            .Select(item => (int?)item.ConversationRevision)
             .SingleOrDefaultAsync(ct);
-        if (state is not null) return state;
+
+        // ConversationParticipant is the source of truth. UserRealtimeState is a
+        // delivery cursor/cache and can temporarily drift when several nodes update
+        // the same user's conversations concurrently. Never expose that drift as a
+        // persistent unread badge.
         var unread = await context.Set<ConversationParticipant>().AsNoTracking()
-            .Where(item => item.UserId == request.UserId && item.DeletedAt == null)
+            .Where(item =>
+                item.UserId == request.UserId &&
+                item.LeftAt == null &&
+                item.DeletedAt == null)
             .SumAsync(item => (int?)item.UnreadCount, ct) ?? 0;
-        return new RealtimeStatusResponse(0, unread);
+
+        return new RealtimeStatusResponse(revision ?? 0, unread);
     }
 }

@@ -127,18 +127,14 @@ public sealed class RealtimeRevisionSaveChangesInterceptor : SaveChangesIntercep
 
         foreach (var entry in context.ChangeTracker.Entries<ConversationParticipant>())
         {
+            if (entry.State is not (EntityState.Added or EntityState.Modified or EntityState.Deleted))
+                continue;
+
             if (!changes.TryGetValue(entry.Entity.UserId, out var change))
                 change = (0, []);
 
-            if (entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)
-                change.Conversations.Add(entry.Entity.ConversationsId);
-
-            if (entry.State == EntityState.Modified &&
-                entry.Property(participant => participant.UnreadCount).IsModified)
-            {
-                var original = entry.Property(participant => participant.UnreadCount).OriginalValue;
-                change.Delta += entry.Entity.UnreadCount - original;
-            }
+            change.Conversations.Add(entry.Entity.ConversationsId);
+            change.Delta += CurrentUnreadContribution(entry) - OriginalUnreadContribution(entry);
 
             changes[entry.Entity.UserId] = change;
         }
@@ -186,11 +182,30 @@ public sealed class RealtimeRevisionSaveChangesInterceptor : SaveChangesIntercep
             }
         }
 
+        var changedUserIds = changes.Keys.ToArray();
+        var persistedUnreadByUser = changedUserIds.Length == 0
+            ? new Dictionary<Guid, int>()
+            : await context.Set<ConversationParticipant>()
+                .AsNoTracking()
+                .Where(participant =>
+                    changedUserIds.Contains(participant.UserId) &&
+                    participant.LeftAt == null &&
+                    participant.DeletedAt == null)
+                .GroupBy(participant => participant.UserId)
+                .Select(group => new
+                {
+                    UserId = group.Key,
+                    UnreadCount = group.Sum(participant => participant.UnreadCount)
+                })
+                .ToDictionaryAsync(item => item.UserId, item => item.UnreadCount, cancellationToken);
+
         foreach (var (userId, change) in changes)
         {
             var state = await FindOrCreateStateAsync(context, userId, now, cancellationToken);
             state.ConversationRevision++;
-            state.ConversationUnreadCount = Math.Max(0, state.ConversationUnreadCount + change.Delta);
+            state.ConversationUnreadCount = Math.Max(
+                0,
+                persistedUnreadByUser.GetValueOrDefault(userId) + change.Delta);
             state.UpdatedAt = now;
             var payload = new ConversationInboxRevisionChangedPayload(
                 state.ConversationRevision,
@@ -201,6 +216,25 @@ public sealed class RealtimeRevisionSaveChangesInterceptor : SaveChangesIntercep
                 state.ConversationRevision,
                 $"conversation-inbox:{userId:N}:{state.ConversationRevision}", payload, now);
         }
+    }
+
+    private static int OriginalUnreadContribution(EntityEntry<ConversationParticipant> entry)
+    {
+        if (entry.State == EntityState.Added) return 0;
+
+        var wasActive = entry.Property(participant => participant.LeftAt).OriginalValue is null &&
+            entry.Property(participant => participant.DeletedAt).OriginalValue is null;
+        return wasActive
+            ? entry.Property(participant => participant.UnreadCount).OriginalValue
+            : 0;
+    }
+
+    private static int CurrentUnreadContribution(EntityEntry<ConversationParticipant> entry)
+    {
+        if (entry.State == EntityState.Deleted) return 0;
+        return entry.Entity.LeftAt is null && entry.Entity.DeletedAt is null
+            ? entry.Entity.UnreadCount
+            : 0;
     }
 
     private static void AddChangedConversationIds<TEntity>(
