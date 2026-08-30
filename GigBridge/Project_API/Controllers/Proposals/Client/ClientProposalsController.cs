@@ -3,6 +3,7 @@ using Application.Common.Models.Ai;
 using Application.Features.Proposals.Client.GetProposalJudgingList;
 using Application.Features.Proposals.Client.GetProposalsByJobPost.Queries;
 using Application.Features.Proposals.Client.JudgeAllProposals;
+using Application.Features.Proposals.Client.JudgeAllProposals.DTOs;
 using Application.Features.Proposals.Common.DTOs;
 using Domain.Enums.Accounts;
 using Microsoft.AspNetCore.Authorization;
