@@ -1,39 +1,16 @@
 using System;
-using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
+using Application.Features.Proposals.Client.GetProposalJudgingList.DTOs;
 using Application.Features.Proposals.Common;
-using Application.Features.Proposals.Common.DTOs;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
-namespace Application.Features.Proposals.Client.GetProposalJudgingList;
-
-public class ProposalJudgingListDto
-{
-    public Guid JobPostId { get; set; }
-    public string JobPostTitle { get; set; } = string.Empty;
-    public int TotalProposalsCount { get; set; }
-    public int JudgedCount { get; set; }
-    public int UnjudgedCount { get; set; }
-    public double AverageScore { get; set; }
-    public int TopScore { get; set; }
-    public int RecommendedCount { get; set; }
-    public List<ProposalDto> RankedProposals { get; set; } = new();
-}
-
-public class GetProposalJudgingListQuery : IRequest<ProposalJudgingListDto>
-{
-    public Guid JobPostId { get; set; }
-    public Guid UserId { get; set; }
-    public bool? RecommendedOnly { get; set; }
-    public int? MinScore { get; set; }
-    public string? SortBy { get; set; } = "aiScore";
-}
+namespace Application.Features.Proposals.Client.GetProposalJudgingList.Queries;
 
 public class GetProposalJudgingListQueryHandler : IRequestHandler<GetProposalJudgingListQuery, ProposalJudgingListDto>
 {

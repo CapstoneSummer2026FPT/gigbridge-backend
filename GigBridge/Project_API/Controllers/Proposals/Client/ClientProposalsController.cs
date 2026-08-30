@@ -1,6 +1,8 @@
 using Application.Common.Models;
 using Application.Common.Models.Ai;
 using Application.Features.Proposals.Client.GetProposalJudgingList;
+using Application.Features.Proposals.Client.GetProposalJudgingList.DTOs;
+using Application.Features.Proposals.Client.GetProposalJudgingList.Queries;
 using Application.Features.Proposals.Client.GetProposalsByJobPost.Queries;
 using Application.Features.Proposals.Client.JudgeAllProposals;
 using Application.Features.Proposals.Client.JudgeAllProposals.DTOs;
