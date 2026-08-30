@@ -1,14 +1,19 @@
+using System;
+using System.Linq;
+using System.Net.Http;
+using System.Threading;
+using System.Threading.Tasks;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.Ai;
 using Application.Common.InternalServices.Premium.Interfaces;
 using Application.Common.Models.Ai;
-using Application.Features.Premium.Client.SmartTalentMatching.GetMatches.DTOs;
+using Application.Features.Premium.Client.SmartTalentMatching.GetTalentMatches.DTOs;
 using Domain.Entities;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
-namespace Application.Features.Premium.Client.SmartTalentMatching.GetMatches.Queries;
+namespace Application.Features.Premium.Client.SmartTalentMatching.GetTalentMatches.Queries;
 
 public sealed class GetTalentMatchesQueryHandler(
     IApplicationDbContext context,

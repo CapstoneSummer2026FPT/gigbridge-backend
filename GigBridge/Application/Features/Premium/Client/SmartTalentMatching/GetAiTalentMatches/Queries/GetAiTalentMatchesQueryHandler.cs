@@ -1,17 +1,26 @@
+using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
+using System.Net.Http;
+using System.Threading;
+using System.Threading.Tasks;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.Ai;
 using Application.Common.Interfaces.Time;
 using Application.Common.InternalServices.Premium.Interfaces;
 using Application.Common.Models.Ai;
-using Application.Features.Premium.Client.SmartTalentMatching.GetMatches.DTOs;
+using Application.Features.Premium.Client.SmartTalentMatching.Common.Services;
+using Application.Features.Premium.Client.SmartTalentMatching.GetAiTalentMatches.DTOs;
+using Application.Features.Premium.Client.SmartTalentMatching.GetAiTalentMatches.Queries.Services;
+using Application.Features.Premium.Client.SmartTalentMatching.GetTalentMatches.DTOs;
 using Domain.Entities;
 using Domain.Enums.Premium;
 using MediatR;
 using Microsoft.Extensions.Logging;
 
-namespace Application.Features.Premium.Client.SmartTalentMatching.GetMatches.Queries;
+namespace Application.Features.Premium.Client.SmartTalentMatching.GetAiTalentMatches.Queries;
 
 public sealed class GetAiTalentMatchesQueryHandler(
     IApplicationDbContext context,
@@ -29,7 +38,6 @@ public sealed class GetAiTalentMatchesQueryHandler(
         GetAiTalentMatchesQuery query,
         CancellationToken cancellationToken)
     {
-
         await premiumAccess.RequirePremiumClientAsync(query.UserId, cancellationToken);
         var stopwatch = Stopwatch.StartNew();
         var candidateFilters = query.Filters is null
@@ -173,7 +181,6 @@ public sealed class GetAiTalentMatchesQueryHandler(
             match.BudgetBonus,
             match.JobBudget,
             match.CandidateRate)).ToList();
-
 
         foreach (var match in matches)
         {
@@ -344,52 +351,6 @@ public sealed class GetAiTalentMatchesQueryHandler(
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static decimal Round(decimal value) => Math.Round(value, 2);
-
-    private static IReadOnlyList<Guid> RankWithLegacyScorer(
-        AiTalentMatchingPool pool,
-        int topK)
-    {
-        var legacyJob = new TalentScoringJob(
-            pool.Job.JobPostId,
-            pool.Job.MajorCategoryId,
-            pool.Job.MajorId,
-            pool.Job.Skills.Select(skill =>
-                new TalentScoringSkill(skill.SkillId, skill.Name, IsRequired: false)).ToList(),
-            pool.Job.CustomSkills);
-
-        return pool.Candidates.Select(candidate =>
-            {
-                var legacyCandidate = new TalentScoringCandidate(
-                    candidate.FreelancerProfileId,
-                    candidate.UserId,
-                    candidate.DisplayName,
-                    candidate.Title,
-                    candidate.Bio,
-                    candidate.Availability,
-                    ProfileCompletionScore: 0,
-                    candidate.EloPoints,
-                    candidate.AverageRating,
-                    candidate.ReviewCount,
-                    candidate.CompletedContractCount,
-                    candidate.MajorId,
-                    candidate.MajorCategoryIds,
-                    candidate.Skills.Select(skill =>
-                        new TalentScoringSkill(skill.SkillId, skill.Name, IsRequired: false)).ToList(),
-                    [],
-                    candidate.VerifiedWork.Select(work => new TalentVerifiedContractEvidence(
-                        work.ContractId,
-                        work.MajorCategoryId,
-                        work.MajorId,
-                        work.Skills.Select(skill => skill.SkillId).ToHashSet())).ToList());
-                return TalentMatchScorer.Score(legacyJob, legacyCandidate);
-            })
-            .Where(result => result is not null)
-            .OrderByDescending(result => result!.Match.MatchPercentage)
-            .ThenBy(result => result!.Match.FreelancerId)
-            .Take(topK)
-            .Select(result => result!.Match.FreelancerId)
-            .ToList();
-    }
 
     private sealed record PendingMatch(
         AiTalentMatchingCandidate Candidate,

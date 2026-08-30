@@ -1,13 +1,18 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Features.Premium.Client.SmartTalentMatching.GetMatches.DTOs;
+using Application.Features.Premium.Client.SmartTalentMatching.GetTalentMatches.DTOs;
 using Domain.Entities;
 using Domain.Enums.Contracts;
 using Domain.Enums.Reviews;
 using Domain.Services;
 using Microsoft.EntityFrameworkCore;
 
-namespace Application.Features.Premium.Client.SmartTalentMatching.GetMatches.Queries;
+namespace Application.Features.Premium.Client.SmartTalentMatching.Common.Services;
 
 public sealed record AiTalentSkill(Guid SkillId, string Name);
 
@@ -177,15 +182,15 @@ public static class TalentMatchingCandidateLoader
                 ExactCategoryMatch = job.MajorCategoryId.HasValue &&
                     (profile.FreelancerProfileCategories.Any(selection =>
                          selection.MajorCategoryId == job.MajorCategoryId.Value) ||
-                     profile.Contracts.Any(contract =>
-                         contract.Status == (int)ContractStatus.Completed &&
-                         contract.JobPosts.MajorCategoryId == job.MajorCategoryId.Value)),
+                      profile.Contracts.Any(contract =>
+                          contract.Status == (int)ContractStatus.Completed &&
+                          contract.JobPosts.MajorCategoryId == job.MajorCategoryId.Value)),
                 SameMajorMatch = job.MajorId.HasValue &&
                     (profile.MajorId == job.MajorId.Value ||
-                     profile.Contracts.Any(contract =>
-                         contract.Status == (int)ContractStatus.Completed &&
-                         contract.JobPosts.MajorCategory != null &&
-                         contract.JobPosts.MajorCategory.MajorId == job.MajorId.Value)),
+                      profile.Contracts.Any(contract =>
+                          contract.Status == (int)ContractStatus.Completed &&
+                          contract.JobPosts.MajorCategory != null &&
+                          contract.JobPosts.MajorCategory.MajorId == job.MajorId.Value)),
                 CompletedContracts = profile.Contracts.Count(contract =>
                     contract.Status == (int)ContractStatus.Completed)
             })

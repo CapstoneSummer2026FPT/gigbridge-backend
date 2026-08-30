@@ -1,6 +1,9 @@
-using Application.Features.Premium.Client.SmartTalentMatching.GetMatches.DTOs;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Application.Features.Premium.Client.SmartTalentMatching.GetTalentMatches.DTOs;
 
-namespace Application.Features.Premium.Client.SmartTalentMatching.GetMatches.Queries;
+namespace Application.Features.Premium.Client.SmartTalentMatching.GetTalentMatches.Queries.Services;
 
 public sealed record TalentScoringSkill(Guid SkillId, string Name, bool IsRequired,
     int? ProficiencyLevel = null, int? YearsOfExperience = null);
