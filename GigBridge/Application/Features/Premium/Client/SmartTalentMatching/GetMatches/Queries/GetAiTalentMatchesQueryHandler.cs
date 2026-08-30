@@ -114,18 +114,15 @@ public sealed class GetAiTalentMatchesQueryHandler(
             var semanticStrengths = Clean(aiMatch.SemanticStrengths, 5, 200);
             var reasons = evidence.Reasons.Concat(Clean(aiMatch.MatchReasons, 3, 300))
                 .Distinct(StringComparer.OrdinalIgnoreCase).Take(6).ToList();
-            var fallbackSaving = (decimal)Math.Round(12.0 + (Math.Abs(candidate.FreelancerProfileId.GetHashCode()) % 14), 1);
             var savingPercentage = aiMatch.SavingPercentage.HasValue 
                 ? (decimal?)Round((decimal)aiMatch.SavingPercentage.Value) 
-                : fallbackSaving;
-            var budgetBonus = aiMatch.BudgetBonus > 0 
+                : null;
+            var budgetBonus = (aiMatch.BudgetBonus > 0 && aiMatch.SavingPercentage.HasValue) 
                 ? (decimal)Round((decimal)aiMatch.BudgetBonus) 
-                : Math.Min(20m, Math.Max(0m, savingPercentage ?? 0m));
+                : 0m;
 
-            var jobBudget = pool.Job.BudgetMax ?? pool.Job.BudgetMin ?? 2000m;
-            var candidateRate = candidate.ExpectedRate ?? (savingPercentage.HasValue 
-                ? Math.Round(jobBudget * (1.0m - (savingPercentage.Value / 100.0m)), 0)
-                : jobBudget);
+            var jobBudget = pool.Job.BudgetMax ?? pool.Job.BudgetMin;
+            var candidateRate = candidate.ExpectedRate;
 
             return new PendingMatch(
                 candidate,
