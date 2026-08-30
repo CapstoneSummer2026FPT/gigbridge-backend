@@ -188,7 +188,9 @@ public sealed class RealtimeRevisionSaveChangesInterceptor : SaveChangesIntercep
 
     private static void QueueReceiptChanges(DbContext context, DateTime now)
     {
-        foreach (var entry in context.ChangeTracker.Entries<ProjectReceipt>())
+        // AddOutbox attaches entities to this context, so do not enumerate the live tracker.
+        var receiptEntries = context.ChangeTracker.Entries<ProjectReceipt>().ToArray();
+        foreach (var entry in receiptEntries)
         {
             if (!IsVisibleReceiptChange(entry)) continue;
             entry.Entity.Revision = entry.State == EntityState.Added ? 1 : entry.Entity.Revision + 1;
