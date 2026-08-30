@@ -99,6 +99,18 @@ public sealed class TalentRerankJobDto
 
     [JsonPropertyName("estimated_duration")]
     public string? EstimatedDuration { get; set; }
+
+    [JsonPropertyName("budget_amount")]
+    public double? BudgetAmount { get; set; }
+
+    [JsonPropertyName("budget_type")]
+    public string? BudgetType { get; set; }
+
+    [JsonPropertyName("budget_min")]
+    public double? BudgetMin { get; set; }
+
+    [JsonPropertyName("budget_max")]
+    public double? BudgetMax { get; set; }
 }
 
 public sealed class TalentRerankCandidateDto
@@ -132,6 +144,15 @@ public sealed class TalentRerankCandidateDto
 
     [JsonPropertyName("verified_work")]
     public List<TalentRerankVerifiedWorkDto> VerifiedWork { get; set; } = new();
+
+    [JsonPropertyName("expected_rate")]
+    public double? ExpectedRate { get; set; }
+
+    [JsonPropertyName("rate_min")]
+    public double? RateMin { get; set; }
+
+    [JsonPropertyName("rate_max")]
+    public double? RateMax { get; set; }
 }
 
 public sealed class TalentRerankVerifiedWorkDto
@@ -181,9 +202,16 @@ public sealed class TalentRerankMatchDto
     [JsonPropertyName("algorithm_score")]
     public double AlgorithmScore { get; set; }
 
+    [JsonPropertyName("saving_percentage")]
+    public double? SavingPercentage { get; set; }
+
+    [JsonPropertyName("budget_bonus")]
+    public double BudgetBonus { get; set; }
+
     [JsonPropertyName("match_reasons")]
     public List<string> MatchReasons { get; set; } = new();
 
     [JsonPropertyName("semantic_strengths")]
     public List<string> SemanticStrengths { get; set; } = new();
 }
+

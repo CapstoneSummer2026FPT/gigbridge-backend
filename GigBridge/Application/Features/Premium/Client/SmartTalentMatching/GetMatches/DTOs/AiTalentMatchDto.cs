@@ -30,7 +30,11 @@ public sealed record AiTalentMatchDto(
     double AverageRating,
     int ReviewCount,
     int CompletedContracts,
-    int EloPoints);
+    int EloPoints,
+    decimal? SavingPercentage = null,
+    decimal BudgetBonus = 0m,
+    decimal? JobBudget = null,
+    decimal? CandidateRate = null);
 
 public sealed record AiTalentMatchingResultDto(
     Guid MatchRunId,

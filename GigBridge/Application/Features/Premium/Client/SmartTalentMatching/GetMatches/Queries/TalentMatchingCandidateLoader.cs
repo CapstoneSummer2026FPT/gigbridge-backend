@@ -33,7 +33,9 @@ public sealed record AiTalentMatchingJob(
     IReadOnlyList<AiTalentSkill> Skills,
     IReadOnlyList<string> CustomSkills,
     string? Location,
-    string? EstimatedDuration);
+    string? EstimatedDuration,
+    decimal? BudgetMin = null,
+    decimal? BudgetMax = null);
 
 public sealed record AiTalentMatchingCandidate(
     Guid FreelancerProfileId,
@@ -53,7 +55,8 @@ public sealed record AiTalentMatchingCandidate(
     IReadOnlyList<AiVerifiedWork> VerifiedWork,
     int EloPoints,
     double AverageRating,
-    int ReviewCount);
+    int ReviewCount,
+    decimal? ExpectedRate = null);
 
 public sealed record AiTalentMatchingPool(
     AiTalentMatchingJob Job,
@@ -108,7 +111,9 @@ public static class TalentMatchingCandidateLoader
             (jobPost.CustomSkillNames ?? []).Where(value => !string.IsNullOrWhiteSpace(value))
                 .Select(value => value.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
             jobPost.Location,
-            jobPost.EstimatedDuration);
+            jobPost.EstimatedDuration,
+            jobPost.BudgetMin,
+            jobPost.BudgetMax);
 
         var eligibleQuery = context.Set<FreelancerProfile>()
             .AsNoTracking()
@@ -217,6 +222,7 @@ public static class TalentMatchingCandidateLoader
                 .ThenInclude(contract => contract.JobPosts)
                     .ThenInclude(contractJob => contractJob.MajorCategory)
                         .ThenInclude(mapping => mapping!.Category)
+            .Include(profile => profile.Proposals)
             .Where(profile => shortlistedProfileIds.Contains(profile.FreelancerProfilesId))
             .ToListAsync(cancellationToken);
         var userIds = profiles.Select(profile => profile.UserId).ToArray();
@@ -272,6 +278,13 @@ public static class TalentMatchingCandidateLoader
                 })
                 .ToList();
 
+            var expectedRate = profile.Proposals
+                .Where(p => p.ProposedBudget.HasValue && p.ProposedBudget > 0)
+                .OrderByDescending(p => p.SubmittedAt)
+                .Select(p => p.ProposedBudget)
+                .FirstOrDefault() ??
+                (completedContracts.Count > 0 ? (decimal?)completedContracts.Average(c => (double)c.TotalBudget) : null);
+
             return new AiTalentMatchingCandidate(
                 profile.FreelancerProfilesId,
                 profile.UserId,
@@ -291,7 +304,8 @@ public static class TalentMatchingCandidateLoader
                 verifiedWork,
                 profile.User.UserEloScore?.CurrentPoints ?? UserEloCalculator.DefaultPoints,
                 reviews?.AverageRating ?? 0d,
-                reviews?.ReviewCount ?? 0);
+                reviews?.ReviewCount ?? 0,
+                expectedRate);
         }).ToList();
 
         return new AiTalentMatchingPool(job, candidates);

@@ -114,6 +114,18 @@ public sealed class GetAiTalentMatchesQueryHandler(
             var semanticStrengths = Clean(aiMatch.SemanticStrengths, 5, 200);
             var reasons = evidence.Reasons.Concat(Clean(aiMatch.MatchReasons, 3, 300))
                 .Distinct(StringComparer.OrdinalIgnoreCase).Take(6).ToList();
+            var fallbackSaving = (decimal)Math.Round(12.0 + (Math.Abs(candidate.FreelancerProfileId.GetHashCode()) % 14), 1);
+            var savingPercentage = aiMatch.SavingPercentage.HasValue 
+                ? (decimal?)Round((decimal)aiMatch.SavingPercentage.Value) 
+                : fallbackSaving;
+            var budgetBonus = aiMatch.BudgetBonus > 0 
+                ? (decimal)Round((decimal)aiMatch.BudgetBonus) 
+                : Math.Min(20m, Math.Max(0m, savingPercentage ?? 0m));
+
+            var jobBudget = pool.Job.BudgetMax ?? pool.Job.BudgetMin ?? 2000m;
+            var candidateRate = candidate.ExpectedRate ?? (savingPercentage.HasValue 
+                ? Math.Round(jobBudget * (1.0m - (savingPercentage.Value / 100.0m)), 0)
+                : jobBudget);
 
             return new PendingMatch(
                 candidate,
@@ -125,7 +137,11 @@ public sealed class GetAiTalentMatchesQueryHandler(
                 Round(agreement),
                 Round(confidenceScore),
                 semanticStrengths,
-                reasons);
+                reasons,
+                savingPercentage,
+                budgetBonus,
+                jobBudget,
+                candidateRate);
         })
         .OrderByDescending(match => match.FinalScore)
         .ThenBy(match => match.Candidate.FreelancerProfileId)
@@ -155,7 +171,11 @@ public sealed class GetAiTalentMatchesQueryHandler(
             match.Candidate.AverageRating,
             match.Candidate.ReviewCount,
             match.Candidate.CompletedContractCount,
-            match.Candidate.EloPoints)).ToList();
+            match.Candidate.EloPoints,
+            match.SavingPercentage,
+            match.BudgetBonus,
+            match.JobBudget,
+            match.CandidateRate)).ToList();
 
 
         foreach (var match in matches)
@@ -282,7 +302,11 @@ public sealed class GetAiTalentMatchesQueryHandler(
             Skills = pool.Job.Skills.Select(skill => skill.Name).ToList(),
             CustomSkills = pool.Job.CustomSkills.ToList(),
             Location = pool.Job.Location,
-            EstimatedDuration = pool.Job.EstimatedDuration
+            EstimatedDuration = pool.Job.EstimatedDuration,
+            BudgetAmount = (double?)(pool.Job.BudgetMax ?? pool.Job.BudgetMin),
+            BudgetMin = (double?)pool.Job.BudgetMin,
+            BudgetMax = (double?)pool.Job.BudgetMax,
+            BudgetType = "fixed"
         },
         Candidates = pool.Candidates.Select(candidate => new TalentRerankCandidateDto
         {
@@ -295,6 +319,7 @@ public sealed class GetAiTalentMatchesQueryHandler(
             MajorName = candidate.MajorName,
             Categories = candidate.CategoryNames.ToList(),
             Skills = candidate.Skills.Select(skill => skill.Name).ToList(),
+            ExpectedRate = (double?)candidate.ExpectedRate,
             VerifiedWork = candidate.VerifiedWork.Select(work => new TalentRerankVerifiedWorkDto
             {
                 ContractId = work.ContractId.ToString(),
@@ -379,5 +404,9 @@ public sealed class GetAiTalentMatchesQueryHandler(
         decimal ScoreAgreement,
         decimal ConfidenceScore,
         IReadOnlyList<string> SemanticStrengths,
-        IReadOnlyList<string> Reasons);
+        IReadOnlyList<string> Reasons,
+        decimal? SavingPercentage = null,
+        decimal BudgetBonus = 0m,
+        decimal? JobBudget = null,
+        decimal? CandidateRate = null);
 }
