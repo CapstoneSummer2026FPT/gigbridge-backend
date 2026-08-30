@@ -13,18 +13,31 @@ namespace Infrastructure.Adapters.Security.Auth;
 
 public class JwtService : IJwtService
 {
-    private readonly IConfiguration _configuration;
+    private readonly string _signingKey;
+    private readonly string _issuer;
+    private readonly string _audience;
+    private readonly int _accessTokenMinutes;
+    private readonly int _refreshTokenMinutes;
 
     public JwtService(IConfiguration configuration)
     {
-        _configuration = configuration;
+        var jwtSettings = configuration.GetSection("Jwt");
+        _signingKey = GetRequiredSetting(jwtSettings, "Key");
+        _issuer = GetRequiredSetting(jwtSettings, "Issuer");
+        _audience = GetRequiredSetting(jwtSettings, "Audience");
+        _accessTokenMinutes = GetRequiredPositiveMinutes(jwtSettings, "AccessTokenMinutes");
+        _refreshTokenMinutes = GetRequiredPositiveMinutes(jwtSettings, "RefreshTokenMinutes");
+
+        if (Encoding.UTF8.GetByteCount(_signingKey) < 32)
+        {
+            throw new InvalidOperationException("Jwt:Key must contain at least 32 UTF-8 bytes.");
+        }
     }
 
     public string GenerateToken(User user)
     {
-        var jwtSettings = _configuration.GetSection("Jwt");
-        var secretKey = Encoding.UTF8.GetBytes(jwtSettings["Key"]!);
-        var accessTokenMinutes = GetAccessTokenMinutes(jwtSettings["AccessTokenMinutes"]);
+        var secretKey = Encoding.UTF8.GetBytes(_signingKey);
+        var issuedAt = DateTime.UtcNow;
 
         string roleName = user.Role.ToUserRole().ToString();
 
@@ -34,6 +47,10 @@ public class JwtService : IJwtService
             new Claim(ClaimTypes.Name, user.FullName),
             new Claim(ClaimTypes.Email, user.Email),
             new Claim(ClaimTypes.Role, roleName),
+            new Claim(
+                JwtRegisteredClaimNames.Iat,
+                EpochTime.GetIntDate(issuedAt).ToString(),
+                ClaimValueTypes.Integer64),
             new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
         };
 
@@ -41,19 +58,15 @@ public class JwtService : IJwtService
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
         var token = new JwtSecurityToken(
-            issuer: jwtSettings["Issuer"],
-            audience: jwtSettings["Audience"],
+            issuer: _issuer,
+            audience: _audience,
             claims: claims,
-            expires: DateTime.UtcNow.AddMinutes(accessTokenMinutes),
+            notBefore: issuedAt,
+            expires: issuedAt.AddMinutes(_accessTokenMinutes),
             signingCredentials: creds
         );
 
         return new JwtSecurityTokenHandler().WriteToken(token);
-    }
-
-    private static int GetAccessTokenMinutes(string? configuredValue)
-    {
-        return int.TryParse(configuredValue, out var minutes) && minutes > 0 ? minutes : 15;
     }
 
     public string GenerateRefreshToken()
@@ -73,15 +86,14 @@ public class JwtService : IJwtService
 
     public ClaimsPrincipal GetPrincipalFromExpiredToken(string token)
     {
-        var jwtSettings = _configuration.GetSection("Jwt");
-        var secretKey = Encoding.UTF8.GetBytes(jwtSettings["Key"]!);
+        var secretKey = Encoding.UTF8.GetBytes(_signingKey);
 
         var tokenValidationParameters = new TokenValidationParameters
         {
             ValidateAudience = true,
-            ValidAudience = jwtSettings["Audience"],
+            ValidAudience = _audience,
             ValidateIssuer = true,
-            ValidIssuer = jwtSettings["Issuer"],
+            ValidIssuer = _issuer,
             ValidateIssuerSigningKey = true,
             IssuerSigningKey = new SymmetricSecurityKey(secretKey),
             ValidateLifetime = false // Ignore token expiration
@@ -101,7 +113,30 @@ public class JwtService : IJwtService
 
     public int GetRefreshTokenExpiryMinutes()
     {
-        var jwtSettings = _configuration.GetSection("Jwt");
-        return int.TryParse(jwtSettings["RefreshTokenMinutes"], out var minutes) && minutes > 0 ? minutes : 10080; // Default to 7 days in minutes
+        return _refreshTokenMinutes;
+    }
+
+    private static string GetRequiredSetting(IConfigurationSection jwtSettings, string key)
+    {
+        var value = jwtSettings[key];
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw new InvalidOperationException($"Jwt:{key} must be configured.");
+        }
+
+        return value;
+    }
+
+    private static int GetRequiredPositiveMinutes(
+        IConfigurationSection jwtSettings,
+        string key)
+    {
+        var configuredValue = GetRequiredSetting(jwtSettings, key);
+        if (!int.TryParse(configuredValue, out var minutes) || minutes <= 0)
+        {
+            throw new InvalidOperationException($"Jwt:{key} must be a positive integer.");
+        }
+
+        return minutes;
     }
 }

@@ -20,9 +20,11 @@ using Application.Features.Auth.VerifyOtp.DTOs;
 using Application.Features.Auth.ChangePassword.Commands;
 using Application.Features.Auth.ChangePassword.DTOs;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Cors.Infrastructure;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.DependencyInjection;
 using Project_API.Controllers.Common;
 using Project_API.Security;
 using System;
@@ -134,10 +136,23 @@ public class AuthController : BaseApiController
     [EnableRateLimiting(AuthRateLimitPolicies.Refresh)]
     public async Task<IActionResult> Logout()
     {
-        await Mediator.Send(new LogoutCommand(GetRefreshTokenCandidates()));
-        DeleteAllRefreshTokenCookies();
+        if (!await IsAllowedBrowserOriginAsync())
+        {
+            return StatusCode(
+                StatusCodes.Status403Forbidden,
+                ApiResponse<object>.Error(403, "Logout origin is not allowed."));
+        }
 
-        return Ok(ApiResponse<object?>.Ok(null, "Logout successful"));
+        try
+        {
+            await Mediator.Send(new LogoutCommand(GetRefreshTokenCandidates()));
+            return Ok(ApiResponse<object?>.Ok(null, "Logout successful"));
+        }
+        finally
+        {
+            // Clearing the browser session must not depend on database availability.
+            DeleteAllRefreshTokenCookies();
+        }
     }
 
     [HttpPost("change-password")]
@@ -258,6 +273,23 @@ public class AuthController : BaseApiController
         DeleteRefreshTokenCookie("/api/auth");
         DeleteRefreshTokenCookie("/api");
         DeleteRefreshTokenCookie("/");
+    }
+
+    private async Task<bool> IsAllowedBrowserOriginAsync()
+    {
+        var origin = Request.Headers.Origin.ToString();
+        if (string.IsNullOrWhiteSpace(origin))
+        {
+            return true;
+        }
+
+        var corsPolicyProvider = HttpContext.RequestServices
+            .GetRequiredService<ICorsPolicyProvider>();
+        var policy = await corsPolicyProvider.GetPolicyAsync(
+            HttpContext,
+            Project_API.Extensions.ServiceCollectionExtensions.FrontendCorsPolicy);
+
+        return policy?.IsOriginAllowed(origin) == true;
     }
 
     private void DeleteRefreshTokenCookie(string path)

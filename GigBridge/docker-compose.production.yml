@@ -1,0 +1,10 @@
+services:
+  web-api:
+    image: ${WEB_API_IMAGE:?WEB_API_IMAGE must be configured}
+    environment:
+      Jwt__Key: ${JWT_KEY:?JWT_KEY must be configured}
+      Jwt__Issuer: ${JWT_ISSUER:?JWT_ISSUER must be configured}
+      Jwt__Audience: ${JWT_AUDIENCE:?JWT_AUDIENCE must be configured}
+      Jwt__AccessTokenMinutes: ${JWT_ACCESS_TOKEN_MINUTES:?JWT_ACCESS_TOKEN_MINUTES must be configured}
+      Jwt__RefreshTokenMinutes: ${JWT_REFRESH_TOKEN_MINUTES:?JWT_REFRESH_TOKEN_MINUTES must be configured}
+      Sentry__Release: ${SENTRY_RELEASE:?SENTRY_RELEASE must be configured}
