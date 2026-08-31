@@ -7,7 +7,9 @@ public sealed record SystemRequestLog(
     int StatusCode,
     string Path,
     long DurationMs,
-    string RequestId);
+    string RequestId,
+    string? User = null,
+    string? Ip = null);
 
 public sealed record SystemErrorLog(
     string Id,
