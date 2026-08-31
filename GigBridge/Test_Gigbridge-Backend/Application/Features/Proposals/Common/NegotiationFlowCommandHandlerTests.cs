@@ -20,8 +20,11 @@ using Domain.Entities;
 using Domain.Enums.Accounts;
 using Domain.Enums.Chat;
 using Domain.Enums.Contracts;
+using Domain.Enums.Contracts.Escrow;
 using Domain.Enums.Contracts.Milestones;
+using Domain.Enums.ESign;
 using Domain.Enums.Notifications;
+using Domain.Enums.Wallets;
 using MediatR;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
@@ -644,6 +647,187 @@ public class NegotiationFlowCommandHandlerTests
         Assert.Contains("already been accepted", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal((int)NegotiationOfferStatus.PendingFreelancerConfirmation, fixture.Offers.Entities.Single(o => o.NegotiationOfferId == fixture.OfferId).Status);
         Assert.Single(fixture.Contracts.Entities); // no second contract was created
+    }
+
+    [Fact]
+    public async Task RespondFinalOffer_AcceptReusesCancelledContractForSameProposal()
+    {
+        var fixture = new NegotiationFixture();
+        fixture.AddConversationWithParticipants();
+
+        // A first negotiation on this proposal was accepted, reached PendingSignature, and
+        // was then cancelled — leaving a Cancelled Contract row still occupying this
+        // proposal's slot in the unique Contracts_propo_ProposalsId_key index, plus stale
+        // milestones/escrow/e-sign/wallet state from that abandoned attempt.
+        var oldContractId = fixture.ContractId;
+        fixture.Contracts.Add(new Contract
+        {
+            ContractsId = oldContractId,
+            JobPostsId = fixture.JobPostId,
+            ClientProfilesId = fixture.ClientProfileId,
+            FreelancerProfilesId = fixture.FreelancerProfileId,
+            ProposalsId = fixture.ProposalId,
+            Title = "Abandoned attempt",
+            Description = "Stale description",
+            TotalBudget = 500m,
+            Status = (int)ContractStatus.Cancelled,
+            RevisionNumber = 3,
+            CancelledAt = fixture.Now.AddMinutes(-5),
+            CancelledByUserId = fixture.ClientUserId,
+            CreatedAt = fixture.Now.AddMinutes(-10),
+            UpdatedAt = fixture.Now.AddMinutes(-5)
+        });
+
+        var staleMilestoneId = Guid.NewGuid();
+        fixture.Milestones.Add(new Milestone
+        {
+            MilestonesId = staleMilestoneId,
+            ContractsId = oldContractId,
+            Title = "Stale milestone",
+            Amount = 500m,
+            Status = (int)MilestoneStatus.Pending,
+            SortOrder = 0,
+            CreatedAt = fixture.Now.AddMinutes(-10)
+        });
+        fixture.Context.Set<ContractWorkItem>().Add(new ContractWorkItem
+        {
+            ContractWorkItemId = Guid.NewGuid(),
+            MilestonesId = staleMilestoneId,
+            Title = "Stale work item",
+            Description = "Stale",
+            OrderIndex = 0,
+            Status = (int)ContractWorkItemStatus.Todo,
+            CreatedAt = fixture.Now.AddMinutes(-10)
+        });
+
+        fixture.Escrows.Add(new ContractEscrow
+        {
+            ContractEscrowId = Guid.NewGuid(),
+            ContractsId = oldContractId,
+            RequiredAmount = 500m,
+            FundedAmount = 0m,
+            RequiredPercentage = 1.0m,
+            Currency = "VND",
+            Status = (int)ContractEscrowStatus.PendingFunding,
+            CreatedAt = fixture.Now.AddMinutes(-8)
+        });
+
+        var staleDocumentId = Guid.NewGuid();
+        fixture.Context.Set<EsignDocument>().Add(new EsignDocument
+        {
+            EsignDocumentsId = staleDocumentId,
+            EsignTemplatesId = Guid.NewGuid(),
+            JobPostsId = fixture.JobPostId,
+            ContractsId = oldContractId,
+            DocumentCode = "GB-STALE",
+            Status = (int)ESignDocumentStatus.PendingSignatures,
+            CreatedAt = fixture.Now.AddMinutes(-8)
+        });
+        fixture.Context.Set<EsignDocumentContent>().Add(new EsignDocumentContent
+        {
+            EsignDocumentsId = staleDocumentId,
+            RenderedHtmlContent = "<html>stale</html>",
+            ContractSnapshotJson = "{\"stale\":true}"
+        });
+
+        // The abandoned attempt's 1% acceptance fee was charged, then fully refunded on
+        // cancellation — but CancelContractCommandHandler never deletes/marks the original
+        // charge row, only adds an offsetting refund row under a different key.
+        var oldChargeKey = $"SERVICE-FEE-ACCEPT-{oldContractId:N}";
+        var oldRefundKey = $"SERVICE-FEE-ACCEPT-REFUND-{oldContractId:N}";
+        fixture.Context.Set<WalletTransaction>().Add(new WalletTransaction
+        {
+            WalletTransactionsId = Guid.NewGuid(),
+            UserWalletsId = Guid.NewGuid(),
+            UserId = fixture.FreelancerUserId,
+            ContractsId = oldContractId,
+            TokenAmount = 5m,
+            VndAmount = 5m,
+            BalanceSource = (int)WalletBalanceSource.Deposited,
+            Type = (int)WalletTransactionType.Adjustment,
+            Status = (int)WalletTransactionStatus.Succeeded,
+            IdempotencyKey = oldChargeKey,
+            GatewayProvider = "InternalTokenWallet",
+            GatewayTransactionCode = oldChargeKey,
+            CreatedAt = fixture.Now.AddMinutes(-9),
+            CompletedAt = fixture.Now.AddMinutes(-9)
+        });
+        fixture.Context.Set<WalletTransaction>().Add(new WalletTransaction
+        {
+            WalletTransactionsId = Guid.NewGuid(),
+            UserWalletsId = Guid.NewGuid(),
+            UserId = fixture.FreelancerUserId,
+            ContractsId = oldContractId,
+            TokenAmount = 5m,
+            VndAmount = 5m,
+            BalanceSource = (int)WalletBalanceSource.Combined,
+            Type = (int)WalletTransactionType.ServiceFeeRefund,
+            Status = (int)WalletTransactionStatus.Succeeded,
+            IdempotencyKey = oldRefundKey,
+            GatewayProvider = "InternalTokenWallet",
+            GatewayTransactionCode = oldRefundKey,
+            CreatedAt = fixture.Now.AddMinutes(-5),
+            CompletedAt = fixture.Now.AddMinutes(-5)
+        });
+
+        // The client and freelancer renegotiate from the same proposal, with a different
+        // price and milestone plan than the abandoned attempt.
+        fixture.AddOfferWithSnapshot(1500m, 600m, 900m);
+
+        var handler = new RespondFinalOfferCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopChatRealtimeNotifier());
+
+        var result = await handler.Handle(
+            new RespondFinalOfferCommand(
+                fixture.FreelancerUserId,
+                new RespondFinalOfferRequest(
+                    fixture.OfferId,
+                    FinalOfferResponse.Accept,
+                    null)),
+            CancellationToken.None);
+
+        // The Cancelled contract row is reused, not replaced — no second Contract row is
+        // ever inserted, which is exactly what avoids the Contracts_propo_ProposalsId_key
+        // duplicate-key error.
+        var contract = Assert.Single(fixture.Contracts.Entities);
+        Assert.Equal(oldContractId, contract.ContractsId);
+        Assert.Equal(oldContractId, result.ContractId);
+        Assert.Equal((int)ContractStatus.PendingContractConfirmation, contract.Status);
+        Assert.Equal(1500m, contract.TotalBudget);
+        Assert.Null(contract.CancelledAt);
+        Assert.Null(contract.CancelledByUserId);
+        Assert.Equal(1, contract.RevisionNumber);
+
+        // Stale milestones/work items from the abandoned attempt are gone, replaced by the
+        // new offer's snapshot.
+        Assert.DoesNotContain(fixture.Milestones.Entities, m => m.MilestonesId == staleMilestoneId);
+        Assert.Equal(1500m, fixture.Milestones.Entities.Sum(m => m.Amount));
+        Assert.DoesNotContain(
+            fixture.Context.Set<ContractWorkItem>(),
+            wi => wi.MilestonesId == staleMilestoneId);
+
+        // Stale escrow is gone — ConfirmContractDetailsCommandHandler will create a fresh
+        // one from the reset TotalBudget.
+        Assert.Empty(fixture.Escrows.Entities);
+
+        // Stale e-sign document is voided rather than resumed, forcing a fresh document on
+        // the next ConfirmContractDetailsCommandHandler call.
+        var staleDocument = fixture.Context.Set<EsignDocument>()
+            .Single(d => d.EsignDocumentsId == staleDocumentId);
+        Assert.Equal((int)ESignDocumentStatus.Voided, staleDocument.Status);
+
+        // The stale charge+refund pair is gone; exactly one fresh charge exists under the
+        // same idempotency key (reused because ContractsId didn't change), and the
+        // freelancer's wallet was actually debited a second time.
+        var walletTransactions = fixture.Context.Set<WalletTransaction>().ToList();
+        Assert.DoesNotContain(walletTransactions, t => t.IdempotencyKey == oldRefundKey);
+        var newCharge = Assert.Single(walletTransactions, t => t.IdempotencyKey == oldChargeKey);
+        Assert.Equal(15m, newCharge.TokenAmount); // 1% of the new 1,500 final price
+        var freelancerWallet = fixture.Context.Set<UserWallet>()
+            .Single(wallet => wallet.UserId == fixture.FreelancerUserId);
+        Assert.Equal(85m, freelancerWallet.AvailableTokens); // 100 - 15
     }
 
     private static object? GetPropertyValue(object instance, string propertyName)

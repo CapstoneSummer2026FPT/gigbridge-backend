@@ -3,6 +3,7 @@ using Application.Common.Interfaces;
 using Application.Features.ESign.Common.DTOs;
 using Application.Features.ESign.Common.Internal;
 using Domain.Entities;
+using Domain.Enums.ESign;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -38,7 +39,13 @@ public sealed class GetESignDocumentStatusByContractQueryHandler(IApplicationDbC
         context.Set<EsignDocument>()
             .AsNoTracking()
             .TagWith("ESign.Status.Document")
-            .Where(item => item.ContractsId == contractId)
+            // Exclude Voided/Expired rows: see GetESignDocumentByContractQueryHandler for why
+            // a stale Voided document (from a Cancelled-then-reused Contract) must not
+            // masquerade as the current one.
+            .Where(item =>
+                item.ContractsId == contractId &&
+                item.Status != (int)ESignDocumentStatus.Voided &&
+                item.Status != (int)ESignDocumentStatus.Expired)
             .OrderByDescending(item => item.CreatedAt)
             .Select(item => new EsignDocument
             {
