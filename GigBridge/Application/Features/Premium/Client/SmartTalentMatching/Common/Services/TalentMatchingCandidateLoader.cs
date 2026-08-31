@@ -228,6 +228,8 @@ public static class TalentMatchingCandidateLoader
                     .ThenInclude(contractJob => contractJob.MajorCategory)
                         .ThenInclude(mapping => mapping!.Category)
             .Include(profile => profile.Proposals)
+                .ThenInclude(proposal => proposal.JobPosts)
+                    .ThenInclude(jobPost => jobPost.MajorCategory)
             .Where(profile => shortlistedProfileIds.Contains(profile.FreelancerProfilesId))
             .ToListAsync(cancellationToken);
         var userIds = profiles.Select(profile => profile.UserId).ToArray();
@@ -283,12 +285,38 @@ public static class TalentMatchingCandidateLoader
                 })
                 .ToList();
 
-            var expectedRate = profile.Proposals
+            var validProposals = profile.Proposals
                 .Where(p => p.ProposedBudget.HasValue && p.ProposedBudget > 0)
-                .OrderByDescending(p => p.SubmittedAt)
-                .Select(p => p.ProposedBudget)
-                .FirstOrDefault() ??
-                (completedContracts.Count > 0 ? (decimal?)completedContracts.Average(c => (double)c.TotalBudget) : null);
+                .ToList();
+
+            var categoryProposals = job.MajorCategoryId.HasValue
+                ? validProposals.Where(p => p.JobPosts?.MajorCategoryId == job.MajorCategoryId.Value).ToList()
+                : new List<Proposal>();
+
+            decimal? expectedRate = null;
+            if (categoryProposals.Count > 0)
+            {
+                expectedRate = (decimal?)categoryProposals.Average(p => (double)p.ProposedBudget!.Value);
+            }
+            else
+            {
+                var majorProposals = job.MajorId.HasValue
+                    ? validProposals.Where(p => p.JobPosts?.MajorCategory?.MajorId == job.MajorId.Value).ToList()
+                    : new List<Proposal>();
+
+                if (majorProposals.Count > 0)
+                {
+                    expectedRate = (decimal?)majorProposals.Average(p => (double)p.ProposedBudget!.Value);
+                }
+                else if (validProposals.Count > 0)
+                {
+                    expectedRate = (decimal?)validProposals.Average(p => (double)p.ProposedBudget!.Value);
+                }
+                else if (completedContracts.Count > 0)
+                {
+                    expectedRate = (decimal?)completedContracts.Average(c => (double)c.TotalBudget);
+                }
+            }
 
             return new AiTalentMatchingCandidate(
                 profile.FreelancerProfilesId,
