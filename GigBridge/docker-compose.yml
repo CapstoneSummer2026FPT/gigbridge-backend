@@ -26,6 +26,8 @@ services:
       - Jwt__Key=${JWT_KEY}
       - Jwt__Issuer=${JWT_ISSUER}
       - Jwt__Audience=${JWT_AUDIENCE}
+      - Jwt__AccessTokenMinutes=${JWT_ACCESS_TOKEN_MINUTES:-60}
+      - Jwt__RefreshTokenMinutes=${JWT_REFRESH_TOKEN_MINUTES:-10080}
 
       # PayOS
       - PayOS__ClientId=${PAYOS_CLIENT_ID}

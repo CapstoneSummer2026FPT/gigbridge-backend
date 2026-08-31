@@ -56,7 +56,7 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, (
         // one of the newly issued tokens when the second SaveChanges wins.
         var user = await LoadUserAsync(userId, cancellationToken);
 
-        EnsureRefreshTokenIsValid(user, request.RefreshToken);
+        EnsureRefreshTokenIsValid(user, GetRefreshTokenCandidates(request));
 
         var newRefreshToken = RotateRefreshToken(user);
         await _context.SaveChangesAsync(cancellationToken);
@@ -107,16 +107,29 @@ public class RefreshTokenCommandHandler : IRequestHandler<RefreshTokenCommand, (
         return user;
     }
 
-    private void EnsureRefreshTokenIsValid(User user, string refreshToken)
+    private IReadOnlyCollection<string> GetRefreshTokenCandidates(RefreshTokenCommand request)
     {
-        var incomingHash = _jwtService.HashRefreshToken(refreshToken);
+        return (request.RefreshTokenCandidates ?? [request.RefreshToken])
+            .Append(request.RefreshToken)
+            .Where(token => !string.IsNullOrWhiteSpace(token))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    private void EnsureRefreshTokenIsValid(User user, IReadOnlyCollection<string> refreshTokens)
+    {
+        var incomingHashes = refreshTokens
+            .Select(_jwtService.HashRefreshToken)
+            .ToHashSet(StringComparer.Ordinal);
         var now = _dateTimeService.UtcNow;
 
-        var matchesCurrent = user.RefreshTokenHash == incomingHash;
+        var matchesCurrent =
+            user.RefreshTokenHash is not null &&
+            incomingHashes.Contains(user.RefreshTokenHash);
         var matchesRecentPrevious =
             !matchesCurrent &&
             user.PreviousRefreshTokenHash is not null &&
-            user.PreviousRefreshTokenHash == incomingHash &&
+            incomingHashes.Contains(user.PreviousRefreshTokenHash) &&
             user.PreviousRefreshTokenGraceExpiresAt is DateTime graceExpiresAt &&
             graceExpiresAt >= now;
 

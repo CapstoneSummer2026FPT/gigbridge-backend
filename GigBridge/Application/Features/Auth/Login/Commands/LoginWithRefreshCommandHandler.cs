@@ -71,6 +71,8 @@ namespace Application.Features.Auth.Login.Commands
             var refreshToken = _jwtService.GenerateRefreshToken();
             user.RefreshTokenHash = _jwtService.HashRefreshToken(refreshToken);
             user.RefreshTokenExpiry = _dateTimeService.UtcNow.AddMinutes(_jwtService.GetRefreshTokenExpiryMinutes());
+            user.PreviousRefreshTokenHash = null;
+            user.PreviousRefreshTokenGraceExpiresAt = null;
             return refreshToken;
         }
 

@@ -18,6 +18,10 @@ public sealed class UserAccountStatusServiceTests
     {
         await using var context = CreateContext();
         var user = User("freelancer@example.test", UserRole.Freelancer);
+        user.RefreshTokenHash = "current-refresh-hash";
+        user.RefreshTokenExpiry = Now.AddDays(7);
+        user.PreviousRefreshTokenHash = "previous-refresh-hash";
+        user.PreviousRefreshTokenGraceExpiresAt = Now.AddSeconds(30);
         var admin = User("admin@example.test", UserRole.Admin);
         context.Users.AddRange(user, admin); await context.SaveChangesAsync();
         var service = new UserAccountStatusService(context, new Clock());
@@ -37,6 +41,10 @@ public sealed class UserAccountStatusServiceTests
         Assert.Equal(UserViolationAction.PermanentBan, third.Action);
         Assert.False(user.IsActive); Assert.Equal((int)AccountStatus.Banned, user.AccountStatus);
         Assert.Equal(3, user.ViolationCount);
+        Assert.Null(user.RefreshTokenHash);
+        Assert.Null(user.RefreshTokenExpiry);
+        Assert.Null(user.PreviousRefreshTokenHash);
+        Assert.Null(user.PreviousRefreshTokenGraceExpiresAt);
     }
 
     [Fact]

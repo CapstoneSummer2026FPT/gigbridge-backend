@@ -24,13 +24,28 @@ internal sealed class EfApplicationDbContextTransaction : IApplicationDbContextT
         string? lockPurpose = null,
         string callerFilePath = "")
     {
+        await AcquireTransactionLockAsync(
+            _transaction,
+            lockKey,
+            cancellationToken,
+            lockPurpose,
+            callerFilePath);
+    }
+
+    internal static async Task AcquireTransactionLockAsync(
+        IDbContextTransaction transaction,
+        long lockKey,
+        CancellationToken cancellationToken,
+        string? lockPurpose = null,
+        string callerFilePath = "")
+    {
         // Providers without a real SQL transaction (e.g. the EF Core in-memory store
         // used by tests) expose no DbTransaction, so the Postgres advisory lock is a
         // no-op there. Production always runs on Npgsql and takes the lock.
         DbTransaction? dbTransaction;
         try
         {
-            dbTransaction = _transaction.GetDbTransaction();
+            dbTransaction = transaction.GetDbTransaction();
         }
         catch (Exception exception) when (exception is NotSupportedException or InvalidOperationException)
         {
