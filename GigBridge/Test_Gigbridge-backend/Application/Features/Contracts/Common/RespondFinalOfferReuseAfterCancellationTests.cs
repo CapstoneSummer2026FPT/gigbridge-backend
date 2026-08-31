@@ -1,3 +1,4 @@
+using Application.Common.Exceptions;
 using Application.Common.Interfaces.Caching;
 using Application.Common.Interfaces.Time;
 using Application.Common.InternalServices.Auditing.Interfaces;
@@ -11,6 +12,8 @@ using Application.Features.Contracts.Details.Freelancer.Confirm.Commands;
 using Application.Features.Contracts.Escrow.Client.Fund.Commands;
 using Application.Features.Contracts.Signing.Common.Sign.Commands;
 using Application.Features.Contracts.Signing.Common.Sign.DTOs;
+using Application.Features.ESign.Common.GetDocumentByContract.Queries;
+using Application.Features.ESign.Common.GetDocumentStatusByContract.Queries;
 using Domain.Entities;
 using Domain.Enums.Accounts;
 using Domain.Enums.Chat;
@@ -54,6 +57,17 @@ public class RespondFinalOfferReuseAfterCancellationTests
         Assert.Equal((int)ContractStatus.PendingContractConfirmation, firstResult.ContractStatus);
         Assert.Single(fixture.Contracts.Entities);
 
+        // Step 1.5: the freelancer confirms contract details, creating the first
+        // EsignDocument, before the client cancels — this reproduces the real scenario the
+        // reuse fix must handle: an abandoned attempt that already has a document to void,
+        // not just a bare pre-confirmation contract.
+        var confirmHandlerForFirstAttempt = fixture.CreateConfirmHandler();
+        await confirmHandlerForFirstAttempt.Handle(
+            new ConfirmContractDetailsCommand(originalContractId, fixture.FreelancerUserId),
+            CancellationToken.None);
+        Assert.Equal((int)ContractStatus.PendingSignature, fixture.Contracts.Entities.Single().Status);
+        Assert.Single(fixture.Context.Set<EsignDocument>());
+
         // Step 2: the client cancels before signing completes.
         var cancelHandler = fixture.CreateCancelHandler();
         await cancelHandler.Handle(
@@ -80,6 +94,29 @@ public class RespondFinalOfferReuseAfterCancellationTests
         Assert.Null(contract.CancelledAt);
         Assert.Null(contract.CancelledByUserId);
 
+        // Step 3.5: before Confirm runs, the only EsignDocument row for this contract is the
+        // Voided one from the abandoned attempt. Both e-sign "get by contract" read handlers
+        // (what the frontend's sign page loads) must treat that as "no document yet" (404)
+        // rather than returning the stale Voided document as if it were current — otherwise
+        // the sign page would render a broken/incorrect signing UI instead of the normal
+        // "document not created yet" state.
+        Assert.Single(fixture.Context.Set<EsignDocument>());
+        Assert.Equal(
+            (int)ESignDocumentStatus.Voided,
+            fixture.Context.Set<EsignDocument>().Single().Status);
+
+        var getByContractHandler = new GetESignDocumentByContractQueryHandler(fixture.Context);
+        await Assert.ThrowsAsync<NotFoundException>(
+            () => getByContractHandler.Handle(
+                new GetESignDocumentByContractQuery(originalContractId, fixture.FreelancerUserId),
+                CancellationToken.None));
+
+        var getStatusByContractHandler = new GetESignDocumentStatusByContractQueryHandler(fixture.Context);
+        await Assert.ThrowsAsync<NotFoundException>(
+            () => getStatusByContractHandler.Handle(
+                new GetESignDocumentStatusByContractQuery(originalContractId, fixture.FreelancerUserId),
+                CancellationToken.None));
+
         // Step 4: the freelancer confirms contract details -> a fresh escrow and e-sign
         // document are created for the reused contract.
         var confirmHandler = fixture.CreateConfirmHandler();
@@ -94,6 +131,19 @@ public class RespondFinalOfferReuseAfterCancellationTests
         var escrow = Assert.Single(fixture.Context.Set<ContractEscrow>());
         Assert.Equal(1200m, escrow.RequiredAmount);
         Assert.Equal(0m, escrow.FundedAmount);
+
+        // The fresh document is now correctly discoverable via both read handlers.
+        var liveDocument = await getByContractHandler.Handle(
+            new GetESignDocumentByContractQuery(originalContractId, fixture.FreelancerUserId),
+            CancellationToken.None);
+        Assert.Equal(document.EsignDocumentsId, liveDocument.DocumentId);
+        Assert.NotEqual((int)ESignDocumentStatus.Voided, liveDocument.Status);
+
+        var liveStatus = await getStatusByContractHandler.Handle(
+            new GetESignDocumentStatusByContractQuery(originalContractId, fixture.FreelancerUserId),
+            CancellationToken.None);
+        Assert.Equal(document.EsignDocumentsId, liveStatus.DocumentId);
+        Assert.NotEqual((int)ESignDocumentStatus.Voided, liveStatus.Status);
 
         // Step 5: both parties sign (identities are pre-seeded on the fixture's users, so
         // signing does not need the identity-verification cache dependency).
