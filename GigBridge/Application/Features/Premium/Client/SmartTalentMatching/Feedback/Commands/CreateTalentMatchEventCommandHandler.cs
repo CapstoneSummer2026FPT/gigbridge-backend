@@ -1,3 +1,6 @@
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.Time;
@@ -8,14 +11,6 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 
 namespace Application.Features.Premium.Client.SmartTalentMatching.Feedback;
-
-public sealed record CreateTalentMatchEventCommand(
-    Guid ClientUserId,
-    Guid JobPostId,
-    Guid MatchRunId,
-    Guid FreelancerProfileId,
-    string EventType,
-    string IdempotencyKey) : IRequest;
 
 public sealed class CreateTalentMatchEventCommandHandler(
     IApplicationDbContext context,

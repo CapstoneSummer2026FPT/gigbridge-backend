@@ -1,4 +1,7 @@
-namespace Application.Features.Premium.Client.SmartTalentMatching.GetMatches.DTOs;
+using System;
+using System.Collections.Generic;
+
+namespace Application.Features.Premium.Client.SmartTalentMatching.GetAiTalentMatches.DTOs;
 
 public sealed record AiTalentMatchScoreBreakdownDto(
     decimal Embedding,
@@ -30,7 +33,11 @@ public sealed record AiTalentMatchDto(
     double AverageRating,
     int ReviewCount,
     int CompletedContracts,
-    int EloPoints);
+    int EloPoints,
+    decimal? SavingPercentage = null,
+    decimal BudgetBonus = 0m,
+    decimal? JobBudget = null,
+    decimal? CandidateRate = null);
 
 public sealed record AiTalentMatchingResultDto(
     Guid MatchRunId,

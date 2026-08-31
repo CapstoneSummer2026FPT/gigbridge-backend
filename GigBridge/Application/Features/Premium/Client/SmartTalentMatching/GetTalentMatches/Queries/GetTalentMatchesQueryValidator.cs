@@ -1,6 +1,6 @@
 using FluentValidation;
 
-namespace Application.Features.Premium.Client.SmartTalentMatching.GetMatches.Queries;
+namespace Application.Features.Premium.Client.SmartTalentMatching.GetTalentMatches.Queries;
 
 public sealed class GetTalentMatchesQueryValidator : AbstractValidator<GetTalentMatchesQuery>
 {
