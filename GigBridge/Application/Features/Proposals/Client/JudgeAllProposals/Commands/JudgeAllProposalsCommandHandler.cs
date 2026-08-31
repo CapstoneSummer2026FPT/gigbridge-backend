@@ -141,6 +141,41 @@ public class JudgeAllProposalsCommandHandler : IRequestHandler<JudgeAllProposals
 
     private static JobPostBaselineInputDto BuildJobBaselineInput(Guid jobPostId, JobPost? jobPostDetails)
     {
+        var milestones = jobPostDetails?.JobPostMilestonePlans?.Select(m => new JobPostMilestoneInputDto
+        {
+            OrderIndex = m.OrderIndex,
+            Title = m.Title,
+            Description = m.Description,
+            Amount = (double)m.Amount,
+            EstimatedDuration = m.EstimatedDuration,
+            Deliverables = m.Deliverables
+        }).OrderBy(m => m.OrderIndex).ToList() ?? new List<JobPostMilestoneInputDto>();
+
+        // Canonical BudgetMax: Use BudgetMax, or sum of baseline milestones, or BudgetMin
+        double? canonicalBudgetMax = (double?)(jobPostDetails?.BudgetMax);
+        if ((canonicalBudgetMax == null || canonicalBudgetMax <= 0) && milestones.Any(m => m.Amount > 0))
+        {
+            canonicalBudgetMax = milestones.Sum(m => m.Amount);
+        }
+        if (canonicalBudgetMax == null || canonicalBudgetMax <= 0)
+        {
+            canonicalBudgetMax = (double?)(jobPostDetails?.BudgetMin);
+        }
+
+        // Canonical EstimatedDuration: Use EstimatedDuration, or sum of baseline milestone durations
+        string? canonicalDuration = jobPostDetails?.EstimatedDuration;
+        if (string.IsNullOrWhiteSpace(canonicalDuration) || canonicalDuration == "—" || canonicalDuration == "null")
+        {
+            var validDurations = milestones
+                .Select(m => m.EstimatedDuration)
+                .Where(d => !string.IsNullOrWhiteSpace(d) && d != "—" && d != "null")
+                .ToList();
+            if (validDurations.Any())
+            {
+                canonicalDuration = string.Join(" + ", validDurations);
+            }
+        }
+
         return new JobPostBaselineInputDto
         {
             JobId = jobPostDetails?.JobPostsId.ToString() ?? jobPostId.ToString(),
@@ -148,17 +183,9 @@ public class JudgeAllProposalsCommandHandler : IRequestHandler<JudgeAllProposals
             JobDescription = jobPostDetails?.Description ?? string.Empty,
             RequiredSkills = jobPostDetails?.JobPostSkills.Select(js => js.Skills.Name).ToList() ?? new List<string>(),
             BudgetMin = (double?)(jobPostDetails?.BudgetMin),
-            BudgetMax = (double?)(jobPostDetails?.BudgetMax),
-            EstimatedDuration = jobPostDetails?.EstimatedDuration,
-            OriginalMilestones = jobPostDetails?.JobPostMilestonePlans.Select(m => new JobPostMilestoneInputDto
-            {
-                OrderIndex = m.OrderIndex,
-                Title = m.Title,
-                Description = m.Description,
-                Amount = (double)m.Amount,
-                EstimatedDuration = m.EstimatedDuration,
-                Deliverables = m.Deliverables
-            }).OrderBy(m => m.OrderIndex).ToList() ?? new List<JobPostMilestoneInputDto>(),
+            BudgetMax = canonicalBudgetMax,
+            EstimatedDuration = canonicalDuration,
+            OriginalMilestones = milestones,
             VettingQuestions = jobPostDetails?.JobPostQuestions.Select(q => q.QuestionText).ToList() ?? new List<string>()
         };
     }
