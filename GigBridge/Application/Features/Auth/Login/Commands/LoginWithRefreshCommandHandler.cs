@@ -19,6 +19,7 @@ namespace Application.Features.Auth.Login.Commands
         private readonly IJwtService _jwtService;
         private readonly IDateTimeService _dateTimeService;
         private readonly IUserEloService _userEloService;
+        private readonly IAuthSessionService _authSessionService;
         private readonly IMapper _mapper;
 
         public LoginWithRefreshCommandHandler(
@@ -27,6 +28,7 @@ namespace Application.Features.Auth.Login.Commands
             IJwtService jwtService,
             IDateTimeService dateTimeService,
             IUserEloService userEloService,
+            IAuthSessionService authSessionService,
             IMapper mapper)
         {
             _context = context;
@@ -34,6 +36,7 @@ namespace Application.Features.Auth.Login.Commands
             _jwtService = jwtService;
             _dateTimeService = dateTimeService;
             _userEloService = userEloService;
+            _authSessionService = authSessionService;
             _mapper = mapper;
         }
 
@@ -55,25 +58,24 @@ namespace Application.Features.Auth.Login.Commands
 
             EnsureUserCanLogin(user, _dateTimeService.UtcNow);
 
+            await using var transaction = await _context.BeginTransactionAsync(cancellationToken);
+            await transaction.AcquireTransactionLockAsync(
+                AccountEnforcementLock.ForUser(user.UserId),
+                cancellationToken,
+                "Auth.Login.CreateSession");
+
             await _userEloService.ApplyLoginActivityAsync(user, cancellationToken);
-            var refreshToken = RotateRefreshToken(user);
+            var refreshToken = await _authSessionService.CreateLoginSessionAsync(
+                user,
+                cancellationToken);
             await _context.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
 
             return (new LoginResponse
             {
                 User = _mapper.Map<UserDTO>(user),
                 Token = _jwtService.GenerateToken(user)
-            }, refreshToken, user.RefreshTokenExpiry ?? DateTime.UtcNow);
-        }
-
-        private string RotateRefreshToken(User user)
-        {
-            var refreshToken = _jwtService.GenerateRefreshToken();
-            user.RefreshTokenHash = _jwtService.HashRefreshToken(refreshToken);
-            user.RefreshTokenExpiry = _dateTimeService.UtcNow.AddMinutes(_jwtService.GetRefreshTokenExpiryMinutes());
-            user.PreviousRefreshTokenHash = null;
-            user.PreviousRefreshTokenGraceExpiresAt = null;
-            return refreshToken;
+            }, refreshToken.Token, refreshToken.ExpiresAt);
         }
 
         private static void EnsureUserCanLogin(User user, DateTime now)

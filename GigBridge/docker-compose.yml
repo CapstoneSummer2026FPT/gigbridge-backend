@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   web-api:
-    image: ghcr.io/capstonesummer2026fpt/gigbridge-api:latest
+    image: ${WEB_API_IMAGE:-ghcr.io/capstonesummer2026fpt/gigbridge-api:latest}
     container_name: gigbridge-api
     restart: always
     environment:
@@ -28,6 +28,10 @@ services:
       - Jwt__Audience=${JWT_AUDIENCE}
       - Jwt__AccessTokenMinutes=${JWT_ACCESS_TOKEN_MINUTES:-60}
       - Jwt__RefreshTokenMinutes=${JWT_REFRESH_TOKEN_MINUTES:-10080}
+
+      # Multi-device refresh-token sessions. Production must set this explicitly.
+      - AuthSessions__Enabled=${AUTH_SESSIONS_ENABLED:?AUTH_SESSIONS_ENABLED must be set to true}
+      - AuthSessions__MaxActiveSessionsPerUser=${AUTH_SESSIONS_MAX_ACTIVE_PER_USER:-5}
 
       # PayOS
       - PayOS__ClientId=${PAYOS_CLIENT_ID}

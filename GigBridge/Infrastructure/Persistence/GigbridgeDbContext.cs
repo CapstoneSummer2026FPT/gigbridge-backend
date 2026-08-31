@@ -36,6 +36,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
     public virtual DbSet<AuditLogWorkSpace> AuditLogWorkSpaces { get; set; }
 
+    public virtual DbSet<AuthSession> AuthSessions { get; set; }
+
     public virtual DbSet<BankAccount> BankAccounts { get; set; }
 
     public DbSet<DataProtectionKey> DataProtectionKeys { get; set; }
@@ -3052,6 +3054,34 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
                 .HasForeignKey<UserEloScore>(d => d.UserId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("UserEloScores_usr_UserId_fkey");
+        });
+
+        modelBuilder.Entity<AuthSession>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("AuthSessions_pkey");
+
+            entity.HasIndex(e => e.RefreshTokenHash, "IX_AuthSessions_RefreshTokenHash")
+                .IsUnique();
+            entity.HasIndex(e => e.PreviousRefreshTokenHash, "IX_AuthSessions_PreviousRefreshTokenHash")
+                .HasFilter("\"PreviousRefreshTokenHash\" IS NOT NULL");
+            entity.HasIndex(
+                e => new { e.UserId, e.RefreshTokenExpiry },
+                "IX_AuthSessions_UserId_RefreshTokenExpiry");
+            entity.HasIndex(
+                e => new { e.UserId, e.LastUsedAt },
+                "IX_AuthSessions_UserId_LastUsedAt");
+
+            entity.Property(e => e.Id)
+                .HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.RefreshTokenHash).IsRequired();
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.LastUsedAt).HasDefaultValueSql("now()");
+
+            entity.HasOne(e => e.User)
+                .WithMany(e => e.AuthSessions)
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("AuthSessions_usr_UserId_fkey");
         });
 
         modelBuilder.Entity<User>(entity =>
