@@ -211,12 +211,14 @@ public class JudgeAllProposalsCommandHandler : IRequestHandler<JudgeAllProposals
                 EstimatedDuration = m.EstimatedDuration,
                 Deliverables = m.Deliverables
             }).OrderBy(m => m.OrderIndex).ToList(),
-            VettingQaAnswers = proposal.ProposalAnswers.Select(pa => new QuestionAnswerPairInputDto
-            {
-                QuestionIndex = pa.JobPostQuestions.OrderIndex,
-                QuestionText = pa.JobPostQuestions.QuestionText,
-                CandidateAnswer = pa.AnswerText
-            }).OrderBy(q => q.QuestionIndex).ToList()
+            VettingQaAnswers = proposal.ProposalAnswers
+                .OrderBy(pa => pa.JobPostQuestions != null ? pa.JobPostQuestions.OrderIndex : 0)
+                .Select((pa, index) => new QuestionAnswerPairInputDto
+                {
+                    QuestionIndex = index + 1,
+                    QuestionText = pa.JobPostQuestions?.QuestionText ?? string.Empty,
+                    CandidateAnswer = pa.AnswerText
+                }).ToList()
         }).ToList();
     }
 
