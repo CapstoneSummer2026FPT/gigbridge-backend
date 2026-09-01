@@ -1,11 +1,15 @@
-using Domain.Enums.AiInterviews;
+using System;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using Application.Common.Interfaces;
+using Application.Features.AiInterviews.Freelancer.Requirement.DTOs;
 using Domain.Entities;
-
+using Domain.Enums.AiInterviews;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
-namespace Application.Features.AiInterviews.Freelancer.Requirement;
+namespace Application.Features.AiInterviews.Freelancer.Requirement.Queries;
 
 public sealed class GetAiInterviewRequirementQueryHandler(IApplicationDbContext context)
     : IRequestHandler<GetAiInterviewRequirementQuery, AiInterviewRequirementDto>

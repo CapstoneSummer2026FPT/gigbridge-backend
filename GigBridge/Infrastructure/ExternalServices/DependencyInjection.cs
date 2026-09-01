@@ -1,5 +1,6 @@
 using Infrastructure.ExternalServices.Ai;
 using Infrastructure.ExternalServices.Banking.VietQr;
+using Infrastructure.ExternalServices.Cache;
 using Infrastructure.ExternalServices.Email.Resend;
 using Infrastructure.ExternalServices.Google.Auth;
 using Infrastructure.ExternalServices.Google.Meet;
@@ -18,6 +19,7 @@ internal static class DependencyInjection
         IConfiguration configuration)
     {
         services.AddAiExternalService(configuration);
+        services.AddRedisExternalService(configuration);
         services.AddResendExternalService(configuration);
         services.AddGoogleAuthExternalService();
         services.AddGoogleMeetExternalService(configuration);

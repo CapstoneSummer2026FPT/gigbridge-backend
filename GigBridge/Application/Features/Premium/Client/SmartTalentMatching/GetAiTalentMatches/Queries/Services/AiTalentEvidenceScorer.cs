@@ -1,4 +1,9 @@
-namespace Application.Features.Premium.Client.SmartTalentMatching.GetMatches.Queries;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Application.Features.Premium.Client.SmartTalentMatching.Common.Services;
+
+namespace Application.Features.Premium.Client.SmartTalentMatching.GetAiTalentMatches.Queries.Services;
 
 public sealed record AiTalentEvidenceScore(
     decimal Score,

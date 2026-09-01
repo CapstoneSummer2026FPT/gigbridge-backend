@@ -1,4 +1,7 @@
-namespace Application.Features.Premium.Client.SmartTalentMatching.GetMatches.DTOs;
+using System;
+using System.Collections.Generic;
+
+namespace Application.Features.Premium.Client.SmartTalentMatching.GetTalentMatches.DTOs;
 
 public sealed record TalentMatchScoreBreakdownDto(
     decimal StructuredSkillFit,

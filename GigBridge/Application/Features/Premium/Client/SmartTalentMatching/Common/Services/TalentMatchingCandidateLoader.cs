@@ -1,13 +1,18 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
-using Application.Features.Premium.Client.SmartTalentMatching.GetMatches.DTOs;
+using Application.Features.Premium.Client.SmartTalentMatching.GetTalentMatches.DTOs;
 using Domain.Entities;
 using Domain.Enums.Contracts;
 using Domain.Enums.Reviews;
 using Domain.Services;
 using Microsoft.EntityFrameworkCore;
 
-namespace Application.Features.Premium.Client.SmartTalentMatching.GetMatches.Queries;
+namespace Application.Features.Premium.Client.SmartTalentMatching.Common.Services;
 
 public sealed record AiTalentSkill(Guid SkillId, string Name);
 
@@ -33,7 +38,9 @@ public sealed record AiTalentMatchingJob(
     IReadOnlyList<AiTalentSkill> Skills,
     IReadOnlyList<string> CustomSkills,
     string? Location,
-    string? EstimatedDuration);
+    string? EstimatedDuration,
+    decimal? BudgetMin = null,
+    decimal? BudgetMax = null);
 
 public sealed record AiTalentMatchingCandidate(
     Guid FreelancerProfileId,
@@ -53,7 +60,8 @@ public sealed record AiTalentMatchingCandidate(
     IReadOnlyList<AiVerifiedWork> VerifiedWork,
     int EloPoints,
     double AverageRating,
-    int ReviewCount);
+    int ReviewCount,
+    decimal? ExpectedRate = null);
 
 public sealed record AiTalentMatchingPool(
     AiTalentMatchingJob Job,
@@ -108,7 +116,9 @@ public static class TalentMatchingCandidateLoader
             (jobPost.CustomSkillNames ?? []).Where(value => !string.IsNullOrWhiteSpace(value))
                 .Select(value => value.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToList(),
             jobPost.Location,
-            jobPost.EstimatedDuration);
+            jobPost.EstimatedDuration,
+            jobPost.BudgetMin,
+            jobPost.BudgetMax);
 
         var eligibleQuery = context.Set<FreelancerProfile>()
             .AsNoTracking()
@@ -172,15 +182,15 @@ public static class TalentMatchingCandidateLoader
                 ExactCategoryMatch = job.MajorCategoryId.HasValue &&
                     (profile.FreelancerProfileCategories.Any(selection =>
                          selection.MajorCategoryId == job.MajorCategoryId.Value) ||
-                     profile.Contracts.Any(contract =>
-                         contract.Status == (int)ContractStatus.Completed &&
-                         contract.JobPosts.MajorCategoryId == job.MajorCategoryId.Value)),
+                      profile.Contracts.Any(contract =>
+                          contract.Status == (int)ContractStatus.Completed &&
+                          contract.JobPosts.MajorCategoryId == job.MajorCategoryId.Value)),
                 SameMajorMatch = job.MajorId.HasValue &&
                     (profile.MajorId == job.MajorId.Value ||
-                     profile.Contracts.Any(contract =>
-                         contract.Status == (int)ContractStatus.Completed &&
-                         contract.JobPosts.MajorCategory != null &&
-                         contract.JobPosts.MajorCategory.MajorId == job.MajorId.Value)),
+                      profile.Contracts.Any(contract =>
+                          contract.Status == (int)ContractStatus.Completed &&
+                          contract.JobPosts.MajorCategory != null &&
+                          contract.JobPosts.MajorCategory.MajorId == job.MajorId.Value)),
                 CompletedContracts = profile.Contracts.Count(contract =>
                     contract.Status == (int)ContractStatus.Completed)
             })
@@ -217,6 +227,9 @@ public static class TalentMatchingCandidateLoader
                 .ThenInclude(contract => contract.JobPosts)
                     .ThenInclude(contractJob => contractJob.MajorCategory)
                         .ThenInclude(mapping => mapping!.Category)
+            .Include(profile => profile.Proposals)
+                .ThenInclude(proposal => proposal.JobPosts)
+                    .ThenInclude(jobPost => jobPost.MajorCategory)
             .Where(profile => shortlistedProfileIds.Contains(profile.FreelancerProfilesId))
             .ToListAsync(cancellationToken);
         var userIds = profiles.Select(profile => profile.UserId).ToArray();
@@ -272,6 +285,39 @@ public static class TalentMatchingCandidateLoader
                 })
                 .ToList();
 
+            var validProposals = profile.Proposals
+                .Where(p => p.ProposedBudget.HasValue && p.ProposedBudget > 0)
+                .ToList();
+
+            var categoryProposals = job.MajorCategoryId.HasValue
+                ? validProposals.Where(p => p.JobPosts?.MajorCategoryId == job.MajorCategoryId.Value).ToList()
+                : new List<Proposal>();
+
+            decimal? expectedRate = null;
+            if (categoryProposals.Count > 0)
+            {
+                expectedRate = (decimal?)categoryProposals.Average(p => (double)p.ProposedBudget!.Value);
+            }
+            else
+            {
+                var majorProposals = job.MajorId.HasValue
+                    ? validProposals.Where(p => p.JobPosts?.MajorCategory?.MajorId == job.MajorId.Value).ToList()
+                    : new List<Proposal>();
+
+                if (majorProposals.Count > 0)
+                {
+                    expectedRate = (decimal?)majorProposals.Average(p => (double)p.ProposedBudget!.Value);
+                }
+                else if (validProposals.Count > 0)
+                {
+                    expectedRate = (decimal?)validProposals.Average(p => (double)p.ProposedBudget!.Value);
+                }
+                else if (completedContracts.Count > 0)
+                {
+                    expectedRate = (decimal?)completedContracts.Average(c => (double)c.TotalBudget);
+                }
+            }
+
             return new AiTalentMatchingCandidate(
                 profile.FreelancerProfilesId,
                 profile.UserId,
@@ -291,7 +337,8 @@ public static class TalentMatchingCandidateLoader
                 verifiedWork,
                 profile.User.UserEloScore?.CurrentPoints ?? UserEloCalculator.DefaultPoints,
                 reviews?.AverageRating ?? 0d,
-                reviews?.ReviewCount ?? 0);
+                reviews?.ReviewCount ?? 0,
+                expectedRate);
         }).ToList();
 
         return new AiTalentMatchingPool(job, candidates);

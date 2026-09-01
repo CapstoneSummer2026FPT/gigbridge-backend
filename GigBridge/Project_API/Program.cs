@@ -5,6 +5,7 @@ using Application.Common.InternalServices.Chat.Interfaces;
 using Application.Common.InternalServices.Notifications.Interfaces;
 using Application.Features.Admin.SystemTracking.Common.Interfaces;
 using Infrastructure;
+using Infrastructure.ExternalServices.Cache;
 using Project_API;
 using Project_API.Extensions;
 using Project_API.Hubs;
@@ -47,32 +48,7 @@ builder.Services.AddScoped<IUserRealtimeEventSender, SignalRChatRealtimeNotifier
 builder.Services.AddScoped<INotificationSender, SignalRNotificationSender>();
 
 var signalRBuilder = builder.Services.AddSignalR();
-var redisConnectionString = Environment.GetEnvironmentVariable("REDIS_CONNECTION_STRING")
-    ?? builder.Configuration["Redis:ConnectionString"]
-    ?? builder.Configuration.GetConnectionString("Redis");
-
-if (!string.IsNullOrWhiteSpace(redisConnectionString))
-{
-    var redisOptions = StackExchange.Redis.ConfigurationOptions.Parse(redisConnectionString);
-    redisOptions.AbortOnConnectFail = false;
-    redisOptions.ConnectTimeout = 10000;
-    redisOptions.KeepAlive = 60;
-    redisOptions.SyncTimeout = 10000;
-
-    var redisConnection = StackExchange.Redis.ConnectionMultiplexer.Connect(redisOptions);
-
-    signalRBuilder.AddStackExchangeRedis(options =>
-    {
-        options.ConnectionFactory = async writer => await Task.FromResult(redisConnection);
-        options.Configuration.ChannelPrefix = StackExchange.Redis.RedisChannel.Literal("GigBridge_SignalR");
-    });
-}
-else
-{
-    using var startupLoggerFactory = LoggerFactory.Create(logging => logging.AddConsole());
-    startupLoggerFactory.CreateLogger("Startup")
-        .LogWarning("Redis connection string is empty or missing! SignalR backplane disabled.");
-}
+builder.Services.AddRedisExternalService(builder.Configuration, signalRBuilder);
 
 builder.Services.AddSingleton<SystemTrackingStore>();
 builder.Services.AddSingleton<ISystemTrackingReader>(provider => provider.GetRequiredService<SystemTrackingStore>());

@@ -27,6 +27,27 @@ public sealed class SystemTrackingStore : ISystemTrackingReader
         var timestamp = DateTimeOffset.UtcNow;
         var requestId = Activity.Current?.Id ?? context.TraceIdentifier;
         var path = context.Request.Path.HasValue ? context.Request.Path.Value! : "/";
+
+        string user = "Guest";
+        if (context.User?.Identity?.IsAuthenticated == true)
+        {
+            user = context.User.Identity.Name 
+                ?? context.User.FindFirst(System.Security.Claims.ClaimTypes.Email)?.Value
+                ?? context.User.FindFirst("email")?.Value
+                ?? context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+                ?? context.User.FindFirst("sub")?.Value
+                ?? "Authenticated User";
+        }
+
+        string ip = context.Request.Headers["X-Forwarded-For"].FirstOrDefault()?.Split(',')[0].Trim()
+            ?? context.Connection.RemoteIpAddress?.ToString()
+            ?? "127.0.0.1";
+
+        if (ip == "::1")
+        {
+            ip = "127.0.0.1";
+        }
+
         var entry = new SystemRequestLog(
             requestId,
             timestamp,
@@ -34,7 +55,9 @@ public sealed class SystemTrackingStore : ISystemTrackingReader
             statusCode,
             path,
             durationMs,
-            requestId);
+            requestId,
+            user,
+            ip);
 
         lock (_gate)
         {
