@@ -60,7 +60,7 @@ public static class DependencyInjection
         services.AddDeliveryServices(configuration);
         services.AddAdminAuditLogServices();
         services.AddAdminAnalyticsServices(configuration);
-        services.AddAuthServices();
+        services.AddAuthServices(configuration);
         services.AddChatServices(configuration);
         services.AddEloServices();
         services.AddESignServices();

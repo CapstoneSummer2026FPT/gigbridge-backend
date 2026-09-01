@@ -93,6 +93,8 @@ public partial class User
 
     public DateTime? PreviousRefreshTokenGraceExpiresAt { get; set; }
 
+    public virtual ICollection<AuthSession> AuthSessions { get; set; } = new List<AuthSession>();
+
 
     public virtual ICollection<AdminAuditLog> AdminAuditLogs { get; set; } = new List<AdminAuditLog>();
 

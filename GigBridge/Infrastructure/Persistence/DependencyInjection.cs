@@ -1,5 +1,6 @@
 using Application.Common.Interfaces;
 using Infrastructure.Persistence.WorkSignals;
+using Infrastructure.Persistence.HealthChecks;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
@@ -31,7 +32,8 @@ internal static class DependencyInjection
             .PersistKeysToDbContext<GigbridgeDbContext>();
 
         services.AddHealthChecks()
-            .AddDbContextCheck<GigbridgeDbContext>("Database");
+            .AddDbContextCheck<GigbridgeDbContext>("Database")
+            .AddCheck<AuthSessionSchemaHealthCheck>("AuthSessions");
 
         return services;
     }

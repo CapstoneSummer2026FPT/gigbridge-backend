@@ -28,6 +28,16 @@ public sealed class RefreshTokenCommandHandlerTests
         };
         var context = new InMemoryApplicationDbContext();
         context.AddSet(user);
+        var session = new AuthSession
+        {
+            Id = Guid.NewGuid(),
+            UserId = user.UserId,
+            RefreshTokenHash = "old-hash",
+            RefreshTokenExpiry = now.AddDays(1),
+            CreatedAt = now,
+            LastUsedAt = now
+        };
+        context.AddSet(session);
         var jwt = CreateJwt(user.UserId);
         jwt.HashRefreshToken("old-refresh-token").Returns("old-hash");
         jwt.GenerateRefreshToken().Returns("new-refresh-token");
@@ -40,6 +50,7 @@ public sealed class RefreshTokenCommandHandlerTests
             context,
             jwt,
             new FixedDateTimeService(now),
+            AuthSessionTestFactory.Create(context, jwt, new FixedDateTimeService(now)),
             mapper,
             NullLogger<RefreshTokenCommandHandler>.Instance);
 
@@ -50,6 +61,7 @@ public sealed class RefreshTokenCommandHandlerTests
         Assert.Equal("new-refresh-token", result.RefreshToken);
         Assert.Equal("new-hash", user.RefreshTokenHash);
         Assert.Equal(now.AddMinutes(60), user.RefreshTokenExpiry);
+        Assert.Equal("new-hash", session.RefreshTokenHash);
         // The just-superseded token is retained for the rotation grace window rather than
         // discarded outright, so a sibling concurrent refresh (e.g. another browser tab) can
         // still succeed instead of being rejected.
@@ -75,12 +87,22 @@ public sealed class RefreshTokenCommandHandlerTests
         };
         var context = new InMemoryApplicationDbContext();
         context.AddSet(user);
+        context.AddSet(new AuthSession
+        {
+            Id = Guid.NewGuid(),
+            UserId = user.UserId,
+            RefreshTokenHash = "current-hash",
+            RefreshTokenExpiry = now.AddDays(1),
+            CreatedAt = now,
+            LastUsedAt = now
+        });
         var jwt = CreateJwt(user.UserId);
         jwt.HashRefreshToken("stale-refresh-token").Returns("stale-hash");
         var handler = new RefreshTokenCommandHandler(
             context,
             jwt,
             new FixedDateTimeService(now),
+            AuthSessionTestFactory.Create(context, jwt, new FixedDateTimeService(now)),
             Substitute.For<IMapper>(),
             NullLogger<RefreshTokenCommandHandler>.Instance);
 
@@ -147,6 +169,7 @@ public sealed class RefreshTokenCommandHandlerTests
     {
         var fixture = new RefreshFixture();
         fixture.User.RefreshTokenExpiry = fixture.Now.AddMinutes(-1);
+        fixture.Session.RefreshTokenExpiry = fixture.Now.AddMinutes(-1);
         var handler = fixture.CreateHandler();
 
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
@@ -212,6 +235,7 @@ public sealed class RefreshTokenCommandHandlerTests
         public InMemoryApplicationDbContext Context { get; } = new();
         public DateTime Now { get; private set; } = new(2026, 6, 11, 12, 0, 0, DateTimeKind.Utc);
         public User User { get; }
+        public AuthSession Session { get; }
         public string CurrentRawToken { get; } = "current-raw-token";
 
         private readonly IJwtService _jwtService = Substitute.For<IJwtService>();
@@ -231,6 +255,17 @@ public sealed class RefreshTokenCommandHandlerTests
                 CreatedAt = Now
             };
             Context.AddSet(User);
+
+            Session = new AuthSession
+            {
+                Id = Guid.NewGuid(),
+                UserId = User.UserId,
+                RefreshTokenHash = HashOf(CurrentRawToken),
+                RefreshTokenExpiry = Now.AddDays(7),
+                CreatedAt = Now,
+                LastUsedAt = Now
+            };
+            Context.AddSet(Session);
 
             _jwtService.HashRefreshToken(Arg.Any<string>())
                 .Returns(callInfo => HashOf(callInfo.Arg<string>()));
@@ -257,6 +292,7 @@ public sealed class RefreshTokenCommandHandlerTests
                 Context,
                 _jwtService,
                 dateTimeService,
+                AuthSessionTestFactory.Create(Context, _jwtService, dateTimeService),
                 mapper,
                 NullLogger<RefreshTokenCommandHandler>.Instance);
         }
