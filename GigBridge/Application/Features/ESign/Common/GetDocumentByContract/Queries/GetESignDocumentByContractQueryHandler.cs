@@ -6,6 +6,7 @@ using Application.Common.Interfaces;
 using Application.Features.ESign.Common.DTOs;
 using Application.Features.ESign.Common.Internal;
 using Domain.Entities;
+using Domain.Enums.ESign;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -25,8 +26,14 @@ public sealed class GetESignDocumentByContractQueryHandler
         GetESignDocumentByContractQuery request,
         CancellationToken cancellationToken)
     {
+        // Exclude Voided/Expired rows: a Cancelled-then-reused Contract voids its old
+        // document at accept time but doesn't get a replacement until contract details are
+        // confirmed, so a stale Voided row must not masquerade as the current document.
         var document = await _context.Set<EsignDocument>()
-            .Where(d => d.ContractsId == request.ContractId)
+            .Where(d =>
+                d.ContractsId == request.ContractId &&
+                d.Status != (int)ESignDocumentStatus.Voided &&
+                d.Status != (int)ESignDocumentStatus.Expired)
             .OrderByDescending(d => d.CreatedAt)
             .FirstOrDefaultAsync(cancellationToken);
 

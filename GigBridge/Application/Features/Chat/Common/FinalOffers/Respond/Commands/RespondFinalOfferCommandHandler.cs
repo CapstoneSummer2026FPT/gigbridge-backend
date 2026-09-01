@@ -18,6 +18,7 @@ using Domain.Entities;
 using Domain.Enums.Chat;
 using Domain.Enums.Contracts;
 using Domain.Enums.Contracts.Milestones;
+using Domain.Enums.ESign;
 using Domain.Enums.Notifications;
 using Domain.Enums.Premium;
 using MediatR;
@@ -377,28 +378,71 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
                 cancellationToken);
         if (existingContract) throw new ConflictException("A contract already exists for this job post.");
 
+        // A Proposal keeps at most one Contract row forever (Contracts_propo_ProposalsId_key
+        // is an unfiltered unique index, unlike IX_Contracts_JobPostsId which excludes
+        // Cancelled rows). If an earlier negotiation attempt on this same proposal was
+        // cancelled, its Contract row must be reused rather than re-inserted, or the
+        // insert below would violate that constraint.
+        var contractToReuse = offer.ProposalsId.HasValue
+            ? await _context.Set<Contract>()
+                .FirstOrDefaultAsync(c => c.ProposalsId == offer.ProposalsId.Value, cancellationToken)
+            : null;
+
+        if (contractToReuse is not null && contractToReuse.Status != (int)ContractStatus.Cancelled)
+        {
+            // Unreachable in practice: a Proposal's JobPostsId always equals its Contract's
+            // JobPostsId, so a non-Cancelled contract on this proposal would already have
+            // tripped the existingContract check above. Defensive guard so reuse can never
+            // silently mutate a live contract if that invariant is ever broken later.
+            throw new ConflictException("A contract already exists for this proposal.");
+        }
+
+        var isReuse = contractToReuse is not null;
+
         var jobPost = await _context.Set<JobPost>()
             .FirstOrDefaultAsync(item => item.JobPostsId == offer.JobPostsId, cancellationToken)
             ?? throw new NotFoundException("Job post does not exist.");
 
-        var contract = new Contract
+        Contract contract;
+        if (isReuse)
         {
-            ContractsId = Guid.NewGuid(),
-            JobPostsId = offer.JobPostsId,
-            ClientProfilesId = offer.ClientProfilesId,
-            FreelancerProfilesId = offer.FreelancerProfilesId,
-            ProposalsId = offer.ProposalsId,
-            Title = jobPost.Title,
-            Description = offer.ScopeSummary ?? jobPost.Description,
-            TotalBudget = offer.FinalPrice,
-            StartDate = offer.StartDate,
-            EndDate = offer.EndDate,
-            Status = (int)ContractStatus.PendingContractConfirmation,
-            RevisionNumber = 1,
-            CreatedAt = now,
-            UpdatedAt = now
-        };
-        _context.Set<Contract>().Add(contract);
+            contract = contractToReuse!;
+            contract.Title = jobPost.Title;
+            contract.Description = offer.ScopeSummary ?? jobPost.Description;
+            contract.TotalBudget = offer.FinalPrice;
+            contract.StartDate = offer.StartDate;
+            contract.EndDate = offer.EndDate;
+            contract.Status = (int)ContractStatus.PendingContractConfirmation;
+            contract.RevisionNumber = 1;
+            contract.CancelledAt = null;
+            contract.CancelledByUserId = null;
+            contract.UpdatedAt = now;
+            // ClientProfilesId/FreelancerProfilesId/JobPostsId/ProposalsId are already
+            // correct: a Contract's ProposalsId never changes and a Proposal's
+            // FreelancerProfilesId is immutable, so contract.FreelancerProfilesId already
+            // equals offer.FreelancerProfilesId.
+        }
+        else
+        {
+            contract = new Contract
+            {
+                ContractsId = Guid.NewGuid(),
+                JobPostsId = offer.JobPostsId,
+                ClientProfilesId = offer.ClientProfilesId,
+                FreelancerProfilesId = offer.FreelancerProfilesId,
+                ProposalsId = offer.ProposalsId,
+                Title = jobPost.Title,
+                Description = offer.ScopeSummary ?? jobPost.Description,
+                TotalBudget = offer.FinalPrice,
+                StartDate = offer.StartDate,
+                EndDate = offer.EndDate,
+                Status = (int)ContractStatus.PendingContractConfirmation,
+                RevisionNumber = 1,
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+            _context.Set<Contract>().Add(contract);
+        }
 
         if (offer.NegotiationOfferMilestones.Count == 0)
         {
@@ -408,6 +452,26 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
         if (offer.NegotiationOfferMilestones.Sum(item => item.Amount) != offer.FinalPrice)
         {
             throw new BadRequestException("The final offer milestone total does not match its final price.");
+        }
+
+        if (isReuse)
+        {
+            // Wipe the abandoned attempt's milestone tree so it isn't left alongside (or
+            // conflicting with) the fresh one built from the new offer below. Explicit
+            // deletes rather than relying on the DB's cascade FK, since the in-memory test
+            // double used by unit tests doesn't simulate cascade deletes.
+            var staleMilestones = await _context.Set<Milestone>()
+                .Where(m => m.ContractsId == contract.ContractsId)
+                .ToListAsync(cancellationToken);
+            if (staleMilestones.Count > 0)
+            {
+                var staleMilestoneIds = staleMilestones.Select(m => m.MilestonesId).ToList();
+                var staleWorkItems = await _context.Set<ContractWorkItem>()
+                    .Where(wi => staleMilestoneIds.Contains(wi.MilestonesId))
+                    .ToListAsync(cancellationToken);
+                _context.Set<ContractWorkItem>().RemoveRange(staleWorkItems);
+                _context.Set<Milestone>().RemoveRange(staleMilestones);
+            }
         }
 
         foreach (var snapshot in offer.NegotiationOfferMilestones.OrderBy(item => item.OrderIndex))
@@ -441,6 +505,60 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
                 CreatedAt = now
             }).ToList();
             _context.Set<Milestone>().Add(milestone);
+        }
+
+        if (isReuse)
+        {
+            // Void rather than delete the abandoned attempt's e-sign document: this forces
+            // ContractEsignRenderer.EnsureDocumentAsync (called from
+            // ConfirmContractDetailsCommandHandler) onto its create-fresh-document path —
+            // new EsignDocumentsId, new DocumentCode, new snapshot from the reset
+            // milestones/price — instead of resuming the stale one. Any EsignSignature rows
+            // from the abandoned attempt stay attached to the voided document and are never
+            // queried again, since signing looks up signatures scoped to the current
+            // document's id.
+            var staleDocuments = await _context.Set<EsignDocument>()
+                .Where(d =>
+                    d.ContractsId == contract.ContractsId &&
+                    d.Status != (int)ESignDocumentStatus.Voided &&
+                    d.Status != (int)ESignDocumentStatus.Expired)
+                .ToListAsync(cancellationToken);
+            foreach (var document in staleDocuments)
+            {
+                document.Status = (int)ESignDocumentStatus.Voided;
+                document.UpdatedAt = now;
+            }
+
+            // Remove any stale escrow left over from the abandoned attempt (created lazily
+            // once it reached PendingSignature) so ConfirmContractDetailsCommandHandler's
+            // escrow-is-null branch creates a fresh one from the reset TotalBudget instead
+            // of leaving stale required-amount data behind. Cancellation is only allowed
+            // before escrow funding progresses, so there is nothing funded to reconcile.
+            var staleEscrow = await _context.Set<ContractEscrow>()
+                .FirstOrDefaultAsync(e => e.ContractsId == contract.ContractsId, cancellationToken);
+            if (staleEscrow is not null)
+            {
+                _context.Set<ContractEscrow>().Remove(staleEscrow);
+            }
+
+            // The abandoned attempt's 1% acceptance fee was charged and then fully refunded
+            // on cancellation, but the refund never marks/deletes the original charge row —
+            // it only adds an offsetting transaction. Left in place, that stale charge row
+            // would make ServiceFeeWorkflow.ChargeAsync's idempotency check below silently
+            // skip charging the fee again. Deleting the self-canceling charge+refund pair
+            // makes the ledger read exactly as if the abandoned attempt never charged
+            // anything (its net effect was already zero) and frees the idempotency key.
+            var oldChargeKey = $"{ServiceFeeWorkflow.AcceptJobFeePrefix}{contract.ContractsId:N}";
+            var oldRefundKey = $"SERVICE-FEE-ACCEPT-REFUND-{contract.ContractsId:N}";
+            var staleFeeTransactions = await _context.Set<WalletTransaction>()
+                .Where(t =>
+                    t.ContractsId == contract.ContractsId &&
+                    (t.IdempotencyKey == oldChargeKey || t.IdempotencyKey == oldRefundKey))
+                .ToListAsync(cancellationToken);
+            if (staleFeeTransactions.Count > 0)
+            {
+                _context.Set<WalletTransaction>().RemoveRange(staleFeeTransactions);
+            }
         }
 
         // Charge the 1% freelancer service fee on job acceptance. This debits the
