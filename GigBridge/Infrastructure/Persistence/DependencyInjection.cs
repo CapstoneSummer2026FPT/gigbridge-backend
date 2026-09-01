@@ -33,7 +33,9 @@ internal static class DependencyInjection
 
         services.AddHealthChecks()
             .AddDbContextCheck<GigbridgeDbContext>("Database")
-            .AddCheck<AuthSessionSchemaHealthCheck>("AuthSessions");
+            .AddCheck<AuthSessionSchemaHealthCheck>("AuthSessions")
+            .AddCheck<Infrastructure.ExternalServices.Payments.PayOs.PayoutProviderHealthCheck>(
+                "PayoutProvider");
 
         return services;
     }
