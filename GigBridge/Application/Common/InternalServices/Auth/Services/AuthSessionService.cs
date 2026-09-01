@@ -34,8 +34,6 @@ public sealed class AuthSessionService : IAuthSessionService
         _logger = logger;
     }
 
-    public bool Enabled => _options.Enabled;
-
     public async Task<IssuedRefreshToken> CreateLoginSessionAsync(
         User user,
         CancellationToken cancellationToken)
@@ -43,45 +41,42 @@ public sealed class AuthSessionService : IAuthSessionService
         var now = _dateTimeService.UtcNow;
         var issued = GenerateRefreshToken(now);
 
-        if (Enabled)
+        var sessions = await _context.Set<AuthSession>()
+            .Where(session => session.UserId == user.UserId)
+            .ToListAsync(cancellationToken);
+
+        var expiredSessions = sessions
+            .Where(session => session.RefreshTokenExpiry <= now)
+            .ToArray();
+        _context.Set<AuthSession>().RemoveRange(expiredSessions);
+
+        var activeSessions = sessions
+            .Except(expiredSessions)
+            .OrderBy(session => session.LastUsedAt)
+            .ThenBy(session => session.CreatedAt)
+            .ToArray();
+        var sessionsToRevoke = Math.Max(
+            0,
+            activeSessions.Length - _options.MaxActiveSessionsPerUser + 1);
+
+        if (sessionsToRevoke > 0)
         {
-            var sessions = await _context.Set<AuthSession>()
-                .Where(session => session.UserId == user.UserId)
-                .ToListAsync(cancellationToken);
-
-            var expiredSessions = sessions
-                .Where(session => session.RefreshTokenExpiry <= now)
-                .ToArray();
-            _context.Set<AuthSession>().RemoveRange(expiredSessions);
-
-            var activeSessions = sessions
-                .Except(expiredSessions)
-                .OrderBy(session => session.LastUsedAt)
-                .ThenBy(session => session.CreatedAt)
-                .ToArray();
-            var sessionsToRevoke = Math.Max(
-                0,
-                activeSessions.Length - _options.MaxActiveSessionsPerUser + 1);
-
-            if (sessionsToRevoke > 0)
-            {
-                _context.Set<AuthSession>().RemoveRange(activeSessions.Take(sessionsToRevoke));
-                _logger.LogInformation(
-                    "Revoked {SessionCount} oldest auth session(s) for user {UserId} while enforcing the active-session limit.",
-                    sessionsToRevoke,
-                    user.UserId);
-            }
-
-            _context.Set<AuthSession>().Add(new AuthSession
-            {
-                Id = Guid.NewGuid(),
-                UserId = user.UserId,
-                RefreshTokenHash = _jwtService.HashRefreshToken(issued.Token),
-                RefreshTokenExpiry = issued.ExpiresAt,
-                CreatedAt = now,
-                LastUsedAt = now
-            });
+            _context.Set<AuthSession>().RemoveRange(activeSessions.Take(sessionsToRevoke));
+            _logger.LogInformation(
+                "Revoked {SessionCount} oldest auth session(s) for user {UserId} while enforcing the active-session limit.",
+                sessionsToRevoke,
+                user.UserId);
         }
+
+        _context.Set<AuthSession>().Add(new AuthSession
+        {
+            Id = Guid.NewGuid(),
+            UserId = user.UserId,
+            RefreshTokenHash = _jwtService.HashRefreshToken(issued.Token),
+            RefreshTokenExpiry = issued.ExpiresAt,
+            CreatedAt = now,
+            LastUsedAt = now
+        });
 
         MirrorLegacySession(user, issued, previousHash: null, previousGraceExpiresAt: null);
         return issued;
@@ -95,19 +90,6 @@ public sealed class AuthSessionService : IAuthSessionService
         var orderedIncomingHashes = HashTokensInOrder(refreshTokens);
         var incomingHashes = orderedIncomingHashes.ToHashSet(StringComparer.Ordinal);
         var now = _dateTimeService.UtcNow;
-
-        if (!Enabled)
-        {
-            EnsureLegacyRefreshTokenIsValid(user, incomingHashes, now);
-            var legacyPreviousHash = user.RefreshTokenHash;
-            var legacyIssued = GenerateRefreshToken(now);
-            MirrorLegacySession(
-                user,
-                legacyIssued,
-                legacyPreviousHash,
-                now.Add(RefreshTokenGracePeriod));
-            return legacyIssued;
-        }
 
         var candidates = await _context.Set<AuthSession>()
             .Where(session =>
@@ -171,19 +153,6 @@ public sealed class AuthSessionService : IAuthSessionService
         }
 
         var now = _dateTimeService.UtcNow;
-        if (!Enabled)
-        {
-            return await _context.Set<User>()
-                .Where(user =>
-                    (user.RefreshTokenHash != null && tokenHashes.Contains(user.RefreshTokenHash)) ||
-                    (user.PreviousRefreshTokenHash != null &&
-                     tokenHashes.Contains(user.PreviousRefreshTokenHash) &&
-                     user.PreviousRefreshTokenGraceExpiresAt >= now))
-                .Select(user => user.UserId)
-                .Distinct()
-                .ToListAsync(cancellationToken);
-        }
-
         return await _context.Set<AuthSession>()
             .Where(session =>
                 tokenHashes.Contains(session.RefreshTokenHash) ||
@@ -204,22 +173,19 @@ public sealed class AuthSessionService : IAuthSessionService
         var now = _dateTimeService.UtcNow;
         var changed = false;
 
-        if (Enabled)
-        {
-            var sessions = await _context.Set<AuthSession>()
-                .Where(session =>
-                    session.UserId == user.UserId &&
-                    (tokenHashes.Contains(session.RefreshTokenHash) ||
-                     (session.PreviousRefreshTokenHash != null &&
-                      tokenHashes.Contains(session.PreviousRefreshTokenHash) &&
-                      session.PreviousRefreshTokenGraceExpiresAt >= now)))
-                .ToListAsync(cancellationToken);
+        var sessions = await _context.Set<AuthSession>()
+            .Where(session =>
+                session.UserId == user.UserId &&
+                (tokenHashes.Contains(session.RefreshTokenHash) ||
+                 (session.PreviousRefreshTokenHash != null &&
+                  tokenHashes.Contains(session.PreviousRefreshTokenHash) &&
+                  session.PreviousRefreshTokenGraceExpiresAt >= now)))
+            .ToListAsync(cancellationToken);
 
-            if (sessions.Count > 0)
-            {
-                _context.Set<AuthSession>().RemoveRange(sessions);
-                changed = true;
-            }
+        if (sessions.Count > 0)
+        {
+            _context.Set<AuthSession>().RemoveRange(sessions);
+            changed = true;
         }
 
         if (LegacySessionMatches(user, tokenHashes, now))
@@ -254,32 +220,6 @@ public sealed class AuthSessionService : IAuthSessionService
             .Select(_jwtService.HashRefreshToken)
             .Distinct(StringComparer.Ordinal)
             .ToArray();
-    }
-
-    private static void EnsureLegacyRefreshTokenIsValid(
-        User user,
-        IReadOnlySet<string> incomingHashes,
-        DateTime now)
-    {
-        var matchesCurrent =
-            user.RefreshTokenHash is not null &&
-            incomingHashes.Contains(user.RefreshTokenHash);
-        var matchesPrevious =
-            !matchesCurrent &&
-            user.PreviousRefreshTokenHash is not null &&
-            incomingHashes.Contains(user.PreviousRefreshTokenHash) &&
-            user.PreviousRefreshTokenGraceExpiresAt >= now;
-
-        if (!matchesCurrent && !matchesPrevious)
-        {
-            throw new UnauthorizedAccessException("Invalid refresh token");
-        }
-
-        if ((matchesCurrent || matchesPrevious) &&
-            (user.RefreshTokenExpiry is null || user.RefreshTokenExpiry <= now))
-        {
-            throw new UnauthorizedAccessException("Refresh token expired");
-        }
     }
 
     private static bool LegacySessionMatches(

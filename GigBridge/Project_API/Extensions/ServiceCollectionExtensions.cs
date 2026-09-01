@@ -10,25 +10,6 @@ public static class ServiceCollectionExtensions
 {
     public const string FrontendCorsPolicy = "Frontend";
 
-    public static void ValidateAuthSessionConfiguration(
-        this IConfiguration configuration,
-        IHostEnvironment environment)
-    {
-        var configuredValue = configuration["AuthSessions:Enabled"];
-        if (environment.IsProduction() &&
-            !string.Equals(configuredValue, "true", StringComparison.OrdinalIgnoreCase))
-        {
-            throw new InvalidOperationException(
-                "AuthSessions:Enabled must be configured explicitly as 'true' in production.");
-        }
-
-        if (configuredValue is not null && !bool.TryParse(configuredValue, out _))
-        {
-            throw new InvalidOperationException(
-                "AuthSessions:Enabled must be either 'true' or 'false'.");
-        }
-    }
-
     public static IServiceCollection AddJwtAuthentication(this IServiceCollection services, IConfiguration configuration)
     {
         var jwtSettings = configuration.GetSection("Jwt");

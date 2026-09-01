@@ -29,8 +29,7 @@ services:
       - Jwt__AccessTokenMinutes=${JWT_ACCESS_TOKEN_MINUTES:-60}
       - Jwt__RefreshTokenMinutes=${JWT_REFRESH_TOKEN_MINUTES:-10080}
 
-      # Multi-device refresh-token sessions. Production must set this explicitly.
-      - AuthSessions__Enabled=${AUTH_SESSIONS_ENABLED:?AUTH_SESSIONS_ENABLED must be set to true}
+      # Multi-device refresh-token sessions.
       - AuthSessions__MaxActiveSessionsPerUser=${AUTH_SESSIONS_MAX_ACTIVE_PER_USER:-5}
 
       # PayOS

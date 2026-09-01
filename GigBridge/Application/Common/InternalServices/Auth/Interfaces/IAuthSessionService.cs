@@ -5,8 +5,6 @@ namespace Application.Common.InternalServices.Auth.Interfaces;
 
 public interface IAuthSessionService
 {
-    bool Enabled { get; }
-
     Task<IssuedRefreshToken> CreateLoginSessionAsync(
         User user,
         CancellationToken cancellationToken);

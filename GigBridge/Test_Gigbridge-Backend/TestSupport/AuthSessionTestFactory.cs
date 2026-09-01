@@ -14,7 +14,6 @@ internal static class AuthSessionTestFactory
         IApplicationDbContext context,
         IJwtService jwtService,
         IDateTimeService dateTimeService,
-        bool enabled = true,
         int maximumActiveSessions = 5)
     {
         return new AuthSessionService(
@@ -23,7 +22,6 @@ internal static class AuthSessionTestFactory
             dateTimeService,
             Options.Create(new AuthSessionOptions
             {
-                Enabled = enabled,
                 MaxActiveSessionsPerUser = maximumActiveSessions
             }),
             NullLogger<AuthSessionService>.Instance);

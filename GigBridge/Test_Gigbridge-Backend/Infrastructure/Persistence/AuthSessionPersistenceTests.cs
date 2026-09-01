@@ -1,11 +1,9 @@
-using Application.Common.Options;
 using Infrastructure.Persistence;
 using Infrastructure.Persistence.HealthChecks;
 using Infrastructure.Persistence.Migrations;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Migrations.Operations;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
-using Microsoft.Extensions.Options;
 
 namespace Test_Gigbridge_Backend.Infrastructure.Persistence;
 
@@ -38,9 +36,7 @@ public sealed class AuthSessionPersistenceTests
             .UseInMemoryDatabase(databaseName)
             .Options;
         await using var context = new GigbridgeDbContext(dbOptions);
-        var healthCheck = new AuthSessionSchemaHealthCheck(
-            context,
-            Options.Create(new AuthSessionOptions { Enabled = true }));
+        var healthCheck = new AuthSessionSchemaHealthCheck(context);
 
         var result = await healthCheck.CheckHealthAsync(new HealthCheckContext());
 

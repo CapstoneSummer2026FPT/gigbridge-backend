@@ -17,7 +17,6 @@ using Project_API.Services.SystemTracking;
 
 // Multi-node load balancing enabled with Redis SignalR Backplane
 var builder = WebApplication.CreateBuilder(args);
-builder.Configuration.ValidateAuthSessionConfiguration(builder.Environment);
 
 builder.Services.AddScoped<IRequestMetadataAccessor, Project_API.Services.RequestMetadataAccessor>();
 builder.WebHost.UseInfrastructureMonitoring(builder.Configuration, builder.Environment);
