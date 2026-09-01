@@ -19,7 +19,8 @@ public sealed class SystemTrackingStore : ISystemTrackingReader
 
     public void Record(HttpContext context, long durationMs, int statusCode)
     {
-        if (context.Request.Path.StartsWithSegments("/api/admin/system-tracking"))
+        if (HttpMethods.IsOptions(context.Request.Method) ||
+        context.Request.Path.StartsWithSegments("/api/admin/system-tracking"))
         {
             return;
         }
