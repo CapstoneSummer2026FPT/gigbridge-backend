@@ -70,7 +70,13 @@ public class GenerateJobHiringPlanCommandHandler
                 DueDate = m.DueDate,
                 Description = m.Description,
                 Deliverables = m.Deliverables,
-                AcceptanceCriteria = m.AcceptanceCriteria
+                AcceptanceCriteria = m.AcceptanceCriteria,
+                WorkItems = m.WorkItems?.Select(w => new GeneratedJobPostWorkItemDto
+                {
+                    Title = w.Title,
+                    Description = w.Description,
+                    EstimatedDuration = w.EstimatedDuration
+                }).ToList() ?? new()
             }).ToList() ?? new()
         };
     }
