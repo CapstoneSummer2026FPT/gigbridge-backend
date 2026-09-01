@@ -228,6 +228,8 @@ public static class TalentMatchingCandidateLoader
                     .ThenInclude(contractJob => contractJob.MajorCategory)
                         .ThenInclude(mapping => mapping!.Category)
             .Include(profile => profile.Proposals)
+                .ThenInclude(proposal => proposal.ProposalMilestonePlans)
+            .Include(profile => profile.Proposals)
                 .ThenInclude(proposal => proposal.JobPosts)
                     .ThenInclude(jobPost => jobPost.MajorCategory)
             .Where(profile => shortlistedProfileIds.Contains(profile.FreelancerProfilesId))
@@ -243,6 +245,16 @@ public static class TalentMatchingCandidateLoader
                 .GroupBy(review => review.RevieweeId)
                 .Select(group => new ReviewAggregate(group.Key, group.Average(review => (double?)review.Rating) ?? 0, group.Count()))
                 .ToDictionaryAsync(item => item.UserId, cancellationToken);
+
+        var allProposalIds = profiles.SelectMany(profile => profile.Proposals).Select(p => p.ProposalsId).Distinct().ToList();
+        var milestonePlansByProposal = allProposalIds.Count == 0
+            ? new Dictionary<Guid, List<ProposalMilestonePlan>>()
+            : (await context.Set<ProposalMilestonePlan>()
+                .AsNoTracking()
+                .Where(m => allProposalIds.Contains(m.ProposalsId))
+                .ToListAsync(cancellationToken))
+                .GroupBy(m => m.ProposalsId)
+                .ToDictionary(group => group.Key, group => group.ToList());
 
         var candidates = profiles.Select(profile =>
         {
@@ -289,32 +301,71 @@ public static class TalentMatchingCandidateLoader
                 .Where(p => p.ProposedBudget.HasValue && p.ProposedBudget > 0)
                 .ToList();
 
-            var categoryProposals = job.MajorCategoryId.HasValue
-                ? validProposals.Where(p => p.JobPosts?.MajorCategoryId == job.MajorCategoryId.Value).ToList()
-                : new List<Proposal>();
+            decimal? CalculateAggregateHourlyRate(List<Proposal> proposals)
+            {
+                if (proposals.Count == 0) return null;
+                double totalBudget = 0d;
+                double totalHours = 0d;
+                foreach (var p in proposals)
+                {
+                    double budget = 0d;
+                    double hours = 0d;
+                    var milestones = milestonePlansByProposal.GetValueOrDefault(p.ProposalsId);
+                    if (milestones is { Count: > 0 })
+                    {
+                        budget = milestones.Sum(m => (double)m.Amount);
+                        hours = milestones.Sum(m => ParseDurationToHours(m.EstimatedDuration));
+                    }
+                    if (budget <= 0)
+                    {
+                        budget = (double)(p.ProposedBudget ?? 0m);
+                    }
+                    if (hours <= 0)
+                    {
+                        hours = ParseDurationToHours(p.ProposedDuration ?? p.JobPosts?.EstimatedDuration);
+                    }
+
+                    if (budget > 0 && hours > 0)
+                    {
+                        totalBudget += budget;
+                        totalHours += hours;
+                    }
+                }
+                if (totalHours > 0)
+                {
+                    return (decimal)(totalBudget / totalHours);
+                }
+                var avgBudget = proposals.Average(p => (double)p.ProposedBudget!.Value);
+                return (decimal)(avgBudget / 160.0);
+            }
 
             decimal? expectedRate = null;
-            if (categoryProposals.Count > 0)
+            if (validProposals.Count > 0)
             {
-                expectedRate = (decimal?)categoryProposals.Average(p => (double)p.ProposedBudget!.Value);
+                expectedRate = CalculateAggregateHourlyRate(validProposals);
             }
-            else
+            else if (completedContracts.Count > 0)
             {
-                var majorProposals = job.MajorId.HasValue
-                    ? validProposals.Where(p => p.JobPosts?.MajorCategory?.MajorId == job.MajorId.Value).ToList()
-                    : new List<Proposal>();
-
-                if (majorProposals.Count > 0)
+                double totalBudget = 0d;
+                double totalHours = 0d;
+                foreach (var c in completedContracts)
                 {
-                    expectedRate = (decimal?)majorProposals.Average(p => (double)p.ProposedBudget!.Value);
+                    var budget = (double)c.TotalBudget;
+                    var durationStr = c.JobPosts?.EstimatedDuration;
+                    var hours = ParseDurationToHours(durationStr);
+                    if (budget > 0 && hours > 0)
+                    {
+                        totalBudget += budget;
+                        totalHours += hours;
+                    }
                 }
-                else if (validProposals.Count > 0)
+                if (totalHours > 0)
                 {
-                    expectedRate = (decimal?)validProposals.Average(p => (double)p.ProposedBudget!.Value);
+                    expectedRate = (decimal)(totalBudget / totalHours);
                 }
                 else if (completedContracts.Count > 0)
                 {
-                    expectedRate = (decimal?)completedContracts.Average(c => (double)c.TotalBudget);
+                    expectedRate = (decimal)(completedContracts.Average(c => (double)c.TotalBudget) / 160.0);
                 }
             }
 
@@ -342,6 +393,20 @@ public static class TalentMatchingCandidateLoader
         }).ToList();
 
         return new AiTalentMatchingPool(job, candidates);
+    }
+
+    private static double ParseDurationToHours(string? durationStr)
+    {
+        if (string.IsNullOrWhiteSpace(durationStr)) return 0d;
+        var text = durationStr.Trim().ToLowerInvariant();
+        var match = System.Text.RegularExpressions.Regex.Match(text, @"(\d+(?:\.\d+)?)");
+        if (!match.Success || !double.TryParse(match.Groups[1].Value, out double val) || val <= 0) return 0d;
+
+        if (text.Contains("month") || text.Contains("mo")) return val * 160.0;
+        if (text.Contains("week") || text.Contains("wk")) return val * 40.0;
+        if (text.Contains("day") || text.Contains("d")) return val * 8.0;
+        if (text.Contains("hour") || text.Contains("hr")) return val * 1.0;
+        return val;
     }
 
     private sealed record ReviewAggregate(Guid UserId, double AverageRating, int ReviewCount);
