@@ -79,6 +79,9 @@ public class GeneratedWorkItemResponseDto
     [JsonPropertyName("description")]
     public string Description { get; set; } = null!;
 
+    [JsonPropertyName("deliverables")]
+    public string Deliverables { get; set; } = null!;
+
     [JsonPropertyName("estimated_duration")]
     public string EstimatedDuration { get; set; } = null!;
 }

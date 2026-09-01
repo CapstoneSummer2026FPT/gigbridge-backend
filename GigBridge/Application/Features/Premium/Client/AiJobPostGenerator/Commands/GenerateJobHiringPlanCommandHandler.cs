@@ -75,6 +75,7 @@ public class GenerateJobHiringPlanCommandHandler
                 {
                     Title = w.Title,
                     Description = w.Description,
+                    Deliverables = w.Deliverables,
                     EstimatedDuration = w.EstimatedDuration
                 }).ToList() ?? new()
             }).ToList() ?? new()

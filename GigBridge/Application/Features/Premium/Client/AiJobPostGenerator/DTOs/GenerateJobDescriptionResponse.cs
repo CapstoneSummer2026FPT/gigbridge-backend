@@ -25,6 +25,7 @@ public class GeneratedJobPostWorkItemDto
 {
     public string Title { get; set; } = null!;
     public string Description { get; set; } = null!;
+    public string Deliverables { get; set; } = null!;
     public string EstimatedDuration { get; set; } = null!;
 }
 
