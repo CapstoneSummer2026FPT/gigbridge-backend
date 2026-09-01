@@ -6,6 +6,7 @@ using Application.Features.Contracts.ProductHandoffs.Common;
 using Domain.Entities;
 using Domain.Enums.Accounts;
 using Domain.Enums.Chat;
+using Domain.Enums.Contracts;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
 
@@ -25,11 +26,18 @@ public class GetContractByJobPostQueryHandler
         GetContractByJobPostQuery request,
         CancellationToken cancellationToken)
     {
+        // A job post can have a stale Cancelled Contract (an abandoned negotiation attempt)
+        // coexisting with a live one for a different, later-accepted proposal — the DB's
+        // IX_Contracts_JobPostsId is a partial unique index that excludes Cancelled rows, so
+        // both can legally exist at once. Skip Cancelled rows and prefer the most recent so
+        // this always resolves to the live contract, not the abandoned one.
         var contract = await _context.Set<Contract>()
             .AsNoTracking()
-            .FirstOrDefaultAsync(
-                contract => contract.JobPostsId == request.JobPostId,
-                cancellationToken);
+            .Where(contract =>
+                contract.JobPostsId == request.JobPostId &&
+                contract.Status != (int)ContractStatus.Cancelled)
+            .OrderByDescending(contract => contract.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
 
         if (contract is null)
         {
