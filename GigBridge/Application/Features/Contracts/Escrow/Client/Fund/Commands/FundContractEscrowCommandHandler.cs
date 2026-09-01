@@ -20,6 +20,7 @@ using Domain.Enums.Wallets;
 using Domain.Services;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace Application.Features.Contracts.Escrow.Client.Fund.Commands;
 
@@ -31,19 +32,22 @@ public sealed class FundContractEscrowCommandHandler :
     private readonly INotificationService _notificationService;
     private readonly IChatRealtimeNotifier _chatRealtimeNotifier;
     private readonly IUserAuditLogService _userAuditLog;
+    private readonly ILogger<FundContractEscrowCommandHandler> _logger;
 
     public FundContractEscrowCommandHandler(
         IApplicationDbContext context,
         IDateTimeService dateTimeService,
         INotificationService notificationService,
         IChatRealtimeNotifier chatRealtimeNotifier,
-        IUserAuditLogService userAuditLog)
+        IUserAuditLogService userAuditLog,
+        ILogger<FundContractEscrowCommandHandler> logger)
     {
         _context = context;
         _dateTimeService = dateTimeService;
         _notificationService = notificationService;
         _chatRealtimeNotifier = chatRealtimeNotifier;
         _userAuditLog = userAuditLog;
+        _logger = logger;
     }
 
     public async Task<FundContractEscrowResponse> Handle(
@@ -110,6 +114,27 @@ public sealed class FundContractEscrowCommandHandler :
             await StartFirstMilestoneAsync(contract.ContractsId, now, cancellationToken);
             await FinalizeProposalOutcomeAsync(contract.JobPostsId, contract.ProposalsId, now, cancellationToken);
             await _context.SaveChangesAsync(cancellationToken);
+
+            // This branch performs a real PendingEscrow -> Active transition, so it has to
+            // announce itself exactly like the full funding path below.
+            var reconciledWorkspaceConversationId = await _context.Set<Conversation>()
+                .AsNoTracking()
+                .Where(conversation =>
+                    conversation.ContractsId == contract.ContractsId &&
+                    conversation.ConversationType == (int)ConversationType.ContractWorkroom)
+                .Select(conversation => (Guid?)conversation.ConversationsId)
+                .FirstOrDefaultAsync(CancellationToken.None);
+
+            await ContractEscrowRealtimeEvents.PublishEscrowFundedAsync(
+                _context,
+                _chatRealtimeNotifier,
+                _logger,
+                contract,
+                reconciledWorkspaceConversationId,
+                escrow.Status,
+                systemMessage: null,
+                CancellationToken.None);
+
             return new FundContractEscrowResponse(
                 contract.ContractsId,
                 escrow.ContractEscrowId,
@@ -236,6 +261,7 @@ public sealed class FundContractEscrowCommandHandler :
             .Where(c => c.ContractsId == contract.ContractsId)
             .ToListAsync(cancellationToken);
 
+        Guid? workspaceConversationId = null;
         foreach (var conversation in conversations)
         {
             if (conversation.ConversationType == (int)ConversationType.JobNegotiation)
@@ -243,9 +269,14 @@ public sealed class FundContractEscrowCommandHandler :
                 conversation.ConversationType = (int)ConversationType.ContractWorkroom;
                 conversation.UpdatedAt = now;
             }
+
+            if (conversation.ConversationType == (int)ConversationType.ContractWorkroom)
+            {
+                workspaceConversationId ??= conversation.ConversationsId;
+            }
         }
 
-        await ContractConversationEvents.AddSystemMessageAsync(
+        var systemMessage = await ContractConversationEvents.AddSystemMessageAsync(
             _context,
             contract.ContractsId,
             "Escrow funded. Contract is now active.",
@@ -299,15 +330,15 @@ public sealed class FundContractEscrowCommandHandler :
 
         await _context.SaveChangesAsync(cancellationToken);
 
-        var activeConversation = conversations.FirstOrDefault(c => c.ConversationType == (int)ConversationType.ContractWorkroom);
-        if (activeConversation != null)
-        {
-            await _chatRealtimeNotifier.SendConversationEventAsync(
-                activeConversation.ConversationsId,
-                "WorkspaceOpened",
-                new { contractId = contract.ContractsId, conversationId = activeConversation.ConversationsId },
-                cancellationToken);
-        }
+        await ContractEscrowRealtimeEvents.PublishEscrowFundedAsync(
+            _context,
+            _chatRealtimeNotifier,
+            _logger,
+            contract,
+            workspaceConversationId,
+            escrow.Status,
+            systemMessage,
+            CancellationToken.None);
 
         return new FundContractEscrowResponse(
             contract.ContractsId,

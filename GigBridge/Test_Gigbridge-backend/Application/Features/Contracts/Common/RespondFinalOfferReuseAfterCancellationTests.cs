@@ -410,7 +410,8 @@ public class RespondFinalOfferReuseAfterCancellationTests
                 new FixedDateTimeService(Now),
                 new NoopNotificationService(),
                 new NoopChatRealtimeNotifier(),
-                new CapturingUserAuditLogService());
+                new CapturingUserAuditLogService(),
+                NullLogger<FundContractEscrowCommandHandler>.Instance);
 
         public EndProjectCommandHandler CreateEndProjectHandler() =>
             new(

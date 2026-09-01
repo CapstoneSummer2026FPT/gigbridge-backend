@@ -309,7 +309,8 @@ public class ProposalStatusLifecycleTests
                 new FixedDateTimeService(Now),
                 new NoopNotificationService(),
                 new NoopChatRealtimeNotifier(),
-                new CapturingUserAuditLogService());
+                new CapturingUserAuditLogService(),
+                NullLogger<FundContractEscrowCommandHandler>.Instance);
     }
 
     private sealed class FixedDateTimeService : IDateTimeService
