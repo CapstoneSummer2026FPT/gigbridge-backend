@@ -55,7 +55,7 @@ public class JudgeAllProposalsCommandHandler : IRequestHandler<JudgeAllProposals
             throw new ForbiddenAccessException("You do not have permission to judge proposals for this job.");
         }
 
-        int maxBatch = request.BatchSize <= 0 || request.BatchSize > 20 ? 10 : request.BatchSize;
+        int maxBatch = request.BatchSize <= 0 || request.BatchSize > 20 ? 1 : request.BatchSize;
 
         // 3. Fetch JobPost details including original milestones and questions
         var jobPostDetails = await _context.Set<JobPost>()
