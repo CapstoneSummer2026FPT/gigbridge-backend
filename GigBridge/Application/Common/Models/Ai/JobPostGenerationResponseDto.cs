@@ -66,4 +66,22 @@ public class GeneratedMilestoneResponseDto
 
     [JsonPropertyName("acceptance_criteria")]
     public string AcceptanceCriteria { get; set; } = null!;
+
+    [JsonPropertyName("work_items")]
+    public List<GeneratedWorkItemResponseDto> WorkItems { get; set; } = new();
+}
+
+public class GeneratedWorkItemResponseDto
+{
+    [JsonPropertyName("title")]
+    public string Title { get; set; } = null!;
+
+    [JsonPropertyName("description")]
+    public string Description { get; set; } = null!;
+
+    [JsonPropertyName("deliverables")]
+    public string Deliverables { get; set; } = null!;
+
+    [JsonPropertyName("estimated_duration")]
+    public string EstimatedDuration { get; set; } = null!;
 }
