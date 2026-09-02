@@ -124,6 +124,94 @@ public class UpdateStatusJobPostCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_OpenStatusWithMilestoneWithNoWorkItems_UpdatesJobPostStatus()
+    {
+        var fixture = new UpdateStatusFixture();
+        fixture.JobPost.EndDate = fixture.Now.AddDays(7);
+        fixture.JobPost.JobPostMilestonePlans.Add(new JobPostMilestonePlan
+        {
+            Title = "Delivery",
+            Amount = 500m,
+            EstimatedDuration = "2 weeks",
+            DueDate = DateOnly.FromDateTime(fixture.Now.AddDays(30)),
+            Deliverables = "Working release",
+            AcceptanceCriteria = "Acceptance tests pass",
+            OrderIndex = 0
+        });
+
+        var result = await fixture.CreateHandler().Handle(
+            new UpdateStatusJobPostCommand(
+                fixture.JobPostId,
+                fixture.ClientUserId,
+                new UpdateStatusJobPostRequest { Status = 1 }),
+            CancellationToken.None);
+
+        Assert.True(result);
+        Assert.Equal(1, fixture.JobPost.Status);
+    }
+
+    [Fact]
+    public async Task Handle_OpenStatusWithWorkItemDurationSumEqualToMilestoneDuration_UpdatesJobPostStatus()
+    {
+        var fixture = new UpdateStatusFixture();
+        fixture.JobPost.EndDate = fixture.Now.AddDays(7);
+        var milestone = new JobPostMilestonePlan
+        {
+            Title = "Delivery",
+            Amount = 500m,
+            EstimatedDuration = "2 weeks",
+            DueDate = DateOnly.FromDateTime(fixture.Now.AddDays(30)),
+            Deliverables = "Working release",
+            AcceptanceCriteria = "Acceptance tests pass",
+            OrderIndex = 0
+        };
+        milestone.WorkItems.Add(new JobPostWorkItem { Title = "Design", Description = "Design phase", EstimatedDuration = "7 days", OrderIndex = 0 });
+        milestone.WorkItems.Add(new JobPostWorkItem { Title = "Build", Description = "Build phase", EstimatedDuration = "7 days", OrderIndex = 1 });
+        fixture.JobPost.JobPostMilestonePlans.Add(milestone);
+
+        var result = await fixture.CreateHandler().Handle(
+            new UpdateStatusJobPostCommand(
+                fixture.JobPostId,
+                fixture.ClientUserId,
+                new UpdateStatusJobPostRequest { Status = 1 }),
+            CancellationToken.None);
+
+        Assert.True(result);
+        Assert.Equal(1, fixture.JobPost.Status);
+    }
+
+    [Fact]
+    public async Task Handle_OpenStatusWithWorkItemDurationSumExceedingMilestoneDuration_ThrowsBadRequest()
+    {
+        var fixture = new UpdateStatusFixture();
+        fixture.JobPost.EndDate = fixture.Now.AddDays(7);
+        var milestone = new JobPostMilestonePlan
+        {
+            Title = "Delivery",
+            Amount = 500m,
+            EstimatedDuration = "1 week",
+            DueDate = DateOnly.FromDateTime(fixture.Now.AddDays(30)),
+            Deliverables = "Working release",
+            AcceptanceCriteria = "Acceptance tests pass",
+            OrderIndex = 0
+        };
+        milestone.WorkItems.Add(new JobPostWorkItem { Title = "Design", Description = "Design phase", EstimatedDuration = "4 days", OrderIndex = 0 });
+        milestone.WorkItems.Add(new JobPostWorkItem { Title = "Build", Description = "Build phase", EstimatedDuration = "4 days", OrderIndex = 1 });
+        fixture.JobPost.JobPostMilestonePlans.Add(milestone);
+
+        var exception = await Assert.ThrowsAsync<BadRequestException>(() =>
+            fixture.CreateHandler().Handle(
+                new UpdateStatusJobPostCommand(
+                    fixture.JobPostId,
+                    fixture.ClientUserId,
+                    new UpdateStatusJobPostRequest { Status = 1 }),
+                CancellationToken.None));
+
+        Assert.Contains("exceed the milestone duration by 1 day", exception.Message);
+        Assert.Equal(0, fixture.JobPost.Status);
+    }
+
+    [Fact]
     public async Task Handle_OpenStatusWithIllegalContent_ThrowsValidationException()
     {
         var fixture = new UpdateStatusFixture();

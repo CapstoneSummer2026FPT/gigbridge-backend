@@ -109,6 +109,21 @@ public sealed class SaveDraftJobPostCommandValidator
                     {
                         item.RuleFor(x => x.OrderIndex).GreaterThanOrEqualTo(0);
                         item.RuleFor(x => x.Title).MaximumLength(200);
+                        item.RuleFor(x => x.EstimatedDuration)
+                            .Must(duration => MilestoneDeadlineCalculator.TryParseWorkItemDurationDays(duration, out _))
+                            .When(x => !string.IsNullOrWhiteSpace(x.EstimatedDuration))
+                            .WithMessage("Work item estimated duration must be a number followed by day(s), week(s), month(s), or year(s).");
+                    });
+                    milestone.RuleFor(x => x).Custom((value, context) =>
+                    {
+                        if (MilestoneDeadlineCalculator.TryGetWorkItemDurationOverage(
+                                value.EstimatedDuration,
+                                value.WorkItems.Select(item => item.EstimatedDuration),
+                                out _, out _, out var overageDays) &&
+                            overageDays > 0)
+                        {
+                            context.AddFailure(nameof(value.WorkItems), $"Work items exceed milestone duration by {overageDays} day(s).");
+                        }
                     });
                 });
 

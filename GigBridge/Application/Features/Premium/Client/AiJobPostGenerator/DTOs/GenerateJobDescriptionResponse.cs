@@ -18,6 +18,15 @@ public class GeneratedJobPostMilestoneDto
     public string Description { get; set; } = null!;
     public string Deliverables { get; set; } = null!;
     public string AcceptanceCriteria { get; set; } = null!;
+    public List<GeneratedJobPostWorkItemDto> WorkItems { get; set; } = new();
+}
+
+public class GeneratedJobPostWorkItemDto
+{
+    public string Title { get; set; } = null!;
+    public string Description { get; set; } = null!;
+    public string Deliverables { get; set; } = null!;
+    public string EstimatedDuration { get; set; } = null!;
 }
 
 public class GenerateJobDescriptionDetailsResponse
