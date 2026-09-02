@@ -100,7 +100,7 @@ public class JudgeAllProposalsCommandHandler : IRequestHandler<JudgeAllProposals
         {
             JobPostBaseline = baselineDto,
             Proposals = proposalOfferDtos,
-            BatchChunkSize = 3
+            BatchChunkSize = 2
         };
 
         int processedCount = 0;
