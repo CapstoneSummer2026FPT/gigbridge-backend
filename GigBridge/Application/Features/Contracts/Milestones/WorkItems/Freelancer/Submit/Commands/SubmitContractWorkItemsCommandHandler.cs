@@ -155,7 +155,17 @@ public sealed class SubmitContractWorkItemsCommandHandler :
                                request.Status == (int)MilestoneEarlyStartRequestStatus.Approved,
                     cancellationToken);
 
-                MilestoneWorkItemWorkflow.TryStart(milestone, orderedMilestones, hasApprovedEarlyStart, now);
+                var milestoneStarted = MilestoneWorkItemWorkflow.TryStart(
+                    milestone, orderedMilestones, hasApprovedEarlyStart, now);
+                if (milestoneStarted)
+                {
+                    await MilestoneEarlyStartRequestWorkflow.CancelPendingForMilestoneAsync(
+                        _context,
+                        milestone.MilestonesId,
+                        now,
+                        cancellationToken);
+                }
+
                 transition = MilestoneWorkItemWorkflow.ApplyAfterSubmit(milestone, freshItems, now);
 
                 contract.UpdatedAt = now;

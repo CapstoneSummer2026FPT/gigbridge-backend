@@ -117,6 +117,15 @@ public sealed class ReviewContractWorkItemsCommandHandler :
             transition = MilestoneWorkItemWorkflow.ApplyAfterReview(
                 milestone, items, orderedMilestones, now);
 
+            if (transition.NextMilestone is not null)
+            {
+                await MilestoneEarlyStartRequestWorkflow.CancelPendingForMilestoneAsync(
+                    _context,
+                    transition.NextMilestone.MilestonesId,
+                    now,
+                    cancellationToken);
+            }
+
             contract.UpdatedAt = now;
 
             systemMessage = await ContractConversationEvents.AddSystemMessageAsync(

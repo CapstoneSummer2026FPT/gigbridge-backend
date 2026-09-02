@@ -342,7 +342,7 @@ internal static class MilestoneWorkflowGuard
     /// before it (by SortOrder) is Approved or Completed. No-op if no such milestone exists
     /// (e.g. the contract has no remaining milestones, or the chain is already broken).
     /// </summary>
-    public static void AdvanceNextMilestone(IReadOnlyList<Milestone> orderedMilestones, DateTime now)
+    public static Milestone? AdvanceNextMilestone(IReadOnlyList<Milestone> orderedMilestones, DateTime now)
     {
         var next = orderedMilestones.FirstOrDefault(candidate =>
             candidate.Status == (int)MilestoneStatus.Pending &&
@@ -354,6 +354,8 @@ internal static class MilestoneWorkflowGuard
             next.StartedAt = now;
             next.UpdatedAt = now;
         }
+
+        return next;
     }
 
     /// <summary>

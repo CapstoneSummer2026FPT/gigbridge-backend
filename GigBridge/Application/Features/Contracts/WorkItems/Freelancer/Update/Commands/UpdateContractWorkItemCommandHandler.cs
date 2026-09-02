@@ -82,6 +82,11 @@ public sealed class UpdateContractWorkItemCommandHandler
 
             milestone.Status = (int)MilestoneStatus.InProgress;
             milestone.StartedAt ??= now;
+            await MilestoneEarlyStartRequestWorkflow.CancelPendingForMilestoneAsync(
+                _context,
+                milestone.MilestonesId,
+                now,
+                cancellationToken);
         }
 
         item.Status = (int)next;

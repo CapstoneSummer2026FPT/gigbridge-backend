@@ -267,7 +267,15 @@ public sealed class ResolveAdminDisputeCommandHandler :
         // and the following milestone reopened.
         await SyncResolvedWorkItemsAsync(allocations.Values.Select(a => editable[a.MilestoneId]), now, cancellationToken);
 
-        MilestoneWorkflowGuard.AdvanceNextMilestone(milestones, now);
+        var nextMilestone = MilestoneWorkflowGuard.AdvanceNextMilestone(milestones, now);
+        if (nextMilestone is not null)
+        {
+            await MilestoneEarlyStartRequestWorkflow.CancelPendingForMilestoneAsync(
+                _context,
+                nextMilestone.MilestonesId,
+                now,
+                cancellationToken);
+        }
 
         escrow.ReleasedAmount += totalRelease;
         escrow.FundedAmount -= totalRefund + totalPenalty;

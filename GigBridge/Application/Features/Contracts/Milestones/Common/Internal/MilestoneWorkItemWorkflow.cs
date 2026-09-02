@@ -113,16 +113,7 @@ internal static class MilestoneWorkItemWorkflow
             milestone.ApprovedAt ??= now;
             milestone.UpdatedAt = now;
 
-            var before = orderedMilestones
-                .Where(candidate => candidate.Status == (int)MilestoneStatus.InProgress)
-                .Select(candidate => candidate.MilestonesId)
-                .ToHashSet();
-
-            MilestoneWorkflowGuard.AdvanceNextMilestone(orderedMilestones, now);
-
-            var next = orderedMilestones.FirstOrDefault(candidate =>
-                candidate.Status == (int)MilestoneStatus.InProgress &&
-                !before.Contains(candidate.MilestonesId));
+            var next = MilestoneWorkflowGuard.AdvanceNextMilestone(orderedMilestones, now);
 
             return new MilestoneTransition(false, false, true, false, next);
         }

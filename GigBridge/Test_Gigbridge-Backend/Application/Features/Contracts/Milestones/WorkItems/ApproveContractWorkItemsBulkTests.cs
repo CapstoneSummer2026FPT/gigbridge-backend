@@ -72,6 +72,27 @@ public sealed class ApproveContractWorkItemsBulkTests
     }
 
     [Fact]
+    public async Task ApprovingTheLastWorkItem_CancelsPendingEarlyStartRequestForTheOpenedMilestone()
+    {
+        var fixture = new BulkReviewFixture();
+        var earlyStartRequest = fixture.AddPendingEarlyStartRequest();
+
+        await fixture.CreateHandler().Handle(
+            new ReviewContractWorkItemsCommand(
+                fixture.ContractId, fixture.MilestoneId, fixture.ClientUserId,
+                [fixture.FirstWorkItemId, fixture.SecondWorkItemId], Approve: true, Reason: null),
+            CancellationToken.None);
+
+        Assert.Equal((int)MilestoneStatus.InProgress, fixture.NextMilestone.Status);
+        Assert.Equal((int)MilestoneEarlyStartRequestStatus.Cancelled, earlyStartRequest.Status);
+        Assert.Equal(fixture.Now, earlyStartRequest.RespondedAt);
+        Assert.Null(earlyStartRequest.RespondedByUserId);
+        Assert.Equal(
+            "Automatically cancelled because the milestone started through the normal workflow.",
+            earlyStartRequest.ResponseNote);
+    }
+
+    [Fact]
     public async Task ApprovingAnAlreadyApprovedWorkItem_ChangesNothingAndAnnouncesNoSecondCompletion()
     {
         var fixture = new BulkReviewFixture();
@@ -240,6 +261,22 @@ public sealed class ApproveContractWorkItemsBulkTests
         public Milestone NextMilestone { get; }
         public ContractWorkItem FirstWorkItem { get; }
         public ContractWorkItem SecondWorkItem { get; }
+
+        public MilestoneEarlyStartRequest AddPendingEarlyStartRequest()
+        {
+            var request = new MilestoneEarlyStartRequest
+            {
+                MilestoneEarlyStartRequestId = Guid.NewGuid(),
+                ContractsId = ContractId,
+                MilestonesId = NextMilestoneId,
+                RequestedByUserId = FreelancerUserId,
+                Reason = "Start milestone 2 early.",
+                Status = (int)MilestoneEarlyStartRequestStatus.Pending,
+                CreatedAt = Now.AddMinutes(-5)
+            };
+            Context.Set<MilestoneEarlyStartRequest>().Add(request);
+            return request;
+        }
 
         public ReviewContractWorkItemsCommandHandler CreateHandler(CapturingChatRealtimeNotifier? notifier = null) =>
             new(

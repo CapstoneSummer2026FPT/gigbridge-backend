@@ -79,7 +79,15 @@ public sealed class ApproveMilestoneCommandHandler :
         var milestones = await MilestoneWorkflowGuard.OrderMilestones(
                 _context.Set<Milestone>().Where(item => item.ContractsId == contract.ContractsId))
             .ToListAsync(cancellationToken);
-        MilestoneWorkflowGuard.AdvanceNextMilestone(milestones, now);
+        var nextMilestone = MilestoneWorkflowGuard.AdvanceNextMilestone(milestones, now);
+        if (nextMilestone is not null)
+        {
+            await MilestoneEarlyStartRequestWorkflow.CancelPendingForMilestoneAsync(
+                _context,
+                nextMilestone.MilestonesId,
+                now,
+                cancellationToken);
+        }
 
         var systemMessage = await ContractConversationEvents.AddSystemMessageAsync(
             _context,

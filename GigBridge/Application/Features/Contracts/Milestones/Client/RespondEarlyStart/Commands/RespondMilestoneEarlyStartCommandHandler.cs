@@ -40,23 +40,32 @@ public sealed class RespondMilestoneEarlyStartCommandHandler
 
         var milestone = await MilestoneWorkflowGuard.GetMilestoneAsync(_context, command.ContractId, request.MilestonesId, cancellationToken);
         var now = _clock.UtcNow;
-        request.Status = command.Request.Approve
-            ? (int)MilestoneEarlyStartRequestStatus.Approved
-            : (int)MilestoneEarlyStartRequestStatus.Rejected;
-        request.ResponseNote = string.IsNullOrWhiteSpace(command.Request.Note) ? null : command.Request.Note.Trim();
-        request.RespondedByUserId = command.UserId;
-        request.RespondedAt = now;
+
+        if (milestone.Status != (int)MilestoneStatus.Pending)
+        {
+            MilestoneEarlyStartRequestWorkflow.CancelAsSuperseded(request, now);
+            contract.UpdatedAt = now;
+            await _context.SaveChangesAsync(cancellationToken);
+            return ToResponse(request);
+        }
+
         if (command.Request.Approve)
         {
             var activeCount = await _context.Set<Milestone>().CountAsync(
                 item => item.ContractsId == command.ContractId && item.Status == (int)MilestoneStatus.InProgress,
                 cancellationToken);
             if (activeCount >= 2) throw new BadRequestException("At most two milestones may be in progress at the same time.");
-            if (milestone.Status != (int)MilestoneStatus.Pending) throw new BadRequestException("Milestone is no longer pending.");
             milestone.Status = (int)MilestoneStatus.InProgress;
             milestone.StartedAt = now;
             milestone.UpdatedAt = now;
         }
+
+        request.Status = command.Request.Approve
+            ? (int)MilestoneEarlyStartRequestStatus.Approved
+            : (int)MilestoneEarlyStartRequestStatus.Rejected;
+        request.ResponseNote = string.IsNullOrWhiteSpace(command.Request.Note) ? null : command.Request.Note.Trim();
+        request.RespondedByUserId = command.UserId;
+        request.RespondedAt = now;
         contract.UpdatedAt = now;
 
         var systemMessage = await ContractConversationEvents.AddSystemMessageAsync(
@@ -94,7 +103,17 @@ public sealed class RespondMilestoneEarlyStartCommandHandler
             }
         }
 
-        return new MilestoneEarlyStartRequestDto(request.MilestoneEarlyStartRequestId, request.ContractsId, request.MilestonesId,
-            request.Reason, request.ResponseNote, request.Status, request.CreatedAt, request.RespondedAt);
+        return ToResponse(request);
     }
+
+    private static MilestoneEarlyStartRequestDto ToResponse(MilestoneEarlyStartRequest request) =>
+        new(
+            request.MilestoneEarlyStartRequestId,
+            request.ContractsId,
+            request.MilestonesId,
+            request.Reason,
+            request.ResponseNote,
+            request.Status,
+            request.CreatedAt,
+            request.RespondedAt);
 }
