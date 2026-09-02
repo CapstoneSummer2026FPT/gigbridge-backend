@@ -65,7 +65,7 @@ public class ClientProposalsController : BaseApiController
     }
 
     [HttpPost("job/{jobPostId}/ai-judge-all")]
-    public async Task<IActionResult> JudgeAllProposals(Guid jobPostId, [FromQuery] int batchSize = 10)
+    public async Task<IActionResult> JudgeAllProposals(Guid jobPostId, [FromQuery] int batchSize = 1)
     {
         if (!TryGetCurrentUserId(out var userId))
         {
