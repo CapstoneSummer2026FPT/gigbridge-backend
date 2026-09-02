@@ -1,0 +1,6 @@
+Placeholder so this directory survives clone and clean.
+
+ASP.NET Core's static web assets loader builds a PhysicalFileProvider over the web root during
+WebApplication.CreateBuilder, which throws DirectoryNotFoundException if wwwroot is absent. The
+folder was previously empty and therefore untracked, so any fresh clone or `git clean -d` hit that
+crash on startup.

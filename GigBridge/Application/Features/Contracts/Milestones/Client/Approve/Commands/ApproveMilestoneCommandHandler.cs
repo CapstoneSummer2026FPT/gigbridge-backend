@@ -50,6 +50,10 @@ public sealed class ApproveMilestoneCommandHandler :
             command.UserId,
             cancellationToken);
 
+        // Milestone-level approval only. A work item contract closes its milestone automatically
+        // once the last work item is approved, so this endpoint would race that reconciliation.
+        MilestoneDeliveryModeGuard.EnsureLegacyApproval(contract);
+
         var milestone = await MilestoneWorkflowGuard.GetMilestoneAsync(
             _context,
             command.ContractId,
@@ -58,7 +62,7 @@ public sealed class ApproveMilestoneCommandHandler :
 
         if (milestone.Status == (int)MilestoneStatus.Approved && milestone.ReleasedAmount >= milestone.Amount)
         {
-            return MilestoneWorkflowGuard.ToResponse(milestone);
+            return MilestoneWorkflowGuard.ToResponse(milestone, contract.DeliveryMode);
         }
 
         if (milestone.Status != (int)MilestoneStatus.Submitted)
@@ -108,6 +112,6 @@ public sealed class ApproveMilestoneCommandHandler :
                     ContractConversationEvents.ToRealtimePayload(systemMessage), cancellationToken);
         }
 
-        return MilestoneWorkflowGuard.ToResponse(milestone);
+        return MilestoneWorkflowGuard.ToResponse(milestone, contract.DeliveryMode);
     }
 }

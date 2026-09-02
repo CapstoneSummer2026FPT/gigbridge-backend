@@ -92,6 +92,35 @@ public sealed record AdminMilestoneAttachmentResponse(
     Guid? UploadedByUserId,
     DateTime CreatedAt);
 
+/// <summary>
+/// One work item submission attempt as dispute evidence: what was delivered, when, and the client's
+/// verdict with its reason. Earlier attempts survive a resubmission, so the admin sees the full
+/// back-and-forth rather than only the latest upload.
+/// </summary>
+public sealed record AdminWorkItemSubmissionResponse(
+    Guid SubmissionId,
+    int RevisionNumber,
+    string? Note,
+    DateTime SubmittedAt,
+    Guid SubmittedByUserId,
+    int ReviewStatus,
+    DateTime? ReviewedAt,
+    Guid? ReviewedByUserId,
+    string? ReviewReason,
+    IReadOnlyList<AdminMilestoneAttachmentResponse> Attachments);
+
+public sealed record AdminWorkItemResponse(
+    Guid WorkItemId,
+    string Title,
+    string? Description,
+    string? EstimatedDuration,
+    DateOnly? DueDate,
+    int OrderIndex,
+    int Status,
+    string? ProgressNote,
+    DateTime? CompletedAt,
+    IReadOnlyList<AdminWorkItemSubmissionResponse> Submissions);
+
 public sealed record AdminMilestoneResponse(
     Guid MilestoneId,
     string Title,
@@ -111,7 +140,8 @@ public sealed record AdminMilestoneResponse(
     DateTime? SubmittedAt,
     DateTime? ApprovedAt,
     DateTime? PaidAt,
-    IReadOnlyList<AdminMilestoneAttachmentResponse> Attachments);
+    IReadOnlyList<AdminMilestoneAttachmentResponse> Attachments,
+    IReadOnlyList<AdminWorkItemResponse> WorkItems);
 
 public sealed record AdminEscrowSummaryResponse(
     Guid? EscrowId,

@@ -261,6 +261,12 @@ public sealed class ResolveAdminDisputeCommandHandler :
             milestone.UpdatedAt = now;
         }
 
+        // Bring the work items in line with the status the admin just imposed. Skipping this leaves a
+        // Completed milestone full of Todo work items — and if the contract resumes, the client
+        // approving one straggler would run the auto-close a second time: duplicate completion email
+        // and the following milestone reopened.
+        await SyncResolvedWorkItemsAsync(allocations.Values.Select(a => editable[a.MilestoneId]), now, cancellationToken);
+
         MilestoneWorkflowGuard.AdvanceNextMilestone(milestones, now);
 
         escrow.ReleasedAmount += totalRelease;
@@ -390,6 +396,39 @@ public sealed class ResolveAdminDisputeCommandHandler :
         }
 
         return await AdminDisputeSupport.GetDetailAsync(_context, dispute.DisputesId, cancellationToken);
+    }
+
+    /// <summary>
+    /// Forces each resolved milestone's work items into a state consistent with the verdict, so the
+    /// delivery space and the auto-close logic agree with what the admin decided.
+    /// </summary>
+    private async Task SyncResolvedWorkItemsAsync(
+        IEnumerable<Milestone> resolvedMilestones,
+        DateTime now,
+        CancellationToken cancellationToken)
+    {
+        var milestoneList = resolvedMilestones.ToList();
+        if (milestoneList.Count == 0)
+        {
+            return;
+        }
+
+        var milestoneIds = milestoneList.Select(milestone => milestone.MilestonesId).ToList();
+        var workItems = await _context.Set<ContractWorkItem>()
+            .Where(item => milestoneIds.Contains(item.MilestonesId))
+            .ToListAsync(cancellationToken);
+        if (workItems.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var milestone in milestoneList)
+        {
+            MilestoneWorkItemWorkflow.SyncWorkItemsToResolvedMilestone(
+                milestone,
+                workItems.Where(item => item.MilestonesId == milestone.MilestonesId).ToList(),
+                now);
+        }
     }
 
     private static void ValidateHeader(ResolveAdminDisputeCommand command)

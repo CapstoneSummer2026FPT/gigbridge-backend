@@ -56,6 +56,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
     public virtual DbSet<ContractWorkItem> ContractWorkItems { get; set; }
 
+    public virtual DbSet<ContractWorkItemSubmission> ContractWorkItemSubmissions { get; set; }
+
     public virtual DbSet<ContractChangeRequest> ContractChangeRequests { get; set; }
 
     public virtual DbSet<ContractAmendment> ContractAmendments { get; set; }
@@ -424,6 +426,9 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.Property(e => e.Title).HasMaxLength(500);
             entity.Property(e => e.TotalBudget).HasPrecision(18, 2);
             entity.Property(e => e.RevisionNumber).HasDefaultValue(1);
+            entity.Property(e => e.DeliveryMode)
+                .HasDefaultValue(0)
+                .HasComment("Enum MilestoneDeliveryMode: 0=Legacy (milestone-level submit/approve), 1=WorkItem (per work item submit/approve)");
 
             entity.HasOne(d => d.ClientProfiles).WithMany(p => p.Contracts)
                 .HasForeignKey(d => d.ClientProfilesId)
@@ -582,9 +587,44 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.Property(e => e.EstimatedDuration).HasMaxLength(100);
             entity.Property(e => e.ProgressNote).HasMaxLength(2000);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.DueDate).HasColumnType("date");
+            entity.Property(e => e.Status)
+                .HasComment("Enum ContractWorkItemStatus: 0=Todo, 1=InProgress, 2=Completed (legacy), 3=RevisionRequired, 4=Submitted, 5=Approved");
             entity.HasOne(e => e.Milestone).WithMany(e => e.WorkItems)
                 .HasForeignKey(e => e.MilestonesId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ContractWorkItemSubmission>(entity =>
+        {
+            entity.HasKey(e => e.ContractWorkItemSubmissionId);
+
+            // Append-only history: one row per revision, never updated in place.
+            entity.HasIndex(e => new { e.ContractWorkItemId, e.RevisionNumber }).IsUnique();
+
+            // Idempotency key. A retried submit carrying the same client-generated batch id
+            // cannot create a second attempt for the same work item.
+            entity.HasIndex(e => new { e.ContractWorkItemId, e.SubmissionBatchId }).IsUnique();
+
+            entity.Property(e => e.ContractWorkItemSubmissionId).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.Note).HasMaxLength(5000);
+            entity.Property(e => e.ReviewReason).HasMaxLength(2000);
+            entity.Property(e => e.SubmittedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.ReviewStatus)
+                .HasDefaultValue(0)
+                .HasComment("Enum ContractWorkItemSubmissionReviewStatus: 0=Submitted, 1=Approved, 2=RevisionRequired");
+
+            entity.HasOne(e => e.ContractWorkItem).WithMany(p => p.Submissions)
+                .HasForeignKey(e => e.ContractWorkItemId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.SubmittedByUser).WithMany()
+                .HasForeignKey(e => e.SubmittedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(e => e.ReviewedByUser).WithMany()
+                .HasForeignKey(e => e.ReviewedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<ContractChangeRequest>(entity =>
@@ -2032,6 +2072,13 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.HasOne(d => d.UploadedByUser).WithMany(p => p.MilestoneAttachments)
                 .HasForeignKey(d => d.UploadedByUserId)
                 .HasConstraintName("MilestoneAttachments_UploadedByUserId_fkey");
+
+            entity.HasIndex(e => e.ContractWorkItemSubmissionId, "IX_MilestoneAttachments_ContractWorkItemSubmissionId");
+
+            entity.HasOne(d => d.ContractWorkItemSubmission).WithMany(p => p.Attachments)
+                .HasForeignKey(d => d.ContractWorkItemSubmissionId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("MilestoneAttachments_ContractWorkItemSubmissionId_fkey");
         });
 
         modelBuilder.Entity<BroadcastNotification>(entity =>

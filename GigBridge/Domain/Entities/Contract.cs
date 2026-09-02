@@ -45,6 +45,13 @@ public partial class Contract
 
     public int RevisionNumber { get; set; } = 1;
 
+    /// <summary>
+    /// Enum MilestoneDeliveryMode: 0=Legacy (submit/approve per milestone), 1=WorkItem (submit/approve
+    /// per work item, milestone auto-closes). Chosen while the contract is pre-Active and frozen at
+    /// activation. Existing contracts were stamped Legacy by the migration even when they carry work items.
+    /// </summary>
+    public int DeliveryMode { get; set; }
+
     public virtual ClientProfile ClientProfiles { get; set; } = null!;
 
     public virtual ICollection<Conversation> Conversations { get; set; } = new List<Conversation>();

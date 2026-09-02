@@ -1,3 +1,4 @@
+using Application.Common.InternalServices.Scheduling;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Features.Disputes.Common.DTOs;
@@ -20,7 +21,7 @@ public sealed class GetDisputeRemainingJobPostPlanQueryHandler(IApplicationDbCon
         var dispute = await context.Set<Dispute>()
             .Include(item => item.Contracts).ThenInclude(contract => contract.ClientProfiles)
             .Include(item => item.Contracts).ThenInclude(contract => contract.JobPosts).ThenInclude(jobPost => jobPost.JobPostSkills)
-            .Include(item => item.Contracts).ThenInclude(contract => contract.Milestones)
+            .Include(item => item.Contracts).ThenInclude(contract => contract.Milestones).ThenInclude(milestone => milestone.WorkItems)
             .FirstOrDefaultAsync(item => item.DisputesId == request.DisputeId, cancellationToken)
             ?? throw new NotFoundException("Dispute does not exist.");
 
@@ -58,6 +59,16 @@ public sealed class GetDisputeRemainingJobPostPlanQueryHandler(IApplicationDbCon
             var milestone = remaining[index];
             var days = Math.Ceiling(milestoneWeeks[index] * 7);
             var dueDate = previousDueDate.AddDays((double)days);
+
+            // Work item deadlines are rebuilt inside the milestone's new window, anchored on the day
+            // before it starts, exactly as they were on the original contract.
+            var orderedWorkItems = (milestone.WorkItems ?? [])
+                .OrderBy(workItem => workItem.OrderIndex)
+                .ToList();
+            var workItemDueDates = WorkBreakdownScheduleCalculator.CalculateWorkItemDueDates(
+                DateOnly.FromDateTime(previousDueDate),
+                orderedWorkItems.Select(workItem => workItem.EstimatedDuration).ToList());
+
             previousDueDate = dueDate;
 
             milestonePlans.Add(new DisputeRemainingMilestonePlanResponse(
@@ -68,7 +79,13 @@ public sealed class GetDisputeRemainingJobPostPlanQueryHandler(IApplicationDbCon
                 DateOnly.FromDateTime(dueDate),
                 milestone.Deliverables,
                 milestone.AcceptanceCriteria,
-                index));
+                index,
+                orderedWorkItems.Select((workItem, workIndex) => new DisputeRemainingWorkItemPlanResponse(
+                    workItem.Title,
+                    workItem.Description,
+                    workItem.EstimatedDuration,
+                    workIndex < workItemDueDates.Count ? workItemDueDates[workIndex] : null,
+                    workIndex)).ToList()));
         }
 
         return new DisputeRemainingJobPostPlanResponse(

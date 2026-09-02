@@ -21,9 +21,17 @@ public partial class MilestoneAttachment
 
     public Guid? UploadedByUserId { get; set; }
 
+    /// <summary>
+    /// Set when the file belongs to one work item submission attempt. Null on milestone-level
+    /// attachments, which is what the legacy submit flow keys off when it replaces its own files.
+    /// </summary>
+    public Guid? ContractWorkItemSubmissionId { get; set; }
+
     public DateTime CreatedAt { get; set; }
 
     public virtual Milestone Milestones { get; set; } = null!;
+
+    public virtual ContractWorkItemSubmission? ContractWorkItemSubmission { get; set; }
 
     public virtual User? UploadedByUser { get; set; }
 }
