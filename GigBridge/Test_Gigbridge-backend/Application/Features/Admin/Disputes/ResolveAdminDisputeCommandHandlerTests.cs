@@ -642,6 +642,17 @@ public sealed class ResolveAdminDisputeCommandHandlerTests
     public async Task Resolve_Resume_AdvancesNextPendingMilestoneToInProgress()
     {
         var fixture = new KeepContractAdvanceFixture();
+        var earlyStartRequest = new MilestoneEarlyStartRequest
+        {
+            MilestoneEarlyStartRequestId = Guid.NewGuid(),
+            ContractsId = fixture.ContractId,
+            MilestonesId = fixture.M4.MilestonesId,
+            RequestedByUserId = fixture.FreelancerUserId,
+            Reason = "Start M4 early.",
+            Status = (int)MilestoneEarlyStartRequestStatus.Pending,
+            CreatedAt = fixture.Now.AddMinutes(-5)
+        };
+        fixture.Context.Set<MilestoneEarlyStartRequest>().Add(earlyStartRequest);
         var handler = fixture.CreateHandler();
 
         // M3 is the 3rd milestone — selecting it requires selecting the whole top-down
@@ -654,6 +665,8 @@ public sealed class ResolveAdminDisputeCommandHandlerTests
         Assert.Equal((int)MilestoneStatus.Completed, fixture.M3.Status);
         Assert.Equal((int)MilestoneStatus.InProgress, fixture.M4.Status);
         Assert.NotNull(fixture.M4.StartedAt);
+        Assert.Equal((int)MilestoneEarlyStartRequestStatus.Cancelled, earlyStartRequest.Status);
+        Assert.Equal(fixture.M4.StartedAt, earlyStartRequest.RespondedAt);
     }
 
     [Fact]

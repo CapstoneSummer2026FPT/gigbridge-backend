@@ -50,6 +50,10 @@ public sealed class ApproveMilestoneCommandHandler :
             command.UserId,
             cancellationToken);
 
+        // Milestone-level approval only. A work item contract closes its milestone automatically
+        // once the last work item is approved, so this endpoint would race that reconciliation.
+        MilestoneDeliveryModeGuard.EnsureLegacyApproval(contract);
+
         var milestone = await MilestoneWorkflowGuard.GetMilestoneAsync(
             _context,
             command.ContractId,
@@ -58,7 +62,7 @@ public sealed class ApproveMilestoneCommandHandler :
 
         if (milestone.Status == (int)MilestoneStatus.Approved && milestone.ReleasedAmount >= milestone.Amount)
         {
-            return MilestoneWorkflowGuard.ToResponse(milestone);
+            return MilestoneWorkflowGuard.ToResponse(milestone, contract.DeliveryMode);
         }
 
         if (milestone.Status != (int)MilestoneStatus.Submitted)
@@ -75,7 +79,15 @@ public sealed class ApproveMilestoneCommandHandler :
         var milestones = await MilestoneWorkflowGuard.OrderMilestones(
                 _context.Set<Milestone>().Where(item => item.ContractsId == contract.ContractsId))
             .ToListAsync(cancellationToken);
-        MilestoneWorkflowGuard.AdvanceNextMilestone(milestones, now);
+        var nextMilestone = MilestoneWorkflowGuard.AdvanceNextMilestone(milestones, now);
+        if (nextMilestone is not null)
+        {
+            await MilestoneEarlyStartRequestWorkflow.CancelPendingForMilestoneAsync(
+                _context,
+                nextMilestone.MilestonesId,
+                now,
+                cancellationToken);
+        }
 
         var systemMessage = await ContractConversationEvents.AddSystemMessageAsync(
             _context,
@@ -108,6 +120,6 @@ public sealed class ApproveMilestoneCommandHandler :
                     ContractConversationEvents.ToRealtimePayload(systemMessage), cancellationToken);
         }
 
-        return MilestoneWorkflowGuard.ToResponse(milestone);
+        return MilestoneWorkflowGuard.ToResponse(milestone, contract.DeliveryMode);
     }
 }

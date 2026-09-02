@@ -666,6 +666,12 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasDefaultValueSql("now()");
 
+                    b.Property<int>("DeliveryMode")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasComment("Enum MilestoneDeliveryMode: 0=Legacy (milestone-level submit/approve), 1=WorkItem (per work item submit/approve)");
+
                     b.Property<string>("Description")
                         .HasColumnType("text");
 
@@ -1201,6 +1207,9 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<string>("Description")
                         .HasColumnType("text");
 
+                    b.Property<DateOnly?>("DueDate")
+                        .HasColumnType("date");
+
                     b.Property<string>("EstimatedDuration")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
@@ -1216,7 +1225,8 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(2000)");
 
                     b.Property<int>("Status")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasComment("Enum ContractWorkItemStatus: 0=Todo, 1=InProgress, 2=Completed (legacy), 3=RevisionRequired, 4=Submitted, 5=Approved");
 
                     b.Property<string>("Title")
                         .IsRequired()
@@ -1232,6 +1242,65 @@ namespace Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("ContractWorkItems");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ContractWorkItemSubmission", b =>
+                {
+                    b.Property<Guid>("ContractWorkItemSubmissionId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<Guid>("ContractWorkItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(5000)
+                        .HasColumnType("character varying(5000)");
+
+                    b.Property<string>("ReviewReason")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<int>("ReviewStatus")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasComment("Enum ContractWorkItemSubmissionReviewStatus: 0=Submitted, 1=Approved, 2=RevisionRequired");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ReviewedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("SubmissionBatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("SubmittedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid>("SubmittedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("ContractWorkItemSubmissionId");
+
+                    b.HasIndex("ReviewedByUserId");
+
+                    b.HasIndex("SubmittedByUserId");
+
+                    b.HasIndex("ContractWorkItemId", "RevisionNumber")
+                        .IsUnique();
+
+                    b.HasIndex("ContractWorkItemId", "SubmissionBatchId")
+                        .IsUnique();
+
+                    b.ToTable("ContractWorkItemSubmissions");
                 });
 
             modelBuilder.Entity("Domain.Entities.Conversation", b =>
@@ -3842,6 +3911,9 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnName("MilestoneAttachmentsId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
+                    b.Property<Guid?>("ContractWorkItemSubmissionId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
@@ -3880,6 +3952,8 @@ namespace Infrastructure.Persistence.Migrations
                         .HasName("MilestoneAttachments_pkey");
 
                     b.HasIndex("UploadedByUserId");
+
+                    b.HasIndex(new[] { "ContractWorkItemSubmissionId" }, "IX_MilestoneAttachments_ContractWorkItemSubmissionId");
 
                     b.HasIndex(new[] { "MilestonesId" }, "IX_MilestoneAttachments_MilestonesId");
 
@@ -7380,6 +7454,32 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("Milestone");
                 });
 
+            modelBuilder.Entity("Domain.Entities.ContractWorkItemSubmission", b =>
+                {
+                    b.HasOne("Domain.Entities.ContractWorkItem", "ContractWorkItem")
+                        .WithMany("Submissions")
+                        .HasForeignKey("ContractWorkItemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Domain.Entities.User", "ReviewedByUser")
+                        .WithMany()
+                        .HasForeignKey("ReviewedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Domain.Entities.User", "SubmittedByUser")
+                        .WithMany()
+                        .HasForeignKey("SubmittedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ContractWorkItem");
+
+                    b.Navigation("ReviewedByUser");
+
+                    b.Navigation("SubmittedByUser");
+                });
+
             modelBuilder.Entity("Domain.Entities.Conversation", b =>
                 {
                     b.HasOne("Domain.Entities.Contract", "Contracts")
@@ -8168,6 +8268,12 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.MilestoneAttachment", b =>
                 {
+                    b.HasOne("Domain.Entities.ContractWorkItemSubmission", "ContractWorkItemSubmission")
+                        .WithMany("Attachments")
+                        .HasForeignKey("ContractWorkItemSubmissionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .HasConstraintName("MilestoneAttachments_ContractWorkItemSubmissionId_fkey");
+
                     b.HasOne("Domain.Entities.Milestone", "Milestones")
                         .WithMany("MilestoneAttachments")
                         .HasForeignKey("MilestonesId")
@@ -8178,6 +8284,8 @@ namespace Infrastructure.Persistence.Migrations
                         .WithMany("MilestoneAttachments")
                         .HasForeignKey("UploadedByUserId")
                         .HasConstraintName("MilestoneAttachments_UploadedByUserId_fkey");
+
+                    b.Navigation("ContractWorkItemSubmission");
 
                     b.Navigation("Milestones");
 
@@ -9202,6 +9310,16 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("EscrowTransactions");
 
                     b.Navigation("WalletTransactions");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ContractWorkItem", b =>
+                {
+                    b.Navigation("Submissions");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ContractWorkItemSubmission", b =>
+                {
+                    b.Navigation("Attachments");
                 });
 
             modelBuilder.Entity("Domain.Entities.Conversation", b =>

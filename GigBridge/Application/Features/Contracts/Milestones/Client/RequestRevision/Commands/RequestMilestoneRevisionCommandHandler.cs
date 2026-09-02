@@ -44,6 +44,12 @@ public sealed class RequestMilestoneRevisionCommandHandler :
             command.UserId,
             cancellationToken);
 
+        // Milestone-level revision only. On a work item contract this endpoint would set item
+        // statuses without recording the verdict on their submission attempts, leaving an item
+        // marked RevisionRequired whose latest attempt still reads as awaiting review — and
+        // without ever running the reconciliation that reopens the milestone consistently.
+        MilestoneDeliveryModeGuard.EnsureLegacyApproval(contract);
+
         var milestone = await MilestoneWorkflowGuard.GetMilestoneAsync(
             _context,
             command.ContractId,
@@ -104,6 +110,6 @@ public sealed class RequestMilestoneRevisionCommandHandler :
                     ContractConversationEvents.ToRealtimePayload(systemMessage), cancellationToken);
         }
 
-        return MilestoneWorkflowGuard.ToResponse(milestone);
+        return MilestoneWorkflowGuard.ToResponse(milestone, contract.DeliveryMode);
     }
 }

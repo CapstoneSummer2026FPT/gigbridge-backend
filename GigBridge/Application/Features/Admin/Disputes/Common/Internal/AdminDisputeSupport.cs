@@ -80,13 +80,19 @@ internal static class AdminDisputeSupport
             ? await context.Set<Proposal>()
                 .AsNoTracking()
                 .Include(item => item.ProposalAnswers).ThenInclude(item => item.JobPostQuestions)
-                .Include(item => item.ProposalMilestonePlans)
+                // AsNoTracking, so unlike GetProposalDetailQueryHandler there is no EF fixup to
+                // populate WorkItems for free — without this ThenInclude they come back empty.
+                .Include(item => item.ProposalMilestonePlans).ThenInclude(item => item.WorkItems)
                 .FirstOrDefaultAsync(item => item.ProposalsId == contract.ProposalsId.Value, cancellationToken)
             : null;
 
         var milestones = await context.Set<Milestone>()
             .AsNoTracking()
             .Include(item => item.MilestoneAttachments)
+            .Include(item => item.WorkItems)
+                .ThenInclude(workItem => workItem.Submissions)
+                    .ThenInclude(submission => submission.Attachments)
+            .AsSplitQuery()
             .Where(item => item.ContractsId == contract.ContractsId)
             .OrderBy(item => item.SortOrder)
             .ThenBy(item => item.CreatedAt)
@@ -358,7 +364,8 @@ internal static class AdminDisputeSupport
                             attachment.MimeType,
                             attachment.UploadedByUserId,
                             attachment.CreatedAt))
-                        .ToList()))
+                        .ToList(),
+                    ToAdminWorkItems(item)))
                 .ToList(),
             new AdminEscrowSummaryResponse(
                 escrow?.ContractEscrowId,
@@ -422,4 +429,59 @@ internal static class AdminDisputeSupport
             }
         }
     }
+    /// <summary>
+    /// Per-work-item evidence for the admin. Without this the dispute view shows a rejected milestone
+    /// with no way to tell which work item was refused or why, even though RequestRevision records
+    /// the decision at exactly that granularity.
+    /// </summary>
+    private static IReadOnlyList<AdminWorkItemResponse> ToAdminWorkItems(Milestone milestone)
+    {
+        if (milestone.WorkItems is null || milestone.WorkItems.Count == 0)
+        {
+            return [];
+        }
+
+        return milestone.WorkItems
+            .OrderBy(workItem => workItem.OrderIndex)
+            .Select(workItem => new AdminWorkItemResponse(
+                workItem.ContractWorkItemId,
+                workItem.Title,
+                workItem.Description,
+                workItem.EstimatedDuration,
+                workItem.DueDate,
+                workItem.OrderIndex,
+                workItem.Status,
+                workItem.ProgressNote,
+                workItem.CompletedAt,
+                workItem.Submissions is null
+                    ? []
+                    : workItem.Submissions
+                        .OrderBy(submission => submission.RevisionNumber)
+                        .Select(submission => new AdminWorkItemSubmissionResponse(
+                            submission.ContractWorkItemSubmissionId,
+                            submission.RevisionNumber,
+                            submission.Note,
+                            submission.SubmittedAt,
+                            submission.SubmittedByUserId,
+                            submission.ReviewStatus,
+                            submission.ReviewedAt,
+                            submission.ReviewedByUserId,
+                            submission.ReviewReason,
+                            submission.Attachments is null
+                                ? []
+                                : submission.Attachments
+                                    .OrderBy(attachment => attachment.CreatedAt)
+                                    .Select(attachment => new AdminMilestoneAttachmentResponse(
+                                        attachment.MilestoneAttachmentsId,
+                                        attachment.FileName,
+                                        attachment.FileUrl,
+                                        attachment.FileSize,
+                                        attachment.MimeType,
+                                        attachment.UploadedByUserId,
+                                        attachment.CreatedAt))
+                                    .ToList()))
+                        .ToList()))
+            .ToList();
+    }
+
 }

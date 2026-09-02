@@ -225,7 +225,8 @@ public class ContractWorkflowTests
             new FixedDateTimeService(fixture.Now),
             new NoopNotificationService(),
             new NoopChatRealtimeNotifier(),
-            fundUserAuditLog);
+            fundUserAuditLog,
+            NullLogger<FundContractEscrowCommandHandler>.Instance);
 
         await Assert.ThrowsAsync<BadRequestException>(() =>
             handler.Handle(
@@ -308,7 +309,8 @@ public class ContractWorkflowTests
             new FixedDateTimeService(fixture.Now),
             new NoopNotificationService(),
             new NoopChatRealtimeNotifier(),
-            new CapturingUserAuditLogService());
+            new CapturingUserAuditLogService(),
+            NullLogger<FundContractEscrowCommandHandler>.Instance);
 
         var result = await handler.Handle(
             new FundContractEscrowCommand(fixture.ContractId, fixture.ClientUserId),
@@ -364,7 +366,8 @@ public class ContractWorkflowTests
             new FixedDateTimeService(fixture.Now),
             new NoopNotificationService(),
             new NoopChatRealtimeNotifier(),
-            new CapturingUserAuditLogService());
+            new CapturingUserAuditLogService(),
+            NullLogger<FundContractEscrowCommandHandler>.Instance);
 
         var result = await handler.Handle(
             new FundContractEscrowCommand(fixture.ContractId, fixture.ClientUserId),
@@ -413,7 +416,8 @@ public class ContractWorkflowTests
             new FixedDateTimeService(fixture.Now),
             new NoopNotificationService(),
             new NoopChatRealtimeNotifier(),
-            new CapturingUserAuditLogService());
+            new CapturingUserAuditLogService(),
+            NullLogger<FundContractEscrowCommandHandler>.Instance);
 
         var first = await handler.Handle(
             new FundContractEscrowCommand(fixture.ContractId, fixture.ClientUserId),
@@ -456,7 +460,8 @@ public class ContractWorkflowTests
             new FixedDateTimeService(fixture.Now),
             new NoopNotificationService(),
             new NoopChatRealtimeNotifier(),
-            new CapturingUserAuditLogService());
+            new CapturingUserAuditLogService(),
+            NullLogger<FundContractEscrowCommandHandler>.Instance);
 
         // 600,000 deposited + 400,000 earned = 1,000,000, but the 10,000-token fee pushes it over.
         await Assert.ThrowsAsync<BadRequestException>(() =>
@@ -491,7 +496,8 @@ public class ContractWorkflowTests
             new FixedDateTimeService(fixture.Now),
             new NoopNotificationService(),
             new NoopChatRealtimeNotifier(),
-            new CapturingUserAuditLogService());
+            new CapturingUserAuditLogService(),
+            NullLogger<FundContractEscrowCommandHandler>.Instance);
 
         var result = await handler.Handle(
             new FundContractEscrowCommand(fixture.ContractId, fixture.ClientUserId),
@@ -569,7 +575,8 @@ public class ContractWorkflowTests
             new FixedDateTimeService(fixture.Now),
             new NoopNotificationService(),
             new NoopChatRealtimeNotifier(),
-            new CapturingUserAuditLogService());
+            new CapturingUserAuditLogService(),
+            NullLogger<FundContractEscrowCommandHandler>.Instance);
 
         var result = await handler.Handle(
             new FundContractEscrowCommand(fixture.ContractId, fixture.ClientUserId),
@@ -614,7 +621,8 @@ public class ContractWorkflowTests
             new FixedDateTimeService(fixture.Now),
             new NoopNotificationService(),
             new NoopChatRealtimeNotifier(),
-            new CapturingUserAuditLogService());
+            new CapturingUserAuditLogService(),
+            NullLogger<FundContractEscrowCommandHandler>.Instance);
 
         var result = await handler.Handle(
             new FundContractEscrowCommand(fixture.ContractId, fixture.ClientUserId),
@@ -646,7 +654,8 @@ public class ContractWorkflowTests
             new FixedDateTimeService(fixture.Now),
             new NoopNotificationService(),
             new NoopChatRealtimeNotifier(),
-            new CapturingUserAuditLogService());
+            new CapturingUserAuditLogService(),
+            NullLogger<FundContractEscrowCommandHandler>.Instance);
 
         var exception = await Assert.ThrowsAsync<BadRequestException>(() => handler.Handle(
             new FundContractEscrowCommand(fixture.ContractId, fixture.ClientUserId),
@@ -681,7 +690,8 @@ public class ContractWorkflowTests
             new FixedDateTimeService(missingFreelancerFixture.Now),
             new NoopNotificationService(),
             new NoopChatRealtimeNotifier(),
-            new CapturingUserAuditLogService());
+            new CapturingUserAuditLogService(),
+            NullLogger<FundContractEscrowCommandHandler>.Instance);
 
         await Assert.ThrowsAsync<BadRequestException>(() =>
             missingFreelancerHandler.Handle(
@@ -697,7 +707,8 @@ public class ContractWorkflowTests
             new FixedDateTimeService(missingClientFixture.Now),
             new NoopNotificationService(),
             new NoopChatRealtimeNotifier(),
-            new CapturingUserAuditLogService());
+            new CapturingUserAuditLogService(),
+            NullLogger<FundContractEscrowCommandHandler>.Instance);
 
         await Assert.ThrowsAsync<BadRequestException>(() =>
             missingClientHandler.Handle(

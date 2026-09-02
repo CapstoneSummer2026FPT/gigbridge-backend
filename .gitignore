@@ -51,3 +51,5 @@ database/migrations/20260720-add-esign-docx-artifacts.sql
 *.dll
 /obj/codex-authsession-build
 *.sh
+/.claude
+/GigBridge/.claude-testbuildDebug

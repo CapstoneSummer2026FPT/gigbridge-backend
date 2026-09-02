@@ -33,6 +33,10 @@ internal static class DependencyInjection
             if (options.SyncIntervalMinutes <= 0) options.SyncIntervalMinutes = 5;
         });
 
+        // Registered on every node, including nodes that do not run the workers, so each one
+        // reports its own withdrawal configuration at startup.
+        services.AddSingleton<IHostedService, PayoutConfigurationReporter>();
+
         if (BackgroundWorkerOptions.IsEnabled(configuration))
         {
             services.AddSingleton<PayoutOutboxWorker>();

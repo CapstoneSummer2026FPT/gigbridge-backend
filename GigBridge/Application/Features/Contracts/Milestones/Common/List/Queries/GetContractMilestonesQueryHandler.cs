@@ -39,13 +39,15 @@ public sealed class GetContractMilestonesQueryHandler :
                 _context.Set<Milestone>()
                     .Include(milestone => milestone.MilestoneAttachments)
                     .Include(milestone => milestone.WorkItems)
+                        .ThenInclude(workItem => workItem.Submissions)
+                            .ThenInclude(submission => submission.Attachments)
                     .Where(milestone => milestone.ContractsId == query.ContractId)
                     .AsSplitQuery()
             )
             .ToListAsync(cancellationToken);
 
         return milestones
-            .Select(milestone => MilestoneWorkflowGuard.ToResponse(milestone))
+            .Select(milestone => MilestoneWorkflowGuard.ToResponse(milestone, contract.DeliveryMode))
             .ToList();
     }
 }

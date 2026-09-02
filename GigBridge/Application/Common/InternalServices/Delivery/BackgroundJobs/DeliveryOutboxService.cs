@@ -23,6 +23,7 @@ using Application.Features.Contracts.Milestones.Freelancer.Submit.Common;
 using Application.Common.InternalServices.Contracts.Interfaces;
 using Application.Common.InternalServices.Contracts.Milestones.Email;
 using Application.Common.InternalServices.Contracts.Models;
+using Application.Features.Contracts.Milestones.WorkItems.Common;
 using Application.Features.Contracts.Signing.Common.Sign.DTOs;
 using Application.Features.ESign.Common.Internal;
 using Application.Features.Notifications.Common.DTOs;
@@ -62,6 +63,7 @@ public sealed class DeliveryOutboxService : BackgroundService
     private readonly IScheduleEmailRenderer _emailRenderer;
     private readonly ISignedEmailRenderer _signedEmailRenderer;
     private readonly IMilestoneSubmissionEmailRenderer _milestoneSubmissionEmailRenderer;
+    private readonly IWorkItemDeliveryEmailRenderer _workItemDeliveryEmailRenderer;
     private readonly DeliveryOutboxOptions _options;
     private readonly WorkSignalOptions _workSignalOptions;
     private readonly IWorkSignalSource _workSignal;
@@ -75,6 +77,7 @@ public sealed class DeliveryOutboxService : BackgroundService
         IScheduleEmailRenderer emailRenderer,
         ISignedEmailRenderer signedEmailRenderer,
         IMilestoneSubmissionEmailRenderer milestoneSubmissionEmailRenderer,
+        IWorkItemDeliveryEmailRenderer workItemDeliveryEmailRenderer,
         IOptions<DeliveryOutboxOptions> options,
         IOptions<WorkSignalOptions> workSignalOptions,
         [FromKeyedServices(WorkSignalChannels.DeliveryOutbox)] IWorkSignalSource workSignal)
@@ -84,6 +87,7 @@ public sealed class DeliveryOutboxService : BackgroundService
         _emailRenderer = emailRenderer;
         _signedEmailRenderer = signedEmailRenderer;
         _milestoneSubmissionEmailRenderer = milestoneSubmissionEmailRenderer;
+        _workItemDeliveryEmailRenderer = workItemDeliveryEmailRenderer;
         _options = options.Value;
         _workSignalOptions = workSignalOptions.Value;
         _workSignal = workSignal;
@@ -434,6 +438,12 @@ public sealed class DeliveryOutboxService : BackgroundService
             {
                 DeliveryOutboxType.MilestoneSubmission =>
                     await PrepareMilestoneSubmissionEmailAsync(context, lease, job, ct),
+                DeliveryOutboxType.WorkItemSubmission =>
+                    PrepareWorkItemSubmissionEmail(lease, job),
+                DeliveryOutboxType.WorkItemRevisionRequested =>
+                    PrepareWorkItemRevisionEmail(lease, job),
+                DeliveryOutboxType.MilestoneAutoCompleted =>
+                    PrepareMilestoneAutoCompletedEmail(lease, job),
                 DeliveryOutboxType.GenericNotification =>
                     await PrepareGenericNotificationAsync(context, lease, job, ct),
                 DeliveryOutboxType.ESignDocumentRevision =>
@@ -1376,6 +1386,91 @@ public sealed class DeliveryOutboxService : BackgroundService
                 ]
             });
     }
+
+    /// <summary>
+    /// The work item delivery emails carry everything they need in their payload, so unlike the
+    /// milestone submission email they need no database round trip: nothing here can go stale
+    /// between enqueue and send, and a deleted contract cannot fail the send.
+    /// </summary>
+    private PreparedDelivery PrepareWorkItemSubmissionEmail(DeliveryOutboxLease lease, DeliveryOutbox job)
+    {
+        EnsureEmailChannel(job, "Work item submission");
+
+        var payload = JsonSerializer.Deserialize<WorkItemSubmissionDeliveryPayload>(job.Payload, JsonOptions)
+            ?? throw new JsonException("Invalid work item submission delivery payload.");
+
+        var rendered = _workItemDeliveryEmailRenderer.RenderSubmission(new WorkItemSubmissionEmailModel(
+            payload.RecipientName,
+            payload.MilestoneTitle,
+            payload.WorkItemTitles,
+            BuildDeliverySpaceUrl(payload.ContractId, payload.MilestoneId)));
+
+        return BuildEmailDelivery(lease, job, payload.RecipientEmail, rendered);
+    }
+
+    private PreparedDelivery PrepareWorkItemRevisionEmail(DeliveryOutboxLease lease, DeliveryOutbox job)
+    {
+        EnsureEmailChannel(job, "Work item revision");
+
+        var payload = JsonSerializer.Deserialize<WorkItemRevisionDeliveryPayload>(job.Payload, JsonOptions)
+            ?? throw new JsonException("Invalid work item revision delivery payload.");
+
+        var rendered = _workItemDeliveryEmailRenderer.RenderRevisionRequested(new WorkItemRevisionEmailModel(
+            payload.RecipientName,
+            payload.MilestoneTitle,
+            payload.WorkItemTitles,
+            payload.Reason,
+            BuildDeliverySpaceUrl(payload.ContractId, payload.MilestoneId)));
+
+        return BuildEmailDelivery(lease, job, payload.RecipientEmail, rendered);
+    }
+
+    private PreparedDelivery PrepareMilestoneAutoCompletedEmail(DeliveryOutboxLease lease, DeliveryOutbox job)
+    {
+        EnsureEmailChannel(job, "Milestone completion");
+
+        var payload = JsonSerializer.Deserialize<MilestoneAutoCompletedDeliveryPayload>(job.Payload, JsonOptions)
+            ?? throw new JsonException("Invalid milestone completion delivery payload.");
+
+        var rendered = _workItemDeliveryEmailRenderer.RenderMilestoneCompleted(new MilestoneAutoCompletedEmailModel(
+            payload.RecipientName,
+            payload.MilestoneTitle,
+            payload.NextMilestoneTitle,
+            BuildDeliverySpaceUrl(payload.ContractId, payload.NextMilestoneId ?? payload.MilestoneId)));
+
+        return BuildEmailDelivery(lease, job, payload.RecipientEmail, rendered);
+    }
+
+    private static void EnsureEmailChannel(DeliveryOutbox job, string label)
+    {
+        if (job.Channel != (int)DeliveryChannel.Email)
+        {
+            throw new InvalidOperationException($"{label} outbox deliveries only support email.");
+        }
+    }
+
+    private string BuildDeliverySpaceUrl(Guid contractId, Guid milestoneId) =>
+        $"{_frontendBaseUrl}/deliveryspace/{contractId:D}/milestones/{milestoneId:D}";
+
+    private static PreparedDelivery BuildEmailDelivery(
+        DeliveryOutboxLease lease,
+        DeliveryOutbox job,
+        string recipientEmail,
+        RenderedDeliveryEmail rendered) =>
+        PreparedDelivery.ForEmail(
+            lease,
+            job.DeliveryKey,
+            job.AttemptCount,
+            new EmailRequest
+            {
+                To = recipientEmail,
+                Subject = rendered.Subject,
+                Body = rendered.HtmlBody,
+                TextBody = rendered.TextBody,
+                IsHtml = true,
+                IdempotencyKey = job.DeliveryKey,
+                MessageId = $"<{job.DeliveryKey.Replace(':', '.')}@gigbridge.local>"
+            });
 
     private async Task<PreparedDelivery> PrepareMilestoneSubmissionEmailAsync(
         IApplicationDbContext context,

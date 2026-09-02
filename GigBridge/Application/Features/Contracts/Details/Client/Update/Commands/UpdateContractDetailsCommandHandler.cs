@@ -1,5 +1,6 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
+using Application.Common.InternalServices.Scheduling;
 using Application.Common.Interfaces.Time;
 using Application.Common.InternalServices.Chat.Interfaces;
 using Application.Features.Contracts.Common.DTOs;
@@ -90,6 +91,15 @@ public sealed class UpdateContractDetailsCommandHandler :
                 return milestone;
             })
             .ToList();
+
+        AssignWorkItemDueDates(contract, newMilestones);
+
+        // The client is still editing a pre-Active contract, so this is the right moment to decide how
+        // it will deliver. Every milestone carrying a work breakdown means per-work-item delivery;
+        // anything else stays on the milestone-level flow. Frozen once the contract goes Active.
+        contract.DeliveryMode = newMilestones.Count > 0 && newMilestones.All(milestone => milestone.WorkItems.Count > 0)
+            ? (int)MilestoneDeliveryMode.WorkItem
+            : (int)MilestoneDeliveryMode.Legacy;
 
         ContractDetailsValidator.ValidateMilestoneDraft(newMilestones);
         ContractDetailsValidator.ValidateMilestoneTotalDoesNotExceedBudget(contract, newMilestones);
@@ -230,6 +240,7 @@ public sealed class UpdateContractDetailsCommandHandler :
             Description = draft.Description,
             Deliverables = draft.Deliverables,
             EstimatedDuration = draft.EstimatedDuration,
+            DueDate = draft.DueDate,
             OrderIndex = draft.OrderIndex,
             Status = (int)ContractWorkItemStatus.Todo,
             CreatedAt = now
@@ -248,8 +259,38 @@ public sealed class UpdateContractDetailsCommandHandler :
         workItem.Description = draft.Description;
         workItem.Deliverables = draft.Deliverables;
         workItem.EstimatedDuration = draft.EstimatedDuration;
+        workItem.DueDate = draft.DueDate;
         workItem.OrderIndex = draft.OrderIndex;
         workItem.UpdatedAt = now;
+    }
+
+    /// <summary>
+    /// Server-computed work item deadlines. Any value the client supplied is ignored: the dates chain
+    /// inside each milestone the same way milestones chain inside the project, anchored on the
+    /// milestone's own start (the previous milestone's due date).
+    /// </summary>
+    private static void AssignWorkItemDueDates(Contract contract, List<Milestone> orderedMilestones)
+    {
+        var milestoneDueDates = orderedMilestones.Select(milestone => milestone.DueDate).ToList();
+        var planAnchor = contract.StartDate?.AddDays(-1);
+
+        for (var index = 0; index < orderedMilestones.Count; index++)
+        {
+            var workItems = orderedMilestones[index].WorkItems.OrderBy(item => item.OrderIndex).ToList();
+            if (workItems.Count == 0)
+            {
+                continue;
+            }
+
+            var dueDates = WorkBreakdownScheduleCalculator.CalculateWorkItemDueDates(
+                WorkBreakdownScheduleCalculator.ResolveMilestoneStartAnchor(planAnchor, milestoneDueDates, index),
+                workItems.Select(item => item.EstimatedDuration).ToList());
+
+            for (var workIndex = 0; workIndex < workItems.Count; workIndex++)
+            {
+                workItems[workIndex].DueDate = workIndex < dueDates.Count ? dueDates[workIndex] : null;
+            }
+        }
     }
 
     private static string? Clean(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();

@@ -8,6 +8,7 @@ internal static class DependencyInjection
     internal static IServiceCollection AddMilestoneSubmissionServices(this IServiceCollection services)
     {
         services.AddSingleton<IMilestoneSubmissionEmailRenderer, MilestoneSubmissionEmailRenderer>();
+        services.AddSingleton<IWorkItemDeliveryEmailRenderer, WorkItemDeliveryEmailRenderer>();
         return services;
     }
 }

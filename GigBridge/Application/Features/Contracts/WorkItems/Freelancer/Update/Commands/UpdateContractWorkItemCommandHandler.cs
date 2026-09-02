@@ -33,6 +33,11 @@ public sealed class UpdateContractWorkItemCommandHandler
         MilestoneWorkflowGuard.EnsureContractActive(contract);
         await MilestoneWorkflowGuard.EnsureFreelancerAsync(_context, contract, command.UserId, cancellationToken);
 
+        // The manual progress checkbox belongs to the milestone-level flow only. On a work-item
+        // delivery contract, uploading files is the submission, and Submitted/Approved are reached
+        // through the work item endpoints — never by the freelancer setting a status directly.
+        MilestoneDeliveryModeGuard.EnsureLegacySubmission(contract);
+
         var milestone = await MilestoneWorkflowGuard.GetMilestoneAsync(_context, command.ContractId, command.MilestoneId, cancellationToken);
         if (milestone.Status != (int)MilestoneStatus.InProgress && milestone.Status != (int)MilestoneStatus.Pending)
             throw new BadRequestException("Work items can only be updated while their milestone is in progress or pending.");
@@ -77,6 +82,11 @@ public sealed class UpdateContractWorkItemCommandHandler
 
             milestone.Status = (int)MilestoneStatus.InProgress;
             milestone.StartedAt ??= now;
+            await MilestoneEarlyStartRequestWorkflow.CancelPendingForMilestoneAsync(
+                _context,
+                milestone.MilestonesId,
+                now,
+                cancellationToken);
         }
 
         item.Status = (int)next;
@@ -102,7 +112,7 @@ public sealed class UpdateContractWorkItemCommandHandler
         }
 
         return new ContractWorkItemResponse(item.ContractWorkItemId, item.MilestonesId, item.Title, item.Description,
-            item.Deliverables, item.EstimatedDuration, item.OrderIndex, item.Status, item.ProgressNote,
-            item.CompletedAt, item.UpdatedAt);
+            item.Deliverables, item.EstimatedDuration, item.DueDate, item.OrderIndex, item.Status, item.ProgressNote,
+            item.CompletedAt, item.UpdatedAt, []);
     }
 }

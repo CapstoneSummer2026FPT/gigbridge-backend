@@ -103,10 +103,12 @@ internal static class DependencyInjection
         services.AddScoped<IWalletTopUpPaymentService, PayOsWalletTopUpPaymentService>();
         services.AddScoped<IPayOsPaymentLinkClient>(provider =>
             new PayOsPaymentLinkClient(provider.GetRequiredKeyedService<PayOSClient>("OrderClient")));
+        services.AddScoped<IPayoutDiagnostics, PayOsPayoutDiagnostics>();
         services.AddScoped<IPayoutProvider>(provider =>
             new PayOsPayoutProvider(
                 provider.GetRequiredKeyedService<PayOSClient>("PayoutClient"),
-                provider.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>()));
+                provider.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>(),
+                provider.GetRequiredService<ILogger<PayOsPayoutProvider>>()));
         return services;
     }
 

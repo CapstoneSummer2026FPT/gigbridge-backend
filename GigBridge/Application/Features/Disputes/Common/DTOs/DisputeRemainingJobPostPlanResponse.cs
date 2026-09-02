@@ -1,5 +1,12 @@
 namespace Application.Features.Disputes.Common.DTOs;
 
+public sealed record DisputeRemainingWorkItemPlanResponse(
+    string Title,
+    string? Description,
+    string? EstimatedDuration,
+    DateOnly? DueDate,
+    int OrderIndex);
+
 public sealed record DisputeRemainingMilestonePlanResponse(
     string Title,
     string? Description,
@@ -8,7 +15,12 @@ public sealed record DisputeRemainingMilestonePlanResponse(
     DateOnly? DueDate,
     string? Deliverables,
     string? AcceptanceCriteria,
-    int OrderIndex);
+    int OrderIndex,
+    /// <summary>
+    /// Carried over so the recreated job post keeps its work breakdown. Dropping it would leave the
+    /// client re-authoring the whole WBS by hand for work that was already planned and priced.
+    /// </summary>
+    IReadOnlyList<DisputeRemainingWorkItemPlanResponse> WorkItems);
 
 public sealed record DisputeRemainingJobPostPlanResponse(
     Guid ContractId,

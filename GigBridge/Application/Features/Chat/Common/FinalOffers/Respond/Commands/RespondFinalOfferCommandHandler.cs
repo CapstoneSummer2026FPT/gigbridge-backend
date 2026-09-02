@@ -1,5 +1,6 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
+using Application.Common.InternalServices.Scheduling;
 using Application.Common.Interfaces.Email;
 using Application.Common.Interfaces.Time;
 using Application.Common.InternalServices.Chat.Interfaces;
@@ -474,8 +475,28 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
             }
         }
 
-        foreach (var snapshot in offer.NegotiationOfferMilestones.OrderBy(item => item.OrderIndex))
+        // A contract materialized from an accepted offer that carries a work breakdown delivers per
+        // work item; one without WBS keeps milestone-level delivery. Recorded once, here, because the
+        // mode must not be re-derived later from a row count that amendments can change.
+        var orderedSnapshots = offer.NegotiationOfferMilestones.OrderBy(item => item.OrderIndex).ToList();
+        contract.DeliveryMode = orderedSnapshots.Count > 0 && orderedSnapshots.All(item => item.WorkItems.Count > 0)
+            ? (int)MilestoneDeliveryMode.WorkItem
+            : (int)MilestoneDeliveryMode.Legacy;
+
+        // Work item deadlines chain inside their milestone exactly as milestones chain inside the
+        // project: the anchor is the milestone's own start, i.e. the previous milestone's due date.
+        var milestoneDueDates = orderedSnapshots.Select(item => item.DueDate).ToList();
+        var planAnchor = contract.StartDate?.AddDays(-1);
+
+        for (var milestoneIndex = 0; milestoneIndex < orderedSnapshots.Count; milestoneIndex++)
         {
+            var snapshot = orderedSnapshots[milestoneIndex];
+            var orderedWorkItems = snapshot.WorkItems.OrderBy(item => item.OrderIndex).ToList();
+            var workItemDueDates = WorkBreakdownScheduleCalculator.CalculateWorkItemDueDates(
+                WorkBreakdownScheduleCalculator.ResolveMilestoneStartAnchor(
+                    planAnchor, milestoneDueDates, milestoneIndex),
+                orderedWorkItems.Select(item => item.EstimatedDuration).ToList());
+
             var milestone = new Milestone
             {
                 MilestonesId = Guid.NewGuid(),
@@ -492,7 +513,7 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
                 ReleasedAmount = 0m,
                 CreatedAt = now
             };
-            milestone.WorkItems = snapshot.WorkItems.OrderBy(item => item.OrderIndex).Select((item, index) => new ContractWorkItem
+            milestone.WorkItems = orderedWorkItems.Select((item, index) => new ContractWorkItem
             {
                 ContractWorkItemId = Guid.NewGuid(),
                 MilestonesId = milestone.MilestonesId,
@@ -500,6 +521,7 @@ public class RespondFinalOfferCommandHandler : IRequestHandler<RespondFinalOffer
                 Description = item.Description,
                 Deliverables = item.Deliverables,
                 EstimatedDuration = item.EstimatedDuration,
+                DueDate = index < workItemDueDates.Count ? workItemDueDates[index] : null,
                 OrderIndex = index,
                 Status = (int)ContractWorkItemStatus.Todo,
                 CreatedAt = now

@@ -1,5 +1,6 @@
 using Application.Common.InternalServices.Wallets.Models;
 using Application.Common.Exceptions;
+using Application.Common.Interfaces;
 using Application.Common.Interfaces.Time;
 using Application.Common.InternalServices.Wallets.BackgroundJobs;
 using Application.Common.InternalServices.Wallets.Interfaces;
@@ -639,7 +640,7 @@ public class WalletWorkflowTests
     }
 
     [Fact]
-    public async Task Withdrawal_CreateWithUnavailableProviderDoesNotLockWallet()
+    public async Task Withdrawal_CreateWithUnavailableProviderQueuesForRetry()
     {
         var fixture = new WalletFixture();
         fixture.SeedFreelancerWallet(100m);
@@ -653,19 +654,22 @@ public class WalletWorkflowTests
                 "PayOS denied access.")
         };
 
-        await Assert.ThrowsAsync<ExternalServiceException>(() =>
-            fixture.CreateWithdrawalHandler(provider).Handle(
-                new CreateWithdrawalCommand(
-                    fixture.FreelancerUserId,
-                    new CreateWithdrawalRequest(30m, null, "withdrawal-provider-unavailable")),
-                CancellationToken.None));
+        var response = await fixture.CreateWithdrawalHandler(provider).Handle(
+            new CreateWithdrawalCommand(
+                fixture.FreelancerUserId,
+                new CreateWithdrawalRequest(30m, null, "withdrawal-provider-unavailable")),
+            CancellationToken.None);
 
+        // A provider outage is exactly what the payout outbox is for: the request is accepted and
+        // retried rather than rejected at the door.
+        Assert.Equal((int)WithdrawalStatus.Pending, response.Status);
         var wallet = Assert.Single(fixture.Wallets.Entities);
-        Assert.Equal(100m, wallet.AvailableTokens);
-        Assert.Equal(100m, wallet.WithdrawableTokens);
-        Assert.Equal(0m, wallet.PendingWithdrawalTokens);
-        Assert.Empty(fixture.Withdrawals.Entities);
-        Assert.Empty(fixture.PayoutOutboxes.Entities);
+        Assert.Equal(70m, wallet.WithdrawableTokens);
+        Assert.Equal(30m, wallet.PendingWithdrawalTokens);
+        var withdrawal = Assert.Single(fixture.Withdrawals.Entities);
+        Assert.Equal((int)WithdrawalStatus.Pending, withdrawal.Status);
+        var outbox = Assert.Single(fixture.PayoutOutboxes.Entities);
+        Assert.Equal((int)PayoutOutboxStatus.Pending, outbox.Status);
     }
 
     [Fact]
@@ -715,6 +719,106 @@ public class WalletWorkflowTests
         await (Task)method.Invoke(worker, [CancellationToken.None])!;
 
         Assert.Equal(1, provider.AvailabilityChecks);
+    }
+
+    [Fact]
+    public async Task PayoutWorker_FailureRecordsTheRealReasonInsteadOfAConstant()
+    {
+        var fixture = new WalletFixture();
+        await fixture.CreatePendingWithdrawalAsync(20m, "withdrawal-real-reason");
+        var provider = new FakePayoutProvider
+        {
+            ThrowOnCall = new InvalidOperationException("PayOS refused the payout channel.")
+        };
+
+        await RunProcessOutboxAsync(fixture, provider);
+
+        var outbox = Assert.Single(fixture.PayoutOutboxes.Entities);
+        var withdrawal = Assert.Single(fixture.Withdrawals.Entities);
+        Assert.Contains("InvalidOperationException", outbox.LastError!, StringComparison.Ordinal);
+        Assert.Contains("PayOS refused the payout channel.", outbox.LastError!, StringComparison.Ordinal);
+        Assert.Contains("PayOS refused the payout channel.", withdrawal.LastSyncError!, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task PayoutWorker_ExhaustedRetriesWithoutProviderPayoutRefundsTokens()
+    {
+        var fixture = new WalletFixture();
+        await fixture.CreatePendingWithdrawalAsync(30m, "withdrawal-dead-letter-refund");
+        var outbox = Assert.Single(fixture.PayoutOutboxes.Entities);
+        outbox.AttemptCount = 5;
+        var provider = new FakePayoutProvider
+        {
+            StatusResult = new PayoutProviderResult(
+                PayoutProviderOutcome.SyncRequired,
+                null,
+                null,
+                "HTTP_403",
+                "PayOS denied access.")
+        };
+
+        await RunProcessOutboxAsync(fixture, provider);
+
+        var withdrawal = Assert.Single(fixture.Withdrawals.Entities);
+        var wallet = Assert.Single(fixture.Wallets.Entities);
+        Assert.Equal((int)PayoutOutboxStatus.DeadLettered, outbox.Status);
+        Assert.Equal((int)WithdrawalStatus.Failed, withdrawal.Status);
+        Assert.Equal(100m, wallet.WithdrawableTokens);
+        Assert.Equal(0m, wallet.PendingWithdrawalTokens);
+    }
+
+    [Fact]
+    public async Task PayoutWorker_ExhaustedRetriesWithProviderPayoutKeepsTokensLocked()
+    {
+        var fixture = new WalletFixture();
+        await fixture.CreatePendingWithdrawalAsync(30m, "withdrawal-dead-letter-inflight");
+        var withdrawal = Assert.Single(fixture.Withdrawals.Entities);
+        withdrawal.ProviderPayoutId = "payout-in-flight";
+        withdrawal.Status = (int)WithdrawalStatus.Processing;
+        var outbox = Assert.Single(fixture.PayoutOutboxes.Entities);
+        outbox.AttemptCount = 5;
+        var provider = new FakePayoutProvider
+        {
+            StatusResult = new PayoutProviderResult(
+                PayoutProviderOutcome.SyncRequired,
+                "payout-in-flight",
+                null,
+                "UNKNOWN",
+                "PayOS returned an unhandled approval state.")
+        };
+
+        await RunProcessOutboxAsync(fixture, provider);
+
+        var wallet = Assert.Single(fixture.Wallets.Entities);
+        // PayOS may already be moving the money, so refunding here could pay the freelancer twice.
+        Assert.Equal((int)PayoutOutboxStatus.DeadLettered, outbox.Status);
+        Assert.Equal((int)WithdrawalStatus.SyncRequired, withdrawal.Status);
+        Assert.Equal(70m, wallet.WithdrawableTokens);
+        Assert.Equal(30m, wallet.PendingWithdrawalTokens);
+    }
+
+    /// <summary>
+    /// Drives <c>ProcessOutboxAsync</c> directly. <c>ProcessBatchAsync</c> claims rows with
+    /// <c>ExecuteUpdateAsync</c>, which the in-memory test context does not implement.
+    /// </summary>
+    private static async Task RunProcessOutboxAsync(WalletFixture fixture, FakePayoutProvider provider)
+    {
+        using var services = new ServiceCollection()
+            .AddSingleton<IApplicationDbContext>(fixture.Context)
+            .AddSingleton<IPayoutProvider>(provider)
+            .AddSingleton<IBankAccountProtector>(new FakeBankAccountProtector())
+            .AddSingleton<IDateTimeService>(new FixedDateTimeService(fixture.Now))
+            .BuildServiceProvider();
+        var worker = new PayoutOutboxWorker(
+            services.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<PayoutOutboxWorker>.Instance,
+            Options.Create(new WalletWithdrawalOptions { Enabled = true }));
+        var method = typeof(PayoutOutboxWorker).GetMethod(
+            "ProcessOutboxAsync",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+        var outboxId = Assert.Single(fixture.PayoutOutboxes.Entities).PayoutOutboxId;
+
+        await (Task)method.Invoke(worker, [services, outboxId, CancellationToken.None])!;
     }
 
     [Fact]
@@ -992,7 +1096,8 @@ public class WalletWorkflowTests
                     Provider = "PayOS"
                 }),
                 new FakeBankAccountProtector(),
-                provider ?? new FakePayoutProvider());
+                provider ?? new FakePayoutProvider(),
+                NullLogger<CreateWithdrawalCommandHandler>.Instance);
         }
 
         public SyncWithdrawalCommandHandler CreateSyncHandler(FakePayoutProvider provider)
@@ -1101,10 +1206,13 @@ public class WalletWorkflowTests
 
         public int AvailabilityChecks { get; private set; }
 
+        public Exception? ThrowOnCall { get; set; }
+
         public Task<PayoutProviderResult> CreatePayoutAsync(
             PayoutCreateRequest request,
             CancellationToken cancellationToken)
         {
+            if (ThrowOnCall is not null) throw ThrowOnCall;
             return Task.FromResult(StatusResult);
         }
 
@@ -1112,11 +1220,13 @@ public class WalletWorkflowTests
             PayoutStatusRequest request,
             CancellationToken cancellationToken)
         {
+            if (ThrowOnCall is not null) throw ThrowOnCall;
             return Task.FromResult(StatusResult);
         }
 
         public Task<PayoutProviderAvailability> CheckAvailabilityAsync(
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            bool bypassCache = false)
         {
             AvailabilityChecks++;
             return Task.FromResult(Availability);
