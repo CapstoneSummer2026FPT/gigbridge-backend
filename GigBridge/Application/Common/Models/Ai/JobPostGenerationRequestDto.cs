@@ -30,4 +30,13 @@ public class JobPostHiringPlanGenerationRequestDto
 
     [JsonPropertyName("proposal_closing_date")]
     public string ProposalClosingDate { get; set; } = null!;
+
+    [JsonPropertyName("skills")]
+    public List<string>? Skills { get; set; }
+
+    [JsonPropertyName("category_name")]
+    public string? CategoryName { get; set; }
+
+    [JsonPropertyName("major_name")]
+    public string? MajorName { get; set; }
 }
