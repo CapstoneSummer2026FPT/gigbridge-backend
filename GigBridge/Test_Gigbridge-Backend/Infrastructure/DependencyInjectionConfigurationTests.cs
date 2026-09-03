@@ -151,6 +151,7 @@ public sealed class DependencyInjectionConfigurationTests
         Assert.NotNull(provider.GetRequiredService<IMarketplaceAnalyticsRecorder>());
         Assert.NotNull(provider.GetRequiredService<IReviewModerationService>());
         Assert.NotNull(provider.GetRequiredService<ScheduleWorkflowService>());
+        Assert.NotNull(provider.GetRequiredService<IContractPlanChangeEmailRenderer>());
         Assert.NotNull(provider.GetRequiredService<IMilestoneSubmissionEmailRenderer>());
         Assert.NotNull(provider.GetRequiredService<IWorkItemDeliveryEmailRenderer>());
         Assert.NotNull(provider.GetRequiredService<IScheduleEmailRenderer>());
