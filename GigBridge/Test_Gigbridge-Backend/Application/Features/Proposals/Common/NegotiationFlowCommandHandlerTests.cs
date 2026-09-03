@@ -14,18 +14,24 @@ using Application.Features.Chat.Common.Messages.Send.DTOs;
 using Application.Features.Chat.Common.Negotiations.MilestonePlans.Commands;
 using Application.Features.Chat.Common.Negotiations.StartFromProposal.Commands;
 using Application.Features.Chat.Common.Negotiations.MilestonePlans.DTOs;
+using Application.Features.Contracts.Cancellation.Common.Cancel.Commands;
 using Application.Features.Proposals.Common.AcceptForNegotiation.Commands;
 using Domain.Entities;
 using Domain.Enums.Accounts;
 using Domain.Enums.Chat;
 using Domain.Enums.Contracts;
+using Domain.Enums.Contracts.Escrow;
 using Domain.Enums.Contracts.Milestones;
+using Domain.Enums.ESign;
 using Domain.Enums.Notifications;
+using Domain.Enums.Wallets;
 using MediatR;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 using Test_Gigbridge_Backend.TestSupport;
+using Application.Common.Models.Email;
 
 namespace Test_Gigbridge_Backend.Application.Features.Proposals.Common;
 
@@ -119,10 +125,11 @@ public class NegotiationFlowCommandHandlerTests
     {
         var fixture = new NegotiationFixture();
         fixture.AddConversationWithParticipants();
+        var realtimeNotifier = Substitute.For<IChatRealtimeNotifier>();
         var handler = new CreateFinalOfferCommandHandler(
             fixture.Context,
             new FixedDateTimeService(fixture.Now),
-            new NoopChatRealtimeNotifier());
+            realtimeNotifier);
 
         var ex = await Assert.ThrowsAsync<BadRequestException>(() =>
             handler.Handle(
@@ -140,6 +147,7 @@ public class NegotiationFlowCommandHandlerTests
         Assert.Equal("At least one milestone is required for a final offer.", ex.Message);
         Assert.Empty(fixture.Offers.Entities);
         Assert.Empty(fixture.Messages.Entities);
+        Assert.Empty(realtimeNotifier.ReceivedCalls());
     }
 
     [Fact]
@@ -231,7 +239,8 @@ public class NegotiationFlowCommandHandlerTests
         fixture.AddConversationWithParticipants();
         var handler = new UpdateNegotiationMilestonePlanCommandHandler(
             fixture.Context,
-            new FixedDateTimeService(fixture.Now));
+            new FixedDateTimeService(fixture.Now),
+            new NoopChatRealtimeNotifier());
 
         var exception = await Assert.ThrowsAsync<BadRequestException>(() =>
             handler.Handle(
@@ -246,9 +255,41 @@ public class NegotiationFlowCommandHandlerTests
     }
 
     [Fact]
+    public async Task UpdateNegotiationMilestonePlan_SuccessNotifiesEveryParticipant()
+    {
+        var fixture = new NegotiationFixture();
+        fixture.AddConversationWithParticipants();
+        var realtimeNotifier = Substitute.For<IChatRealtimeNotifier>();
+        var handler = new UpdateNegotiationMilestonePlanCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            realtimeNotifier);
+
+        var result = await handler.Handle(
+            new UpdateNegotiationMilestonePlanCommand(
+                fixture.ConversationId,
+                fixture.ClientUserId,
+                new UpdateNegotiationMilestonePlanRequest(CreatePlan(600m, 900m))),
+            CancellationToken.None);
+
+        Assert.Equal(2, result.Count);
+        await realtimeNotifier.Received(1).SendUsersEventAsync(
+            Arg.Is<IReadOnlyCollection<Guid>>(userIds =>
+                userIds.Count == 2 &&
+                userIds.Contains(fixture.ClientUserId) &&
+                userIds.Contains(fixture.FreelancerUserId)),
+            "NegotiationMilestonePlanUpdated",
+            Arg.Is<object>(payload =>
+                Equals(GetPropertyValue(payload, "ConversationId"), fixture.ConversationId) &&
+                Equals(GetPropertyValue(payload, "UpdatedByUserId"), fixture.ClientUserId)),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task RespondFinalOffer_AcceptCreatesContractForPlanConfirmationWithoutEscrow()
     {
         var fixture = new NegotiationFixture();
+        fixture.Proposal.Status = 2; // Shortlisted — negotiation already pulled it out of Pending.
         fixture.AddConversationWithParticipants();
         var waitlistedProposal = new Proposal
         {
@@ -296,7 +337,9 @@ public class NegotiationFlowCommandHandlerTests
         Assert.Equal(fixture.ProposalId, contract.ProposalsId);
         Assert.Equal(1500m, contract.TotalBudget);
         Assert.Equal((int)ContractStatus.PendingContractConfirmation, contract.Status);
-        Assert.Equal(3, fixture.Proposal.Status);
+        // Accepting the final offer no longer flips Proposal.Status to Accepted — that now
+        // happens only once escrow is funded and the contract goes Active.
+        Assert.Equal(2, fixture.Proposal.Status);
         Assert.Equal(1, waitlistedProposal.Status);
         Assert.Equal(contract.ContractsId, result.ContractId);
         Assert.Equal((int)ContractStatus.PendingContractConfirmation, result.ContractStatus);
@@ -311,6 +354,20 @@ public class NegotiationFlowCommandHandlerTests
         Assert.Equal(
             contract.ContractsId,
             workflowPayload.GetType().GetProperty("contractId")?.GetValue(workflowPayload));
+        var realtimeEventNames = realtimeNotifier.ReceivedCalls()
+            .Select(call => call.GetArguments().ElementAtOrDefault(1) as string)
+            .Where(name => name is not null)
+            .ToList();
+        Assert.True(realtimeEventNames.IndexOf("ReceiveMessage") < realtimeEventNames.IndexOf("FinalOfferResponded"));
+        Assert.True(realtimeEventNames.IndexOf("FinalOfferResponded") < realtimeEventNames.IndexOf("ConversationUpdated"));
+        Assert.True(realtimeEventNames.IndexOf("ConversationUpdated") < realtimeEventNames.IndexOf("ContractDraftUpdated"));
+        var responseCall = realtimeNotifier.ReceivedCalls().Single(call =>
+            Equals(call.GetArguments()[1], "FinalOfferResponded"));
+        var responsePayload = responseCall.GetArguments()[2]
+            ?? throw new InvalidOperationException("FinalOfferResponded payload was null.");
+        Assert.Equal(fixture.ConversationId, GetPropertyValue(responsePayload, "conversationId"));
+        Assert.Equal(contract.ContractsId, GetPropertyValue(responsePayload, "contractId"));
+        Assert.NotNull(GetPropertyValue(responsePayload, "messageId"));
         await notifications.Received(1).CreateNotificationAsync(
             fixture.FreelancerUserId,
             NotificationType.ContractStarted,
@@ -324,6 +381,46 @@ public class NegotiationFlowCommandHandlerTests
                 email.To == "freelancer@example.com" &&
                 email.Subject == "Accepted" &&
                 email.IsHtml),
+            Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(FinalOfferResponse.RequestChange, NegotiationOfferStatus.ChangeRequested)]
+    [InlineData(FinalOfferResponse.Decline, NegotiationOfferStatus.Rejected)]
+    public async Task RespondFinalOffer_NonAcceptResponsesPushMessageAndScopedOfferEvent(
+        FinalOfferResponse response,
+        NegotiationOfferStatus expectedStatus)
+    {
+        var fixture = new NegotiationFixture();
+        fixture.AddConversationWithParticipants();
+        fixture.AddOfferWithSnapshot(1500m, 600m, 900m);
+        var realtimeNotifier = Substitute.For<IChatRealtimeNotifier>();
+        var handler = new RespondFinalOfferCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            realtimeNotifier);
+
+        await handler.Handle(
+            new RespondFinalOfferCommand(
+                fixture.FreelancerUserId,
+                new RespondFinalOfferRequest(fixture.OfferId, response, null)),
+            CancellationToken.None);
+
+        Assert.Equal((int)expectedStatus, fixture.Offers.Entities[0].Status);
+        var eventNames = realtimeNotifier.ReceivedCalls()
+            .Select(call => call.GetArguments().ElementAtOrDefault(1) as string)
+            .Where(name => name is not null)
+            .ToList();
+        Assert.True(eventNames.IndexOf("ReceiveMessage") < eventNames.IndexOf("FinalOfferResponded"));
+        Assert.True(eventNames.IndexOf("FinalOfferResponded") < eventNames.IndexOf("ConversationUpdated"));
+        await realtimeNotifier.Received(1).SendUsersEventAsync(
+            Arg.Any<IReadOnlyCollection<Guid>>(),
+            "FinalOfferResponded",
+            Arg.Is<object>(payload =>
+                Equals(GetPropertyValue(payload, "conversationId"), fixture.ConversationId) &&
+                Equals(GetPropertyValue(payload, "offerId"), fixture.OfferId) &&
+                Equals(GetPropertyValue(payload, "status"), (int)expectedStatus) &&
+                GetPropertyValue(payload, "messageId") is Guid),
             Arg.Any<CancellationToken>());
     }
 
@@ -372,11 +469,12 @@ public class NegotiationFlowCommandHandlerTests
         fixture.JobPost.Status = 2;
         fixture.AddConversationWithParticipants();
         fixture.AddOfferWithSnapshot(1500m, 600m, 900m);
+        var realtimeNotifier = Substitute.For<IChatRealtimeNotifier>();
 
         var handler = new RespondFinalOfferCommandHandler(
             fixture.Context,
             new FixedDateTimeService(fixture.Now),
-            new NoopChatRealtimeNotifier());
+            realtimeNotifier);
 
         var exception = await Assert.ThrowsAsync<BadRequestException>(() =>
             handler.Handle(
@@ -392,6 +490,7 @@ public class NegotiationFlowCommandHandlerTests
         Assert.Equal((int)NegotiationOfferStatus.PendingFreelancerConfirmation, fixture.Offers.Entities[0].Status);
         Assert.Empty(fixture.Contracts.Entities);
         Assert.Empty(fixture.Escrows.Entities);
+        Assert.Empty(realtimeNotifier.ReceivedCalls());
     }
 
     [Fact]
@@ -424,6 +523,311 @@ public class NegotiationFlowCommandHandlerTests
         Assert.All(fixture.Milestones.Entities, milestone => Assert.False(string.IsNullOrWhiteSpace(milestone.AcceptanceCriteria)));
         Assert.Equal(2, fixture.Milestones.Entities.Sum(milestone => milestone.WorkItems.Count));
         Assert.Empty(fixture.Escrows.Entities);
+    }
+
+    [Fact]
+    public async Task RespondFinalOffer_AcceptSucceedsAfterEarlierContractOnSameJobPostWasCancelled()
+    {
+        var fixture = new NegotiationFixture();
+        fixture.AddConversationWithParticipants();
+
+        // A previous negotiation on this same job post was accepted and its contract created.
+        var cancelledContractId = Guid.NewGuid();
+        fixture.Contracts.Add(new Contract
+        {
+            ContractsId = cancelledContractId,
+            JobPostsId = fixture.JobPostId,
+            ClientProfilesId = fixture.ClientProfileId,
+            Title = "Cancelled attempt",
+            TotalBudget = 500m,
+            Status = (int)ContractStatus.PendingSignature,
+            CreatedAt = fixture.Now.AddMinutes(-5)
+        });
+        var priorOffer = new NegotiationOffer
+        {
+            NegotiationOfferId = Guid.NewGuid(),
+            ConversationsId = Guid.NewGuid(),
+            JobPostsId = fixture.JobPostId,
+            ContractsId = cancelledContractId,
+            ClientProfilesId = fixture.ClientProfileId,
+            FreelancerProfilesId = Guid.NewGuid(),
+            FinalPrice = 500m,
+            Status = (int)NegotiationOfferStatus.Accepted,
+            CreatedAt = fixture.Now.AddMinutes(-5),
+            RespondedAt = fixture.Now.AddMinutes(-5)
+        };
+        fixture.Offers.Add(priorOffer);
+
+        // The client cancels that stalled contract — this must release the offer's Accepted
+        // slot, or no other offer on this job post could ever be accepted again
+        // (UX_NegotiationOffers_AcceptedPerJobPost allows only one Accepted offer per job post).
+        var cancelHandler = new CancelContractCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopChatRealtimeNotifier(),
+            new NoopNotificationService(),
+            new CapturingUserAuditLogService(),
+            NullLogger<CancelContractCommandHandler>.Instance);
+        await cancelHandler.Handle(
+            new CancelContractCommand(cancelledContractId, fixture.ClientUserId),
+            CancellationToken.None);
+
+        Assert.Equal((int)NegotiationOfferStatus.Cancelled, priorOffer.Status);
+
+        fixture.AddOfferWithSnapshot(1500m, 600m, 900m);
+
+        var handler = new RespondFinalOfferCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopChatRealtimeNotifier());
+
+        var result = await handler.Handle(
+            new RespondFinalOfferCommand(
+                fixture.FreelancerUserId,
+                new RespondFinalOfferRequest(
+                    fixture.OfferId,
+                    FinalOfferResponse.Accept,
+                    null)),
+            CancellationToken.None);
+
+        Assert.NotNull(result.ContractId);
+        Assert.Equal((int)NegotiationOfferStatus.Accepted, fixture.Offers.Entities.Single(o => o.NegotiationOfferId == fixture.OfferId).Status);
+        var newContract = Assert.Single(fixture.Contracts.Entities, c => c.ContractsId != cancelledContractId);
+        Assert.Equal((int)ContractStatus.PendingContractConfirmation, newContract.Status);
+    }
+
+    [Fact]
+    public async Task RespondFinalOffer_AcceptStillRejectsWhenEarlierAcceptedOffersContractIsNotCancelled()
+    {
+        var fixture = new NegotiationFixture();
+        fixture.AddConversationWithParticipants();
+
+        var activeContractId = Guid.NewGuid();
+        fixture.Contracts.Add(new Contract
+        {
+            ContractsId = activeContractId,
+            JobPostsId = fixture.JobPostId,
+            ClientProfilesId = fixture.ClientProfileId,
+            Title = "Already in progress",
+            TotalBudget = 500m,
+            Status = (int)ContractStatus.PendingContractConfirmation,
+            CreatedAt = fixture.Now
+        });
+        fixture.Offers.Add(new NegotiationOffer
+        {
+            NegotiationOfferId = Guid.NewGuid(),
+            ConversationsId = Guid.NewGuid(),
+            JobPostsId = fixture.JobPostId,
+            ContractsId = activeContractId,
+            ClientProfilesId = fixture.ClientProfileId,
+            FreelancerProfilesId = Guid.NewGuid(),
+            FinalPrice = 500m,
+            Status = (int)NegotiationOfferStatus.Accepted,
+            CreatedAt = fixture.Now,
+            RespondedAt = fixture.Now
+        });
+
+        fixture.AddOfferWithSnapshot(1500m, 600m, 900m);
+
+        var handler = new RespondFinalOfferCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopChatRealtimeNotifier());
+
+        var exception = await Assert.ThrowsAsync<ConflictException>(() =>
+            handler.Handle(
+                new RespondFinalOfferCommand(
+                    fixture.FreelancerUserId,
+                    new RespondFinalOfferRequest(
+                        fixture.OfferId,
+                        FinalOfferResponse.Accept,
+                        null)),
+                CancellationToken.None));
+
+        Assert.Contains("already been accepted", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal((int)NegotiationOfferStatus.PendingFreelancerConfirmation, fixture.Offers.Entities.Single(o => o.NegotiationOfferId == fixture.OfferId).Status);
+        Assert.Single(fixture.Contracts.Entities); // no second contract was created
+    }
+
+    [Fact]
+    public async Task RespondFinalOffer_AcceptReusesCancelledContractForSameProposal()
+    {
+        var fixture = new NegotiationFixture();
+        fixture.AddConversationWithParticipants();
+
+        // A first negotiation on this proposal was accepted, reached PendingSignature, and
+        // was then cancelled — leaving a Cancelled Contract row still occupying this
+        // proposal's slot in the unique Contracts_propo_ProposalsId_key index, plus stale
+        // milestones/escrow/e-sign/wallet state from that abandoned attempt.
+        var oldContractId = fixture.ContractId;
+        fixture.Contracts.Add(new Contract
+        {
+            ContractsId = oldContractId,
+            JobPostsId = fixture.JobPostId,
+            ClientProfilesId = fixture.ClientProfileId,
+            FreelancerProfilesId = fixture.FreelancerProfileId,
+            ProposalsId = fixture.ProposalId,
+            Title = "Abandoned attempt",
+            Description = "Stale description",
+            TotalBudget = 500m,
+            Status = (int)ContractStatus.Cancelled,
+            RevisionNumber = 3,
+            CancelledAt = fixture.Now.AddMinutes(-5),
+            CancelledByUserId = fixture.ClientUserId,
+            CreatedAt = fixture.Now.AddMinutes(-10),
+            UpdatedAt = fixture.Now.AddMinutes(-5)
+        });
+
+        var staleMilestoneId = Guid.NewGuid();
+        fixture.Milestones.Add(new Milestone
+        {
+            MilestonesId = staleMilestoneId,
+            ContractsId = oldContractId,
+            Title = "Stale milestone",
+            Amount = 500m,
+            Status = (int)MilestoneStatus.Pending,
+            SortOrder = 0,
+            CreatedAt = fixture.Now.AddMinutes(-10)
+        });
+        fixture.Context.Set<ContractWorkItem>().Add(new ContractWorkItem
+        {
+            ContractWorkItemId = Guid.NewGuid(),
+            MilestonesId = staleMilestoneId,
+            Title = "Stale work item",
+            Description = "Stale",
+            OrderIndex = 0,
+            Status = (int)ContractWorkItemStatus.Todo,
+            CreatedAt = fixture.Now.AddMinutes(-10)
+        });
+
+        fixture.Escrows.Add(new ContractEscrow
+        {
+            ContractEscrowId = Guid.NewGuid(),
+            ContractsId = oldContractId,
+            RequiredAmount = 500m,
+            FundedAmount = 0m,
+            RequiredPercentage = 1.0m,
+            Currency = "VND",
+            Status = (int)ContractEscrowStatus.PendingFunding,
+            CreatedAt = fixture.Now.AddMinutes(-8)
+        });
+
+        var staleDocumentId = Guid.NewGuid();
+        fixture.Context.Set<EsignDocument>().Add(new EsignDocument
+        {
+            EsignDocumentsId = staleDocumentId,
+            EsignTemplatesId = Guid.NewGuid(),
+            JobPostsId = fixture.JobPostId,
+            ContractsId = oldContractId,
+            DocumentCode = "GB-STALE",
+            Status = (int)ESignDocumentStatus.PendingSignatures,
+            CreatedAt = fixture.Now.AddMinutes(-8)
+        });
+        fixture.Context.Set<EsignDocumentContent>().Add(new EsignDocumentContent
+        {
+            EsignDocumentsId = staleDocumentId,
+            RenderedHtmlContent = "<html>stale</html>",
+            ContractSnapshotJson = "{\"stale\":true}"
+        });
+
+        // The abandoned attempt's 1% acceptance fee was charged, then fully refunded on
+        // cancellation — but CancelContractCommandHandler never deletes/marks the original
+        // charge row, only adds an offsetting refund row under a different key.
+        var oldChargeKey = $"SERVICE-FEE-ACCEPT-{oldContractId:N}";
+        var oldRefundKey = $"SERVICE-FEE-ACCEPT-REFUND-{oldContractId:N}";
+        fixture.Context.Set<WalletTransaction>().Add(new WalletTransaction
+        {
+            WalletTransactionsId = Guid.NewGuid(),
+            UserWalletsId = Guid.NewGuid(),
+            UserId = fixture.FreelancerUserId,
+            ContractsId = oldContractId,
+            TokenAmount = 5m,
+            VndAmount = 5m,
+            BalanceSource = (int)WalletBalanceSource.Deposited,
+            Type = (int)WalletTransactionType.Adjustment,
+            Status = (int)WalletTransactionStatus.Succeeded,
+            IdempotencyKey = oldChargeKey,
+            GatewayProvider = "InternalTokenWallet",
+            GatewayTransactionCode = oldChargeKey,
+            CreatedAt = fixture.Now.AddMinutes(-9),
+            CompletedAt = fixture.Now.AddMinutes(-9)
+        });
+        fixture.Context.Set<WalletTransaction>().Add(new WalletTransaction
+        {
+            WalletTransactionsId = Guid.NewGuid(),
+            UserWalletsId = Guid.NewGuid(),
+            UserId = fixture.FreelancerUserId,
+            ContractsId = oldContractId,
+            TokenAmount = 5m,
+            VndAmount = 5m,
+            BalanceSource = (int)WalletBalanceSource.Combined,
+            Type = (int)WalletTransactionType.ServiceFeeRefund,
+            Status = (int)WalletTransactionStatus.Succeeded,
+            IdempotencyKey = oldRefundKey,
+            GatewayProvider = "InternalTokenWallet",
+            GatewayTransactionCode = oldRefundKey,
+            CreatedAt = fixture.Now.AddMinutes(-5),
+            CompletedAt = fixture.Now.AddMinutes(-5)
+        });
+
+        // The client and freelancer renegotiate from the same proposal, with a different
+        // price and milestone plan than the abandoned attempt.
+        fixture.AddOfferWithSnapshot(1500m, 600m, 900m);
+
+        var handler = new RespondFinalOfferCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopChatRealtimeNotifier());
+
+        var result = await handler.Handle(
+            new RespondFinalOfferCommand(
+                fixture.FreelancerUserId,
+                new RespondFinalOfferRequest(
+                    fixture.OfferId,
+                    FinalOfferResponse.Accept,
+                    null)),
+            CancellationToken.None);
+
+        // The Cancelled contract row is reused, not replaced — no second Contract row is
+        // ever inserted, which is exactly what avoids the Contracts_propo_ProposalsId_key
+        // duplicate-key error.
+        var contract = Assert.Single(fixture.Contracts.Entities);
+        Assert.Equal(oldContractId, contract.ContractsId);
+        Assert.Equal(oldContractId, result.ContractId);
+        Assert.Equal((int)ContractStatus.PendingContractConfirmation, contract.Status);
+        Assert.Equal(1500m, contract.TotalBudget);
+        Assert.Null(contract.CancelledAt);
+        Assert.Null(contract.CancelledByUserId);
+        Assert.Equal(1, contract.RevisionNumber);
+
+        // Stale milestones/work items from the abandoned attempt are gone, replaced by the
+        // new offer's snapshot.
+        Assert.DoesNotContain(fixture.Milestones.Entities, m => m.MilestonesId == staleMilestoneId);
+        Assert.Equal(1500m, fixture.Milestones.Entities.Sum(m => m.Amount));
+        Assert.DoesNotContain(
+            fixture.Context.Set<ContractWorkItem>(),
+            wi => wi.MilestonesId == staleMilestoneId);
+
+        // Stale escrow is gone — ConfirmContractDetailsCommandHandler will create a fresh
+        // one from the reset TotalBudget.
+        Assert.Empty(fixture.Escrows.Entities);
+
+        // Stale e-sign document is voided rather than resumed, forcing a fresh document on
+        // the next ConfirmContractDetailsCommandHandler call.
+        var staleDocument = fixture.Context.Set<EsignDocument>()
+            .Single(d => d.EsignDocumentsId == staleDocumentId);
+        Assert.Equal((int)ESignDocumentStatus.Voided, staleDocument.Status);
+
+        // The stale charge+refund pair is gone; exactly one fresh charge exists under the
+        // same idempotency key (reused because ContractsId didn't change), and the
+        // freelancer's wallet was actually debited a second time.
+        var walletTransactions = fixture.Context.Set<WalletTransaction>().ToList();
+        Assert.DoesNotContain(walletTransactions, t => t.IdempotencyKey == oldRefundKey);
+        var newCharge = Assert.Single(walletTransactions, t => t.IdempotencyKey == oldChargeKey);
+        Assert.Equal(15m, newCharge.TokenAmount); // 1% of the new 1,500 final price
+        var freelancerWallet = fixture.Context.Set<UserWallet>()
+            .Single(wallet => wallet.UserId == fixture.FreelancerUserId);
+        Assert.Equal(85m, freelancerWallet.AvailableTokens); // 100 - 15
     }
 
     private static object? GetPropertyValue(object instance, string propertyName)
@@ -635,6 +1039,7 @@ public class NegotiationFlowCommandHandlerTests
         {
             Title = $"Milestone {index + 1}",
             Amount = amount,
+            EstimatedDuration = "1 week",
             Deliverables = $"Deliverable {index + 1}",
             AcceptanceCriteria = $"Acceptance criteria {index + 1}",
             OrderIndex = index,

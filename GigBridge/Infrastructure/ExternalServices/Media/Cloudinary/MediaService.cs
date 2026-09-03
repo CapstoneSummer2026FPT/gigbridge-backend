@@ -97,7 +97,7 @@ public class MediaService : IMediaService
                     PublicId = publicId
                 };
 
-                var uploadResult = await Task.Run(() => _cloudinary.Upload(uploadParams), cancellationToken);
+                var uploadResult = await _cloudinary.UploadAsync(uploadParams, resourceType, cancellationToken);
                 return GetSecureUrl(uploadResult, resourceType);
             }
         }

@@ -10,7 +10,8 @@ public interface INotificationService
         string? content = null,
         Guid? referenceId = null,
         string? referenceType = null,
-        CancellationToken cancellationToken = default);
+        CancellationToken cancellationToken = default,
+        string? metadata = null);
 
     Task CreateBroadcastNotificationAsync(
         NotificationTarget target,

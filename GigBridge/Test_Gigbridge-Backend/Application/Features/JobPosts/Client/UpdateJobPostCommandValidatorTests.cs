@@ -10,7 +10,6 @@ public class UpdateJobPostCommandValidatorTests
 
     [Theory]
     [InlineData(0)]
-    [InlineData(1)]
     [InlineData(2)]
     public void Validate_ReturnsNoErrorsForValidVisibility(int visibility)
     {
@@ -33,6 +32,7 @@ public class UpdateJobPostCommandValidatorTests
 
     [Theory]
     [InlineData(-1)]
+    [InlineData(1)]
     [InlineData(3)]
     public void Validate_ReturnsErrorWhenVisibilityIsOutOfRange(int visibility)
     {
@@ -109,7 +109,7 @@ public class UpdateJobPostCommandValidatorTests
             BudgetMax: 1000m,
             Currency: "VND",
             EstimatedDuration: "2 weeks",
-            Visibility: 1,
+            Visibility: 0,
             EndDate: DateTime.UtcNow.AddDays(7),
             SkillIds: new List<Guid> { Guid.NewGuid() },
             CustomSkillNames: new List<string> { "API" });

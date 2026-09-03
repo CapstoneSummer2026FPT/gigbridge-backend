@@ -1,31 +1,34 @@
 using Application.Common.InternalServices.Notifications.Models;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.Email;
+using Application.Common.InternalServices.Delivery.Models;
 using Application.Common.InternalServices.Notifications.Interfaces;
 using Application.Features.Auth.Shared.DTOs;
-using Application.Features.Notifications.Common.DTOs;
 using Domain.Entities;
 using Domain.Enums.Accounts;
+using Domain.Enums.Chat;
+using Domain.Enums.Delivery;
 using Domain.Enums.Notifications;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using System.Text.Json;
+using Application.Common.Models.Email;
 
 namespace Application.Common.InternalServices.Notifications.Services;
 public class NotificationService : INotificationService
 {
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
     private readonly IApplicationDbContext _context;
-    private readonly INotificationSender _notificationSender;
     private readonly IEmailService? _emailService;
     private readonly ILogger<NotificationService> _logger;
 
     public NotificationService(
         IApplicationDbContext context,
-        INotificationSender notificationSender,
         ILogger<NotificationService> logger,
         IEmailService? emailService = null)
     {
         _context = context;
-        _notificationSender = notificationSender;
         _logger = logger;
         _emailService = emailService;
     }
@@ -37,24 +40,29 @@ public class NotificationService : INotificationService
         string? content = null,
         Guid? referenceId = null,
         string? referenceType = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string? metadata = null)
     {
         var notification = new Domain.Entities.Notification
         {
+            NotificationsId = Guid.NewGuid(),
             UserId = userId,
             Type = (int)type,
             Title = title,
             Content = content,
             ReferenceId = referenceId,
             ReferenceType = referenceType,
+            Metadata = metadata,
             IsRead = false,
             CreatedAt = DateTime.UtcNow
         };
 
         _context.Set<Domain.Entities.Notification>().Add(notification);
+        EnqueueRealtimeDelivery(
+            $"notification:{notification.NotificationsId}",
+            userId,
+            new GenericNotificationDeliveryPayload(userId, notification.NotificationsId, null, null));
         await _context.SaveChangesAsync(cancellationToken);
-
-        await _notificationSender.SendToUserAsync(userId, MapToDto(notification), cancellationToken);
     }
 
     public async Task CreateBroadcastNotificationAsync(
@@ -83,6 +91,7 @@ public class NotificationService : INotificationService
         var now = DateTime.UtcNow;
         var broadcastNotification = new BroadcastNotification
         {
+            BroadcastNotificationId = Guid.NewGuid(),
             Title = title,
             Content = content,
             Type = (int)type,
@@ -99,6 +108,7 @@ public class NotificationService : INotificationService
         {
             broadcastNotification.Recipients.Add(new BroadcastNotificationRecipient
             {
+                BroadcastNotificationRecipientId = Guid.NewGuid(),
                 UserId = userId,
                 IsRead = false,
                 CreatedAt = now
@@ -106,16 +116,41 @@ public class NotificationService : INotificationService
         }
 
         _context.Set<BroadcastNotification>().Add(broadcastNotification);
-        await _context.SaveChangesAsync(cancellationToken);
+        foreach (var recipient in broadcastNotification.Recipients)
+        {
+            EnqueueRealtimeDelivery(
+                $"broadcast:{broadcastNotification.BroadcastNotificationId}:{recipient.BroadcastNotificationRecipientId}",
+                recipient.UserId,
+                new GenericNotificationDeliveryPayload(
+                    recipient.UserId, null, broadcastNotification.BroadcastNotificationId, recipient.BroadcastNotificationRecipientId));
+        }
 
-        var sendTasks = broadcastNotification.Recipients.Select(r =>
-            _notificationSender.SendToUserAsync(r.UserId, MapToDto(broadcastNotification, r), cancellationToken));
-        await Task.WhenAll(sendTasks);
+        await _context.SaveChangesAsync(cancellationToken);
 
         if (sendEmail && _emailService is not null)
         {
             await SendBroadcastEmailAsync(targetUserIds, title, content ?? title, cancellationToken);
         }
+    }
+
+    private void EnqueueRealtimeDelivery(string deliveryKey, Guid userId, GenericNotificationDeliveryPayload payload)
+    {
+        var now = DateTime.UtcNow;
+        _context.Set<DeliveryOutbox>().Add(new DeliveryOutbox
+        {
+            DeliveryOutboxId = Guid.NewGuid(),
+            DeliveryKey = deliveryKey,
+            ScheduleId = null,
+            DeliveryType = (int)DeliveryOutboxType.GenericNotification,
+            RecipientUserId = userId,
+            EventSequence = 0,
+            Channel = (int)DeliveryChannel.NotificationRealtime,
+            Payload = JsonSerializer.Serialize(payload, JsonOptions),
+            Status = (int)DeliveryOutboxStatus.Pending,
+            AttemptCount = 0,
+            NextAttemptAt = now,
+            CreatedAt = now
+        });
     }
 
     private async Task<List<Guid>> ResolveTargetUserIdsAsync(
@@ -189,46 +224,4 @@ public class NotificationService : INotificationService
         }
     }
 
-    private static NotificationDto MapToDto(Domain.Entities.Notification notification)
-    {
-        return new NotificationDto
-        {
-            Id = notification.NotificationsId,
-            Source = "Personal",
-            NotificationId = notification.NotificationsId,
-            ReadTargetId = notification.NotificationsId,
-            Type = (NotificationType)notification.Type,
-            Title = notification.Title,
-            Content = notification.Content,
-            ReferenceId = notification.ReferenceId,
-            ReferenceType = notification.ReferenceType,
-            Metadata = notification.Metadata,
-            Revision = notification.Revision,
-            IsRead = notification.IsRead ?? false,
-            ReadAt = notification.ReadAt,
-            CreatedAt = notification.CreatedAt
-        };
-    }
-
-    private static NotificationDto MapToDto(
-        BroadcastNotification notification,
-        BroadcastNotificationRecipient recipient)
-    {
-        return new NotificationDto
-        {
-            Id = notification.BroadcastNotificationId,
-            Source = "Broadcast",
-            BroadcastNotificationId = notification.BroadcastNotificationId,
-            BroadcastRecipientId = recipient.BroadcastNotificationRecipientId,
-            ReadTargetId = recipient.BroadcastNotificationRecipientId,
-            Type = (NotificationType)notification.Type,
-            Title = notification.Title,
-            Content = notification.Content,
-            ReferenceId = notification.ReferenceId,
-            ReferenceType = notification.ReferenceType,
-            IsRead = recipient.IsRead ?? false,
-            ReadAt = recipient.ReadAt,
-            CreatedAt = recipient.CreatedAt
-        };
-    }
 }

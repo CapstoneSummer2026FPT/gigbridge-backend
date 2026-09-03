@@ -1,13 +1,19 @@
 using Application.Common.Exceptions;
+using Application.Common.InternalServices.ESign.Services;
 using Application.Features.ESign.Common.DeleteDocument.Commands;
 using Application.Features.ESign.Common.DownloadDocument.Queries;
 using Application.Features.ESign.Common.GetDocument.Queries;
+using Application.Features.ESign.Common.GetDocumentStatusByContract.Queries;
 using Application.Features.ESign.Common.GetDocuments.Queries;
+using Application.Features.ESign.Common.Internal;
 using Application.Features.ESign.Common.SavePdf.Commands;
 using Domain.Entities;
 using Domain.Enums.Accounts;
 using Domain.Enums.Contracts;
 using Domain.Enums.ESign;
+using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
+using Infrastructure.Persistence;
 using Test_Gigbridge_Backend.TestSupport;
 
 namespace Test_Gigbridge_Backend.Application.Features.ESign;
@@ -87,6 +93,139 @@ public sealed class ESignDocumentManagementTests
         await Assert.ThrowsAsync<ConflictException>(() => handler.Handle(
             new DownloadESignDocumentQuery(fixture.PendingDocumentId, fixture.ClientUserId),
             CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Download_PrefersPdfArtifactWithoutReadingUnrelatedDocxArtifact()
+    {
+        var fixture = new Fixture();
+        var artifactPdf = "%PDF-1.7 artifact-table"u8.ToArray();
+        fixture.Context.AddSet(
+            new EsignDocumentArtifact
+            {
+                EsignDocumentArtifactId = Guid.NewGuid(),
+                EsignDocumentsId = fixture.FinalizedDocumentId,
+                ArtifactType = (int)ESignArtifactType.Pdf,
+                Content = artifactPdf,
+                FileName = "artifact.pdf",
+                MimeType = "application/pdf",
+                SizeBytes = artifactPdf.Length,
+                ContentHashSha256 = new string('a', 64),
+                ArtifactRevision = 3,
+                CreatedAt = fixture.Now
+            },
+            new EsignDocumentArtifact
+            {
+                EsignDocumentArtifactId = Guid.NewGuid(),
+                EsignDocumentsId = fixture.FinalizedDocumentId,
+                ArtifactType = (int)ESignArtifactType.FinalizedDocx,
+                Content = new byte[1024 * 1024],
+                FileName = "unrelated.docx",
+                MimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                SizeBytes = 1024 * 1024,
+                ContentHashSha256 = new string('b', 64),
+                ArtifactRevision = 3,
+                CreatedAt = fixture.Now
+            });
+        var handler = new DownloadESignDocumentQueryHandler(fixture.Context);
+
+        var result = await handler.Handle(
+            new DownloadESignDocumentQuery(fixture.FinalizedDocumentId, fixture.ClientUserId),
+            CancellationToken.None);
+
+        Assert.Equal(artifactPdf, result.Content);
+        Assert.Equal("application/pdf", result.ContentType);
+    }
+
+    [Fact]
+    public async Task ContractStatus_IsSmallAndHidesCounterpartIdentityAndSignatureImage()
+    {
+        var fixture = new Fixture();
+        var pending = fixture.Documents.Entities.Single(item => item.EsignDocumentsId == fixture.PendingDocumentId);
+        pending.ContentRevision = 7;
+        fixture.Signatures.AddRange(
+            new EsignSignature
+            {
+                EsignSignaturesId = Guid.NewGuid(),
+                EsignDocumentsId = fixture.PendingDocumentId,
+                UserId = fixture.ClientUserId,
+                SignerRole = (int)ESignerRole.Client,
+                Status = (int)ESignSignatureStatus.Pending,
+                SignatureImageUrl = "data:image/png;base64,current-user",
+                SignatureWidth = 200,
+                SignatureHeight = 70,
+                IdentityOrTaxCode = "123456789",
+                DraftSubmittedAt = fixture.Now,
+                PolicyAcceptedAt = fixture.Now,
+                PolicyVersion = ContractEsignRenderer.PolicyVersion,
+                IpAddress = "10.0.0.1",
+                UserAgent = "secret-current-agent",
+                CreatedAt = fixture.Now
+            },
+            new EsignSignature
+            {
+                EsignSignaturesId = Guid.NewGuid(),
+                EsignDocumentsId = fixture.PendingDocumentId,
+                UserId = fixture.FreelancerUserId,
+                SignerRole = (int)ESignerRole.Freelancer,
+                Status = (int)ESignSignatureStatus.Pending,
+                SignatureImageUrl = "data:image/png;base64,counterpart-secret",
+                SignatureWidth = 210,
+                SignatureHeight = 75,
+                IdentityOrTaxCode = "987654321",
+                DraftSubmittedAt = fixture.Now,
+                PolicyAcceptedAt = fixture.Now,
+                PolicyVersion = ContractEsignRenderer.PolicyVersion,
+                IpAddress = "10.0.0.2",
+                UserAgent = "secret-counterpart-agent",
+                CreatedAt = fixture.Now.AddSeconds(1)
+            });
+        var handler = new GetESignDocumentStatusByContractQueryHandler(fixture.Context);
+
+        var result = await handler.Handle(
+            new GetESignDocumentStatusByContractQuery(fixture.ContractId, fixture.ClientUserId),
+            CancellationToken.None);
+
+        Assert.Equal(7, result.Revision);
+        Assert.Equal(2, result.SignatureCount);
+        var own = Assert.Single(result.Signatures, item => item.UserId == fixture.ClientUserId);
+        Assert.Equal("123456789", own.IdentityOrTaxCode);
+        Assert.NotNull(own.SignatureImageUrl);
+        var counterpart = Assert.Single(result.Signatures, item => item.UserId == fixture.FreelancerUserId);
+        Assert.Null(counterpart.IdentityOrTaxCode);
+        Assert.Null(counterpart.SignatureImageUrl);
+        Assert.Null(counterpart.SignatureWidth);
+        Assert.Null(counterpart.SignatureHeight);
+
+        var json = JsonSerializer.Serialize(result);
+        Assert.True(System.Text.Encoding.UTF8.GetByteCount(json) < 16 * 1024);
+        Assert.DoesNotContain("RenderedHtmlContent", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("ContractSnapshotJson", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("PdfDocumentContent", json, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("secret-counterpart", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("secret-current-agent", json, StringComparison.Ordinal);
+        Assert.DoesNotContain("secret-counterpart-agent", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ContractStatusSql_DoesNotSelectContentOrArtifactTables()
+    {
+        var options = new DbContextOptionsBuilder<GigbridgeDbContext>()
+            .UseNpgsql("Host=localhost;Database=query_shape;Username=query_shape;Password=query_shape")
+            .Options;
+        using var context = new GigbridgeDbContext(options);
+
+        var sql = GetESignDocumentStatusByContractQueryHandler
+            .StatusDocumentQuery(context, Guid.NewGuid())
+            .ToQueryString();
+
+        Assert.Contains("ESign.Status.Document", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("ESignDocumentContents", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("ESignDocumentArtifacts", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("RenderedHtmlContent", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("ContractSnapshotJson", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("PdfDocumentContent", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("FinalizedDocumentContent", sql, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -222,7 +361,6 @@ public sealed class ESignDocumentManagementTests
                     JobPostsId = JobPostId,
                     ContractsId = ContractId,
                     DocumentCode = "GB-CONTRACT-PENDING",
-                    RenderedHtmlContent = "<h1>Pending</h1>",
                     Status = (int)ESignDocumentStatus.PendingSignatures,
                     DocumentHash = "pending-hash",
                     CreatedAt = Now
@@ -234,19 +372,31 @@ public sealed class ESignDocumentManagementTests
                     JobPostsId = JobPostId,
                     ContractsId = ContractId,
                     DocumentCode = "GB-CONTRACT-FINAL",
-                    RenderedHtmlContent = "<h1>Final</h1>",
                     Status = (int)ESignDocumentStatus.FullySigned,
                     DocumentHash = "final-hash",
                     FinalizedAt = Now.AddDays(-1),
-                    FinalizedDocumentContent = FinalizedContent,
                     FinalizedDocumentFileName = "GB-CONTRACT-FINAL.docx",
-                    FinalizedDocumentMimeType = DocxContentType,
                     FinalizedDocumentSizeBytes = FinalizedContent.Length,
-                    PdfDocumentContent = PdfContent,
-                    PdfDocumentFileName = "GB-CONTRACT-FINAL.pdf",
-                    PdfDocumentHash = "final-hash:contract-template-pdf-v2",
+                    PdfDocumentSizeBytes = PdfContent.Length,
+                    PdfDocumentHash = "final-hash:contract-template-pdf-v5",
                     PdfSignatureCount = 2,
                     CreatedAt = Now.AddDays(-1)
+                });
+
+            Context.AddSet(
+                new EsignDocumentContent
+                {
+                    EsignDocumentsId = PendingDocumentId,
+                    RenderedHtmlContent = "<h1>Pending</h1>"
+                },
+                new EsignDocumentContent
+                {
+                    EsignDocumentsId = FinalizedDocumentId,
+                    RenderedHtmlContent = "<h1>Final</h1>",
+                    FinalizedDocumentContent = FinalizedContent,
+                    FinalizedDocumentMimeType = DocxContentType,
+                    PdfDocumentContent = PdfContent,
+                    PdfDocumentFileName = "GB-CONTRACT-FINAL.pdf"
                 });
 
             Signatures = Context.AddSet(
@@ -305,11 +455,15 @@ public sealed class ESignDocumentManagementTests
                 JobPostsId = JobPostId,
                 ContractsId = ContractId,
                 DocumentCode = $"GB-DRAFT-{Guid.NewGuid():N}",
-                RenderedHtmlContent = "<h1>Draft</h1>",
                 Status = (int)ESignDocumentStatus.Draft,
                 CreatedAt = Now
             };
             Documents.Add(document);
+            Context.Set<EsignDocumentContent>().Add(new EsignDocumentContent
+            {
+                EsignDocumentsId = document.EsignDocumentsId,
+                RenderedHtmlContent = "<h1>Draft</h1>"
+            });
             return document;
         }
     }

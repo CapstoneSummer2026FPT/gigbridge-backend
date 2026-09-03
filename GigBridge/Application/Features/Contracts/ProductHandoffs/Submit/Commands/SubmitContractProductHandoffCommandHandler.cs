@@ -5,6 +5,7 @@ using Application.Common.Interfaces.Media;
 using Application.Common.Interfaces.Time;
 using Application.Common.InternalServices.Chat.Interfaces;
 using Application.Common.InternalServices.Notifications.Interfaces;
+using Application.Common.Models.Files;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.Contracts.ProductHandoffs.Common;
 using Application.Features.Contracts.ProductHandoffs.Common.DTOs;
@@ -79,20 +80,20 @@ public sealed class SubmitContractProductHandoffCommandHandler :
                 cancellationToken);
 
             var now = _dateTimeService.UtcNow;
-            var currentHandoffs = await _context.Set<ContractProductHandoff>()
-                .Where(handoff => handoff.ContractsId == contract.ContractsId && handoff.IsCurrent)
+
+            // Combined into a single round trip: one tracked fetch of every handoff for this
+            // contract, then compute both "which are current" and "next version" in memory
+            // instead of two separate DB queries.
+            var allHandoffs = await _context.Set<ContractProductHandoff>()
+                .Where(handoff => handoff.ContractsId == contract.ContractsId)
                 .ToListAsync(cancellationToken);
 
-            foreach (var currentHandoff in currentHandoffs)
+            foreach (var currentHandoff in allHandoffs.Where(h => h.IsCurrent))
             {
                 currentHandoff.IsCurrent = false;
             }
 
-            var nextVersion = await _context.Set<ContractProductHandoff>()
-                .AsNoTracking()
-                .Where(handoff => handoff.ContractsId == contract.ContractsId)
-                .Select(handoff => (int?)handoff.Version)
-                .MaxAsync(cancellationToken) ?? 0;
+            var nextVersion = allHandoffs.Count > 0 ? allHandoffs.Max(h => h.Version) : 0;
 
             var handoff = new ContractProductHandoff
             {
@@ -164,10 +165,21 @@ public sealed class SubmitContractProductHandoffCommandHandler :
 
                 if (systemMessage is not null)
                 {
+                    var messagePayload = ContractConversationEvents.ToRealtimePayload(systemMessage);
+
+                    if (participantUserIds.Count > 0)
+                    {
+                        await _chatRealtimeNotifier.SendUsersEventAsync(
+                            participantUserIds,
+                            "ReceiveMessage",
+                            messagePayload,
+                            cancellationToken);
+                    }
+
                     await _chatRealtimeNotifier.SendConversationEventAsync(
                         systemMessage.ConversationsId,
                         "ReceiveMessage",
-                        ContractConversationEvents.ToRealtimePayload(systemMessage),
+                        messagePayload,
                         cancellationToken);
                 }
 

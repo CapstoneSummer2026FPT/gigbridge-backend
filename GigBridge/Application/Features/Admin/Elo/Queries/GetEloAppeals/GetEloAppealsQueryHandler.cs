@@ -19,7 +19,7 @@ public sealed class GetEloAppealsQueryHandler :
         CancellationToken cancellationToken)
     {
         var page = Math.Max(1, query.Page);
-        var size = Math.Clamp(query.PageSize, 1, 100);
+        var size = Math.Clamp(query.PageSize, 1, PaginatedQuery.MaxPageSize);
 
         var rows = _context.Set<EloPointAppeal>()
             .AsNoTracking()

@@ -36,17 +36,37 @@ public class GetMyConversationsQueryHandler
             .Select(participant => participant.ConversationsId)
             .ToHashSet();
 
-        var conversations = await _context.Set<Conversation>()
+        var conversationsQuery = _context.Set<Conversation>()
             .AsNoTracking()
+            .TagWith("Chat.ConversationSummary")
             .Where(conversation =>
                 conversationIds.Contains(conversation.ConversationsId) &&
-                conversation.DeletedAt == null)
+                conversation.DeletedAt == null &&
+                (!request.ConversationId.HasValue || conversation.ConversationsId == request.ConversationId) &&
+                (!request.ContractId.HasValue || conversation.ContractsId == request.ContractId) &&
+                (!request.DisputeId.HasValue || conversation.DisputesId == request.DisputeId) &&
+                (!request.ProposalId.HasValue || conversation.ProposalsId == request.ProposalId) &&
+                (!request.JobPostId.HasValue || conversation.JobPostsId == request.JobPostId) &&
+                (request.Cursor == null ||
+                    (conversation.LastMessageAt ?? conversation.CreatedAt) < request.Cursor.SortAt ||
+                    ((conversation.LastMessageAt ?? conversation.CreatedAt) == request.Cursor.SortAt &&
+                     conversation.ConversationsId.CompareTo(request.Cursor.ConversationId) < 0)))
             .Include(conversation => conversation.JobPosts)
                 .ThenInclude(jobPost => jobPost!.MajorCategory)
                     .ThenInclude(majorCategory => majorCategory!.Category)
             .Include(conversation => conversation.Proposals)
             .OrderByDescending(conversation => conversation.LastMessageAt ?? conversation.CreatedAt)
-            .ToListAsync(cancellationToken);
+            .ThenByDescending(conversation => conversation.ConversationsId);
+
+        if (request.Take.HasValue)
+        {
+            conversationsQuery = (IOrderedQueryable<Conversation>)conversationsQuery.Take(request.Take.Value);
+        }
+
+        var conversations = await conversationsQuery.ToListAsync(cancellationToken);
+        var pageConversationIds = conversations
+            .Select(conversation => conversation.ConversationsId)
+            .ToHashSet();
 
         var lastMessageIds = conversations
             .Where(conversation => conversation.LastMessageId.HasValue)
@@ -78,16 +98,20 @@ public class GetMyConversationsQueryHandler
 
         var allParticipants = await _context.Set<ConversationParticipant>()
             .AsNoTracking()
-            .Where(p => conversationIds.Contains(p.ConversationsId) && p.DeletedAt == null)
-            .Include(p => p.User)
-                .ThenInclude(u => u.FreelancerProfile)
-            .Include(p => p.User)
-                .ThenInclude(u => u.ClientProfile)
+            .Where(p => pageConversationIds.Contains(p.ConversationsId) && p.DeletedAt == null)
+            .Select(p => new ParticipantSummary(
+                p.ConversationsId,
+                p.UserId,
+                p.User.FullName,
+                p.User.Avatar,
+                p.User.Role,
+                p.User.ClientProfile != null ? p.User.ClientProfile.CompanyName : null,
+                p.User.FreelancerProfile != null ? p.User.FreelancerProfile.Title : null))
             .ToListAsync(cancellationToken);
 
         var otherParticipantsLookup = allParticipants
             .Where(p => p.UserId != request.UserId)
-            .GroupBy(p => p.ConversationsId)
+            .GroupBy(p => p.ConversationId)
             .ToDictionary(
                 g => g.Key,
                 g => g.First()
@@ -95,7 +119,7 @@ public class GetMyConversationsQueryHandler
 
         var latestOffers = await _context.Set<NegotiationOffer>()
             .AsNoTracking()
-            .Where(offer => conversationIds.Contains(offer.ConversationsId))
+            .Where(offer => pageConversationIds.Contains(offer.ConversationsId))
             .OrderByDescending(offer => offer.CreatedAt)
             .ToListAsync(cancellationToken);
 
@@ -136,11 +160,11 @@ public class GetMyConversationsQueryHandler
                             attachmentsByMessage.GetValueOrDefault(message!.MessagesId) ?? [])
                         : null,
                     otherParticipant?.UserId,
-                    otherParticipant?.User?.FullName,
-                    otherParticipant?.User?.Avatar,
-                    otherParticipant?.User?.Role,
-                    otherParticipant?.User?.ClientProfile?.CompanyName,
-                    otherParticipant?.User?.FreelancerProfile?.Title,
+                    otherParticipant?.FullName,
+                    otherParticipant?.Avatar,
+                    otherParticipant?.Role,
+                    otherParticipant?.CompanyName,
+                    otherParticipant?.FreelancerTitle,
                     latestOffer?.NegotiationOfferId,
                     latestOffer?.FinalPrice,
                     latestOffer?.Status,
@@ -160,6 +184,15 @@ public class GetMyConversationsQueryHandler
             })
             .ToList();
     }
+
+    private sealed record ParticipantSummary(
+        Guid ConversationId,
+        Guid UserId,
+        string? FullName,
+        string? Avatar,
+        int Role,
+        string? CompanyName,
+        string? FreelancerTitle);
 
     private static bool IsVisibleToParticipant(Message message, Guid userId, int participantRole)
     {

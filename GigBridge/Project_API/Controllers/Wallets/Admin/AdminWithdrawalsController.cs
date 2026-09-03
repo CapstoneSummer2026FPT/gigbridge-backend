@@ -23,6 +23,17 @@ public sealed class AdminWithdrawalsController : BaseApiController
         return Ok(ApiResponse<IReadOnlyList<WithdrawalResponse>>.Ok(result, "Success"));
     }
 
+    /// <summary>
+    /// Reports why payouts are or are not flowing on the node that serves this request. Behind a
+    /// load balancer, call it a few times and compare <c>instance</c> to cover every node.
+    /// </summary>
+    [HttpGet("payout-health")]
+    public async Task<IActionResult> GetPayoutHealth([FromQuery] bool bypassCache = false)
+    {
+        var result = await Mediator.Send(new GetPayoutHealthQuery(bypassCache));
+        return Ok(ApiResponse<PayoutHealthResponse>.Ok(result, "Success"));
+    }
+
     [HttpGet("{withdrawalId:guid}")]
     public async Task<IActionResult> GetWithdrawalDetail(Guid withdrawalId)
     {
@@ -35,6 +46,40 @@ public sealed class AdminWithdrawalsController : BaseApiController
     {
         var result = await Mediator.Send(new SyncWithdrawalCommand(withdrawalId, null, true));
         return Ok(ApiResponse<WithdrawalResponse>.Ok(result, "Withdrawal status synced"));
+    }
+
+    /// <summary>
+    /// Re-reads provider state for every non-terminal withdrawal. Safe to run first after an
+    /// outage: it only reads, so it cannot pay twice, and it tells apart withdrawals the provider
+    /// already paid from ones it never received.
+    /// </summary>
+    [HttpPost("bulk-sync")]
+    public async Task<IActionResult> BulkSyncWithdrawals(
+        [FromQuery] int? status,
+        [FromQuery] int limit = 100)
+    {
+        var result = await Mediator.Send(new BulkSyncWithdrawalsCommand(status, limit));
+        return Ok(ApiResponse<BulkWithdrawalOperationResponse>.Ok(result, "Withdrawals synced"));
+    }
+
+    /// <summary>
+    /// Re-queues an explicit list of withdrawals for payout. Run <c>bulk-sync</c> first and retry
+    /// only the ids it reports as never received by the provider.
+    /// </summary>
+    [HttpPost("bulk-retry")]
+    public async Task<IActionResult> BulkRetryWithdrawals(
+        [FromBody] BulkRetryWithdrawalsRequest request)
+    {
+        if (!TryGetCurrentUserId(out var adminUserId))
+        {
+            return InvalidTokenResponse();
+        }
+
+        var result = await Mediator.Send(
+            new BulkRetryWithdrawalsCommand(adminUserId, request.WithdrawalIds));
+        return Accepted(ApiResponse<BulkWithdrawalOperationResponse>.Ok(
+            result,
+            "Withdrawal retries queued; worker will process automatically"));
     }
 
     [HttpPost("{withdrawalId:guid}/retry")]

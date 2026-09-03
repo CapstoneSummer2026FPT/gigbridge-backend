@@ -27,6 +27,25 @@ public static class ESignTemplateInitializationExtensions
             var context = scope.ServiceProvider.GetRequiredService<GigbridgeDbContext>();
             var templateReader = scope.ServiceProvider.GetRequiredService<ITemplateReader>();
 
+            // Automatically apply any pending database migrations & ensure columns exist in PostgreSQL
+            try
+            {
+                await context.Database.MigrateAsync();
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "MigrateAsync warning, attempting direct ALTER TABLE execution...");
+            }
+
+            await context.Database.ExecuteSqlRawAsync(@"
+                ALTER TABLE ""ProposalAiJudgings"" ADD COLUMN IF NOT EXISTS ""TechnicalQualityScore"" double precision NULL;
+                ALTER TABLE ""ProposalAiJudgings"" ADD COLUMN IF NOT EXISTS ""ValueScore"" double precision NULL;
+                ALTER TABLE ""ProposalAiJudgings"" ADD COLUMN IF NOT EXISTS ""VerdictBadge"" text NULL;
+                ALTER TABLE ""ProposalAiJudgings"" ADD COLUMN IF NOT EXISTS ""QualityBand"" text NULL;
+                ALTER TABLE ""ProposalAiJudgings"" ADD COLUMN IF NOT EXISTS ""SavingsRatioPercent"" double precision NULL;
+                ALTER TABLE ""ProposalAiJudgings"" ADD COLUMN IF NOT EXISTS ""ScopeCompletenessPercent"" double precision NULL;
+                ALTER TABLE ""ProposalAiJudgings"" ADD COLUMN IF NOT EXISTS ""FullEvaluationJson"" text NULL;
+            ");
 
             var hasActiveFixedPriceTemplate = await context.EsignTemplates
                 .AnyAsync(template =>

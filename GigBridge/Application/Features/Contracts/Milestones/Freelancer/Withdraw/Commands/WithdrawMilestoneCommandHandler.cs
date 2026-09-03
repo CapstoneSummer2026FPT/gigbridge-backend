@@ -2,6 +2,7 @@ using Application.Common.InternalServices.Contracts.Services;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.Time;
+using Application.Common.InternalServices.Chat.Interfaces;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.Contracts.Milestones.Common.DTOs;
 using Application.Features.Contracts.Milestones.Common.Internal;
@@ -21,13 +22,16 @@ public sealed class WithdrawMilestoneCommandHandler :
 
     private readonly IApplicationDbContext _context;
     private readonly IDateTimeService _dateTimeService;
+    private readonly IChatRealtimeNotifier? _realtimeNotifier;
 
     public WithdrawMilestoneCommandHandler(
         IApplicationDbContext context,
-        IDateTimeService dateTimeService)
+        IDateTimeService dateTimeService,
+        IChatRealtimeNotifier? realtimeNotifier = null)
     {
         _context = context;
         _dateTimeService = dateTimeService;
+        _realtimeNotifier = realtimeNotifier;
     }
 
     public async Task<WithdrawMilestoneResponse> Handle(
@@ -164,7 +168,7 @@ public sealed class WithdrawMilestoneCommandHandler :
             CompletedAt = now
         });
 
-        await ContractConversationEvents.AddSystemMessageAsync(
+        var systemMessage = await ContractConversationEvents.AddSystemMessageAsync(
             _context,
             contract.ContractsId,
             $"Milestone early withdrawal released: {milestone.Title}.",
@@ -173,6 +177,23 @@ public sealed class WithdrawMilestoneCommandHandler :
 
         await _context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+
+        if (_realtimeNotifier is not null)
+        {
+            var participantIds = await MilestoneWorkflowGuard.GetParticipantUserIdsAsync(_context, contract, cancellationToken);
+            await _realtimeNotifier.SendUsersEventAsync(
+                participantIds,
+                "MilestoneStatusChanged",
+                new { contractId = contract.ContractsId, milestoneId = milestone.MilestonesId, status = milestone.Status },
+                cancellationToken);
+
+            if (systemMessage is not null)
+            {
+                var messagePayload = ContractConversationEvents.ToRealtimePayload(systemMessage);
+                await _realtimeNotifier.SendUsersEventAsync(participantIds, "ReceiveMessage", messagePayload, cancellationToken);
+                await _realtimeNotifier.SendConversationEventAsync(systemMessage.ConversationsId, "ReceiveMessage", messagePayload, cancellationToken);
+            }
+        }
 
         return new WithdrawMilestoneResponse(
             contract.ContractsId,

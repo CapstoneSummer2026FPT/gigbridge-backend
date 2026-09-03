@@ -143,7 +143,13 @@ internal static class MilestoneWorkflowGuard
         throw new ForbiddenAccessException("Only contract participants can view milestones.");
     }
 
-    public static ContractMilestoneResponse ToResponse(Milestone milestone)
+    /// <param name="deliveryMode">
+    /// Enum MilestoneDeliveryMode from the owning contract. Passed in rather than read off the
+    /// milestone because the milestone has no back-pointer loaded on most of these code paths;
+    /// callers that genuinely have no contract in hand fall through to Legacy, which is the safe
+    /// default (it routes the client to the existing milestone-level screens).
+    /// </param>
+    public static ContractMilestoneResponse ToResponse(Milestone milestone, int deliveryMode = 0)
     {
         var attachments = milestone.MilestoneAttachments != null
             ? System.Linq.Enumerable.ToList(System.Linq.Enumerable.Select(milestone.MilestoneAttachments, a => new MilestoneAttachmentResponse(
@@ -165,11 +171,13 @@ internal static class MilestoneWorkflowGuard
                 item.Description,
                 item.Deliverables,
                 item.EstimatedDuration,
+                item.DueDate,
                 item.OrderIndex,
                 item.Status,
                 item.ProgressNote,
                 item.CompletedAt,
-                item.UpdatedAt)).ToList()
+                item.UpdatedAt,
+                ToSubmissionResponses(item))).ToList()
             : [];
 
         return new ContractMilestoneResponse(
@@ -191,7 +199,46 @@ internal static class MilestoneWorkflowGuard
             milestone.LastReleasedAt,
             milestone.SubmissionDescription,
             attachments,
-            workItems);
+            workItems,
+            deliveryMode);
+    }
+
+    private static IReadOnlyList<ContractWorkItemSubmissionResponse> ToSubmissionResponses(ContractWorkItem item)
+    {
+        if (item.Submissions is null || item.Submissions.Count == 0)
+        {
+            return [];
+        }
+
+        return item.Submissions
+            .OrderBy(submission => submission.RevisionNumber)
+            .Select(submission => new ContractWorkItemSubmissionResponse(
+                submission.ContractWorkItemSubmissionId,
+                submission.ContractWorkItemId,
+                submission.RevisionNumber,
+                submission.Note,
+                submission.SubmittedAt,
+                submission.SubmittedByUserId,
+                submission.ReviewStatus,
+                submission.ReviewedAt,
+                submission.ReviewedByUserId,
+                submission.ReviewReason,
+                submission.Attachments is null
+                    ? []
+                    : submission.Attachments
+                        .OrderBy(attachment => attachment.CreatedAt)
+                        .Select(attachment => new MilestoneAttachmentResponse(
+                            attachment.MilestoneAttachmentsId,
+                            attachment.MilestonesId,
+                            attachment.FileName,
+                            attachment.FileUrl,
+                            attachment.FileSize,
+                            attachment.SourceType,
+                            attachment.MimeType,
+                            attachment.UploadedByUserId,
+                            attachment.CreatedAt))
+                        .ToList()))
+            .ToList();
     }
 
     /// <summary>
@@ -250,6 +297,38 @@ internal static class MilestoneWorkflowGuard
             : (clientUserId, user.FullName, user.Email);
     }
 
+    /// <summary>
+    /// The freelancer's contact details for delivery emails. Returns null when the contract has no
+    /// freelancer assigned yet, which is a legitimate state before an offer is accepted — callers
+    /// simply skip the email rather than failing the operation that already committed.
+    /// </summary>
+    public static async Task<(Guid UserId, string FullName, string Email)?> GetFreelancerContactAsync(
+        IApplicationDbContext context,
+        Contract contract,
+        CancellationToken cancellationToken)
+    {
+        if (contract.FreelancerProfilesId is null)
+        {
+            return null;
+        }
+
+        var freelancerUserId = await context.Set<FreelancerProfile>()
+            .Where(profile => profile.FreelancerProfilesId == contract.FreelancerProfilesId.Value)
+            .Select(profile => profile.UserId)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (freelancerUserId == Guid.Empty)
+        {
+            return null;
+        }
+
+        var user = await context.Set<User>()
+            .Where(user => user.UserId == freelancerUserId)
+            .Select(user => new { user.FullName, user.Email })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return user is null ? null : (freelancerUserId, user.FullName, user.Email);
+    }
+
     public static IOrderedQueryable<Milestone> OrderMilestones(IQueryable<Milestone> milestones)
     {
         return milestones
@@ -263,7 +342,7 @@ internal static class MilestoneWorkflowGuard
     /// before it (by SortOrder) is Approved or Completed. No-op if no such milestone exists
     /// (e.g. the contract has no remaining milestones, or the chain is already broken).
     /// </summary>
-    public static void AdvanceNextMilestone(IReadOnlyList<Milestone> orderedMilestones, DateTime now)
+    public static Milestone? AdvanceNextMilestone(IReadOnlyList<Milestone> orderedMilestones, DateTime now)
     {
         var next = orderedMilestones.FirstOrDefault(candidate =>
             candidate.Status == (int)MilestoneStatus.Pending &&
@@ -275,5 +354,27 @@ internal static class MilestoneWorkflowGuard
             next.StartedAt = now;
             next.UpdatedAt = now;
         }
+
+        return next;
+    }
+
+    /// <summary>
+    /// True if a Pending milestone is allowed to transition to InProgress right now: every
+    /// milestone before it (by SortOrder) is Approved or Completed, or the freelancer holds an
+    /// Approved early-start request for this specific milestone. This is the single source of
+    /// truth for "can this milestone start" shared by UpdateContractWorkItemCommandHandler
+    /// (freelancer starting via work item update) and RespondMilestoneEarlyStartCommandHandler
+    /// (client approving early start).
+    /// </summary>
+    public static bool IsEligibleToStart(
+        Milestone candidate,
+        IReadOnlyList<Milestone> orderedMilestones,
+        bool hasApprovedEarlyStartRequest)
+    {
+        var allPriorApproved = orderedMilestones
+            .Where(previous => (previous.SortOrder ?? 0) < (candidate.SortOrder ?? 0))
+            .All(previous => previous.Status is (int)MilestoneStatus.Approved or (int)MilestoneStatus.Completed);
+
+        return allPriorApproved || hasApprovedEarlyStartRequest;
     }
 }

@@ -7,6 +7,7 @@ using Domain.Entities;
 using Domain.Enums.Contracts;
 using Domain.Enums.Notifications;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 using Test_Gigbridge_Backend.TestSupport;
 
 
@@ -75,7 +76,8 @@ public class UpdateProposalStatusCommandHandlerTests
         context.AddSet(draftContract);
         var escrows = context.AddSet<ContractEscrow>();
 
-        var handler = new UpdateProposalStatusCommandHandler(context, new FixedDateTimeService(now));
+        var handler = new UpdateProposalStatusCommandHandler(
+            context, new FixedDateTimeService(now), new NoopNotificationService());
         var command = new UpdateProposalStatusCommand(
             acceptedProposalId,
             clientUserId,
@@ -137,7 +139,8 @@ public class UpdateProposalStatusCommandHandlerTests
         });
         context.AddSet<ContractEscrow>();
 
-        var handler = new UpdateProposalStatusCommandHandler(context, new FixedDateTimeService(now));
+        var handler = new UpdateProposalStatusCommandHandler(
+            context, new FixedDateTimeService(now), new NoopNotificationService());
         var command = new UpdateProposalStatusCommand(
             proposalId,
             clientUserId,
@@ -154,17 +157,21 @@ public class UpdateProposalStatusCommandHandlerTests
         var context = new InMemoryApplicationDbContext();
         var freelancerUserId = Guid.NewGuid();
         var freelancerProfileId = Guid.NewGuid();
+        var clientProfileId = Guid.NewGuid();
         var jobPostId = Guid.NewGuid();
         var proposalId = Guid.NewGuid();
 
+        var clientUserId = Guid.NewGuid();
+        var clientProfile = new ClientProfile { ClientProfilesId = clientProfileId, UserId = clientUserId };
         var jobPost = new JobPost
         {
             JobPostsId = jobPostId,
-            ClientProfilesId = Guid.NewGuid(),
+            ClientProfilesId = clientProfileId,
             Title = "Interview job",
             Description = "Answer questions.",
             Status = 1,
-            CreatedAt = now
+            CreatedAt = now,
+            ClientProfiles = clientProfile
         };
         var proposal = new Proposal
         {
@@ -206,10 +213,11 @@ public class UpdateProposalStatusCommandHandlerTests
         });
         context.AddSet(jobPost);
         context.AddSet(proposal);
-        context.AddSet<ClientProfile>();
+        context.AddSet(clientProfile);
         context.AddSet<UserEloPointTransaction>();
         context.AddSet<Notification>();
-        var handler = new UpdateProposalStatusCommandHandler(context, new FixedDateTimeService(now));
+        var notificationService = new SpyNotificationService(context);
+        var handler = new UpdateProposalStatusCommandHandler(context, new FixedDateTimeService(now), notificationService);
 
         var result = await handler.Handle(
             new UpdateProposalStatusCommand(
@@ -221,13 +229,20 @@ public class UpdateProposalStatusCommandHandlerTests
         Assert.True(result.Success);
         Assert.Equal(1, proposal.Status);
         Assert.Empty(context.Set<UserEloPointTransaction>());
-        Assert.Empty(context.Set<Notification>());
+
+        var notification = Assert.Single(notificationService.Notifications);
+        Assert.Equal(clientUserId, notification.UserId);
+        Assert.Equal(NotificationType.ProposalReceived, notification.Type);
+        Assert.Equal(jobPostId, notification.ReferenceId);
+        Assert.Equal("ProposalMilestone", notification.ReferenceType);
+        Assert.Contains("1", notification.Title);
+        Assert.Contains(jobPost.Title, notification.Title);
     }
 
     [Fact]
     public async Task Handle_SubmitDraftWithoutWorkBreakdown_ThrowsBadRequest()
     {
-        var (handler, proposal, userId) = CreateDraftSubmissionHandler();
+        var (handler, proposal, userId, _, _, _) = CreateDraftSubmissionHandler();
         proposal.ProposalWorkBreakdownItems.Clear();
 
         var exception = await Assert.ThrowsAsync<BadRequestException>(() => handler.Handle(
@@ -244,7 +259,7 @@ public class UpdateProposalStatusCommandHandlerTests
     [Fact]
     public async Task Handle_SubmitDraftWithBudgetOverride_AllowsMilestoneTotalMismatch()
     {
-        var (handler, proposal, userId) = CreateDraftSubmissionHandler();
+        var (handler, proposal, userId, _, _, _) = CreateDraftSubmissionHandler();
         proposal.ProposalMilestonePlans.Single().Amount = 400m;
 
         var result = await handler.Handle(
@@ -263,7 +278,7 @@ public class UpdateProposalStatusCommandHandlerTests
     [Fact]
     public async Task Handle_SubmitDraftWithGeneratedWorkItem_PassesSubmissionGuard()
     {
-        var (handler, proposal, userId) = CreateDraftSubmissionHandler();
+        var (handler, proposal, userId, _, _, _) = CreateDraftSubmissionHandler();
         var milestone = proposal.ProposalMilestonePlans.Single();
         var workItem = proposal.ProposalWorkBreakdownItems.Single();
         workItem.Title = milestone.Title;
@@ -286,7 +301,7 @@ public class UpdateProposalStatusCommandHandlerTests
     [Fact]
     public async Task Handle_WithdrawShortlistedProposal_ThrowsBadRequest()
     {
-        var (handler, proposal, userId) = CreateDraftSubmissionHandler();
+        var (handler, proposal, userId, _, _, _) = CreateDraftSubmissionHandler();
         proposal.Status = 2;
 
         var exception = await Assert.ThrowsAsync<BadRequestException>(() => handler.Handle(
@@ -303,7 +318,7 @@ public class UpdateProposalStatusCommandHandlerTests
     [Fact]
     public async Task Handle_SubmitDraftWithoutMilestoneDuration_ThrowsBadRequest()
     {
-        var (handler, proposal, userId) = CreateDraftSubmissionHandler();
+        var (handler, proposal, userId, _, _, _) = CreateDraftSubmissionHandler();
         proposal.ProposalMilestonePlans.Single().EstimatedDuration = null;
 
         var exception = await Assert.ThrowsAsync<BadRequestException>(() => handler.Handle(
@@ -320,7 +335,7 @@ public class UpdateProposalStatusCommandHandlerTests
     [Fact]
     public async Task Handle_SubmitDraftWithoutMilestoneDeadline_ThrowsBadRequest()
     {
-        var (handler, proposal, userId) = CreateDraftSubmissionHandler();
+        var (handler, proposal, userId, _, _, _) = CreateDraftSubmissionHandler();
         proposal.ProposalMilestonePlans.Single().DueDate = null;
 
         var exception = await Assert.ThrowsAsync<BadRequestException>(() => handler.Handle(
@@ -337,7 +352,7 @@ public class UpdateProposalStatusCommandHandlerTests
     [Fact]
     public async Task Handle_SubmitDraftWhenJobPostClosed_ThrowsBadRequest()
     {
-        var (handler, proposal, userId) = CreateDraftSubmissionHandler();
+        var (handler, proposal, userId, _, _, _) = CreateDraftSubmissionHandler();
         proposal.JobPosts.Status = 2;
 
         var exception = await Assert.ThrowsAsync<BadRequestException>(() => handler.Handle(
@@ -381,7 +396,8 @@ public class UpdateProposalStatusCommandHandlerTests
         context.AddSet(jobPost);
         context.AddSet(proposal);
 
-        var handler = new UpdateProposalStatusCommandHandler(context, new FixedDateTimeService(now));
+        var handler = new UpdateProposalStatusCommandHandler(
+            context, new FixedDateTimeService(now), new NoopNotificationService());
 
         var exception = await Assert.ThrowsAsync<BadRequestException>(() => handler.Handle(
             new UpdateProposalStatusCommand(
@@ -394,20 +410,174 @@ public class UpdateProposalStatusCommandHandlerTests
         Assert.Equal(1, proposal.Status);
     }
 
-    private static (UpdateProposalStatusCommandHandler Handler, Proposal Proposal, Guid UserId) CreateDraftSubmissionHandler()
+    [Theory]
+    [InlineData(0, 1)]
+    [InlineData(2, 3)]
+    [InlineData(4, 5)]
+    [InlineData(9, 10)]
+    [InlineData(19, 20)]
+    [InlineData(49, 50)]
+    [InlineData(99, 100)]
+    [InlineData(199, 200)]
+    [InlineData(599, 600)]
+    public async Task Handle_SubmitDraft_NotifiesClientAtProposalMilestone(
+        int existingSubmittedProposals, int expectedProposalCount)
+    {
+        var notificationService = new SpyNotificationService();
+        var (handler, proposal, userId, jobPostId, clientUserId, context) =
+            CreateDraftSubmissionHandler(notificationService, existingSubmittedProposals);
+        notificationService.Context = context;
+
+        var result = await handler.Handle(
+            new UpdateProposalStatusCommand(
+                proposal.ProposalsId,
+                userId,
+                new UpdateProposalStatusRequest { Status = 1 }),
+            CancellationToken.None);
+
+        Assert.True(result.Success);
+        var notification = Assert.Single(notificationService.Notifications);
+        Assert.Equal(clientUserId, notification.UserId);
+        Assert.Equal(NotificationType.ProposalReceived, notification.Type);
+        Assert.Equal(jobPostId, notification.ReferenceId);
+        Assert.Equal("ProposalMilestone", notification.ReferenceType);
+        Assert.Contains($"Đã có {expectedProposalCount} Proposal", notification.Title);
+        Assert.Contains(proposal.JobPosts.Title, notification.Title);
+        Assert.NotNull(notification.Metadata);
+        using var metadataDoc = JsonDocument.Parse(notification.Metadata!);
+        Assert.Equal(expectedProposalCount, metadataDoc.RootElement.GetProperty("proposalCount").GetInt32());
+        Assert.Equal(jobPostId, metadataDoc.RootElement.GetProperty("jobPostId").GetGuid());
+    }
+
+    [Theory]
+    [InlineData(1, 2)]
+    [InlineData(10, 11)]
+    [InlineData(20, 21)]
+    public async Task Handle_SubmitDraft_DoesNotNotifyOnNonMilestoneCount(
+        int existingSubmittedProposals, int expectedProposalCount)
+    {
+        var notificationService = new SpyNotificationService();
+        var (handler, proposal, userId, _, _, context) =
+            CreateDraftSubmissionHandler(notificationService, existingSubmittedProposals);
+        notificationService.Context = context;
+
+        var result = await handler.Handle(
+            new UpdateProposalStatusCommand(
+                proposal.ProposalsId,
+                userId,
+                new UpdateProposalStatusRequest { Status = 1 }),
+            CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Equal(expectedProposalCount, existingSubmittedProposals + 1);
+        Assert.Empty(notificationService.Notifications);
+    }
+
+    [Fact]
+    public async Task Handle_SubmitDraft_CountsProposalsPerJobPostOnly()
+    {
+        var notificationService = new SpyNotificationService();
+        var (handler, proposal, userId, jobPostId, clientUserId, context) =
+            CreateDraftSubmissionHandler(notificationService, existingSubmittedProposals: 9);
+        notificationService.Context = context;
+
+        var otherJobPostId = Guid.NewGuid();
+        var otherClientProfile = new ClientProfile { ClientProfilesId = Guid.NewGuid(), UserId = Guid.NewGuid() };
+        var otherJobPost = new JobPost
+        {
+            JobPostsId = otherJobPostId,
+            ClientProfilesId = otherClientProfile.ClientProfilesId,
+            Title = "Unrelated job",
+            Description = "A different job post.",
+            Status = 1,
+            CreatedAt = proposal.JobPosts.CreatedAt,
+            ClientProfiles = otherClientProfile
+        };
+        var otherProposals = context.Set<Proposal>();
+        for (var i = 0; i < 30; i++)
+        {
+            otherProposals.Add(new Proposal
+            {
+                ProposalsId = Guid.NewGuid(),
+                JobPostsId = otherJobPostId,
+                FreelancerProfilesId = Guid.NewGuid(),
+                Status = 1,
+                JobPosts = otherJobPost
+            });
+        }
+
+        var result = await handler.Handle(
+            new UpdateProposalStatusCommand(
+                proposal.ProposalsId,
+                userId,
+                new UpdateProposalStatusRequest { Status = 1 }),
+            CancellationToken.None);
+
+        Assert.True(result.Success);
+        var notification = Assert.Single(notificationService.Notifications);
+        Assert.Equal(clientUserId, notification.UserId);
+        Assert.Equal(jobPostId, notification.ReferenceId);
+        Assert.Contains("Đã có 10 Proposal", notification.Title);
+    }
+
+    [Fact]
+    public async Task Handle_SubmitDraft_DoesNotDuplicateNotificationForSameMilestone()
+    {
+        var notificationService = new SpyNotificationService();
+        var (handler, proposal, userId, jobPostId, _, context) =
+            CreateDraftSubmissionHandler(notificationService, existingSubmittedProposals: 0);
+        notificationService.Context = context;
+
+        context.AddSet(new Notification
+        {
+            NotificationsId = Guid.NewGuid(),
+            UserId = Guid.NewGuid(),
+            Type = (int)NotificationType.ProposalReceived,
+            Title = "Đã có 1 Proposal ứng tuyển vào Project request.",
+            ReferenceId = jobPostId,
+            ReferenceType = "ProposalMilestone",
+            Metadata = System.Text.Json.JsonSerializer.Serialize(new { jobPostId, proposalCount = 1 }),
+            IsRead = false,
+            CreatedAt = proposal.JobPosts.CreatedAt
+        });
+
+        var result = await handler.Handle(
+            new UpdateProposalStatusCommand(
+                proposal.ProposalsId,
+                userId,
+                new UpdateProposalStatusRequest { Status = 1 }),
+            CancellationToken.None);
+
+        Assert.True(result.Success);
+        Assert.Empty(notificationService.Notifications);
+    }
+
+    private static (
+        UpdateProposalStatusCommandHandler Handler,
+        Proposal Proposal,
+        Guid UserId,
+        Guid JobPostId,
+        Guid ClientUserId,
+        InMemoryApplicationDbContext Context) CreateDraftSubmissionHandler(
+        INotificationService? notificationService = null,
+        int existingSubmittedProposals = 0)
     {
         var now = new DateTime(2026, 7, 5, 10, 0, 0, DateTimeKind.Utc);
         var context = new InMemoryApplicationDbContext();
         var userId = Guid.NewGuid();
         var freelancerProfileId = Guid.NewGuid();
+        var clientProfileId = Guid.NewGuid();
+        var clientUserId = Guid.NewGuid();
+        var clientProfile = new ClientProfile { ClientProfilesId = clientProfileId, UserId = clientUserId };
         var jobPost = new JobPost
         {
             JobPostsId = Guid.NewGuid(),
-            ClientProfilesId = Guid.NewGuid(),
+            ClientProfilesId = clientProfileId,
             Title = "Project request",
             Description = "Build the requested product.",
             Status = 1,
-            CreatedAt = now
+            CreatedAt = now,
+            ClientProfiles = clientProfile
         };
         var proposal = new Proposal
         {
@@ -448,10 +618,25 @@ public class UpdateProposalStatusCommandHandlerTests
             UserId = userId
         });
         context.AddSet(jobPost);
-        context.AddSet(proposal);
-        context.AddSet<ClientProfile>();
+        var proposals = context.AddSet(proposal);
+        for (var i = 0; i < existingSubmittedProposals; i++)
+        {
+            proposals.Add(new Proposal
+            {
+                ProposalsId = Guid.NewGuid(),
+                JobPostsId = jobPost.JobPostsId,
+                FreelancerProfilesId = Guid.NewGuid(),
+                Status = 1,
+                JobPosts = jobPost
+            });
+        }
+        context.AddSet(clientProfile);
+        context.AddSet<Notification>();
 
-        return (new UpdateProposalStatusCommandHandler(context, new FixedDateTimeService(now)), proposal, userId);
+        var handler = new UpdateProposalStatusCommandHandler(
+            context, new FixedDateTimeService(now), notificationService ?? new NoopNotificationService());
+
+        return (handler, proposal, userId, jobPost.JobPostsId, clientUserId, context);
     }
 
     private sealed class FixedDateTimeService : IDateTimeService
@@ -466,12 +651,16 @@ public class UpdateProposalStatusCommandHandlerTests
 
     private sealed class SpyNotificationService : INotificationService
     {
-        private readonly InMemoryApplicationDbContext _context;
+        public SpyNotificationService()
+        {
+        }
 
         public SpyNotificationService(InMemoryApplicationDbContext context)
         {
-            _context = context;
+            Context = context;
         }
+
+        public InMemoryApplicationDbContext? Context { get; set; }
 
         public List<NotificationCall> Notifications { get; } = new();
 
@@ -482,7 +671,8 @@ public class UpdateProposalStatusCommandHandlerTests
             string? content = null,
             Guid? referenceId = null,
             string? referenceType = null,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default,
+            string? metadata = null)
         {
             Notifications.Add(new NotificationCall(
                 userId,
@@ -491,7 +681,8 @@ public class UpdateProposalStatusCommandHandlerTests
                 content ?? string.Empty,
                 referenceId,
                 referenceType,
-                _context.SaveChangesCount));
+                metadata,
+                Context?.SaveChangesCount ?? 0));
 
             return Task.CompletedTask;
         }
@@ -522,6 +713,7 @@ public class UpdateProposalStatusCommandHandlerTests
         string Content,
         Guid? ReferenceId,
         string? ReferenceType,
+        string? Metadata,
         int SaveChangesCountAtCreation);
 }
 

@@ -1,11 +1,16 @@
 using Application.Common.Interfaces;
 using System.Data.Common;
 using Microsoft.EntityFrameworkCore.Storage;
+using System.Diagnostics;
+using System.Diagnostics.Metrics;
 
 namespace Infrastructure.Persistence;
 
 internal sealed class EfApplicationDbContextTransaction : IApplicationDbContextTransaction
 {
+    private static readonly Meter Meter = new("GigBridge.Database");
+    private static readonly Histogram<double> LockWaitMilliseconds = Meter.CreateHistogram<double>(
+        "gigbridge.database.advisory_lock.wait", "ms", "PostgreSQL transaction advisory lock wait time.");
     private readonly IDbContextTransaction _transaction;
 
     public EfApplicationDbContextTransaction(IDbContextTransaction transaction)
@@ -15,7 +20,24 @@ internal sealed class EfApplicationDbContextTransaction : IApplicationDbContextT
 
     public async Task AcquireTransactionLockAsync(
         long lockKey,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string? lockPurpose = null,
+        string callerFilePath = "")
+    {
+        await AcquireTransactionLockAsync(
+            _transaction,
+            lockKey,
+            cancellationToken,
+            lockPurpose,
+            callerFilePath);
+    }
+
+    internal static async Task AcquireTransactionLockAsync(
+        IDbContextTransaction transaction,
+        long lockKey,
+        CancellationToken cancellationToken,
+        string? lockPurpose = null,
+        string callerFilePath = "")
     {
         // Providers without a real SQL transaction (e.g. the EF Core in-memory store
         // used by tests) expose no DbTransaction, so the Postgres advisory lock is a
@@ -23,7 +45,7 @@ internal sealed class EfApplicationDbContextTransaction : IApplicationDbContextT
         DbTransaction? dbTransaction;
         try
         {
-            dbTransaction = _transaction.GetDbTransaction();
+            dbTransaction = transaction.GetDbTransaction();
         }
         catch (Exception exception) when (exception is NotSupportedException or InvalidOperationException)
         {
@@ -45,7 +67,20 @@ internal sealed class EfApplicationDbContextTransaction : IApplicationDbContextT
         parameter.Value = lockKey;
         command.Parameters.Add(parameter);
 
+        var purpose = string.IsNullOrWhiteSpace(lockPurpose)
+            ? Path.GetFileNameWithoutExtension(callerFilePath)
+            : lockPurpose;
+        var started = Stopwatch.GetTimestamp();
         await command.ExecuteNonQueryAsync(cancellationToken);
+        var elapsed = Stopwatch.GetElapsedTime(started);
+        LockWaitMilliseconds.Record(elapsed.TotalMilliseconds,
+            new KeyValuePair<string, object?>("lock.purpose", purpose));
+        if (elapsed >= TimeSpan.FromSeconds(2))
+        {
+            Trace.TraceWarning(
+                "PostgreSQL advisory lock {0} waited {1:F0}ms (key={2}).",
+                purpose, elapsed.TotalMilliseconds, lockKey);
+        }
     }
 
     public Task CommitAsync(CancellationToken cancellationToken)

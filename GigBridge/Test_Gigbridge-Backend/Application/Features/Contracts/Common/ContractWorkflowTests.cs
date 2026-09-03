@@ -2,12 +2,18 @@ using Application.Common.InternalServices.ESign.Services;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces.Time;
 using Application.Common.Interfaces.Caching;
+using Application.Common.Interfaces.Email;
+using Application.Common.InternalServices.Contracts.Interfaces;
+using Application.Common.InternalServices.Contracts.Models;
 using Application.Common.InternalServices.Notifications.Interfaces;
+using Application.Common.Models.Email;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.Contracts.Details.Client.Update.Commands;
 using Application.Features.Contracts.Details.Client.Update.DTOs;
 using Application.Features.Contracts.Details.Client.Submit.Commands;
 using Application.Features.Contracts.Details.Freelancer.Confirm.Commands;
+using Application.Features.Contracts.Details.Common.PlanChangeRequest.Queries;
+using Application.Features.Contracts.Details.Freelancer.RequestChange.Commands;
 using Application.Features.Contracts.Escrow.Client.Fund.Commands;
 using Application.Features.Contracts.MilestoneReview.Freelancer.Accept.Commands;
 using Application.Features.Contracts.MilestoneReview.Freelancer.RequestChange.Commands;
@@ -23,11 +29,14 @@ using Domain.Enums.Chat;
 using Domain.Enums.Contracts;
 using Domain.Enums.Contracts.Escrow;
 using Domain.Enums.Contracts.Milestones;
+using Domain.Enums.Delivery;
 using Domain.Enums.ESign;
 using Domain.Enums.Notifications;
 using Domain.Enums.Wallets;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
 using Test_Gigbridge_Backend.TestSupport;
 using NSubstitute;
 
@@ -157,7 +166,7 @@ public class ContractWorkflowTests
         Assert.Equal(createdAt, persistedWorkItem.CreatedAt);
         Assert.Equal(1, (await context.Set<Contract>().SingleAsync()).RevisionNumber);
     }
-    
+
     [Fact]
     public async Task SubmitAndFreelancerConfirm_CreatesEsignDocumentAndPendingEscrow()
     {
@@ -196,7 +205,11 @@ public class ContractWorkflowTests
         Assert.Equal(0m, escrow.FundedAmount);
         Assert.Equal((int)ContractEscrowStatus.PendingFunding, escrow.Status);
         Assert.Single(fixture.EsignDocuments.Entities);
-        Assert.NotNull(fixture.EsignDocuments.Entities[0].ContractSnapshotJson);
+        var confirmedDocumentId = fixture.EsignDocuments.Entities[0].EsignDocumentsId;
+        var confirmedContent = Assert.Single(
+            fixture.Context.Set<EsignDocumentContent>(),
+            item => item.EsignDocumentsId == confirmedDocumentId);
+        Assert.NotNull(confirmedContent.ContractSnapshotJson);
         Assert.Equal((int)ContractStatus.PendingSignature, fixture.Contract.Status);
 
         // Only the first, successful confirmation should have created an audit log entry.
@@ -219,7 +232,8 @@ public class ContractWorkflowTests
             new FixedDateTimeService(fixture.Now),
             new NoopNotificationService(),
             new NoopChatRealtimeNotifier(),
-            fundUserAuditLog);
+            fundUserAuditLog,
+            NullLogger<FundContractEscrowCommandHandler>.Instance);
 
         await Assert.ThrowsAsync<BadRequestException>(() =>
             handler.Handle(
@@ -302,7 +316,8 @@ public class ContractWorkflowTests
             new FixedDateTimeService(fixture.Now),
             new NoopNotificationService(),
             new NoopChatRealtimeNotifier(),
-            new CapturingUserAuditLogService());
+            new CapturingUserAuditLogService(),
+            NullLogger<FundContractEscrowCommandHandler>.Instance);
 
         var result = await handler.Handle(
             new FundContractEscrowCommand(fixture.ContractId, fixture.ClientUserId),
@@ -358,13 +373,14 @@ public class ContractWorkflowTests
             new FixedDateTimeService(fixture.Now),
             new NoopNotificationService(),
             new NoopChatRealtimeNotifier(),
-            new CapturingUserAuditLogService());
+            new CapturingUserAuditLogService(),
+            NullLogger<FundContractEscrowCommandHandler>.Instance);
 
         var result = await handler.Handle(
             new FundContractEscrowCommand(fixture.ContractId, fixture.ClientUserId),
             CancellationToken.None);
 
-        // Funding 200 G-coin: -202 available (200 hold + 2 fee), +200 held. No ÷1000.
+        // Funding 200 G-coin: -202 available (200 hold + 2 fee), +200 held. No Ã·1000.
         var wallet = fixture.Wallets.Entities[0];
         Assert.Equal(0m, wallet.AvailableTokens);
         Assert.Equal(200m, wallet.HeldTokens);
@@ -407,7 +423,8 @@ public class ContractWorkflowTests
             new FixedDateTimeService(fixture.Now),
             new NoopNotificationService(),
             new NoopChatRealtimeNotifier(),
-            new CapturingUserAuditLogService());
+            new CapturingUserAuditLogService(),
+            NullLogger<FundContractEscrowCommandHandler>.Instance);
 
         var first = await handler.Handle(
             new FundContractEscrowCommand(fixture.ContractId, fixture.ClientUserId),
@@ -450,7 +467,8 @@ public class ContractWorkflowTests
             new FixedDateTimeService(fixture.Now),
             new NoopNotificationService(),
             new NoopChatRealtimeNotifier(),
-            new CapturingUserAuditLogService());
+            new CapturingUserAuditLogService(),
+            NullLogger<FundContractEscrowCommandHandler>.Instance);
 
         // 600,000 deposited + 400,000 earned = 1,000,000, but the 10,000-token fee pushes it over.
         await Assert.ThrowsAsync<BadRequestException>(() =>
@@ -485,7 +503,8 @@ public class ContractWorkflowTests
             new FixedDateTimeService(fixture.Now),
             new NoopNotificationService(),
             new NoopChatRealtimeNotifier(),
-            new CapturingUserAuditLogService());
+            new CapturingUserAuditLogService(),
+            NullLogger<FundContractEscrowCommandHandler>.Instance);
 
         var result = await handler.Handle(
             new FundContractEscrowCommand(fixture.ContractId, fixture.ClientUserId),
@@ -503,6 +522,122 @@ public class ContractWorkflowTests
         Assert.Equal(2, fixture.Context.Set<JobPost>().Single().Status);
         Assert.Equal(2, fixture.WalletTransactions.Entities.Count);
         Assert.Single(fixture.EscrowTransactions.Entities);
+    }
+
+    [Fact]
+    public async Task FundEscrow_ActivatingContract_AcceptsLinkedProposalAndRejectsSiblings()
+    {
+        var fixture = new ContractWorkflowFixture();
+        fixture.MoveToPendingSignatureWithDocument();
+        fixture.MarkDocumentFullySigned();
+        fixture.Wallets.Add(new UserWallet
+        {
+            UserWalletsId = fixture.WalletId,
+            UserId = fixture.ClientUserId,
+            AvailableTokens = 1_010m,
+            HeldTokens = 0m,
+            CreatedAt = fixture.Now
+        });
+
+        var negotiatedProposalId = Guid.NewGuid();
+        fixture.Contract.ProposalsId = negotiatedProposalId;
+        fixture.Proposals.Add(new Proposal
+        {
+            ProposalsId = negotiatedProposalId,
+            JobPostsId = fixture.JobPostId,
+            FreelancerProfilesId = fixture.FreelancerProfileId,
+            Status = 2, // Shortlisted
+            SubmittedAt = fixture.Now
+        });
+        var pendingSiblingId = Guid.NewGuid();
+        fixture.Proposals.Add(new Proposal
+        {
+            ProposalsId = pendingSiblingId,
+            JobPostsId = fixture.JobPostId,
+            FreelancerProfilesId = Guid.NewGuid(),
+            Status = 1, // Pending
+            SubmittedAt = fixture.Now
+        });
+        var shortlistedSiblingId = Guid.NewGuid();
+        fixture.Proposals.Add(new Proposal
+        {
+            ProposalsId = shortlistedSiblingId,
+            JobPostsId = fixture.JobPostId,
+            FreelancerProfilesId = Guid.NewGuid(),
+            Status = 2, // Shortlisted
+            SubmittedAt = fixture.Now
+        });
+        var otherJobPostProposalId = Guid.NewGuid();
+        fixture.Proposals.Add(new Proposal
+        {
+            ProposalsId = otherJobPostProposalId,
+            JobPostsId = Guid.NewGuid(), // different job post â€” must be untouched
+            FreelancerProfilesId = Guid.NewGuid(),
+            Status = 1, // Pending
+            SubmittedAt = fixture.Now
+        });
+
+        var handler = new FundContractEscrowCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopNotificationService(),
+            new NoopChatRealtimeNotifier(),
+            new CapturingUserAuditLogService(),
+            NullLogger<FundContractEscrowCommandHandler>.Instance);
+
+        var result = await handler.Handle(
+            new FundContractEscrowCommand(fixture.ContractId, fixture.ClientUserId),
+            CancellationToken.None);
+
+        Assert.Equal((int)ContractStatus.Active, result.ContractStatus);
+        Assert.Equal(3, fixture.Proposals.Entities.Single(p => p.ProposalsId == negotiatedProposalId).Status);
+        Assert.Equal(4, fixture.Proposals.Entities.Single(p => p.ProposalsId == pendingSiblingId).Status);
+        Assert.Equal(4, fixture.Proposals.Entities.Single(p => p.ProposalsId == shortlistedSiblingId).Status);
+        Assert.Equal(1, fixture.Proposals.Entities.Single(p => p.ProposalsId == otherJobPostProposalId).Status);
+    }
+
+    [Fact]
+    public async Task FundEscrow_SelfHealAlreadyFundedEscrow_AlsoFinalizesProposalOutcome()
+    {
+        var fixture = new ContractWorkflowFixture();
+        fixture.MoveToFullySignedPendingEscrow();
+        fixture.Escrows.Entities[0].Status = (int)ContractEscrowStatus.Funded;
+
+        var negotiatedProposalId = Guid.NewGuid();
+        fixture.Contract.ProposalsId = negotiatedProposalId;
+        fixture.Proposals.Add(new Proposal
+        {
+            ProposalsId = negotiatedProposalId,
+            JobPostsId = fixture.JobPostId,
+            FreelancerProfilesId = fixture.FreelancerProfileId,
+            Status = 2, // Shortlisted
+            SubmittedAt = fixture.Now
+        });
+        var pendingSiblingId = Guid.NewGuid();
+        fixture.Proposals.Add(new Proposal
+        {
+            ProposalsId = pendingSiblingId,
+            JobPostsId = fixture.JobPostId,
+            FreelancerProfilesId = Guid.NewGuid(),
+            Status = 1, // Pending
+            SubmittedAt = fixture.Now
+        });
+
+        var handler = new FundContractEscrowCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopNotificationService(),
+            new NoopChatRealtimeNotifier(),
+            new CapturingUserAuditLogService(),
+            NullLogger<FundContractEscrowCommandHandler>.Instance);
+
+        var result = await handler.Handle(
+            new FundContractEscrowCommand(fixture.ContractId, fixture.ClientUserId),
+            CancellationToken.None);
+
+        Assert.Equal((int)ContractStatus.Active, result.ContractStatus);
+        Assert.Equal(3, fixture.Proposals.Entities.Single(p => p.ProposalsId == negotiatedProposalId).Status);
+        Assert.Equal(4, fixture.Proposals.Entities.Single(p => p.ProposalsId == pendingSiblingId).Status);
     }
 
     [Fact]
@@ -526,7 +661,8 @@ public class ContractWorkflowTests
             new FixedDateTimeService(fixture.Now),
             new NoopNotificationService(),
             new NoopChatRealtimeNotifier(),
-            new CapturingUserAuditLogService());
+            new CapturingUserAuditLogService(),
+            NullLogger<FundContractEscrowCommandHandler>.Instance);
 
         var exception = await Assert.ThrowsAsync<BadRequestException>(() => handler.Handle(
             new FundContractEscrowCommand(fixture.ContractId, fixture.ClientUserId),
@@ -561,7 +697,8 @@ public class ContractWorkflowTests
             new FixedDateTimeService(missingFreelancerFixture.Now),
             new NoopNotificationService(),
             new NoopChatRealtimeNotifier(),
-            new CapturingUserAuditLogService());
+            new CapturingUserAuditLogService(),
+            NullLogger<FundContractEscrowCommandHandler>.Instance);
 
         await Assert.ThrowsAsync<BadRequestException>(() =>
             missingFreelancerHandler.Handle(
@@ -577,7 +714,8 @@ public class ContractWorkflowTests
             new FixedDateTimeService(missingClientFixture.Now),
             new NoopNotificationService(),
             new NoopChatRealtimeNotifier(),
-            new CapturingUserAuditLogService());
+            new CapturingUserAuditLogService(),
+            NullLogger<FundContractEscrowCommandHandler>.Instance);
 
         await Assert.ThrowsAsync<BadRequestException>(() =>
             missingClientHandler.Handle(
@@ -601,7 +739,8 @@ public class ContractWorkflowTests
             fixture.DocumentGenerator,
             fixture.PdfConverter,
             new CapturingUserAuditLogService(),
-            Substitute.For<ICacheService>());
+            Substitute.For<ICacheService>(),
+            NullLogger<SignContractCommandHandler>.Instance);
 
         var exception = await Assert.ThrowsAsync<BadRequestException>(() => handler.Handle(
             new SignContractCommand(
@@ -640,7 +779,8 @@ public class ContractWorkflowTests
             fixture.DocumentGenerator,
             fixture.PdfConverter,
             signUserAuditLog,
-            CreateVerifiedIdentityCache());
+            CreateVerifiedIdentityCache(),
+            NullLogger<SignContractCommandHandler>.Instance);
 
         await handler.Handle(
             new SignContractCommand(
@@ -661,8 +801,13 @@ public class ContractWorkflowTests
             "012345678901",
             fixture.Context.Set<User>().Single(user => user.UserId == fixture.ClientUserId).IdentityOrTaxCode);
         Assert.Equal(fixture.Now, fixture.EsignSignatures.Entities[0].PolicyAcceptedAt);
-        Assert.Null(fixture.EsignDocuments.Entities[0].FinalizedDocumentContent);
-        Assert.Empty(fixture.DeliveryOutboxes.Entities);
+        Assert.Null(fixture.GetContractDocumentContent().FinalizedDocumentContent);
+        Assert.Equal(2, fixture.DeliveryOutboxes.Entities.Count);
+        Assert.All(fixture.DeliveryOutboxes.Entities, delivery =>
+        {
+            Assert.Equal((int)DeliveryOutboxType.ESignDocumentRevision, delivery.DeliveryType);
+            Assert.Equal((int)DeliveryChannel.NotificationRealtime, delivery.Channel);
+        });
 
         var result = await handler.Handle(
             new SignContractCommand(
@@ -688,7 +833,7 @@ public class ContractWorkflowTests
             "109876543210",
             fixture.Context.Set<User>().Single(user => user.UserId == fixture.FreelancerUserId).IdentityOrTaxCode);
         Assert.Equal(2, fixture.MediaService.Uploads.Count);
-        Assert.Equal(4, fixture.EsignDocuments.Entities[0].FinalizedDocumentContent?.Length);
+        Assert.Equal(4, fixture.GetContractDocumentContent().FinalizedDocumentContent?.Length);
         Assert.Equal(4L, fixture.EsignDocuments.Entities[0].FinalizedDocumentSizeBytes);
 
         // Finalization records one audit entry for each contract participant.
@@ -706,16 +851,25 @@ public class ContractWorkflowTests
         Assert.NotEqual(
             generation.DocumentHash,
             ContractEsignRenderer.ComputeFinalHash(
-                fixture.EsignDocuments.Entities[0],
+                fixture.GetContractDocumentContent(),
                 generation.ClientSignature with { PolicyVersion = "changed" },
                 generation.FreelancerSignature));
-        Assert.Equal(2, fixture.DeliveryOutboxes.Entities.Count);
-        Assert.All(fixture.DeliveryOutboxes.Entities, delivery =>
+        var emailDeliveries = fixture.DeliveryOutboxes.Entities
+            .Where(delivery => delivery.Channel == (int)DeliveryChannel.Email)
+            .ToList();
+        Assert.Equal(2, emailDeliveries.Count);
+        Assert.All(emailDeliveries, delivery =>
         {
             Assert.Null(delivery.ScheduleId);
             Assert.Equal((int)DeliveryChannel.Email, delivery.Channel);
             Assert.Equal((int)DeliveryOutboxStatus.Pending, delivery.Status);
         });
+        var revisionDeliveries = fixture.DeliveryOutboxes.Entities
+            .Where(delivery => delivery.DeliveryType == (int)DeliveryOutboxType.ESignDocumentRevision)
+            .ToList();
+        Assert.Equal(4, revisionDeliveries.Count);
+        Assert.All(revisionDeliveries, delivery =>
+            Assert.Equal((int)DeliveryChannel.NotificationRealtime, delivery.Channel));
     }
 
     [Fact]
@@ -733,7 +887,8 @@ public class ContractWorkflowTests
             fixture.DocumentGenerator,
             fixture.PdfConverter,
             auditLog,
-            identityCache);
+            identityCache,
+            NullLogger<SignContractCommandHandler>.Instance);
 
         await handler.Handle(
             new SignContractCommand(
@@ -780,10 +935,12 @@ public class ContractWorkflowTests
         Assert.Null(fixture.Context.Set<User>()
             .Single(user => user.UserId == fixture.FreelancerUserId)
             .IdentityOrTaxCode);
-        Assert.Null(fixture.GetContractDocument().FinalizedDocumentContent);
+        Assert.Null(fixture.GetContractDocumentContent().FinalizedDocumentContent);
         Assert.Empty(fixture.DocumentGenerator.GenerateCalls);
         Assert.Empty(fixture.PdfConverter.ConvertCalls);
-        Assert.Empty(fixture.DeliveryOutboxes.Entities);
+        Assert.Equal(2, fixture.DeliveryOutboxes.Entities.Count);
+        Assert.All(fixture.DeliveryOutboxes.Entities, delivery =>
+            Assert.Equal((int)DeliveryOutboxType.ESignDocumentRevision, delivery.DeliveryType));
         Assert.Empty(auditLog.Entries);
         await identityCache.Received(1)
             .GetAndRemoveAsync<bool>(Arg.Any<string>(), Arg.Any<CancellationToken>());
@@ -806,7 +963,8 @@ public class ContractWorkflowTests
             fixture.DocumentGenerator,
             fixture.PdfConverter,
             new CapturingUserAuditLogService(),
-            identityCache);
+            identityCache,
+            NullLogger<SignContractCommandHandler>.Instance);
 
         var exception = await Assert.ThrowsAsync<BadRequestException>(() =>
             handler.Handle(
@@ -851,7 +1009,8 @@ public class ContractWorkflowTests
             fixture.DocumentGenerator,
             fixture.PdfConverter,
             new CapturingUserAuditLogService(),
-            CreateVerifiedIdentityCache());
+            CreateVerifiedIdentityCache(),
+            NullLogger<SignContractCommandHandler>.Instance);
 
         await signHandler.Handle(
             new SignContractCommand(
@@ -911,7 +1070,8 @@ public class ContractWorkflowTests
             fixture.DocumentGenerator,
             fixture.PdfConverter,
             new CapturingUserAuditLogService(),
-            CreateVerifiedIdentityCache());
+            CreateVerifiedIdentityCache(),
+            NullLogger<SignContractCommandHandler>.Instance);
 
         await handler.Handle(
             new SignContractCommand(
@@ -1011,7 +1171,8 @@ public class ContractWorkflowTests
             fixture.DocumentGenerator,
             fixture.PdfConverter,
             new CapturingUserAuditLogService(),
-            CreateVerifiedIdentityCache());
+            CreateVerifiedIdentityCache(),
+            NullLogger<SignContractCommandHandler>.Instance);
 
         var result = await handler.Handle(
             new SignContractCommand(
@@ -1056,7 +1217,8 @@ public class ContractWorkflowTests
             fixture.DocumentGenerator,
             fixture.PdfConverter,
             new CapturingUserAuditLogService(),
-            CreateVerifiedIdentityCache());
+            CreateVerifiedIdentityCache(),
+            NullLogger<SignContractCommandHandler>.Instance);
 
         await Assert.ThrowsAsync<BadRequestException>(() =>
             handler.Handle(
@@ -1086,7 +1248,8 @@ public class ContractWorkflowTests
             fixture.DocumentGenerator,
             fixture.PdfConverter,
             new CapturingUserAuditLogService(),
-            CreateVerifiedIdentityCache());
+            CreateVerifiedIdentityCache(),
+            NullLogger<SignContractCommandHandler>.Instance);
 
         await Assert.ThrowsAsync<BadRequestException>(() =>
             handler.Handle(
@@ -1155,11 +1318,16 @@ public class ContractWorkflowTests
         fixture.MarkDocumentFullySigned();
         var notificationService = new RecordingNotificationService();
 
+        var emailService = Substitute.For<IEmailService>();
         var handler = new RequestContractMilestoneChangeCommandHandler(
             fixture.Context,
             new FixedDateTimeService(fixture.Now),
             new NoopChatRealtimeNotifier(),
-            notificationService);
+            notificationService,
+            emailService,
+            StubPlanChangeEmailRenderer(),
+            PlanChangeConfiguration(),
+            NullLogger<RequestContractMilestoneChangeCommandHandler>.Instance);
 
         var result = await handler.Handle(
             new RequestContractMilestoneChangeCommand(
@@ -1180,6 +1348,16 @@ public class ContractWorkflowTests
         Assert.Contains("Please adjust the second milestone.", notification.Content);
         Assert.Equal(fixture.ContractId, notification.ReferenceId);
         Assert.Equal("Contract", notification.ReferenceType);
+        await emailService.Received(1).SendEmailAsync(
+            Arg.Is<EmailRequest>(email => email.To == "client@example.com"),
+            Arg.Any<CancellationToken>());
+
+        var planChange = Assert.Single(fixture.Context.Set<ContractPlanChangeRequest>());
+        Assert.Equal(fixture.ContractId, planChange.ContractsId);
+        Assert.Equal(fixture.FreelancerUserId, planChange.RequestedByUserId);
+        Assert.Equal("Please adjust the second milestone.", planChange.Reason);
+        Assert.Equal((int)ContractPlanChangeOrigin.MilestoneReview, planChange.Origin);
+        Assert.Null(planChange.ResolvedAt);
 
         var submitHandler = new SubmitContractDetailsCommandHandler(
             fixture.Context,
@@ -1203,6 +1381,76 @@ public class ContractWorkflowTests
             document.Status == (int)ESignDocumentStatus.Voided));
         Assert.Single(fixture.EsignDocuments.Entities.Where(document =>
             document.Status == (int)ESignDocumentStatus.PendingSignatures));
+        Assert.NotNull(Assert.Single(fixture.Context.Set<ContractPlanChangeRequest>()).ResolvedAt);
+    }
+
+    [Fact]
+    public async Task RequestContractDetailsChange_NotifiesAndEmailsClient()
+    {
+        var fixture = new ContractWorkflowFixture();
+        fixture.ApplyValidDetails();
+        fixture.Contract.Status = (int)ContractStatus.PendingContractConfirmation;
+        var notificationService = new RecordingNotificationService();
+        var emailService = Substitute.For<IEmailService>();
+        var emailRenderer = Substitute.For<IContractPlanChangeEmailRenderer>();
+        ContractPlanChangeEmailModel? renderedModel = null;
+        emailRenderer.Render(Arg.Any<ContractPlanChangeEmailModel>())
+            .Returns(callInfo =>
+            {
+                renderedModel = callInfo.Arg<ContractPlanChangeEmailModel>();
+                return new RenderedContractPlanChangeEmail(
+                    "Rendered subject",
+                    "<p>Rendered body</p>",
+                    "Rendered text");
+            });
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["FrontendBaseUrl"] = "https://gigbridge.example"
+            })
+            .Build();
+        var handler = new RequestContractDetailsChangeCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopChatRealtimeNotifier(),
+            notificationService,
+            emailService,
+            emailRenderer,
+            configuration,
+            NullLogger<RequestContractDetailsChangeCommandHandler>.Instance);
+
+        var result = await handler.Handle(
+            new RequestContractDetailsChangeCommand(
+                fixture.ContractId,
+                fixture.FreelancerUserId,
+                new RequestContractDetailsChangeRequest("Please update the WBS.")),
+            CancellationToken.None);
+
+        Assert.Equal((int)ContractStatus.PendingContractDetails, result.Status);
+        var notification = Assert.Single(notificationService.Notifications);
+        Assert.Equal(fixture.ClientUserId, notification.UserId);
+        Assert.Equal(NotificationType.MilestoneUpdated, notification.Type);
+        Assert.Equal("Project plan changes requested", notification.Title);
+        Assert.Contains("Please update the WBS.", notification.Content);
+        Assert.Equal(fixture.ContractId, notification.ReferenceId);
+        Assert.Equal("Contract", notification.ReferenceType);
+
+        Assert.NotNull(renderedModel);
+        Assert.Equal("Client", renderedModel.ClientName);
+        Assert.Equal("Freelancer", renderedModel.FreelancerName);
+        Assert.Equal("Fixed contract", renderedModel.ContractTitle);
+        Assert.Equal("Please update the WBS.", renderedModel.Reason);
+        Assert.Equal($"https://gigbridge.example/contracts/{fixture.ContractId}", renderedModel.ActionUrl);
+
+        await emailService.Received(1).SendEmailAsync(
+            Arg.Is<EmailRequest>(email =>
+                email.To == "client@example.com" &&
+                email.Subject == "Rendered subject" &&
+                email.Body == "<p>Rendered body</p>" &&
+                email.TextBody == "Rendered text" &&
+                email.IsHtml &&
+                email.IdempotencyKey == $"contract-plan-change:{fixture.ContractId:N}:1"),
+            CancellationToken.None);
     }
 
     private static ICacheService CreateVerifiedIdentityCache()
@@ -1212,6 +1460,146 @@ public class ContractWorkflowTests
             .Returns(true);
         return cache;
     }
+
+    [Fact]
+    public async Task RequestContractDetailsChange_RecordsOpenPlanChangeRequestForTheClient()
+    {
+        var fixture = new ContractWorkflowFixture();
+        fixture.ApplyValidDetails();
+        fixture.Contract.Status = (int)ContractStatus.PendingContractConfirmation;
+        var milestoneId = fixture.Milestones.Entities[0].MilestonesId;
+
+        var handler = new RequestContractDetailsChangeCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopChatRealtimeNotifier(),
+            new RecordingNotificationService(),
+            Substitute.For<IEmailService>(),
+            StubPlanChangeEmailRenderer(),
+            PlanChangeConfiguration(),
+            NullLogger<RequestContractDetailsChangeCommandHandler>.Instance);
+
+        await handler.Handle(
+            new RequestContractDetailsChangeCommand(
+                fixture.ContractId,
+                fixture.FreelancerUserId,
+                new RequestContractDetailsChangeRequest("  Split milestone one.  ", [milestoneId])),
+            CancellationToken.None);
+
+        var request = Assert.Single(fixture.Context.Set<ContractPlanChangeRequest>());
+        Assert.Equal(fixture.ContractId, request.ContractsId);
+        Assert.Equal(fixture.FreelancerUserId, request.RequestedByUserId);
+        Assert.Equal("Split milestone one.", request.Reason);
+        Assert.Equal([milestoneId], request.AffectedMilestoneIds);
+        Assert.Equal((int)ContractPlanChangeOrigin.ContractDetails, request.Origin);
+        Assert.Null(request.ResolvedAt);
+
+        var query = new GetOpenContractPlanChangeRequestQueryHandler(fixture.Context);
+        var dto = await query.Handle(
+            new GetOpenContractPlanChangeRequestQuery(fixture.ContractId, fixture.ClientUserId),
+            CancellationToken.None);
+
+        Assert.NotNull(dto);
+        Assert.Equal("Split milestone one.", dto.Reason);
+        Assert.Equal("Freelancer", dto.RequestedByName);
+        Assert.Equal([milestoneId], dto.AffectedMilestoneIds);
+    }
+
+    [Fact]
+    public async Task SubmitContractDetails_ResolvesTheOpenPlanChangeRequest()
+    {
+        var fixture = new ContractWorkflowFixture();
+        fixture.ApplyValidDetails();
+        fixture.Contract.Status = (int)ContractStatus.PendingContractConfirmation;
+
+        var requestHandler = new RequestContractDetailsChangeCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopChatRealtimeNotifier(),
+            new RecordingNotificationService(),
+            Substitute.For<IEmailService>(),
+            StubPlanChangeEmailRenderer(),
+            PlanChangeConfiguration(),
+            NullLogger<RequestContractDetailsChangeCommandHandler>.Instance);
+        await requestHandler.Handle(
+            new RequestContractDetailsChangeCommand(
+                fixture.ContractId,
+                fixture.FreelancerUserId,
+                new RequestContractDetailsChangeRequest("Rework the plan.")),
+            CancellationToken.None);
+
+        var resolvedAt = fixture.Now.AddMinutes(5);
+        var submitHandler = new SubmitContractDetailsCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(resolvedAt),
+            new NoopChatRealtimeNotifier());
+        await submitHandler.Handle(
+            new SubmitContractDetailsCommand(fixture.ContractId, fixture.ClientUserId),
+            CancellationToken.None);
+
+        Assert.Equal(resolvedAt, Assert.Single(fixture.Context.Set<ContractPlanChangeRequest>()).ResolvedAt);
+
+        var query = new GetOpenContractPlanChangeRequestQueryHandler(fixture.Context);
+        Assert.Null(await query.Handle(
+            new GetOpenContractPlanChangeRequestQuery(fixture.ContractId, fixture.ClientUserId),
+            CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task RequestContractDetailsChange_RetiresTheEarlierRequestSoOnlyOneStaysOpen()
+    {
+        var fixture = new ContractWorkflowFixture();
+        fixture.ApplyValidDetails();
+
+        async Task RequestAsync(string reason, DateTime at)
+        {
+            fixture.Contract.Status = (int)ContractStatus.PendingContractConfirmation;
+            var handler = new RequestContractDetailsChangeCommandHandler(
+                fixture.Context,
+                new FixedDateTimeService(at),
+                new NoopChatRealtimeNotifier(),
+                new RecordingNotificationService(),
+                Substitute.For<IEmailService>(),
+                StubPlanChangeEmailRenderer(),
+                PlanChangeConfiguration(),
+                NullLogger<RequestContractDetailsChangeCommandHandler>.Instance);
+            await handler.Handle(
+                new RequestContractDetailsChangeCommand(
+                    fixture.ContractId,
+                    fixture.FreelancerUserId,
+                    new RequestContractDetailsChangeRequest(reason)),
+                CancellationToken.None);
+        }
+
+        await RequestAsync("First pass.", fixture.Now);
+        await RequestAsync("Second pass.", fixture.Now.AddMinutes(10));
+
+        var requests = fixture.Context.Set<ContractPlanChangeRequest>().ToList();
+        Assert.Equal(2, requests.Count);
+        Assert.Single(requests.Where(request => request.ResolvedAt == null));
+
+        var query = new GetOpenContractPlanChangeRequestQueryHandler(fixture.Context);
+        var dto = await query.Handle(
+            new GetOpenContractPlanChangeRequestQuery(fixture.ContractId, fixture.ClientUserId),
+            CancellationToken.None);
+        Assert.Equal("Second pass.", dto?.Reason);
+    }
+
+    private static IContractPlanChangeEmailRenderer StubPlanChangeEmailRenderer()
+    {
+        var renderer = Substitute.For<IContractPlanChangeEmailRenderer>();
+        renderer.Render(Arg.Any<ContractPlanChangeEmailModel>())
+            .Returns(new RenderedContractPlanChangeEmail("Subject", "<p>Body</p>", "Text"));
+        return renderer;
+    }
+
+    private static IConfiguration PlanChangeConfiguration() =>
+        new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["FrontendBaseUrl"] = "https://gigbridge.example"
+            })
+            .Build();
 
     private sealed class ContractWorkflowFixture
     {
@@ -1268,6 +1656,7 @@ public class ContractWorkflowTests
             EsignDocuments = Context.AddSet<EsignDocument>();
             EsignSignatures = Context.AddSet<EsignSignature>();
             DeliveryOutboxes = Context.AddSet<DeliveryOutbox>();
+            Proposals = Context.AddSet<Proposal>();
         }
 
         public InMemoryApplicationDbContext Context { get; } = new();
@@ -1299,8 +1688,9 @@ public class ContractWorkflowTests
         public TestDbSet<EsignDocument> EsignDocuments { get; }
         public TestDbSet<EsignSignature> EsignSignatures { get; }
         public TestDbSet<DeliveryOutbox> DeliveryOutboxes { get; }
+        public TestDbSet<Proposal> Proposals { get; }
 
- 
+
         public void ApplyValidDetails()
         {
 
@@ -1365,22 +1755,33 @@ public class ContractWorkflowTests
         {
             MoveToPendingSignature();
             var templateId = AddTemplate();
+            var documentId = Guid.NewGuid();
             EsignDocuments.Add(new EsignDocument
             {
-                EsignDocumentsId = Guid.NewGuid(),
+                EsignDocumentsId = documentId,
                 EsignTemplatesId = templateId,
                 JobPostsId = JobPostId,
                 ContractsId = ContractId,
                 DocumentCode = "GB-TEST",
-                RenderedHtmlContent = "<html>contract</html>",
                 Status = (int)ESignDocumentStatus.PendingSignatures,
                 CreatedAt = Now
+            });
+            Context.Set<EsignDocumentContent>().Add(new EsignDocumentContent
+            {
+                EsignDocumentsId = documentId,
+                RenderedHtmlContent = "<html>contract</html>"
             });
         }
 
         public EsignDocument GetContractDocument()
         {
             return EsignDocuments.Entities.Single(document => document.ContractsId == ContractId);
+        }
+
+        public EsignDocumentContent GetContractDocumentContent()
+        {
+            var documentId = GetContractDocument().EsignDocumentsId;
+            return Context.Set<EsignDocumentContent>().Single(item => item.EsignDocumentsId == documentId);
         }
 
         public void AddSignedJobPostDocument()
@@ -1395,10 +1796,14 @@ public class ContractWorkflowTests
                 JobPostsId = JobPostId,
                 ContractsId = null,
                 DocumentCode = "GB-JOB-TEST",
-                RenderedHtmlContent = "<html>job post contract</html>",
                 Status = (int)ESignDocumentStatus.FullySigned,
                 FinalizedAt = Now,
                 CreatedAt = Now
+            });
+            Context.Set<EsignDocumentContent>().Add(new EsignDocumentContent
+            {
+                EsignDocumentsId = documentId,
+                RenderedHtmlContent = "<html>job post contract</html>"
             });
 
             EsignSignatures.Add(new EsignSignature
@@ -1509,7 +1914,8 @@ public class ContractWorkflowTests
             string? content = null,
             Guid? referenceId = null,
             string? referenceType = null,
-            CancellationToken cancellationToken = default)
+            CancellationToken cancellationToken = default,
+            string? metadata = null)
         {
             Notifications.Add(new NotificationCall(userId, type, title, content, referenceId, referenceType));
             return Task.CompletedTask;

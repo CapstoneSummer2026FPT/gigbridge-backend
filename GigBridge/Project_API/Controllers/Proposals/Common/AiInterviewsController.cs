@@ -7,6 +7,8 @@ using Application.Features.AiInterviews.Freelancer.Confirm.Commands;
 using Application.Features.AiInterviews.Freelancer.Start.Commands;
 using Application.Features.AiInterviews.Freelancer.Transcribe.Commands;
 using Application.Features.AiInterviews.Freelancer.Requirement;
+using Application.Features.AiInterviews.Freelancer.Requirement.DTOs;
+using Application.Features.AiInterviews.Freelancer.Requirement.Queries;
 using Domain.Enums.Accounts;
 using Domain.Enums.Proposals;
 using Microsoft.AspNetCore.Authorization;

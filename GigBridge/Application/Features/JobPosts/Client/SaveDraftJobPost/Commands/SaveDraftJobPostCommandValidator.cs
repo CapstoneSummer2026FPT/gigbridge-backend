@@ -74,9 +74,8 @@ public sealed class SaveDraftJobPostCommandValidator
                 .Must(visibility =>
                     !visibility.HasValue ||
                     visibility.Value == 0 ||
-                    visibility.Value == 1 ||
                     visibility.Value == 2)
-                .WithMessage("Visibility must be 0=Public, 1=Private, or 2=InviteOnly.");
+                .WithMessage("Visibility must be 0=Public or 2=InviteOnly.");
 
             RuleFor(x => x.Request.EndDate)
                 .GreaterThan(DateTime.UtcNow)
@@ -110,6 +109,21 @@ public sealed class SaveDraftJobPostCommandValidator
                     {
                         item.RuleFor(x => x.OrderIndex).GreaterThanOrEqualTo(0);
                         item.RuleFor(x => x.Title).MaximumLength(200);
+                        item.RuleFor(x => x.EstimatedDuration)
+                            .Must(duration => MilestoneDeadlineCalculator.TryParseWorkItemDurationDays(duration, out _))
+                            .When(x => !string.IsNullOrWhiteSpace(x.EstimatedDuration))
+                            .WithMessage("Work item estimated duration must be a number followed by day(s), week(s), month(s), or year(s).");
+                    });
+                    milestone.RuleFor(x => x).Custom((value, context) =>
+                    {
+                        if (MilestoneDeadlineCalculator.TryGetWorkItemDurationOverage(
+                                value.EstimatedDuration,
+                                value.WorkItems.Select(item => item.EstimatedDuration),
+                                out _, out _, out var overageDays) &&
+                            overageDays > 0)
+                        {
+                            context.AddFailure(nameof(value.WorkItems), $"Work items exceed milestone duration by {overageDays} day(s).");
+                        }
                     });
                 });
 

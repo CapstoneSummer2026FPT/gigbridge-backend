@@ -39,6 +39,22 @@ public sealed class UnhandledExceptionBehaviourTests
         Assert.Contains(LogLevel.Error, logger.Levels);
     }
 
+    [Fact]
+    public async Task Handle_WhenAuthenticationIsRejected_LogsDebugInsteadOfWarning()
+    {
+        var logger = new RecordingLogger<TestRequest>();
+        var behavior = new UnhandledExceptionBehaviour<TestRequest, string>(logger);
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() => behavior.Handle(
+            new TestRequest(),
+            _ => throw new UnauthorizedAccessException("Invalid refresh token"),
+            CancellationToken.None));
+
+        Assert.Contains(LogLevel.Debug, logger.Levels);
+        Assert.DoesNotContain(LogLevel.Warning, logger.Levels);
+        Assert.DoesNotContain(LogLevel.Error, logger.Levels);
+    }
+
     private sealed record TestRequest : IRequest<string>;
 
     private sealed class RecordingLogger<T> : ILogger<T>

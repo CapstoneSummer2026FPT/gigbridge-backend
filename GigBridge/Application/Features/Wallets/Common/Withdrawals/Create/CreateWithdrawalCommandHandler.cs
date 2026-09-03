@@ -10,6 +10,7 @@ using Domain.Enums.Wallets;
 using Domain.Services.Payments;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Security.Cryptography;
 
@@ -24,19 +25,22 @@ public sealed class CreateWithdrawalCommandHandler :
     private readonly WalletWithdrawalOptions _options;
     private readonly IBankAccountProtector _bankAccountProtector;
     private readonly IPayoutProvider _payoutProvider;
+    private readonly ILogger<CreateWithdrawalCommandHandler> _logger;
 
     public CreateWithdrawalCommandHandler(
         IApplicationDbContext context,
         IDateTimeService dateTimeService,
         IOptions<WalletWithdrawalOptions> options,
         IBankAccountProtector bankAccountProtector,
-        IPayoutProvider payoutProvider)
+        IPayoutProvider payoutProvider,
+        ILogger<CreateWithdrawalCommandHandler> logger)
     {
         _context = context;
         _dateTimeService = dateTimeService;
         _options = options.Value;
         _bankAccountProtector = bankAccountProtector;
         _payoutProvider = payoutProvider;
+        _logger = logger;
     }
 
     public async Task<WithdrawalResponse> Handle(
@@ -112,8 +116,14 @@ public sealed class CreateWithdrawalCommandHandler :
         {
             _bankAccountProtector.Unprotect(bankAccount.AccountNumberEncrypted);
         }
-        catch (CryptographicException)
+        catch (CryptographicException ex)
         {
+            _logger.LogWarning(
+                ex,
+                "Bank account {BankAccountId} for user {UserId} could not be decrypted and was disabled. " +
+                "A data-protection key rotation would disable accounts in bulk.",
+                bankAccount.BankAccountId,
+                command.UserId);
             var invalidAccount = await _context.Set<BankAccount>().FirstAsync(
                 account => account.BankAccountId == bankAccount.BankAccountId,
                 cancellationToken);
@@ -132,14 +142,28 @@ public sealed class CreateWithdrawalCommandHandler :
             throw new BadRequestException("Withdrawal amount must be greater than the payout fee.");
         }
 
+        // A provider outage must not block queueing a withdrawal - the payout outbox exists
+        // precisely so the request survives one. Only a readable-but-insufficient payout balance
+        // is grounds to refuse, because that request is certain to fail.
         var availability = await _payoutProvider.CheckAvailabilityAsync(cancellationToken);
         if (!availability.IsAvailable)
         {
-            throw new ExternalServiceException("Bank withdrawals are temporarily unavailable.");
+            _logger.LogWarning(
+                "Payout provider is unavailable while user {UserId} requested a withdrawal of " +
+                "{NetVndAmount} VND; queueing it for retry. ErrorCode={ErrorCode} Reason={Reason}",
+                command.UserId,
+                netVndAmount,
+                availability.ErrorCode,
+                availability.SafeMessage);
         }
-
-        if (!availability.BalanceVnd.HasValue || availability.BalanceVnd.Value < netVndAmount)
+        else if (!availability.BalanceVnd.HasValue || availability.BalanceVnd.Value < netVndAmount)
         {
+            _logger.LogWarning(
+                "Refusing withdrawal for user {UserId}: payout account balance {BalanceVnd} VND is " +
+                "below the requested {NetVndAmount} VND.",
+                command.UserId,
+                availability.BalanceVnd,
+                netVndAmount);
             throw new ExternalServiceException(
                 "Bank withdrawals are temporarily unavailable because the payout account balance is insufficient.");
         }

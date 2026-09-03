@@ -16,6 +16,8 @@ public static class ServiceCollectionExtensions
         var signingKey = GetRequiredJwtSetting(jwtSettings, "Key");
         var issuer = GetRequiredJwtSetting(jwtSettings, "Issuer");
         var audience = GetRequiredJwtSetting(jwtSettings, "Audience");
+        _ = GetRequiredPositiveJwtMinutes(jwtSettings, "AccessTokenMinutes");
+        _ = GetRequiredPositiveJwtMinutes(jwtSettings, "RefreshTokenMinutes");
 
         if (Encoding.UTF8.GetByteCount(signingKey) < 32)
         {
@@ -64,6 +66,7 @@ public static class ServiceCollectionExtensions
         });
 
         return services;
+
     }
 
     public static IServiceCollection AddSwaggerWithBearerAuth(this IServiceCollection services)
@@ -176,6 +179,19 @@ public static class ServiceCollectionExtensions
         }
 
         return value;
+    }
+
+    private static int GetRequiredPositiveJwtMinutes(
+        IConfigurationSection jwtSettings,
+        string key)
+    {
+        var configuredValue = GetRequiredJwtSetting(jwtSettings, key);
+        if (!int.TryParse(configuredValue, out var minutes) || minutes <= 0)
+        {
+            throw new InvalidOperationException($"Jwt:{key} must be a positive integer.");
+        }
+
+        return minutes;
     }
 
     private static bool TryNormalizeOrigin(string origin, out string normalizedOrigin, out Uri uri)

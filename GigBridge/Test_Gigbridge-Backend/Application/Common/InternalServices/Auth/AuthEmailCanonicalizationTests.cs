@@ -193,6 +193,7 @@ public class AuthEmailCanonicalizationTests
             jwt,
             dateTime,
             Substitute.For<IUserEloService>(),
+            AuthSessionTestFactory.Create(context, jwt, dateTime),
             Substitute.For<IMapper>());
         var command = new LoginWithRefreshCommand(new LoginRequest
         {
@@ -527,6 +528,7 @@ public class AuthEmailCanonicalizationTests
             jwt,
             dateTime,
             Substitute.For<IUserEloService>(),
+            AuthSessionTestFactory.Create(context, jwt, dateTime),
             Substitute.For<IMapper>());
 
         // Act
@@ -566,6 +568,7 @@ public class AuthEmailCanonicalizationTests
             jwt,
             dateTime,
             Substitute.For<IUserEloService>(),
+            AuthSessionTestFactory.Create(context, jwt, dateTime),
             Substitute.For<IMapper>());
 
         // Act

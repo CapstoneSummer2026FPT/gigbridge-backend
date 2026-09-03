@@ -5,6 +5,7 @@ using Application.Common.Interfaces.Time;
 using Application.Common.InternalServices.Scheduling;
 using Application.Common.InternalServices.Chat.Interfaces;
 using Application.Features.Chat.Common.Messages.Send.DTOs;
+using Application.Features.Chat.Common.Negotiations.Realtime;
 using Application.Features.JobPosts.Common;
 using Application.Features.Proposals.Common;
 using Domain.Entities;
@@ -225,7 +226,7 @@ public class CreateFinalOfferCommandHandler : IRequestHandler<CreateFinalOfferCo
 
         await _chatRealtimeNotifier.SendUsersEventAsync(
             participantUserIds,
-            "FinalOfferCreated",
+            NegotiationRealtimeEvents.FinalOfferCreated,
             new
             {
                 conversationId = conversation.ConversationsId,

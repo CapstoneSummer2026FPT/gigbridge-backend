@@ -2,6 +2,7 @@ using Domain.Enums.AiInterviews;
 using Application.Common.Interfaces;
 using Application.Features.JobPosts.Common;
 using Application.Features.JobPosts.Public.GetAvailableJobPosts.DTOs;
+using Application.Features.JobPosts.Public.SearchAvailableJobPosts.Commands;
 using Application.Common.Interfaces.Time;
 using Domain.Entities;
 
@@ -24,7 +25,7 @@ public class GetAvailableJobPostsQueryHandler : IRequestHandler<GetAvailableJobP
 
     public async Task<IEnumerable<JobPostSummaryDto>> Handle(GetAvailableJobPostsQuery request, CancellationToken cancellationToken)
     {
-        var query = _context.Set<JobPost>()
+        IQueryable<JobPost> query = _context.Set<JobPost>()
             .AsNoTracking()
             .Include(jobPost => jobPost.ClientProfiles)
                 .ThenInclude(clientProfile => clientProfile.User)
@@ -34,9 +35,9 @@ public class GetAvailableJobPostsQueryHandler : IRequestHandler<GetAvailableJobP
             .Include(jobPost => jobPost.MajorCategory)
                 .ThenInclude(majorCategory => majorCategory!.Major)
             .Include(jobPost => jobPost.MajorCategory)
-                .ThenInclude(majorCategory => majorCategory!.Category)
-            .Where(jobPost => jobPost.Status == 1 && (jobPost.Visibility == null || jobPost.Visibility == 0));
+                .ThenInclude(majorCategory => majorCategory!.Category);
 
+        query = SearchAvailableJobPostsCommandHandler.ApplyOpenAndVisibleFilter(query, _clock.UtcNow);
         query = ApplyFilters(query, request);
         query = ApplySorting(query, request, _clock.UtcNow);
 

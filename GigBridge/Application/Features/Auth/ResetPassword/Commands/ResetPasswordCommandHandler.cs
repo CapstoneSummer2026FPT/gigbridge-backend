@@ -53,6 +53,8 @@ public class ResetPasswordCommandHandler : IRequestHandler<ResetPasswordCommand>
         user.Password = _passwordHasher.HashPassword(resetRequest.NewPassword);
         user.RefreshTokenHash = null;
         user.RefreshTokenExpiry = null;
+        user.PreviousRefreshTokenHash = null;
+        user.PreviousRefreshTokenGraceExpiresAt = null;
 
         await _context.SaveChangesAsync(cancellationToken);
     }

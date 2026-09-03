@@ -9,6 +9,8 @@ using Application.Features.Contracts.Completion.Freelancer.Commands;
 using Application.Features.Contracts.Milestones.Client.Approve.Commands;
 using Application.Features.Contracts.Milestones.Client.RequestRevision.Commands;
 using Application.Features.Contracts.Milestones.Client.RequestRevision.DTOs;
+using Application.Features.Contracts.Milestones.Client.RespondEarlyStart.Commands;
+using Application.Features.Contracts.Milestones.Client.RespondEarlyStart.DTOs;
 using Application.Features.Contracts.Milestones.Client.Start.Commands;
 using Application.Features.Contracts.Milestones.Common.Get.Queries;
 using Application.Features.Contracts.Milestones.Common.List.Queries;
@@ -267,6 +269,40 @@ public class MilestoneWorkflowTests
         Assert.Equal(UserRole.Client, auditEntry.Role);
         Assert.Equal(AuditUserActionType.MilestoneApproved, auditEntry.ActionType);
         Assert.Equal(fixture.FirstMilestoneId, auditEntry.MilestoneId);
+    }
+
+    [Fact]
+    public async Task ApproveMilestone_OpeningNextMilestone_CancelsItsPendingEarlyStartRequest()
+    {
+        var fixture = new MilestoneWorkflowFixture();
+        fixture.FirstMilestone.Status = (int)MilestoneStatus.Submitted;
+        var earlyStartRequest = new MilestoneEarlyStartRequest
+        {
+            MilestoneEarlyStartRequestId = Guid.NewGuid(),
+            ContractsId = fixture.ContractId,
+            MilestonesId = fixture.SecondMilestoneId,
+            RequestedByUserId = fixture.FreelancerUserId,
+            Reason = "Start milestone 2 early.",
+            Status = (int)MilestoneEarlyStartRequestStatus.Pending,
+            CreatedAt = fixture.Now
+        };
+        fixture.Context.Set<MilestoneEarlyStartRequest>().Add(earlyStartRequest);
+        var transitionTime = fixture.Now.AddMinutes(2);
+        var handler = new ApproveMilestoneCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(transitionTime),
+            new CapturingUserAuditLogService());
+
+        await handler.Handle(
+            new ApproveMilestoneCommand(
+                fixture.ContractId,
+                fixture.FirstMilestoneId,
+                fixture.ClientUserId),
+            CancellationToken.None);
+
+        Assert.Equal((int)MilestoneStatus.InProgress, fixture.SecondMilestone.Status);
+        Assert.Equal((int)MilestoneEarlyStartRequestStatus.Cancelled, earlyStartRequest.Status);
+        Assert.Equal(transitionTime, earlyStartRequest.RespondedAt);
     }
 
     [Fact]
@@ -728,6 +764,115 @@ public class MilestoneWorkflowTests
         Assert.Equal(new[] { fixture.ClientUserId, fixture.FreelancerUserId }, evt.UserIds.OrderBy(id => id == fixture.ClientUserId ? 0 : 1));
     }
 
+    // ---------------------------------------------------------------------
+    // Milestone sequencing: a Pending milestone may only start once every
+    // milestone before it is Approved/Completed, or it holds an Approved
+    // early-start request. Starting InProgress/Submitted (not yet approved)
+    // predecessors must be rejected — this is the fix for the freelancer
+    // bypassing client approval by starting the next milestone early.
+    // ---------------------------------------------------------------------
+
+    [Fact]
+    public async Task UpdateContractWorkItem_PreviousMilestoneInProgress_ThrowsBadRequest()
+    {
+        var fixture = new MilestoneWorkflowFixture();
+        fixture.FirstMilestone.Status = (int)MilestoneStatus.InProgress;
+        fixture.FirstMilestone.StartedAt = fixture.Now;
+        fixture.SecondWorkItem.Status = (int)ContractWorkItemStatus.Todo;
+        var handler = new UpdateContractWorkItemCommandHandler(
+            fixture.Context, new FixedDateTimeService(fixture.Now));
+
+        await Assert.ThrowsAsync<BadRequestException>(() =>
+            handler.Handle(
+                new UpdateContractWorkItemCommand(
+                    fixture.ContractId, fixture.SecondMilestoneId, fixture.SecondWorkItem.ContractWorkItemId, fixture.FreelancerUserId,
+                    new UpdateContractWorkItemRequest((int)ContractWorkItemStatus.InProgress, null)),
+                CancellationToken.None));
+
+        Assert.Equal((int)MilestoneStatus.Pending, fixture.SecondMilestone.Status);
+    }
+
+    [Fact]
+    public async Task UpdateContractWorkItem_PreviousMilestoneSubmitted_ThrowsBadRequest()
+    {
+        var fixture = new MilestoneWorkflowFixture();
+        fixture.FirstMilestone.Status = (int)MilestoneStatus.Submitted;
+        fixture.FirstMilestone.SubmittedAt = fixture.Now;
+        fixture.SecondWorkItem.Status = (int)ContractWorkItemStatus.Todo;
+        var handler = new UpdateContractWorkItemCommandHandler(
+            fixture.Context, new FixedDateTimeService(fixture.Now));
+
+        await Assert.ThrowsAsync<BadRequestException>(() =>
+            handler.Handle(
+                new UpdateContractWorkItemCommand(
+                    fixture.ContractId, fixture.SecondMilestoneId, fixture.SecondWorkItem.ContractWorkItemId, fixture.FreelancerUserId,
+                    new UpdateContractWorkItemRequest((int)ContractWorkItemStatus.InProgress, null)),
+                CancellationToken.None));
+
+        Assert.Equal((int)MilestoneStatus.Pending, fixture.SecondMilestone.Status);
+    }
+
+    [Fact]
+    public async Task UpdateContractWorkItem_ApprovedEarlyStartRequest_AllowsStartingNextMilestone()
+    {
+        var fixture = new MilestoneWorkflowFixture();
+        fixture.FirstMilestone.Status = (int)MilestoneStatus.InProgress;
+        fixture.FirstMilestone.StartedAt = fixture.Now;
+        fixture.SecondWorkItem.Status = (int)ContractWorkItemStatus.Todo;
+        fixture.Context.Set<MilestoneEarlyStartRequest>().Add(new MilestoneEarlyStartRequest
+        {
+            MilestoneEarlyStartRequestId = Guid.NewGuid(),
+            ContractsId = fixture.ContractId,
+            MilestonesId = fixture.SecondMilestoneId,
+            RequestedByUserId = fixture.FreelancerUserId,
+            RespondedByUserId = fixture.ClientUserId,
+            Reason = "Approved to start early.",
+            Status = (int)MilestoneEarlyStartRequestStatus.Approved,
+            CreatedAt = fixture.Now,
+            RespondedAt = fixture.Now
+        });
+        var handler = new UpdateContractWorkItemCommandHandler(
+            fixture.Context, new FixedDateTimeService(fixture.Now));
+
+        await handler.Handle(
+            new UpdateContractWorkItemCommand(
+                fixture.ContractId, fixture.SecondMilestoneId, fixture.SecondWorkItem.ContractWorkItemId, fixture.FreelancerUserId,
+                new UpdateContractWorkItemRequest((int)ContractWorkItemStatus.InProgress, null)),
+            CancellationToken.None);
+
+        Assert.Equal((int)MilestoneStatus.InProgress, fixture.SecondMilestone.Status);
+    }
+
+    [Fact]
+    public async Task UpdateContractWorkItem_PreviousMilestoneApproved_AllowsStartingNextMilestone()
+    {
+        var fixture = new MilestoneWorkflowFixture();
+        fixture.ApproveMilestone(fixture.FirstMilestone);
+        fixture.SecondWorkItem.Status = (int)ContractWorkItemStatus.Todo;
+        var earlyStartRequest = new MilestoneEarlyStartRequest
+        {
+            MilestoneEarlyStartRequestId = Guid.NewGuid(),
+            ContractsId = fixture.ContractId,
+            MilestonesId = fixture.SecondMilestoneId,
+            RequestedByUserId = fixture.FreelancerUserId,
+            Reason = "Start milestone 2 early.",
+            Status = (int)MilestoneEarlyStartRequestStatus.Pending,
+            CreatedAt = fixture.Now
+        };
+        fixture.Context.Set<MilestoneEarlyStartRequest>().Add(earlyStartRequest);
+        var handler = new UpdateContractWorkItemCommandHandler(
+            fixture.Context, new FixedDateTimeService(fixture.Now));
+
+        await handler.Handle(
+            new UpdateContractWorkItemCommand(
+                fixture.ContractId, fixture.SecondMilestoneId, fixture.SecondWorkItem.ContractWorkItemId, fixture.FreelancerUserId,
+                new UpdateContractWorkItemRequest((int)ContractWorkItemStatus.InProgress, null)),
+            CancellationToken.None);
+
+        Assert.Equal((int)MilestoneStatus.InProgress, fixture.SecondMilestone.Status);
+        Assert.Equal((int)MilestoneEarlyStartRequestStatus.Cancelled, earlyStartRequest.Status);
+    }
+
     [Fact]
     public async Task SubmitMilestone_SendsDeliverableSubmittedAndLiveSystemMessage()
     {
@@ -797,6 +942,208 @@ public class MilestoneWorkflowTests
         Assert.Contains(fixture.ClientUserId, usersEvent.UserIds);
         Assert.Contains(fixture.FreelancerUserId, usersEvent.UserIds);
         Assert.Single(realtime.ConversationEvents);
+    }
+
+    [Fact]
+    public async Task WithdrawMilestone_PushesRealtimeEventsToBothParticipants()
+    {
+        var fixture = new MilestoneWorkflowFixture();
+        fixture.ApproveMilestone(fixture.FirstMilestone);
+        fixture.ApproveMilestone(fixture.SecondMilestone);
+        var realtime = new CapturingChatRealtimeNotifier();
+        var handler = new WithdrawMilestoneCommandHandler(
+            fixture.Context, new FixedDateTimeService(fixture.Now.AddMinutes(5)), realtime);
+
+        await handler.Handle(
+            new WithdrawMilestoneCommand(fixture.ContractId, fixture.FirstMilestoneId, fixture.FreelancerUserId),
+            CancellationToken.None);
+
+        var usersEvent = Assert.Single(realtime.UsersEvents, evt => evt.EventName == "MilestoneStatusChanged");
+        Assert.Contains(fixture.ClientUserId, usersEvent.UserIds);
+        Assert.Contains(fixture.FreelancerUserId, usersEvent.UserIds);
+
+        var receiveMessageUsersEvent = Assert.Single(realtime.UsersEvents, evt => evt.EventName == "ReceiveMessage");
+        Assert.Contains(fixture.ClientUserId, receiveMessageUsersEvent.UserIds);
+        Assert.Contains(fixture.FreelancerUserId, receiveMessageUsersEvent.UserIds);
+        Assert.Single(realtime.ConversationEvents, evt => evt.EventName == "ReceiveMessage");
+    }
+
+    [Fact]
+    public async Task RequestMilestoneUnlock_PushesEarlyStartRequestedToClient()
+    {
+        var fixture = new MilestoneWorkflowFixture();
+        fixture.FirstMilestone.Status = (int)MilestoneStatus.InProgress;
+        fixture.FirstMilestone.StartedAt = fixture.Now;
+        var realtime = new CapturingChatRealtimeNotifier();
+        var handler = new RequestMilestoneUnlockCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now.AddMinutes(8)),
+            new NoopNotificationService(),
+            new CapturingUserAuditLogService(),
+            realtime);
+
+        await handler.Handle(
+            new RequestMilestoneUnlockCommand(
+                fixture.ContractId,
+                fixture.SecondMilestoneId,
+                fixture.FreelancerUserId,
+                "Begin integration while milestone one is in review."),
+            CancellationToken.None);
+
+        var usersEvent = Assert.Single(realtime.UsersEvents, evt => evt.EventName == "EarlyStartRequested");
+        Assert.Contains(fixture.ClientUserId, usersEvent.UserIds);
+        Assert.Contains(fixture.FreelancerUserId, usersEvent.UserIds);
+
+        var receiveMessageUsersEvent = Assert.Single(realtime.UsersEvents, evt => evt.EventName == "ReceiveMessage");
+        Assert.Contains(fixture.ClientUserId, receiveMessageUsersEvent.UserIds);
+        Assert.Single(realtime.ConversationEvents, evt => evt.EventName == "ReceiveMessage");
+    }
+
+    [Fact]
+    public async Task RespondMilestoneEarlyStart_Approve_PushesRealtimeEventAndSystemMessage()
+    {
+        var fixture = new MilestoneWorkflowFixture();
+        fixture.FirstMilestone.Status = (int)MilestoneStatus.InProgress;
+        fixture.FirstMilestone.StartedAt = fixture.Now;
+        var request = new MilestoneEarlyStartRequest
+        {
+            MilestoneEarlyStartRequestId = Guid.NewGuid(),
+            ContractsId = fixture.ContractId,
+            MilestonesId = fixture.SecondMilestoneId,
+            RequestedByUserId = fixture.FreelancerUserId,
+            Reason = "Begin integration early.",
+            Status = (int)MilestoneEarlyStartRequestStatus.Pending,
+            CreatedAt = fixture.Now
+        };
+        fixture.Context.Set<MilestoneEarlyStartRequest>().Add(request);
+        var realtime = new CapturingChatRealtimeNotifier();
+        var handler = new RespondMilestoneEarlyStartCommandHandler(
+            fixture.Context, new FixedDateTimeService(fixture.Now.AddMinutes(10)), realtime);
+
+        var response = await handler.Handle(
+            new RespondMilestoneEarlyStartCommand(
+                fixture.ContractId, request.MilestoneEarlyStartRequestId, fixture.ClientUserId,
+                new RespondMilestoneEarlyStartRequest(true, "Go ahead.")),
+            CancellationToken.None);
+
+        Assert.Equal((int)MilestoneEarlyStartRequestStatus.Approved, response.Status);
+        Assert.Equal((int)MilestoneStatus.InProgress, fixture.SecondMilestone.Status);
+
+        var usersEvent = Assert.Single(realtime.UsersEvents, evt => evt.EventName == "EarlyStartResponded");
+        Assert.Contains(fixture.ClientUserId, usersEvent.UserIds);
+        Assert.Contains(fixture.FreelancerUserId, usersEvent.UserIds);
+
+        var receiveMessageUsersEvent = Assert.Single(realtime.UsersEvents, evt => evt.EventName == "ReceiveMessage");
+        Assert.Contains(fixture.FreelancerUserId, receiveMessageUsersEvent.UserIds);
+        Assert.Single(realtime.ConversationEvents, evt => evt.EventName == "ReceiveMessage");
+    }
+
+    [Fact]
+    public async Task RespondMilestoneEarlyStart_Reject_PushesRealtimeEventAndSystemMessage()
+    {
+        var fixture = new MilestoneWorkflowFixture();
+        fixture.FirstMilestone.Status = (int)MilestoneStatus.InProgress;
+        fixture.FirstMilestone.StartedAt = fixture.Now;
+        var request = new MilestoneEarlyStartRequest
+        {
+            MilestoneEarlyStartRequestId = Guid.NewGuid(),
+            ContractsId = fixture.ContractId,
+            MilestonesId = fixture.SecondMilestoneId,
+            RequestedByUserId = fixture.FreelancerUserId,
+            Reason = "Begin integration early.",
+            Status = (int)MilestoneEarlyStartRequestStatus.Pending,
+            CreatedAt = fixture.Now
+        };
+        fixture.Context.Set<MilestoneEarlyStartRequest>().Add(request);
+        var realtime = new CapturingChatRealtimeNotifier();
+        var handler = new RespondMilestoneEarlyStartCommandHandler(
+            fixture.Context, new FixedDateTimeService(fixture.Now.AddMinutes(10)), realtime);
+
+        var response = await handler.Handle(
+            new RespondMilestoneEarlyStartCommand(
+                fixture.ContractId, request.MilestoneEarlyStartRequestId, fixture.ClientUserId,
+                new RespondMilestoneEarlyStartRequest(false, "Not yet.")),
+            CancellationToken.None);
+
+        Assert.Equal((int)MilestoneEarlyStartRequestStatus.Rejected, response.Status);
+        Assert.Equal((int)MilestoneStatus.Pending, fixture.SecondMilestone.Status);
+
+        var usersEvent = Assert.Single(realtime.UsersEvents, evt => evt.EventName == "EarlyStartResponded");
+        Assert.Contains(fixture.FreelancerUserId, usersEvent.UserIds);
+        Assert.Single(realtime.ConversationEvents, evt => evt.EventName == "ReceiveMessage");
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task RespondMilestoneEarlyStart_MilestoneAlreadyStarted_CancelsStaleRequest(
+        bool approve)
+    {
+        var fixture = new MilestoneWorkflowFixture();
+        fixture.FirstMilestone.Status = (int)MilestoneStatus.Approved;
+        fixture.FirstMilestone.ApprovedAt = fixture.Now;
+        fixture.SecondMilestone.Status = (int)MilestoneStatus.InProgress;
+        fixture.SecondMilestone.StartedAt = fixture.Now.AddMinutes(5);
+        var request = new MilestoneEarlyStartRequest
+        {
+            MilestoneEarlyStartRequestId = Guid.NewGuid(),
+            ContractsId = fixture.ContractId,
+            MilestonesId = fixture.SecondMilestoneId,
+            RequestedByUserId = fixture.FreelancerUserId,
+            Reason = "Begin milestone 2 early.",
+            Status = (int)MilestoneEarlyStartRequestStatus.Pending,
+            CreatedAt = fixture.Now
+        };
+        fixture.Context.Set<MilestoneEarlyStartRequest>().Add(request);
+        var realtime = new CapturingChatRealtimeNotifier();
+        var responseTime = fixture.Now.AddMinutes(10);
+        var handler = new RespondMilestoneEarlyStartCommandHandler(
+            fixture.Context, new FixedDateTimeService(responseTime), realtime);
+
+        var response = await handler.Handle(
+            new RespondMilestoneEarlyStartCommand(
+                fixture.ContractId,
+                request.MilestoneEarlyStartRequestId,
+                fixture.ClientUserId,
+                new RespondMilestoneEarlyStartRequest(approve, "Client response must not be recorded.")),
+            CancellationToken.None);
+
+        Assert.Equal((int)MilestoneEarlyStartRequestStatus.Cancelled, response.Status);
+        Assert.Equal((int)MilestoneEarlyStartRequestStatus.Cancelled, request.Status);
+        Assert.Equal(responseTime, request.RespondedAt);
+        Assert.Null(request.RespondedByUserId);
+        Assert.Equal(
+            "Automatically cancelled because the milestone started through the normal workflow.",
+            request.ResponseNote);
+        Assert.Equal((int)MilestoneStatus.InProgress, fixture.SecondMilestone.Status);
+        Assert.Empty(realtime.UsersEvents);
+        Assert.Empty(realtime.ConversationEvents);
+        Assert.Empty(fixture.Context.Set<Message>());
+    }
+
+    [Fact]
+    public async Task ContractConversationEvents_AddSystemMessageAsync_ExcludesDisputeConversation()
+    {
+        var fixture = new MilestoneWorkflowFixture();
+        var workroomConversation = fixture.Context.Set<Conversation>()
+            .Single(conversation => conversation.ConversationType == (int)ConversationType.ContractWorkroom);
+        var disputeConversation = new Conversation
+        {
+            ConversationsId = Guid.NewGuid(),
+            ConversationType = (int)ConversationType.Dispute,
+            ContractsId = fixture.ContractId,
+            CreatedByUserId = fixture.ClientUserId,
+            Status = (int)ConversationStatus.Active,
+            CreatedAt = fixture.Now,
+            LastMessageAt = fixture.Now.AddMinutes(30),
+        };
+        fixture.Context.Set<Conversation>().Add(disputeConversation);
+
+        var message = await global::Application.Features.Contracts.Common.Internal.ContractConversationEvents.AddSystemMessageAsync(
+            fixture.Context, fixture.ContractId, "Test system message.", fixture.Now, CancellationToken.None);
+
+        Assert.NotNull(message);
+        Assert.Equal(workroomConversation.ConversationsId, message!.ConversationsId);
     }
 
     // Existing call sites that construct these handlers WITHOUT a realtime notifier (the

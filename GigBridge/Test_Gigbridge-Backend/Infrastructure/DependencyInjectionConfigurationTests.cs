@@ -39,11 +39,13 @@ using Application.Common.InternalServices.Proposals.Models;
 using Application.Common.InternalServices.Reviews.Interfaces;
 using Application.Common.InternalServices.Wallets.Interfaces;
 using Infrastructure.Adapters.Caching;
+using Infrastructure.Adapters.Delivery;
 using Infrastructure.Adapters.Files;
 using Infrastructure.Adapters.Security.Auth;
 using Infrastructure.Adapters.Security.Wallets;
 using Infrastructure.Adapters.Templates;
 using Infrastructure.Adapters.Time;
+using Infrastructure.Adapters.Wallets;
 using Infrastructure.ExternalServices.Ai;
 using Infrastructure.ExternalServices.Banking.VietQr;
 using Infrastructure.ExternalServices.Email.Resend;
@@ -51,23 +53,22 @@ using Infrastructure.ExternalServices.Google.Meet;
 using Infrastructure.ExternalServices.Media.Cloudinary;
 using Infrastructure.ExternalServices.Payments.PayOs;
 using Infrastructure.Persistence;
-using Infrastructure.Persistence.Delivery;
-using Infrastructure.Persistence.Wallets;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using NSubstitute;
 using Npgsql;
+using Application.Common.InternalServices.Wallets.BackgroundJobs;
 
 namespace Test_Gigbridge_backend.Infrastructure;
 
 public sealed class DependencyInjectionConfigurationTests
 {
     [Theory]
-    [InlineData("Development", null, 1)]
-    [InlineData("Production", null, 8)]
-    [InlineData("Production", "false", 1)]
-    [InlineData("Development", "true", 8)]
+    [InlineData("Development", null, 0)]
+    [InlineData("Production", null, 9)]
+    [InlineData("Production", "false", 0)]
+    [InlineData("Development", "true", 9)]
     public void ApplicationWorkers_RespectEnvironmentAndExplicitOverride(
         string environment,
         string? enabled,
@@ -77,9 +78,7 @@ public sealed class DependencyInjectionConfigurationTests
 
         services.AddApplicationServices(Configuration(environment, enabled));
 
-        Assert.Equal(
-            expectedHostedServices,
-            services.Count(descriptor => descriptor.ServiceType == typeof(IHostedService)));
+        Assert.Equal(expectedHostedServices, CountWorkers(services));
     }
 
     [Fact]
@@ -89,10 +88,35 @@ public sealed class DependencyInjectionConfigurationTests
 
         services.AddApplicationServices(new ConfigurationBuilder().Build());
 
-        Assert.Equal(
-            8,
-            services.Count(descriptor => descriptor.ServiceType == typeof(IHostedService)));
+        Assert.Equal(9, CountWorkers(services));
     }
+
+    [Theory]
+    [InlineData("Development", null)]
+    [InlineData("Production", "false")]
+    public void PayoutConfigurationReporter_IsRegisteredEvenWhenWorkersAreDisabled(
+        string environment,
+        string? enabled)
+    {
+        var services = new ServiceCollection();
+
+        services.AddApplicationServices(Configuration(environment, enabled));
+
+        // Every node reports its own withdrawal configuration at startup, including nodes that do
+        // not run the background workers.
+        Assert.Single(services.Where(descriptor =>
+            descriptor.ServiceType == typeof(IHostedService) &&
+            descriptor.ImplementationType == typeof(PayoutConfigurationReporter)));
+    }
+
+    /// <summary>
+    /// Counts background workers only. PayoutConfigurationReporter is a hosted service too, but it
+    /// is registered unconditionally, so it is not part of what these assertions measure.
+    /// </summary>
+    private static int CountWorkers(IServiceCollection services) =>
+        services.Count(descriptor =>
+            descriptor.ServiceType == typeof(IHostedService) &&
+            descriptor.ImplementationType != typeof(PayoutConfigurationReporter));
 
     [Fact]
     public void ApplicationServices_ResolveFromModularRegistrations()
@@ -127,7 +151,9 @@ public sealed class DependencyInjectionConfigurationTests
         Assert.NotNull(provider.GetRequiredService<IMarketplaceAnalyticsRecorder>());
         Assert.NotNull(provider.GetRequiredService<IReviewModerationService>());
         Assert.NotNull(provider.GetRequiredService<ScheduleWorkflowService>());
+        Assert.NotNull(provider.GetRequiredService<IContractPlanChangeEmailRenderer>());
         Assert.NotNull(provider.GetRequiredService<IMilestoneSubmissionEmailRenderer>());
+        Assert.NotNull(provider.GetRequiredService<IWorkItemDeliveryEmailRenderer>());
         Assert.NotNull(provider.GetRequiredService<IScheduleEmailRenderer>());
         Assert.NotNull(provider.GetRequiredService<IJobAcceptanceEmailRenderer>());
         Assert.NotNull(provider.GetRequiredService<ISignedEmailRenderer>());
@@ -160,7 +186,7 @@ public sealed class DependencyInjectionConfigurationTests
     }
 
     [Fact]
-    public void Infrastructure_RegistersDeliveryAndAdaptersWithOriginalLifetimes()
+    public void Infrastructure_RegistersAdaptersWithOriginalLifetimes()
     {
         var services = new ServiceCollection();
 

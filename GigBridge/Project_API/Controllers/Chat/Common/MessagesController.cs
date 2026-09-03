@@ -1,4 +1,3 @@
-using Application.Common.Interfaces.Files;
 using Application.Common.Models;
 using Application.Features.Chat.Common.Messages.GetConversationMessages.DTOs;
 using Application.Features.Chat.Common.Messages.GetConversationMessages.Queries;
@@ -8,6 +7,7 @@ using Application.Features.Chat.Common.Messages.Send.DTOs;
 using Application.Features.Chat.Common.Messages.SendWithAttachments.Commands;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Application.Common.Models.Files;
 
 namespace Project_API.Controllers.Chat.Common;
 

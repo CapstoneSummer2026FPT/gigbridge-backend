@@ -1,3 +1,4 @@
+using Application.Common.Exceptions;
 using Application.Common.InternalServices.ESign.Services;
 using Application.Common.Interfaces;
 using Application.Features.Contracts.Common.Internal;
@@ -26,14 +27,113 @@ internal static class ESignDocumentProjection
         var signerRole = await ResolveSignerRoleAsync(
             context,
             document,
-            signatures,
             currentUserId,
             cancellationToken);
 
-        return ToResponse(document, signatures, currentUserId, signerRole);
+        var renderedHtmlContent = await context.Set<EsignDocumentContent>()
+            .AsNoTracking()
+            .Where(content => content.EsignDocumentsId == document.EsignDocumentsId)
+            .Select(content => content.RenderedHtmlContent)
+            .SingleOrDefaultAsync(cancellationToken)
+            ?? throw new NotFoundException("E-sign document content does not exist.");
+
+        return ToResponse(document, renderedHtmlContent, signatures, currentUserId, signerRole);
     }
 
-    public static ESignDocumentResponse ToResponse(
+    public static async Task<ESignDocumentStatusResponse> ToStatusResponseAsync(
+        IApplicationDbContext context,
+        EsignDocument document,
+        Guid currentUserId,
+        CancellationToken cancellationToken)
+    {
+        var signatures = await context.Set<EsignSignature>()
+            .AsNoTracking()
+            .Where(signature => signature.EsignDocumentsId == document.EsignDocumentsId)
+            .OrderBy(signature => signature.CreatedAt)
+            .ToListAsync(cancellationToken);
+
+        var signerRole = await ResolveSignerRoleAsync(
+            context,
+            document,
+            currentUserId,
+            cancellationToken);
+
+        return ToStatusResponse(document, signatures, currentUserId, signerRole);
+    }
+
+    public static async Task<ESignDocumentLightweightStatusResponse> ToLightweightStatusResponseAsync(
+        IApplicationDbContext context,
+        EsignDocument document,
+        Guid currentUserId,
+        CancellationToken cancellationToken)
+    {
+        var signatures = await context.Set<EsignSignature>()
+            .AsNoTracking()
+            .TagWith("ESign.Status.Signatures")
+            .Where(signature => signature.EsignDocumentsId == document.EsignDocumentsId)
+            .OrderBy(signature => signature.CreatedAt)
+            .Select(signature => new ESignSignerStatusResponse(
+                signature.EsignSignaturesId,
+                signature.EsignDocumentsId,
+                signature.UserId,
+                signature.SignerRole,
+                signature.Status,
+                signature.Status == (int)ESignSignatureStatus.Pending &&
+                    signature.DraftSubmittedAt.HasValue &&
+                    signature.SignatureImageUrl != null &&
+                    signature.SignatureImageUrl != string.Empty &&
+                    signature.IdentityOrTaxCode != null &&
+                    (signature.IdentityOrTaxCode.Length == 9 || signature.IdentityOrTaxCode.Length == 12) &&
+                    signature.PolicyAcceptedAt.HasValue &&
+                    signature.PolicyVersion == ContractEsignRenderer.PolicyVersion,
+                signature.SignedAt,
+                signature.DraftSubmittedAt,
+                signature.UserId == currentUserId ? signature.SignatureImageUrl : null,
+                signature.UserId == currentUserId ? signature.SignatureWidth : null,
+                signature.UserId == currentUserId ? signature.SignatureHeight : null,
+                signature.UserId == currentUserId ? signature.IdentityOrTaxCode : null))
+            .ToListAsync(cancellationToken);
+
+        var signerRole = await ResolveSignerRoleAsync(
+            context,
+            document,
+            currentUserId,
+            cancellationToken);
+        var signedCount = signatures.Count(signature =>
+            signature.Status == (int)ESignSignatureStatus.Signed);
+        var hasCurrentPdf = document.PdfDocumentSizeBytes is > 0 &&
+            document.PdfSignatureCount == signedCount &&
+            string.Equals(
+                document.PdfDocumentHash,
+                ESignPdfArtifactRevision.ExpectedHash(document),
+                StringComparison.Ordinal);
+        var hasCurrentUserSigned = signatures.Any(signature =>
+            signature.UserId == currentUserId &&
+            signature.Status == (int)ESignSignatureStatus.Signed);
+
+        return new ESignDocumentLightweightStatusResponse(
+            document.EsignDocumentsId,
+            document.ContractsId,
+            document.Status,
+            document.ContentRevision,
+            document.CreatedAt,
+            document.UpdatedAt,
+            document.ExpiresAt,
+            document.FinalizedAt,
+            signerRole,
+            signerRole.HasValue &&
+                document.Status is (int)ESignDocumentStatus.PendingSignatures or
+                    (int)ESignDocumentStatus.PartiallySigned &&
+                !hasCurrentUserSigned,
+            document.FinalizedDocumentSizeBytes is > 0,
+            hasCurrentPdf,
+            hasCurrentPdf ? document.PdfDocumentSizeBytes : null,
+            document.PdfDocumentHash,
+            signatures.Count,
+            signatures);
+    }
+
+    public static ESignDocumentStatusResponse ToStatusResponse(
         EsignDocument document,
         IReadOnlyList<EsignSignature> signatures,
         Guid currentUserId,
@@ -47,7 +147,51 @@ internal static class ESignDocumentProjection
             !hasCurrentUserSigned;
         var signedCount = signatures.Count(signature =>
             signature.Status == (int)ESignSignatureStatus.Signed);
-        var hasCurrentPdf = document.PdfDocumentContent is { Length: > 0 } &&
+        var hasCurrentPdf = document.PdfDocumentSizeBytes is > 0 &&
+            document.PdfSignatureCount == signedCount &&
+            string.Equals(
+                document.PdfDocumentHash,
+                ESignPdfArtifactRevision.ExpectedHash(document),
+                StringComparison.Ordinal);
+
+        return new ESignDocumentStatusResponse(
+            document.EsignDocumentsId,
+            document.JobPostsId,
+            document.ContractsId,
+            document.EsignTemplatesId,
+            document.DocumentCode,
+            document.Status,
+            document.DocumentHash,
+            document.ExpiresAt,
+            document.FinalizedAt,
+            document.ExportedPdfUrl,
+            signerRole,
+            canCurrentUserSign,
+            document.FinalizedDocumentSizeBytes is > 0,
+            document.FinalizedDocumentFileName,
+            hasCurrentPdf,
+            document.CreatedAt,
+            document.UpdatedAt,
+            signatures.Select(signature => ToSignatureResponse(signature, currentUserId)).ToList(),
+            document.ContentRevision);
+    }
+
+    public static ESignDocumentResponse ToResponse(
+        EsignDocument document,
+        string renderedHtmlContent,
+        IReadOnlyList<EsignSignature> signatures,
+        Guid currentUserId,
+        int? signerRole)
+    {
+        var hasCurrentUserSigned = signatures.Any(signature =>
+            signature.UserId == currentUserId &&
+            signature.Status == (int)ESignSignatureStatus.Signed);
+        var canCurrentUserSign = signerRole.HasValue &&
+            document.Status is (int)ESignDocumentStatus.PendingSignatures or (int)ESignDocumentStatus.PartiallySigned &&
+            !hasCurrentUserSigned;
+        var signedCount = signatures.Count(signature =>
+            signature.Status == (int)ESignSignatureStatus.Signed);
+        var hasCurrentPdf = document.PdfDocumentSizeBytes is > 0 &&
             document.PdfSignatureCount == signedCount &&
             string.Equals(
                 document.PdfDocumentHash,
@@ -60,7 +204,7 @@ internal static class ESignDocumentProjection
             document.ContractsId,
             document.EsignTemplatesId,
             document.DocumentCode,
-            document.RenderedHtmlContent,
+            renderedHtmlContent,
             document.Status,
             document.DocumentHash,
             document.ExpiresAt,
@@ -68,12 +212,13 @@ internal static class ESignDocumentProjection
             document.ExportedPdfUrl,
             signerRole,
             canCurrentUserSign,
-            document.FinalizedDocumentContent is { Length: > 0 },
+            document.FinalizedDocumentSizeBytes is > 0,
             document.FinalizedDocumentFileName,
             hasCurrentPdf,
             document.CreatedAt,
             document.UpdatedAt,
-            signatures.Select(signature => ToSignatureResponse(signature, currentUserId)).ToList());
+            signatures.Select(signature => ToSignatureResponse(signature, currentUserId)).ToList(),
+            document.ContentRevision);
     }
 
     public static ESignSignatureResponse ToSignatureResponse(
@@ -114,7 +259,6 @@ internal static class ESignDocumentProjection
     private static async Task<int?> ResolveSignerRoleAsync(
         IApplicationDbContext context,
         EsignDocument document,
-        IReadOnlyList<EsignSignature> signatures,
         Guid currentUserId,
         CancellationToken cancellationToken)
     {
@@ -132,12 +276,6 @@ internal static class ESignDocumentProjection
         if (userRole is (int)UserRole.Client or (int)UserRole.Freelancer)
         {
             return userRole;
-        }
-
-        var existingSignature = signatures.FirstOrDefault(signature => signature.UserId == currentUserId);
-        if (existingSignature is not null)
-        {
-            return existingSignature.SignerRole;
         }
 
         if (!document.ContractsId.HasValue)

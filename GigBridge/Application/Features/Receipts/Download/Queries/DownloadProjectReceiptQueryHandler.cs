@@ -1,6 +1,7 @@
 using Application.Common.Exceptions;
 using Application.Common.Interfaces;
 using Application.Features.Receipts.Common.DTOs;
+using Application.Common.InternalServices.Receipts.Services;
 using Domain.Entities;
 using Domain.Enums;
 using MediatR;
@@ -28,13 +29,19 @@ public sealed class DownloadProjectReceiptQueryHandler
             throw new ForbiddenAccessException("You cannot download another user's receipt.");
         }
         if (receipt.GenerationStatus != (int)ProjectReceiptGenerationStatus.Ready ||
-            receipt.PdfContent is not { Length: > 0 })
+            receipt.PdfSizeBytes is not > 0)
+        {
+            throw new ConflictException("The receipt PDF is still being prepared.");
+        }
+        var content = await ProjectReceiptArtifactStorage.GetPdfAsync(
+            _context, request.ReceiptId, "Download", cancellationToken);
+        if (content?.Content is not { Length: > 0 })
         {
             throw new ConflictException("The receipt PDF is still being prepared.");
         }
         return new ProjectReceiptDownloadResponse(
-            receipt.PdfContent,
-            receipt.PdfFileName ?? $"GigBridge-{receipt.ReceiptNumber}.pdf",
-            receipt.PdfContentType ?? "application/pdf");
+            content.Content,
+            string.IsNullOrWhiteSpace(content.FileName) ? $"GigBridge-{receipt.ReceiptNumber}.pdf" : content.FileName,
+            content.MimeType);
     }
 }

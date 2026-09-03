@@ -23,6 +23,8 @@ namespace Infrastructure.Persistence;
 
 public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDataProtectionKeyContext
 {
+    public bool SupportsRelationalBulkOperations => true;
+
     public GigbridgeDbContext(DbContextOptions<GigbridgeDbContext> options)
         : base(options)
     {
@@ -33,6 +35,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
     public virtual DbSet<AdminAuditLog> AdminAuditLogs { get; set; }
 
     public virtual DbSet<AuditLogWorkSpace> AuditLogWorkSpaces { get; set; }
+
+    public virtual DbSet<AuthSession> AuthSessions { get; set; }
 
     public virtual DbSet<BankAccount> BankAccounts { get; set; }
 
@@ -52,7 +56,11 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
     public virtual DbSet<ContractWorkItem> ContractWorkItems { get; set; }
 
+    public virtual DbSet<ContractWorkItemSubmission> ContractWorkItemSubmissions { get; set; }
+
     public virtual DbSet<ContractChangeRequest> ContractChangeRequests { get; set; }
+
+    public virtual DbSet<ContractPlanChangeRequest> ContractPlanChangeRequests { get; set; }
 
     public virtual DbSet<ContractAmendment> ContractAmendments { get; set; }
 
@@ -69,6 +77,10 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
     public virtual DbSet<ContractProductHandoff> ContractProductHandoffs { get; set; }
 
     public virtual DbSet<ProjectReceipt> ProjectReceipts { get; set; }
+
+    public virtual DbSet<ProjectReceiptContent> ProjectReceiptContents { get; set; }
+    public virtual DbSet<ProjectReceiptArtifact> ProjectReceiptArtifacts { get; set; }
+    public virtual DbSet<UserRealtimeState> UserRealtimeStates { get; set; }
 
     public virtual DbSet<Conversation> Conversations { get; set; }
 
@@ -97,6 +109,10 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
     public virtual DbSet<UserViolation> UserViolations { get; set; }
 
     public virtual DbSet<EsignDocument> EsignDocuments { get; set; }
+
+    public virtual DbSet<EsignDocumentContent> EsignDocumentContents { get; set; }
+
+    public virtual DbSet<EsignDocumentArtifact> EsignDocumentArtifacts { get; set; }
 
     public virtual DbSet<EsignSignature> EsignSignatures { get; set; }
 
@@ -388,7 +404,12 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
             entity.HasIndex(e => new { e.FreelancerProfilesId, e.Status }, "IX_Contracts_FreelancerProfilesId_Status");
 
-            entity.HasIndex(e => e.JobPostsId, "IX_Contracts_JobPostsId").IsUnique();
+            // Partial unique index: a job post may accumulate multiple Cancelled contracts
+            // over successive negotiation attempts, but only ever one non-Cancelled contract
+            // at a time (ContractStatus.Cancelled = 9).
+            entity.HasIndex(e => e.JobPostsId, "IX_Contracts_JobPostsId")
+                .IsUnique()
+                .HasFilter("\"Status\" <> 9");
 
             entity.HasIndex(e => e.Status, "IX_Contracts_Status");
 
@@ -407,6 +428,9 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.Property(e => e.Title).HasMaxLength(500);
             entity.Property(e => e.TotalBudget).HasPrecision(18, 2);
             entity.Property(e => e.RevisionNumber).HasDefaultValue(1);
+            entity.Property(e => e.DeliveryMode)
+                .HasDefaultValue(0)
+                .HasComment("Enum MilestoneDeliveryMode: 0=Legacy (milestone-level submit/approve), 1=WorkItem (per work item submit/approve)");
 
             entity.HasOne(d => d.ClientProfiles).WithMany(p => p.Contracts)
                 .HasForeignKey(d => d.ClientProfilesId)
@@ -460,26 +484,16 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
                 .IsRequired();
             entity.Property(e => e.ReceiptType)
                 .HasComment("Enum ProjectReceiptType: 0=Client, 1=Freelancer");
-            entity.Property(e => e.SnapshotJson)
-                .HasColumnType("jsonb")
-                .IsRequired();
-            entity.Property(e => e.SnapshotHashSha256)
-                .HasMaxLength(64)
-                .IsRequired();
             entity.Property(e => e.GenerationStatus)
                 .HasComment("Enum ProjectReceiptGenerationStatus: 0=Pending, 1=Processing, 2=Ready, 3=Failed");
             entity.Property(e => e.GenerationLeaseToken)
                 .IsConcurrencyToken();
             entity.Property(e => e.GenerationLastError)
                 .HasMaxLength(2000);
-            entity.Property(e => e.PdfContent)
-                .HasColumnType("bytea");
-            entity.Property(e => e.PdfFileName)
-                .HasMaxLength(255);
-            entity.Property(e => e.PdfContentType)
-                .HasMaxLength(100);
-            entity.Property(e => e.PdfHashSha256)
-                .HasMaxLength(64);
+            entity.Property(e => e.ContentRevision)
+                .HasDefaultValue(0);
+            entity.Property(e => e.Revision)
+                .HasDefaultValue(0);
             entity.Property(e => e.EmailStatus)
                 .HasComment("Enum ProjectReceiptEmailStatus: 0=Pending, 1=Delivered, 2=Failed");
             entity.Property(e => e.EmailLastError)
@@ -507,6 +521,65 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
                 .OnDelete(DeleteBehavior.SetNull);
         });
 
+        modelBuilder.Entity<ProjectReceiptContent>(entity =>
+        {
+            entity.ToTable("ProjectReceiptContents");
+
+            entity.HasKey(e => e.ProjectReceiptId);
+
+            entity.Property(e => e.SnapshotJson)
+                .HasColumnType("jsonb")
+                .IsRequired();
+            entity.Property(e => e.SnapshotHashSha256)
+                .HasMaxLength(64)
+                .IsRequired();
+            entity.Property(e => e.PdfContent)
+                .HasColumnType("bytea");
+            entity.Property(e => e.PdfFileName)
+                .HasMaxLength(255);
+            entity.Property(e => e.PdfContentType)
+                .HasMaxLength(100);
+            entity.Property(e => e.PdfHashSha256)
+                .HasMaxLength(64);
+
+            entity.HasOne(e => e.ProjectReceipt)
+                .WithOne(r => r.Content)
+                .HasForeignKey<ProjectReceiptContent>(e => e.ProjectReceiptId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ProjectReceiptArtifact>(entity =>
+        {
+            entity.ToTable("ProjectReceiptArtifacts", table =>
+            {
+                table.HasCheckConstraint("CK_ProjectReceiptArtifacts_ArtifactType", "\"ArtifactType\" = 1");
+                table.HasCheckConstraint("CK_ProjectReceiptArtifacts_SizeBytes", "\"SizeBytes\" = octet_length(\"Content\") AND \"SizeBytes\" > 0");
+            });
+            entity.HasKey(e => e.ProjectReceiptArtifactId);
+            entity.HasIndex(e => new { e.ProjectReceiptId, e.ArtifactType }).IsUnique();
+            entity.Property(e => e.ProjectReceiptArtifactId).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.Content).HasColumnType("bytea").IsRequired();
+            entity.Property(e => e.FileName).HasMaxLength(255).IsRequired();
+            entity.Property(e => e.MimeType).HasMaxLength(150).IsRequired();
+            entity.Property(e => e.ContentHashSha256).HasMaxLength(64).IsFixedLength().IsRequired();
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.HasOne(e => e.ProjectReceipt).WithMany(e => e.Artifacts)
+                .HasForeignKey(e => e.ProjectReceiptId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<UserRealtimeState>(entity =>
+        {
+            entity.ToTable("UserRealtimeStates");
+            entity.HasKey(e => e.UserId);
+            entity.Property(e => e.NotificationRevision).HasDefaultValue(0);
+            entity.Property(e => e.NotificationUnreadCount).HasDefaultValue(0);
+            entity.Property(e => e.ConversationRevision).HasDefaultValue(0);
+            entity.Property(e => e.ConversationUnreadCount).HasDefaultValue(0);
+            entity.Property(e => e.UpdatedAt).HasDefaultValueSql("now()");
+            entity.HasOne(e => e.User).WithOne(e => e.RealtimeState)
+                .HasForeignKey<UserRealtimeState>(e => e.UserId).OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<ContractWorkItem>(entity =>
         {
             entity.HasKey(e => e.ContractWorkItemId);
@@ -516,9 +589,44 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.Property(e => e.EstimatedDuration).HasMaxLength(100);
             entity.Property(e => e.ProgressNote).HasMaxLength(2000);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.DueDate).HasColumnType("date");
+            entity.Property(e => e.Status)
+                .HasComment("Enum ContractWorkItemStatus: 0=Todo, 1=InProgress, 2=Completed (legacy), 3=RevisionRequired, 4=Submitted, 5=Approved");
             entity.HasOne(e => e.Milestone).WithMany(e => e.WorkItems)
                 .HasForeignKey(e => e.MilestonesId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ContractWorkItemSubmission>(entity =>
+        {
+            entity.HasKey(e => e.ContractWorkItemSubmissionId);
+
+            // Append-only history: one row per revision, never updated in place.
+            entity.HasIndex(e => new { e.ContractWorkItemId, e.RevisionNumber }).IsUnique();
+
+            // Idempotency key. A retried submit carrying the same client-generated batch id
+            // cannot create a second attempt for the same work item.
+            entity.HasIndex(e => new { e.ContractWorkItemId, e.SubmissionBatchId }).IsUnique();
+
+            entity.Property(e => e.ContractWorkItemSubmissionId).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.Note).HasMaxLength(5000);
+            entity.Property(e => e.ReviewReason).HasMaxLength(2000);
+            entity.Property(e => e.SubmittedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.ReviewStatus)
+                .HasDefaultValue(0)
+                .HasComment("Enum ContractWorkItemSubmissionReviewStatus: 0=Submitted, 1=Approved, 2=RevisionRequired");
+
+            entity.HasOne(e => e.ContractWorkItem).WithMany(p => p.Submissions)
+                .HasForeignKey(e => e.ContractWorkItemId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.SubmittedByUser).WithMany()
+                .HasForeignKey(e => e.SubmittedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(e => e.ReviewedByUser).WithMany()
+                .HasForeignKey(e => e.ReviewedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<ContractChangeRequest>(entity =>
@@ -597,6 +705,22 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.Property(e => e.SnapshotJson).HasColumnType("jsonb");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.HasOne(e => e.Contract).WithMany(e => e.PlanRevisions)
+                .HasForeignKey(e => e.ContractsId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ContractPlanChangeRequest>(entity =>
+        {
+            entity.HasKey(e => e.ContractPlanChangeRequestId);
+            entity.Property(e => e.ContractPlanChangeRequestId).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.Reason).HasMaxLength(2000);
+            entity.Property(e => e.AffectedMilestoneIds).HasColumnType("uuid[]");
+            entity.Property(e => e.AffectedWorkItemIds).HasColumnType("uuid[]");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            // The client editor only ever asks for the open request on one contract, so the
+            // filtered index keeps that lookup off a sequential scan as the table grows.
+            entity.HasIndex(e => new { e.ContractsId, e.CreatedAt })
+                .HasFilter("\"ResolvedAt\" IS NULL");
+            entity.HasOne(e => e.Contract).WithMany(e => e.PlanChangeRequests)
                 .HasForeignKey(e => e.ContractsId).OnDelete(DeleteBehavior.Cascade);
         });
 
@@ -1093,16 +1217,12 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
                 .HasDefaultValueSql("gen_random_uuid()")
                 .HasColumnName("ESignDocumentsId");
             entity.Property(e => e.ContractsId).HasColumnName("ContractsId");
-            entity.Property(e => e.ContractSnapshotJson).HasColumnType("jsonb");
+            entity.Property(e => e.ContentRevision).HasDefaultValue(0);
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.Property(e => e.DocumentCode).HasMaxLength(50);
             entity.Property(e => e.DocumentHash).HasMaxLength(128);
             entity.Property(e => e.EsignTemplatesId).HasColumnName("ESignTemplatesId");
-            entity.Property(e => e.FinalizedDocumentContent).HasColumnType("bytea");
             entity.Property(e => e.FinalizedDocumentFileName).HasMaxLength(255);
-            entity.Property(e => e.FinalizedDocumentMimeType).HasMaxLength(150);
-            entity.Property(e => e.PdfDocumentContent).HasColumnType("bytea");
-            entity.Property(e => e.PdfDocumentFileName).HasMaxLength(255);
             entity.Property(e => e.PdfDocumentHash).HasMaxLength(128);
             entity.Property(e => e.PdfSignatureCount).HasDefaultValue(0);
             entity.Property(e => e.JobPostsId).HasColumnName("JobPostsId");
@@ -1123,6 +1243,51 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
                 .HasForeignKey(d => d.JobPostsId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("ESignDocuments_jp_JobPostsId_fkey");
+        });
+
+        modelBuilder.Entity<EsignDocumentContent>(entity =>
+        {
+            entity.HasKey(e => e.EsignDocumentsId).HasName("ESignDocumentContents_pkey");
+
+            entity.ToTable("ESignDocumentContents");
+
+            entity.Property(e => e.EsignDocumentsId).HasColumnName("ESignDocumentsId");
+            entity.Property(e => e.RenderedHtmlContent).IsRequired();
+            entity.Property(e => e.ContractSnapshotJson).HasColumnType("jsonb");
+            entity.Property(e => e.FinalizedDocumentContent).HasColumnType("bytea");
+            entity.Property(e => e.FinalizedDocumentMimeType).HasMaxLength(150);
+            entity.Property(e => e.PdfDocumentContent).HasColumnType("bytea");
+            entity.Property(e => e.PdfDocumentFileName).HasMaxLength(255);
+
+            entity.HasOne(e => e.EsignDocument).WithOne(d => d.Content)
+                .HasForeignKey<EsignDocumentContent>(e => e.EsignDocumentsId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("ESignDocumentContents_eDoc_ESignDocumentsId_fkey");
+        });
+
+        modelBuilder.Entity<EsignDocumentArtifact>(entity =>
+        {
+            entity.HasKey(e => e.EsignDocumentArtifactId)
+                .HasName("ESignDocumentArtifacts_pkey");
+
+            entity.ToTable("ESignDocumentArtifacts");
+
+            entity.HasIndex(e => new { e.EsignDocumentsId, e.ArtifactType },
+                    "ESignDocumentArtifacts_eDoc_Type_key")
+                .IsUnique();
+
+            entity.Property(e => e.EsignDocumentArtifactId)
+                .HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.Content).HasColumnType("bytea").IsRequired();
+            entity.Property(e => e.FileName).HasMaxLength(255).IsRequired();
+            entity.Property(e => e.MimeType).HasMaxLength(150).IsRequired();
+            entity.Property(e => e.ContentHashSha256).HasMaxLength(64).IsFixedLength().IsRequired();
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+
+            entity.HasOne(e => e.EsignDocument).WithMany(d => d.Artifacts)
+                .HasForeignKey(e => e.EsignDocumentsId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("ESignDocumentArtifacts_eDoc_ESignDocumentsId_fkey");
         });
 
         modelBuilder.Entity<EsignSignature>(entity =>
@@ -1477,7 +1642,7 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
             entity.Property(e => e.Visibility)
                 .HasDefaultValue(0)
-                .HasComment("Enum JobPostVisibility: 0=Public, 1=Private, 2=InviteOnly");
+                .HasComment("Enum JobPostVisibility: 0=Public, 2=InviteOnly");
 
             entity.Property(e => e.CustomSkillNames)
                 .HasColumnType("text[]")
@@ -1925,6 +2090,13 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.HasOne(d => d.UploadedByUser).WithMany(p => p.MilestoneAttachments)
                 .HasForeignKey(d => d.UploadedByUserId)
                 .HasConstraintName("MilestoneAttachments_UploadedByUserId_fkey");
+
+            entity.HasIndex(e => e.ContractWorkItemSubmissionId, "IX_MilestoneAttachments_ContractWorkItemSubmissionId");
+
+            entity.HasOne(d => d.ContractWorkItemSubmission).WithMany(p => p.Attachments)
+                .HasForeignKey(d => d.ContractWorkItemSubmissionId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("MilestoneAttachments_ContractWorkItemSubmissionId_fkey");
         });
 
         modelBuilder.Entity<BroadcastNotification>(entity =>
@@ -2947,6 +3119,34 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
                 .HasForeignKey<UserEloScore>(d => d.UserId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("UserEloScores_usr_UserId_fkey");
+        });
+
+        modelBuilder.Entity<AuthSession>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("AuthSessions_pkey");
+
+            entity.HasIndex(e => e.RefreshTokenHash, "IX_AuthSessions_RefreshTokenHash")
+                .IsUnique();
+            entity.HasIndex(e => e.PreviousRefreshTokenHash, "IX_AuthSessions_PreviousRefreshTokenHash")
+                .HasFilter("\"PreviousRefreshTokenHash\" IS NOT NULL");
+            entity.HasIndex(
+                e => new { e.UserId, e.RefreshTokenExpiry },
+                "IX_AuthSessions_UserId_RefreshTokenExpiry");
+            entity.HasIndex(
+                e => new { e.UserId, e.LastUsedAt },
+                "IX_AuthSessions_UserId_LastUsedAt");
+
+            entity.Property(e => e.Id)
+                .HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.RefreshTokenHash).IsRequired();
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            entity.Property(e => e.LastUsedAt).HasDefaultValueSql("now()");
+
+            entity.HasOne(e => e.User)
+                .WithMany(e => e.AuthSessions)
+                .HasForeignKey(e => e.UserId)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("AuthSessions_usr_UserId_fkey");
         });
 
         modelBuilder.Entity<User>(entity =>

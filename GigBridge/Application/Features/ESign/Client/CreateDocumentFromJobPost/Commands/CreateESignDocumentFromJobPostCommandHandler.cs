@@ -36,13 +36,22 @@ public sealed class CreateESignDocumentFromJobPostCommandHandler
             request.UserId,
             cancellationToken);
 
-        var document = await JobPostESignRenderer.EnsureDocumentAsync(
+        var (document, created) = await JobPostESignRenderer.EnsureDocumentAsync(
             _context,
             jobPost,
             _dateTimeService.UtcNow,
             cancellationToken);
 
-        await _context.SaveChangesAsync(cancellationToken);
+        if (created)
+        {
+            ESignDocumentRevision.Advance(document, _dateTimeService.UtcNow);
+            await ESignDocumentRevision.EnqueueAsync(
+                _context,
+                document,
+                _dateTimeService.UtcNow,
+                cancellationToken);
+            await _context.SaveChangesAsync(cancellationToken);
+        }
 
         return await ESignDocumentProjection.ToResponseAsync(
             _context,

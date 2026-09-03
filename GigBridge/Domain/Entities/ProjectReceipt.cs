@@ -9,8 +9,6 @@ public sealed class ProjectReceipt
     public string ReceiptNumber { get; set; } = string.Empty;
     public int TemplateVersion { get; set; } = 1;
     public DateTime IssuedAt { get; set; }
-    public string SnapshotJson { get; set; } = string.Empty;
-    public string SnapshotHashSha256 { get; set; } = string.Empty;
 
     public int GenerationStatus { get; set; }
     public int GenerationAttemptCount { get; set; }
@@ -19,11 +17,7 @@ public sealed class ProjectReceipt
     public DateTime? GenerationLeaseExpiresAt { get; set; }
     public string? GenerationLastError { get; set; }
 
-    public byte[]? PdfContent { get; set; }
-    public string? PdfFileName { get; set; }
-    public string? PdfContentType { get; set; }
     public long? PdfSizeBytes { get; set; }
-    public string? PdfHashSha256 { get; set; }
     public DateTime? GeneratedAt { get; set; }
 
     public Guid? NotificationId { get; set; }
@@ -40,10 +34,19 @@ public sealed class ProjectReceipt
     public string? EmailLastError { get; set; }
     public DateTime? EmailedAt { get; set; }
 
+    /// <summary>
+    /// Bumped every time the paired <see cref="ProjectReceiptContent"/> row changes, so callers can
+    /// detect content changes without loading the heavy columns themselves.
+    /// </summary>
+    public int ContentRevision { get; set; }
+    public int Revision { get; set; }
+
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 
     public Contract Contract { get; set; } = null!;
     public User OwnerUser { get; set; } = null!;
     public Notification? Notification { get; set; }
+    public ProjectReceiptContent? Content { get; set; }
+    public ICollection<ProjectReceiptArtifact> Artifacts { get; set; } = new List<ProjectReceiptArtifact>();
 }

@@ -1,4 +1,5 @@
-using Application.Features.Premium.Client.SmartTalentMatching.GetMatches.Queries;
+using Application.Features.Premium.Client.SmartTalentMatching.Common.Services;
+using Application.Features.Premium.Client.SmartTalentMatching.GetAiTalentMatches.Queries.Services;
 
 namespace Test_Gigbridge_Backend.Application.Features.Premium.SmartTalentMatching;
 

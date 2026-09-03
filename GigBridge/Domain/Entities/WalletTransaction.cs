@@ -40,7 +40,7 @@ public partial class WalletTransaction
     public decimal? EarnedAmount { get; set; }
 
     /// <summary>
-    /// Enum WalletTransactionType: 0=AdminCredit, 1=TopUp, 2=EscrowHold, 3=EscrowRelease, 4=EscrowRefund, 5=Adjustment, 12=DisputePenalty
+    /// Enum WalletTransactionType: 0=AdminCredit, 1=TopUp, 2=EscrowHold, 3=EscrowRelease, 4=EscrowRefund, 5=Adjustment, 12=DisputePenalty, 13=ServiceFeeRefund
     /// </summary>
     public int Type { get; set; }
 

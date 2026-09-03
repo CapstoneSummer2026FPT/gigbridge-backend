@@ -29,12 +29,15 @@ public class ESignJobPostWorkflowTests
             CancellationToken.None);
 
         var document = Assert.Single(fixture.Documents.Entities);
+        var content = Assert.Single(
+            fixture.Context.Set<EsignDocumentContent>(),
+            item => item.EsignDocumentsId == document.EsignDocumentsId);
         Assert.Equal(document.EsignDocumentsId, result.DocumentId);
         Assert.Equal(fixture.JobPostId, result.JobPostId);
         Assert.Equal(fixture.TemplateId, result.TemplateId);
         Assert.Equal((int)ESignDocumentStatus.PendingSignatures, document.Status);
-        Assert.Contains("Build landing page", document.RenderedHtmlContent);
-        Assert.Contains("Create a responsive landing page", document.RenderedHtmlContent);
+        Assert.Contains("Build landing page", content.RenderedHtmlContent);
+        Assert.Contains("Create a responsive landing page", content.RenderedHtmlContent);
         Assert.False(string.IsNullOrWhiteSpace(document.DocumentHash));
         Assert.Equal(fixture.Now, document.CreatedAt);
     }
@@ -374,12 +377,16 @@ public class ESignJobPostWorkflowTests
                 EsignTemplatesId = TemplateId,
                 JobPostsId = JobPostId,
                 DocumentCode = "GB-JOB-EXISTING",
-                RenderedHtmlContent = "<h1>Existing</h1>",
                 Status = (int)ESignDocumentStatus.PendingSignatures,
                 DocumentHash = "existing-hash",
                 CreatedAt = Now
             };
             Documents.Add(document);
+            Context.Set<EsignDocumentContent>().Add(new EsignDocumentContent
+            {
+                EsignDocumentsId = document.EsignDocumentsId,
+                RenderedHtmlContent = "<h1>Existing</h1>"
+            });
             return document;
         }
     }
@@ -475,7 +482,6 @@ public class ESignJobPostWorkflowTests
                     EsignTemplatesId = TemplateId,
                     JobPostsId = JobPostId,
                     DocumentCode = "GB-JOB-SIGNED",
-                    RenderedHtmlContent = "<h1>Landing Page</h1>",
                     Status = (int)ESignDocumentStatus.FullySigned,
                     FinalizedAt = Now.AddMinutes(-50),
                     CreatedAt = Now.AddDays(-5)
@@ -487,7 +493,6 @@ public class ESignJobPostWorkflowTests
                     JobPostsId = ClientPartialContractJobPostId,
                     ContractsId = ClientPartialContractId,
                     DocumentCode = "GB-CONTRACT-PARTIAL",
-                    RenderedHtmlContent = "<h1>Mobile App Contract</h1>",
                     Status = (int)ESignDocumentStatus.PartiallySigned,
                     CreatedAt = Now.AddDays(-4)
                 },
@@ -498,7 +503,6 @@ public class ESignJobPostWorkflowTests
                     JobPostsId = FreelancerContractJobPostId,
                     ContractsId = FreelancerContractId,
                     DocumentCode = "GB-CONTRACT-FREELANCER",
-                    RenderedHtmlContent = "<h1>API Integration Contract</h1>",
                     Status = (int)ESignDocumentStatus.PartiallySigned,
                     CreatedAt = Now.AddDays(-3)
                 },
@@ -508,7 +512,6 @@ public class ESignJobPostWorkflowTests
                     EsignTemplatesId = TemplateId,
                     JobPostsId = UnsignedJobPostId,
                     DocumentCode = "GB-JOB-PENDING",
-                    RenderedHtmlContent = "<h1>Unsigned Job</h1>",
                     Status = (int)ESignDocumentStatus.PendingSignatures,
                     CreatedAt = Now.AddDays(-2)
                 },
@@ -518,9 +521,35 @@ public class ESignJobPostWorkflowTests
                     EsignTemplatesId = TemplateId,
                     JobPostsId = JobPostId,
                     DocumentCode = "GB-JOB-FREELANCER-SHOULD-HIDE",
-                    RenderedHtmlContent = "<h1>Wrong job signer</h1>",
                     Status = (int)ESignDocumentStatus.FullySigned,
                     CreatedAt = Now.AddDays(-1)
+                });
+
+            Context.AddSet(
+                new EsignDocumentContent
+                {
+                    EsignDocumentsId = JobDocumentId,
+                    RenderedHtmlContent = "<h1>Landing Page</h1>"
+                },
+                new EsignDocumentContent
+                {
+                    EsignDocumentsId = ClientPartialContractDocumentId,
+                    RenderedHtmlContent = "<h1>Mobile App Contract</h1>"
+                },
+                new EsignDocumentContent
+                {
+                    EsignDocumentsId = FreelancerContractDocumentId,
+                    RenderedHtmlContent = "<h1>API Integration Contract</h1>"
+                },
+                new EsignDocumentContent
+                {
+                    EsignDocumentsId = UnsignedDocumentId,
+                    RenderedHtmlContent = "<h1>Unsigned Job</h1>"
+                },
+                new EsignDocumentContent
+                {
+                    EsignDocumentsId = FreelancerJobDocumentId,
+                    RenderedHtmlContent = "<h1>Wrong job signer</h1>"
                 });
 
             Context.AddSet(

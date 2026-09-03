@@ -1,4 +1,5 @@
 using Application.Common.Models;
+using Application.Features.Contracts.Cancellation.Common.Cancel.Commands;
 using Application.Features.Contracts.Common.DTOs;
 using Application.Features.Contracts.Completion.Client.Commands;
 using Application.Features.Contracts.Completion.Client.DTOs;
@@ -10,6 +11,8 @@ using Application.Features.Contracts.Details.Client.Update.DTOs;
 using Application.Features.Contracts.Details.Freelancer.Confirm.Commands;
 using Application.Features.Contracts.Details.Freelancer.RequestChange.Commands;
 using Application.Features.Contracts.Details.Freelancer.RequestChange.DTOs;
+using Application.Features.Contracts.Details.Common.PlanChangeRequest.DTOs;
+using Application.Features.Contracts.Details.Common.PlanChangeRequest.Queries;
 using Application.Features.Contracts.Escrow.Client.Fund.Commands;
 using Application.Features.Contracts.Escrow.Client.Fund.DTOs;
 using Application.Features.Contracts.Signing.Common.Sign.Commands;
@@ -87,6 +90,23 @@ public sealed class ContractsWorkflowController : BaseApiController
         return Ok(ApiResponse<ContractWorkflowResponse>.Ok(result, "Contract details change requested"));
     }
 
+    /// <summary>
+    /// The open "rework the plan" request, or null when there is none. Both contract participants
+    /// may read it: the client to see what to fix, the freelancer to see what they already asked for.
+    /// </summary>
+    [HttpGet("{contractId}/details/change-request")]
+    public async Task<IActionResult> GetOpenPlanChangeRequest(Guid contractId)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return InvalidTokenResponse();
+        }
+
+        var result = await Mediator.Send(new GetOpenContractPlanChangeRequestQuery(contractId, userId));
+
+        return Ok(ApiResponse<ContractPlanChangeRequestDto?>.Ok(result, "Success"));
+    }
+
     [HttpPost("{contractId}/escrow/fund")]
     [Authorize(Roles = "Client")]
     public async Task<IActionResult> FundEscrow(Guid contractId)
@@ -120,6 +140,19 @@ public sealed class ContractsWorkflowController : BaseApiController
                 Request.Headers.UserAgent.ToString()));
 
         return Ok(ApiResponse<ContractWorkflowResponse>.Ok(result, "Contract signed"));
+    }
+
+    [HttpPost("{contractId}/cancel")]
+    public async Task<IActionResult> Cancel(Guid contractId)
+    {
+        if (!TryGetCurrentUserId(out var userId))
+        {
+            return InvalidTokenResponse();
+        }
+
+        var result = await Mediator.Send(new CancelContractCommand(contractId, userId));
+
+        return Ok(ApiResponse<ContractWorkflowResponse>.Ok(result, "Contract cancelled"));
     }
 
     [HttpPost("{contractId}/milestones/accept")]

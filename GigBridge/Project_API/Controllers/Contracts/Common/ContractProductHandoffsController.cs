@@ -1,6 +1,6 @@
 using Application.Common.Exceptions;
-using Application.Common.Interfaces.Files;
 using Application.Common.Models;
+using Application.Common.Models.Files;
 using Application.Features.Contracts.ProductHandoffs.Acknowledge.Commands;
 using Application.Features.Contracts.ProductHandoffs.Common.DTOs;
 using Application.Features.Contracts.ProductHandoffs.Download.Queries;

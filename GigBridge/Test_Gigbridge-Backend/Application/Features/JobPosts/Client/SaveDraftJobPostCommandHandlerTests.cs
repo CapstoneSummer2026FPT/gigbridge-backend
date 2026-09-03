@@ -105,6 +105,64 @@ public class SaveDraftJobPostCommandHandlerTests
     }
 
     [Fact]
+    public async Task Handle_WithValidWorkItemPlan_PersistsWorkItemsTiedToTheirMilestone()
+    {
+        var now = new DateTime(2026, 6, 15, 10, 0, 0, DateTimeKind.Utc);
+        var context = new InMemoryApplicationDbContext();
+        var userId = Guid.NewGuid();
+        var clientProfileId = Guid.NewGuid();
+        var jobPostId = Guid.NewGuid();
+
+        context.AddSet(new ClientProfile { ClientProfilesId = clientProfileId, UserId = userId });
+        context.AddSet(new JobPost
+        {
+            JobPostsId = jobPostId,
+            ClientProfilesId = clientProfileId,
+            Title = "Untitled Job Post",
+            Description = string.Empty,
+            Status = 0,
+            CreatedAt = now
+        });
+        context.AddSet<JobPostSkill>();
+        context.AddSet<JobPostQuestion>();
+        var milestoneSet = context.AddSet<JobPostMilestonePlan>();
+
+        var request = CreateValidRequest(now) with
+        {
+            MilestonePlans =
+            [
+                new JobPostMilestonePlanDto
+                {
+                    Title = "Backend milestone",
+                    Amount = 100m,
+                    EstimatedDuration = "2 weeks",
+                    OrderIndex = 0,
+                    WorkItems =
+                    [
+                        new JobPostWorkItemDto { Title = "Database design", EstimatedDuration = "2 days", OrderIndex = 0 },
+                        new JobPostWorkItemDto { Title = "API development", EstimatedDuration = "4 days", OrderIndex = 1 },
+                    ]
+                }
+            ]
+        };
+
+        var handler = new SaveDraftJobPostCommandHandler(
+            context,
+            new FixedDateTimeService(now),
+            new ContentModerationService());
+
+        await handler.Handle(
+            new SaveDraftJobPostCommand(jobPostId, userId, request),
+            CancellationToken.None);
+
+        var milestone = Assert.Single(milestoneSet.Entities);
+        Assert.Equal(2, milestone.WorkItems.Count);
+        Assert.All(milestone.WorkItems, item => Assert.Equal(milestone.JobPostMilestonePlanId, item.JobPostMilestonePlanId));
+        Assert.Contains(milestone.WorkItems, item => item.Title == "Database design" && item.EstimatedDuration == "2 days");
+        Assert.Contains(milestone.WorkItems, item => item.Title == "API development" && item.EstimatedDuration == "4 days");
+    }
+
+    [Fact]
     public async Task Handle_WithEmptyMilestonePlan_PreservesExpectedBudget()
     {
         var now = new DateTime(2026, 6, 15, 10, 0, 0, DateTimeKind.Utc);

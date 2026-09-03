@@ -6,6 +6,7 @@ using Application.Common.Interfaces.Media;
 using Application.Common.Interfaces.Time;
 using Application.Common.InternalServices.Auditing.Interfaces;
 using Application.Common.InternalServices.Chat.Interfaces;
+using Application.Common.Models.Files;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.Contracts.Milestones.Common.DTOs;
 using Application.Features.Contracts.Milestones.Common.Internal;
@@ -68,6 +69,7 @@ public sealed class SubmitMilestoneCommandHandler :
             contract,
             command.UserId,
             cancellationToken);
+        MilestoneDeliveryModeGuard.EnsureLegacySubmission(contract);
 
         var milestone = await MilestoneWorkflowGuard.GetMilestoneAsync(
             _context,
@@ -83,7 +85,7 @@ public sealed class SubmitMilestoneCommandHandler :
         var workItems = await _context.Set<ContractWorkItem>()
             .Where(item => item.MilestonesId == milestone.MilestonesId)
             .ToListAsync(cancellationToken);
-        if (workItems.Count == 0 || workItems.Any(item => item.Status != (int)ContractWorkItemStatus.Completed))
+        if (workItems.Count == 0 || workItems.Any(item => !ContractWorkItemStatusExtensions.IsDelivered(item.Status)))
         {
             throw new BadRequestException("All milestone work items must be completed before submitting deliverables.");
         }
@@ -97,8 +99,13 @@ public sealed class SubmitMilestoneCommandHandler :
             }
 
             var now = _dateTimeService.UtcNow;
+            // Scoped to milestone-level attachments on purpose. Files belonging to a work item
+            // submission attempt (ContractWorkItemSubmissionId set) are an append-only delivery
+            // history and the evidence an admin reads in a dispute — this handler replaces only
+            // its own bundle and must never RemoveRange them.
             var existingAttachments = await _context.Set<MilestoneAttachment>()
-                .Where(attachment => attachment.MilestonesId == milestone.MilestonesId)
+                .Where(attachment => attachment.MilestonesId == milestone.MilestonesId &&
+                                     attachment.ContractWorkItemSubmissionId == null)
                 .ToListAsync(cancellationToken);
             var newAttachments = new List<MilestoneAttachment>(validatedFiles.Count);
 
@@ -131,7 +138,14 @@ public sealed class SubmitMilestoneCommandHandler :
                 }
 
                 _context.Set<MilestoneAttachment>().AddRange(newAttachments);
-                milestone.MilestoneAttachments.Clear();
+
+                // Same reasoning as above: Clear() would drop work item submission files from the
+                // tracked graph too, so remove only the milestone-level set being replaced.
+                foreach (var attachment in existingAttachments)
+                {
+                    milestone.MilestoneAttachments.Remove(attachment);
+                }
+
                 foreach (var attachment in newAttachments)
                 {
                     milestone.MilestoneAttachments.Add(attachment);
@@ -196,7 +210,7 @@ public sealed class SubmitMilestoneCommandHandler :
                 }
             }
 
-            return MilestoneWorkflowGuard.ToResponse(milestone);
+            return MilestoneWorkflowGuard.ToResponse(milestone, contract.DeliveryMode);
         }
         finally
         {

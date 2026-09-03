@@ -137,7 +137,9 @@ public sealed class ProjectReceiptWorkflowTests
             now,
             CancellationToken.None);
 
-        var snapshot = ProjectReceiptWorkflow.DeserializeSnapshot(receipts[0]);
+        var content = context.Set<ProjectReceiptContent>()
+            .Single(item => item.ProjectReceiptId == receipts[0].ProjectReceiptId);
+        var snapshot = ProjectReceiptWorkflow.DeserializeSnapshot(content);
         Assert.Equal(1m, snapshot.FreelancerServiceFeeGigCoin);
         Assert.Equal(99m, snapshot.FreelancerNetReceivedGigCoin);
         Assert.Collection(
@@ -180,9 +182,12 @@ public sealed class ProjectReceiptWorkflowTests
         var startedAt = now.AddDays(-2);
         var dueDate = DateOnly.FromDateTime(now.AddDays(-1));
         var context = new InMemoryApplicationDbContext();
-        var receipts = context.AddSet(
-            CreateReadyReceipt(contractId, ProjectReceiptType.Client),
-            CreateReadyReceipt(contractId, ProjectReceiptType.Freelancer));
+        var clientReceipt = CreateReadyReceipt(contractId, ProjectReceiptType.Client);
+        var freelancerReceipt = CreateReadyReceipt(contractId, ProjectReceiptType.Freelancer);
+        var receipts = context.AddSet(clientReceipt, freelancerReceipt);
+        context.AddSet(
+            CreateReadyReceiptContent(clientReceipt),
+            CreateReadyReceiptContent(freelancerReceipt));
         context.AddSet(new Contract
         {
             ContractsId = contractId,
@@ -254,12 +259,15 @@ public sealed class ProjectReceiptWorkflowTests
             Assert.Equal(4, receipt.TemplateVersion);
             Assert.Equal((int)ProjectReceiptGenerationStatus.Pending, receipt.GenerationStatus);
             Assert.Equal((int)ProjectReceiptEmailStatus.Pending, receipt.EmailStatus);
-            Assert.NotEqual("{}", receipt.SnapshotJson);
-            Assert.Null(receipt.PdfContent);
             Assert.Null(receipt.GeneratedAt);
             Assert.Null(receipt.EmailedAt);
 
-            var snapshot = ProjectReceiptWorkflow.DeserializeSnapshot(receipt);
+            var content = context.Set<ProjectReceiptContent>()
+                .Single(item => item.ProjectReceiptId == receipt.ProjectReceiptId);
+            Assert.NotEqual("{}", content.SnapshotJson);
+            Assert.Null(content.PdfContent);
+
+            var snapshot = ProjectReceiptWorkflow.DeserializeSnapshot(content);
             Assert.Equal(startedAt, snapshot.ProjectStartedAtUtc);
             var milestone = Assert.Single(snapshot.Milestones);
             Assert.Equal(startedAt, milestone.StartedAtUtc);
@@ -276,15 +284,21 @@ public sealed class ProjectReceiptWorkflowTests
         ReceiptNumber = $"TEST-{type}",
         TemplateVersion = 1,
         IssuedAt = DateTime.UtcNow,
-        SnapshotJson = "{}",
-        SnapshotHashSha256 = new string('a', 64),
         GenerationStatus = (int)ProjectReceiptGenerationStatus.Ready,
         NextGenerationAttemptAt = DateTime.UtcNow,
-        PdfContent = [1, 2, 3],
+        PdfSizeBytes = 3,
         GeneratedAt = DateTime.UtcNow,
         EmailStatus = (int)ProjectReceiptEmailStatus.Delivered,
         NextEmailAttemptAt = DateTime.UtcNow,
         EmailedAt = DateTime.UtcNow,
         CreatedAt = DateTime.UtcNow
+    };
+
+    private static ProjectReceiptContent CreateReadyReceiptContent(ProjectReceipt receipt) => new()
+    {
+        ProjectReceiptId = receipt.ProjectReceiptId,
+        SnapshotJson = "{}",
+        SnapshotHashSha256 = new string('a', 64),
+        PdfContent = [1, 2, 3]
     };
 }

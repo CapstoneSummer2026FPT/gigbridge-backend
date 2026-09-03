@@ -35,3 +35,16 @@ public sealed record PayoutProviderAvailability(
     decimal? BalanceVnd,
     string? ErrorCode,
     string? SafeMessage);
+
+/// <summary>
+/// Node-level facts about the payout client. <paramref name="OutboundIp"/> is the address the
+/// payout provider actually sees, measured through the same HTTP handler the payout client uses,
+/// so it accounts for a NAT gateway or a configured proxy. It is what a provider IP allowlist has
+/// to contain - not the address the host believes it has.
+/// </summary>
+public sealed record PayoutProviderDiagnostics(
+    bool CredentialsConfigured,
+    string? ClientIdPrefix,
+    bool ProxyConfigured,
+    string? OutboundIp,
+    string? OutboundIpError);

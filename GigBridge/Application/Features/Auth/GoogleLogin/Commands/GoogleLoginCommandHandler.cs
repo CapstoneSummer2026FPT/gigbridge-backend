@@ -23,6 +23,7 @@ public class GoogleLoginCommandHandler : IRequestHandler<GoogleLoginCommand, (Lo
     private readonly IJwtService _jwtService;
     private readonly IDateTimeService _dateTimeService;
     private readonly IUserEloService _userEloService;
+    private readonly IAuthSessionService _authSessionService;
     private readonly IMapper _mapper;
 
     public GoogleLoginCommandHandler(
@@ -31,6 +32,7 @@ public class GoogleLoginCommandHandler : IRequestHandler<GoogleLoginCommand, (Lo
         IJwtService jwtService,
         IDateTimeService dateTimeService,
         IUserEloService userEloService,
+        IAuthSessionService authSessionService,
         IMapper mapper)
     {
         _context = context;
@@ -38,6 +40,7 @@ public class GoogleLoginCommandHandler : IRequestHandler<GoogleLoginCommand, (Lo
         _jwtService = jwtService;
         _dateTimeService = dateTimeService;
         _userEloService = userEloService;
+        _authSessionService = authSessionService;
         _mapper = mapper;
     }
 
@@ -60,6 +63,12 @@ public class GoogleLoginCommandHandler : IRequestHandler<GoogleLoginCommand, (Lo
             await _userEloService.InitializeNewUserAsync(user, cancellationToken);
         }
 
+        await using var transaction = await _context.BeginTransactionAsync(cancellationToken);
+        await transaction.AcquireTransactionLockAsync(
+            AccountEnforcementLock.ForUser(user.UserId),
+            cancellationToken,
+            "Auth.GoogleLogin.CreateSession");
+
         UserAccountEnforcement.EnsureCanAuthenticate(user, _dateTimeService.UtcNow);
 
         if (!isNewUser)
@@ -67,14 +76,17 @@ public class GoogleLoginCommandHandler : IRequestHandler<GoogleLoginCommand, (Lo
             await _userEloService.ApplyLoginActivityAsync(user, cancellationToken);
         }
 
-        var refreshToken = RotateRefreshToken(user);
+        var refreshToken = await _authSessionService.CreateLoginSessionAsync(
+            user,
+            cancellationToken);
         await _context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         return (new LoginResponse
         {
             User = _mapper.Map<UserDTO>(user),
             Token = _jwtService.GenerateToken(user)
-        }, refreshToken, user.RefreshTokenExpiry ?? DateTime.UtcNow);
+        }, refreshToken.Token, refreshToken.ExpiresAt);
     }
 
     private Task<User?> FindUserAsync(string email, CancellationToken cancellationToken)
@@ -121,11 +133,4 @@ public class GoogleLoginCommandHandler : IRequestHandler<GoogleLoginCommand, (Lo
         };
     }
 
-    private string RotateRefreshToken(User user)
-    {
-        var refreshToken = _jwtService.GenerateRefreshToken();
-        user.RefreshTokenHash = _jwtService.HashRefreshToken(refreshToken);
-        user.RefreshTokenExpiry = _dateTimeService.UtcNow.AddMinutes(_jwtService.GetRefreshTokenExpiryMinutes());
-        return refreshToken;
-    }
 }

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces.Files;
+using Application.Common.Models.Files;
 using SharpCompress.Common;
 using SharpCompress.Readers;
 

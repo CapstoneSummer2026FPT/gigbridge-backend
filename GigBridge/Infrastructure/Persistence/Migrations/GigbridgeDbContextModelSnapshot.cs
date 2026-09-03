@@ -291,6 +291,55 @@ namespace Infrastructure.Persistence.Migrations
                     b.ToTable("AuditLogWorkSpaces");
                 });
 
+            modelBuilder.Entity("Domain.Entities.AuthSession", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime>("LastUsedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<DateTime?>("PreviousRefreshTokenGraceExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PreviousRefreshTokenHash")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("RefreshTokenExpiry")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RefreshTokenHash")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id")
+                        .HasName("AuthSessions_pkey");
+
+                    b.HasIndex(new[] { "PreviousRefreshTokenHash" }, "IX_AuthSessions_PreviousRefreshTokenHash")
+                        .HasFilter("\"PreviousRefreshTokenHash\" IS NOT NULL");
+
+                    b.HasIndex(new[] { "RefreshTokenHash" }, "IX_AuthSessions_RefreshTokenHash")
+                        .IsUnique();
+
+                    b.HasIndex(new[] { "UserId", "LastUsedAt" }, "IX_AuthSessions_UserId_LastUsedAt");
+
+                    b.HasIndex(new[] { "UserId", "RefreshTokenExpiry" }, "IX_AuthSessions_UserId_RefreshTokenExpiry");
+
+                    b.ToTable("AuthSessions");
+                });
+
             modelBuilder.Entity("Domain.Entities.BankAccount", b =>
                 {
                     b.Property<Guid>("BankAccountId")
@@ -599,6 +648,12 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnName("ContractsId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
+                    b.Property<DateTime?>("CancelledAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("CancelledByUserId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid>("ClientProfilesId")
                         .HasColumnType("uuid")
                         .HasColumnName("ClientProfilesId");
@@ -610,6 +665,12 @@ namespace Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
                         .HasDefaultValueSql("now()");
+
+                    b.Property<int>("DeliveryMode")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasComment("Enum MilestoneDeliveryMode: 0=Legacy (milestone-level submit/approve), 1=WorkItem (per work item submit/approve)");
 
                     b.Property<string>("Description")
                         .HasColumnType("text");
@@ -673,7 +734,8 @@ namespace Infrastructure.Persistence.Migrations
                     b.HasIndex(new[] { "FreelancerProfilesId", "Status" }, "IX_Contracts_FreelancerProfilesId_Status");
 
                     b.HasIndex(new[] { "JobPostsId" }, "IX_Contracts_JobPostsId")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("\"Status\" <> 9");
 
                     b.HasIndex(new[] { "Status" }, "IX_Contracts_Status");
 
@@ -1012,6 +1074,51 @@ namespace Infrastructure.Persistence.Migrations
                     b.ToTable("ContractEscrows");
                 });
 
+            modelBuilder.Entity("Domain.Entities.ContractPlanChangeRequest", b =>
+                {
+                    b.Property<Guid>("ContractPlanChangeRequestId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<Guid[]>("AffectedMilestoneIds")
+                        .IsRequired()
+                        .HasColumnType("uuid[]");
+
+                    b.Property<Guid[]>("AffectedWorkItemIds")
+                        .IsRequired()
+                        .HasColumnType("uuid[]");
+
+                    b.Property<Guid>("ContractsId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<int>("Origin")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<Guid>("RequestedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("ResolvedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("ContractPlanChangeRequestId");
+
+                    b.HasIndex("ContractsId", "CreatedAt")
+                        .HasFilter("\"ResolvedAt\" IS NULL");
+
+                    b.ToTable("ContractPlanChangeRequests");
+                });
+
             modelBuilder.Entity("Domain.Entities.ContractPlanRevision", b =>
                 {
                     b.Property<Guid>("ContractPlanRevisionId")
@@ -1145,6 +1252,9 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<string>("Description")
                         .HasColumnType("text");
 
+                    b.Property<DateOnly?>("DueDate")
+                        .HasColumnType("date");
+
                     b.Property<string>("EstimatedDuration")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
@@ -1160,7 +1270,8 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(2000)");
 
                     b.Property<int>("Status")
-                        .HasColumnType("integer");
+                        .HasColumnType("integer")
+                        .HasComment("Enum ContractWorkItemStatus: 0=Todo, 1=InProgress, 2=Completed (legacy), 3=RevisionRequired, 4=Submitted, 5=Approved");
 
                     b.Property<string>("Title")
                         .IsRequired()
@@ -1176,6 +1287,65 @@ namespace Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("ContractWorkItems");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ContractWorkItemSubmission", b =>
+                {
+                    b.Property<Guid>("ContractWorkItemSubmissionId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<Guid>("ContractWorkItemId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(5000)
+                        .HasColumnType("character varying(5000)");
+
+                    b.Property<string>("ReviewReason")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<int>("ReviewStatus")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasComment("Enum ContractWorkItemSubmissionReviewStatus: 0=Submitted, 1=Approved, 2=RevisionRequired");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("ReviewedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("RevisionNumber")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("SubmissionBatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("SubmittedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid>("SubmittedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("ContractWorkItemSubmissionId");
+
+                    b.HasIndex("ReviewedByUserId");
+
+                    b.HasIndex("SubmittedByUserId");
+
+                    b.HasIndex("ContractWorkItemId", "RevisionNumber")
+                        .IsUnique();
+
+                    b.HasIndex("ContractWorkItemId", "SubmissionBatchId")
+                        .IsUnique();
+
+                    b.ToTable("ContractWorkItemSubmissions");
                 });
 
             modelBuilder.Entity("Domain.Entities.Conversation", b =>
@@ -1963,8 +2133,10 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnName("ESignDocumentsId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
-                    b.Property<string>("ContractSnapshotJson")
-                        .HasColumnType("jsonb");
+                    b.Property<int>("ContentRevision")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
 
                     b.Property<Guid?>("ContractsId")
                         .HasColumnType("uuid")
@@ -1997,16 +2169,9 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<DateTime?>("FinalizedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<byte[]>("FinalizedDocumentContent")
-                        .HasColumnType("bytea");
-
                     b.Property<string>("FinalizedDocumentFileName")
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)");
-
-                    b.Property<string>("FinalizedDocumentMimeType")
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)");
 
                     b.Property<long?>("FinalizedDocumentSizeBytes")
                         .HasColumnType("bigint");
@@ -2015,25 +2180,17 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("JobPostsId");
 
-                    b.Property<byte[]>("PdfDocumentContent")
-                        .HasColumnType("bytea");
-
-                    b.Property<string>("PdfDocumentFileName")
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)");
-
                     b.Property<string>("PdfDocumentHash")
                         .HasMaxLength(128)
                         .HasColumnType("character varying(128)");
+
+                    b.Property<long?>("PdfDocumentSizeBytes")
+                        .HasColumnType("bigint");
 
                     b.Property<int>("PdfSignatureCount")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
                         .HasDefaultValue(0);
-
-                    b.Property<string>("RenderedHtmlContent")
-                        .IsRequired()
-                        .HasColumnType("text");
 
                     b.Property<int>("Status")
                         .ValueGeneratedOnAdd()
@@ -2062,6 +2219,95 @@ namespace Infrastructure.Persistence.Migrations
                         .IsDescending(false, true);
 
                     b.ToTable("ESignDocuments", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.Entities.EsignDocumentArtifact", b =>
+                {
+                    b.Property<Guid>("EsignDocumentArtifactId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<int>("ArtifactRevision")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ArtifactType")
+                        .HasColumnType("integer");
+
+                    b.Property<byte[]>("Content")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("ContentHashSha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .IsFixedLength();
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid>("EsignDocumentsId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("MimeType")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("EsignDocumentArtifactId")
+                        .HasName("ESignDocumentArtifacts_pkey");
+
+                    b.HasIndex(new[] { "EsignDocumentsId", "ArtifactType" }, "ESignDocumentArtifacts_eDoc_Type_key")
+                        .IsUnique();
+
+                    b.ToTable("ESignDocumentArtifacts", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.Entities.EsignDocumentContent", b =>
+                {
+                    b.Property<Guid>("EsignDocumentsId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("ESignDocumentsId");
+
+                    b.Property<string>("ContractSnapshotJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<byte[]>("FinalizedDocumentContent")
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("FinalizedDocumentMimeType")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<byte[]>("PdfDocumentContent")
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("PdfDocumentFileName")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("RenderedHtmlContent")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("EsignDocumentsId")
+                        .HasName("ESignDocumentContents_pkey");
+
+                    b.ToTable("ESignDocumentContents", (string)null);
                 });
 
             modelBuilder.Entity("Domain.Entities.EsignSignature", b =>
@@ -2963,7 +3209,7 @@ namespace Infrastructure.Persistence.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
                         .HasDefaultValue(0)
-                        .HasComment("Enum JobPostVisibility: 0=Public, 1=Private, 2=InviteOnly");
+                        .HasComment("Enum JobPostVisibility: 0=Public, 2=InviteOnly");
 
                     b.HasKey("JobPostsId")
                         .HasName("JobPosts_pkey");
@@ -3710,6 +3956,9 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnName("MilestoneAttachmentsId")
                         .HasDefaultValueSql("gen_random_uuid()");
 
+                    b.Property<Guid?>("ContractWorkItemSubmissionId")
+                        .HasColumnType("uuid");
+
                     b.Property<DateTime>("CreatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("timestamp with time zone")
@@ -3748,6 +3997,8 @@ namespace Infrastructure.Persistence.Migrations
                         .HasName("MilestoneAttachments_pkey");
 
                     b.HasIndex("UploadedByUserId");
+
+                    b.HasIndex(new[] { "ContractWorkItemSubmissionId" }, "IX_MilestoneAttachments_ContractWorkItemSubmissionId");
 
                     b.HasIndex(new[] { "MilestonesId" }, "IX_MilestoneAttachments_MilestonesId");
 
@@ -4416,6 +4667,11 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasDefaultValueSql("gen_random_uuid()");
 
+                    b.Property<int>("ContentRevision")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
                     b.Property<Guid>("ContractsId")
                         .HasColumnType("uuid");
 
@@ -4492,21 +4748,6 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<Guid>("OwnerUserId")
                         .HasColumnType("uuid");
 
-                    b.Property<byte[]>("PdfContent")
-                        .HasColumnType("bytea");
-
-                    b.Property<string>("PdfContentType")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<string>("PdfFileName")
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)");
-
-                    b.Property<string>("PdfHashSha256")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
                     b.Property<long?>("PdfSizeBytes")
                         .HasColumnType("bigint");
 
@@ -4519,14 +4760,10 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasComment("Enum ProjectReceiptType: 0=Client, 1=Freelancer");
 
-                    b.Property<string>("SnapshotHashSha256")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<string>("SnapshotJson")
-                        .IsRequired()
-                        .HasColumnType("jsonb");
+                    b.Property<int>("Revision")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
 
                     b.Property<int>("TemplateVersion")
                         .HasColumnType("integer");
@@ -4556,6 +4793,100 @@ namespace Infrastructure.Persistence.Migrations
                         .IsDescending(false, true);
 
                     b.ToTable("ProjectReceipts", (string)null);
+                });
+
+            modelBuilder.Entity("Domain.Entities.ProjectReceiptArtifact", b =>
+                {
+                    b.Property<Guid>("ProjectReceiptArtifactId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<int>("ArtifactRevision")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ArtifactType")
+                        .HasColumnType("integer");
+
+                    b.Property<byte[]>("Content")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("ContentHashSha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .IsFixedLength();
+
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("MimeType")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<Guid>("ProjectReceiptId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("SizeBytes")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("ProjectReceiptArtifactId");
+
+                    b.HasIndex("ProjectReceiptId", "ArtifactType")
+                        .IsUnique();
+
+                    b.ToTable("ProjectReceiptArtifacts", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_ProjectReceiptArtifacts_ArtifactType", "\"ArtifactType\" = 1");
+
+                            t.HasCheckConstraint("CK_ProjectReceiptArtifacts_SizeBytes", "\"SizeBytes\" = octet_length(\"Content\") AND \"SizeBytes\" > 0");
+                        });
+                });
+
+            modelBuilder.Entity("Domain.Entities.ProjectReceiptContent", b =>
+                {
+                    b.Property<Guid>("ProjectReceiptId")
+                        .HasColumnType("uuid");
+
+                    b.Property<byte[]>("PdfContent")
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("PdfContentType")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("PdfFileName")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)");
+
+                    b.Property<string>("PdfHashSha256")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SnapshotHashSha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SnapshotJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.HasKey("ProjectReceiptId");
+
+                    b.ToTable("ProjectReceiptContents", (string)null);
                 });
 
             modelBuilder.Entity("Domain.Entities.Proposal", b =>
@@ -4710,6 +5041,9 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasDefaultValueSql("now()");
 
+                    b.Property<string>("FullEvaluationJson")
+                        .HasColumnType("text");
+
                     b.Property<string>("GradedQuestionsJson")
                         .HasColumnType("text");
 
@@ -4722,8 +5056,17 @@ namespace Infrastructure.Persistence.Migrations
                     b.Property<Guid>("ProposalId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("QualityBand")
+                        .HasColumnType("text");
+
                     b.Property<bool>("RecommendedHire")
                         .HasColumnType("boolean");
+
+                    b.Property<double>("SavingsRatioPercent")
+                        .HasColumnType("double precision");
+
+                    b.Property<double>("ScopeCompletenessPercent")
+                        .HasColumnType("double precision");
 
                     b.Property<int>("Score")
                         .HasColumnType("integer");
@@ -4735,11 +5078,20 @@ namespace Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<double>("TechnicalQualityScore")
+                        .HasColumnType("double precision");
+
                     b.Property<string>("TechnicalSkillsJson")
                         .HasColumnType("text");
 
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<double>("ValueScore")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("VerdictBadge")
+                        .HasColumnType("text");
 
                     b.HasKey("ProposalAiJudgingsId")
                         .HasName("ProposalAiJudgings_pkey");
@@ -6075,6 +6427,12 @@ namespace Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(5)")
                         .HasDefaultValueSql("'vi'::character varying");
 
+                    b.Property<DateTime?>("PreviousRefreshTokenGraceExpiresAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PreviousRefreshTokenHash")
+                        .HasColumnType("text");
+
                     b.Property<string>("Provider")
                         .HasColumnType("text");
 
@@ -6273,6 +6631,41 @@ namespace Infrastructure.Persistence.Migrations
                         {
                             t.HasCheckConstraint("CK_UserEloScores_CurrentPoints_NonNegative", "\"CurrentPoints\" >= 0");
                         });
+                });
+
+            modelBuilder.Entity("Domain.Entities.UserRealtimeState", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ConversationRevision")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("ConversationUnreadCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("NotificationRevision")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("NotificationUnreadCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.HasKey("UserId");
+
+                    b.ToTable("UserRealtimeStates", (string)null);
                 });
 
             modelBuilder.Entity("Domain.Entities.UserViolation", b =>
@@ -6866,6 +7259,18 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("Domain.Entities.AuthSession", b =>
+                {
+                    b.HasOne("Domain.Entities.User", "User")
+                        .WithMany("AuthSessions")
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("AuthSessions_usr_UserId_fkey");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("Domain.Entities.BankAccount", b =>
                 {
                     b.HasOne("Domain.Entities.User", "User")
@@ -7046,6 +7451,17 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("Contract");
                 });
 
+            modelBuilder.Entity("Domain.Entities.ContractPlanChangeRequest", b =>
+                {
+                    b.HasOne("Domain.Entities.Contract", "Contract")
+                        .WithMany("PlanChangeRequests")
+                        .HasForeignKey("ContractsId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Contract");
+                });
+
             modelBuilder.Entity("Domain.Entities.ContractPlanRevision", b =>
                 {
                     b.HasOne("Domain.Entities.Contract", "Contract")
@@ -7092,6 +7508,32 @@ namespace Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Milestone");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ContractWorkItemSubmission", b =>
+                {
+                    b.HasOne("Domain.Entities.ContractWorkItem", "ContractWorkItem")
+                        .WithMany("Submissions")
+                        .HasForeignKey("ContractWorkItemId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Domain.Entities.User", "ReviewedByUser")
+                        .WithMany()
+                        .HasForeignKey("ReviewedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("Domain.Entities.User", "SubmittedByUser")
+                        .WithMany()
+                        .HasForeignKey("SubmittedByUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("ContractWorkItem");
+
+                    b.Navigation("ReviewedByUser");
+
+                    b.Navigation("SubmittedByUser");
                 });
 
             modelBuilder.Entity("Domain.Entities.Conversation", b =>
@@ -7452,6 +7894,30 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("EsignTemplates");
 
                     b.Navigation("JobPosts");
+                });
+
+            modelBuilder.Entity("Domain.Entities.EsignDocumentArtifact", b =>
+                {
+                    b.HasOne("Domain.Entities.EsignDocument", "EsignDocument")
+                        .WithMany("Artifacts")
+                        .HasForeignKey("EsignDocumentsId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("ESignDocumentArtifacts_eDoc_ESignDocumentsId_fkey");
+
+                    b.Navigation("EsignDocument");
+                });
+
+            modelBuilder.Entity("Domain.Entities.EsignDocumentContent", b =>
+                {
+                    b.HasOne("Domain.Entities.EsignDocument", "EsignDocument")
+                        .WithOne("Content")
+                        .HasForeignKey("Domain.Entities.EsignDocumentContent", "EsignDocumentsId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("ESignDocumentContents_eDoc_ESignDocumentsId_fkey");
+
+                    b.Navigation("EsignDocument");
                 });
 
             modelBuilder.Entity("Domain.Entities.EsignSignature", b =>
@@ -7858,6 +8324,12 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.MilestoneAttachment", b =>
                 {
+                    b.HasOne("Domain.Entities.ContractWorkItemSubmission", "ContractWorkItemSubmission")
+                        .WithMany("Attachments")
+                        .HasForeignKey("ContractWorkItemSubmissionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .HasConstraintName("MilestoneAttachments_ContractWorkItemSubmissionId_fkey");
+
                     b.HasOne("Domain.Entities.Milestone", "Milestones")
                         .WithMany("MilestoneAttachments")
                         .HasForeignKey("MilestonesId")
@@ -7868,6 +8340,8 @@ namespace Infrastructure.Persistence.Migrations
                         .WithMany("MilestoneAttachments")
                         .HasForeignKey("UploadedByUserId")
                         .HasConstraintName("MilestoneAttachments_UploadedByUserId_fkey");
+
+                    b.Navigation("ContractWorkItemSubmission");
 
                     b.Navigation("Milestones");
 
@@ -8110,6 +8584,28 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("Notification");
 
                     b.Navigation("OwnerUser");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ProjectReceiptArtifact", b =>
+                {
+                    b.HasOne("Domain.Entities.ProjectReceipt", "ProjectReceipt")
+                        .WithMany("Artifacts")
+                        .HasForeignKey("ProjectReceiptId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ProjectReceipt");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ProjectReceiptContent", b =>
+                {
+                    b.HasOne("Domain.Entities.ProjectReceipt", "ProjectReceipt")
+                        .WithOne("Content")
+                        .HasForeignKey("Domain.Entities.ProjectReceiptContent", "ProjectReceiptId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("ProjectReceipt");
                 });
 
             modelBuilder.Entity("Domain.Entities.Proposal", b =>
@@ -8639,6 +9135,17 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("Domain.Entities.UserRealtimeState", b =>
+                {
+                    b.HasOne("Domain.Entities.User", "User")
+                        .WithOne("RealtimeState")
+                        .HasForeignKey("Domain.Entities.UserRealtimeState", "UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("Domain.Entities.UserViolation", b =>
                 {
                     b.HasOne("Domain.Entities.Contract", "Contract")
@@ -8828,6 +9335,8 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.Navigation("NegotiationOffers");
 
+                    b.Navigation("PlanChangeRequests");
+
                     b.Navigation("PlanRevisions");
 
                     b.Navigation("ReportContracts");
@@ -8859,6 +9368,16 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("EscrowTransactions");
 
                     b.Navigation("WalletTransactions");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ContractWorkItem", b =>
+                {
+                    b.Navigation("Submissions");
+                });
+
+            modelBuilder.Entity("Domain.Entities.ContractWorkItemSubmission", b =>
+                {
+                    b.Navigation("Attachments");
                 });
 
             modelBuilder.Entity("Domain.Entities.Conversation", b =>
@@ -8894,6 +9413,10 @@ namespace Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Domain.Entities.EsignDocument", b =>
                 {
+                    b.Navigation("Artifacts");
+
+                    b.Navigation("Content");
+
                     b.Navigation("EsignSignatures");
                 });
 
@@ -9020,6 +9543,13 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("WorkItems");
                 });
 
+            modelBuilder.Entity("Domain.Entities.ProjectReceipt", b =>
+                {
+                    b.Navigation("Artifacts");
+
+                    b.Navigation("Content");
+                });
+
             modelBuilder.Entity("Domain.Entities.Proposal", b =>
                 {
                     b.Navigation("AdminNotes");
@@ -9105,6 +9635,8 @@ namespace Infrastructure.Persistence.Migrations
 
                     b.Navigation("AssignedReportContracts");
 
+                    b.Navigation("AuthSessions");
+
                     b.Navigation("BroadcastNotificationRecipients");
 
                     b.Navigation("CancelledSchedules");
@@ -9154,6 +9686,8 @@ namespace Infrastructure.Persistence.Migrations
                     b.Navigation("ProposalInterviewReviewSessions");
 
                     b.Navigation("ProposalQuestionTimers");
+
+                    b.Navigation("RealtimeState");
 
                     b.Navigation("ReceivedContractProductHandoffs");
 

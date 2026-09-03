@@ -65,6 +65,8 @@ public class UserAccountStatusService : IUserAccountStatusService
         user.SuspensionReason = null;
         user.RefreshTokenHash = null;
         user.RefreshTokenExpiry = null;
+        user.PreviousRefreshTokenHash = null;
+        user.PreviousRefreshTokenGraceExpiresAt = null;
         user.UpdatedAt = now;
     }
 

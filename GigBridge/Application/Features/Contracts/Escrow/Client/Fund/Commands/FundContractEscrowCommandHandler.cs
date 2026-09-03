@@ -15,10 +15,12 @@ using Domain.Enums.Contracts;
 using Domain.Enums.Contracts.Escrow;
 using Domain.Enums.Contracts.Milestones;
 using Domain.Enums.Notifications;
+using Domain.Enums.Proposals;
 using Domain.Enums.Wallets;
 using Domain.Services;
 using MediatR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace Application.Features.Contracts.Escrow.Client.Fund.Commands;
 
@@ -30,19 +32,22 @@ public sealed class FundContractEscrowCommandHandler :
     private readonly INotificationService _notificationService;
     private readonly IChatRealtimeNotifier _chatRealtimeNotifier;
     private readonly IUserAuditLogService _userAuditLog;
+    private readonly ILogger<FundContractEscrowCommandHandler> _logger;
 
     public FundContractEscrowCommandHandler(
         IApplicationDbContext context,
         IDateTimeService dateTimeService,
         INotificationService notificationService,
         IChatRealtimeNotifier chatRealtimeNotifier,
-        IUserAuditLogService userAuditLog)
+        IUserAuditLogService userAuditLog,
+        ILogger<FundContractEscrowCommandHandler> logger)
     {
         _context = context;
         _dateTimeService = dateTimeService;
         _notificationService = notificationService;
         _chatRealtimeNotifier = chatRealtimeNotifier;
         _userAuditLog = userAuditLog;
+        _logger = logger;
     }
 
     public async Task<FundContractEscrowResponse> Handle(
@@ -107,7 +112,29 @@ public sealed class FundContractEscrowCommandHandler :
         {
             contract.Status = (int)ContractStatus.Active;
             await StartFirstMilestoneAsync(contract.ContractsId, now, cancellationToken);
+            await FinalizeProposalOutcomeAsync(contract.JobPostsId, contract.ProposalsId, now, cancellationToken);
             await _context.SaveChangesAsync(cancellationToken);
+
+            // This branch performs a real PendingEscrow -> Active transition, so it has to
+            // announce itself exactly like the full funding path below.
+            var reconciledWorkspaceConversationId = await _context.Set<Conversation>()
+                .AsNoTracking()
+                .Where(conversation =>
+                    conversation.ContractsId == contract.ContractsId &&
+                    conversation.ConversationType == (int)ConversationType.ContractWorkroom)
+                .Select(conversation => (Guid?)conversation.ConversationsId)
+                .FirstOrDefaultAsync(CancellationToken.None);
+
+            await ContractEscrowRealtimeEvents.PublishEscrowFundedAsync(
+                _context,
+                _chatRealtimeNotifier,
+                _logger,
+                contract,
+                reconciledWorkspaceConversationId,
+                escrow.Status,
+                systemMessage: null,
+                CancellationToken.None);
+
             return new FundContractEscrowResponse(
                 contract.ContractsId,
                 escrow.ContractEscrowId,
@@ -181,6 +208,7 @@ public sealed class FundContractEscrowCommandHandler :
         contract.Status = (int)ContractStatus.Active;
         contract.UpdatedAt = now;
         await StartFirstMilestoneAsync(contract.ContractsId, now, cancellationToken);
+        await FinalizeProposalOutcomeAsync(contract.JobPostsId, contract.ProposalsId, now, cancellationToken);
 
         var holdBalanceSource = WalletBalanceAudit.ResolveSource(
             fundingUsage.DepositedAmount,
@@ -233,6 +261,7 @@ public sealed class FundContractEscrowCommandHandler :
             .Where(c => c.ContractsId == contract.ContractsId)
             .ToListAsync(cancellationToken);
 
+        Guid? workspaceConversationId = null;
         foreach (var conversation in conversations)
         {
             if (conversation.ConversationType == (int)ConversationType.JobNegotiation)
@@ -240,9 +269,14 @@ public sealed class FundContractEscrowCommandHandler :
                 conversation.ConversationType = (int)ConversationType.ContractWorkroom;
                 conversation.UpdatedAt = now;
             }
+
+            if (conversation.ConversationType == (int)ConversationType.ContractWorkroom)
+            {
+                workspaceConversationId ??= conversation.ConversationsId;
+            }
         }
 
-        await ContractConversationEvents.AddSystemMessageAsync(
+        var systemMessage = await ContractConversationEvents.AddSystemMessageAsync(
             _context,
             contract.ContractsId,
             "Escrow funded. Contract is now active.",
@@ -296,15 +330,15 @@ public sealed class FundContractEscrowCommandHandler :
 
         await _context.SaveChangesAsync(cancellationToken);
 
-        var activeConversation = conversations.FirstOrDefault(c => c.ConversationType == (int)ConversationType.ContractWorkroom);
-        if (activeConversation != null)
-        {
-            await _chatRealtimeNotifier.SendConversationEventAsync(
-                activeConversation.ConversationsId,
-                "WorkspaceOpened",
-                new { contractId = contract.ContractsId, conversationId = activeConversation.ConversationsId },
-                cancellationToken);
-        }
+        await ContractEscrowRealtimeEvents.PublishEscrowFundedAsync(
+            _context,
+            _chatRealtimeNotifier,
+            _logger,
+            contract,
+            workspaceConversationId,
+            escrow.Status,
+            systemMessage,
+            CancellationToken.None);
 
         return new FundContractEscrowResponse(
             contract.ContractsId,
@@ -335,6 +369,43 @@ public sealed class FundContractEscrowCommandHandler :
             first.Status = (int)MilestoneStatus.InProgress;
             first.StartedAt = now;
             first.UpdatedAt = now;
+        }
+    }
+
+    /// <summary>
+    /// Marks the negotiation as won: the negotiated proposal (if any) becomes Accepted, and
+    /// every other Pending/Shortlisted proposal for the same job post is rejected. This is the
+    /// single point Proposal.Status reaches Accepted — earlier stages (negotiation, final-offer
+    /// acceptance, signing) leave it at Shortlisted so a cancelled contract needs no restoration.
+    /// </summary>
+    private async Task FinalizeProposalOutcomeAsync(
+        Guid jobPostId,
+        Guid? acceptedProposalId,
+        DateTime now,
+        CancellationToken cancellationToken)
+    {
+        if (acceptedProposalId.HasValue)
+        {
+            var acceptedProposal = await _context.Set<Proposal>()
+                .FirstOrDefaultAsync(proposal => proposal.ProposalsId == acceptedProposalId.Value, cancellationToken);
+            if (acceptedProposal is not null)
+            {
+                acceptedProposal.Status = (int)ProposalStatus.Accepted;
+                acceptedProposal.UpdatedAt = now;
+            }
+        }
+
+        var siblingProposals = await _context.Set<Proposal>()
+            .Where(proposal =>
+                proposal.JobPostsId == jobPostId &&
+                proposal.ProposalsId != acceptedProposalId &&
+                (proposal.Status == (int)ProposalStatus.Pending || proposal.Status == (int)ProposalStatus.Shortlisted))
+            .ToListAsync(cancellationToken);
+
+        foreach (var proposal in siblingProposals)
+        {
+            proposal.Status = (int)ProposalStatus.Rejected;
+            proposal.UpdatedAt = now;
         }
     }
 }

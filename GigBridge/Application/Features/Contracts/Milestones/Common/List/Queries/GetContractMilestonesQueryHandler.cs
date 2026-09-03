@@ -32,16 +32,22 @@ public sealed class GetContractMilestonesQueryHandler :
             query.UserId,
             cancellationToken);
 
+        // AsSplitQuery: two collection Includes (attachments + work items) in one query would
+        // otherwise produce a row-multiplying JOIN (attachments_count * workItems_count per
+        // milestone); splitting into separate queries avoids that.
         var milestones = await MilestoneWorkflowGuard.OrderMilestones(
                 _context.Set<Milestone>()
                     .Include(milestone => milestone.MilestoneAttachments)
                     .Include(milestone => milestone.WorkItems)
+                        .ThenInclude(workItem => workItem.Submissions)
+                            .ThenInclude(submission => submission.Attachments)
                     .Where(milestone => milestone.ContractsId == query.ContractId)
+                    .AsSplitQuery()
             )
             .ToListAsync(cancellationToken);
 
         return milestones
-            .Select(milestone => MilestoneWorkflowGuard.ToResponse(milestone))
+            .Select(milestone => MilestoneWorkflowGuard.ToResponse(milestone, contract.DeliveryMode))
             .ToList();
     }
 }

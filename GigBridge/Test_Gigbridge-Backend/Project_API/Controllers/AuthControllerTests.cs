@@ -8,6 +8,7 @@ using Application.Features.Auth.GoogleLogin.Commands;
 using Application.Features.Auth.GoogleLogin.DTOs;
 using Application.Features.Auth.Login.Commands;
 using Application.Features.Auth.Login.DTOs;
+using Application.Features.Auth.Logout.Commands;
 using Application.Features.Auth.RefreshToken.Commands;
 using Application.Features.Auth.RefreshToken.DTOs;
 using Application.Features.Auth.Register.Commands;
@@ -43,6 +44,7 @@ public class AuthControllerTests
     [InlineData(nameof(AuthController.Login), AuthRateLimitPolicies.Login)]
     [InlineData(nameof(AuthController.GoogleLogin), AuthRateLimitPolicies.Login)]
     [InlineData(nameof(AuthController.Refresh), AuthRateLimitPolicies.Refresh)]
+    [InlineData(nameof(AuthController.Logout), AuthRateLimitPolicies.Refresh)]
     [InlineData(nameof(AuthController.SendPasswordEmailChanging), AuthRateLimitPolicies.OtpIssue)]
     [InlineData(nameof(AuthController.PasswordChangingRequest), AuthRateLimitPolicies.OtpVerify)]
     public void AnonymousAuthEndpoint_UsesExpectedRateLimitPolicy(
@@ -61,6 +63,9 @@ public class AuthControllerTests
         var mediator = Substitute.For<IMediator>();
         var services = new ServiceCollection();
         services.AddSingleton(mediator);
+        services.AddCors(options => options.AddPolicy(
+            global::Project_API.Extensions.ServiceCollectionExtensions.FrontendCorsPolicy,
+            policy => policy.WithOrigins("https://gigbridge.id.vn")));
         var serviceProvider = services.BuildServiceProvider();
 
         var httpContext = new DefaultHttpContext
@@ -242,15 +247,17 @@ public class AuthControllerTests
         Assert.False(apiResponse.Success);
     }
 
-    [Fact]
-    public async Task Login_ReturnsOk_WhenLoginSucceeds()
+    [Theory]
+    [InlineData((int)UserRole.Client)]
+    [InlineData((int)UserRole.Freelancer)]
+    public async Task Login_ReturnsOkWithCanonicalCookie_ForEveryRole(int role)
     {
         // Arrange
         var (controller, mediator, httpContext) = CreateController();
         var request = new LoginRequest { Email = "test@test.com", Password = "Password123!" };
         var loginResponse = new LoginResponse
         {
-            User = new UserDTO { UserId = Guid.NewGuid(), Email = "test@test.com", Role = 1 },
+            User = new UserDTO { UserId = Guid.NewGuid(), Email = "test@test.com", Role = role },
             Token = "jwt_token_here"
         };
         var expiry = DateTime.UtcNow.AddDays(7);
@@ -265,7 +272,7 @@ public class AuthControllerTests
         var apiResponse = Assert.IsType<ApiResponse<LoginResponse>>(okResult.Value);
         Assert.True(apiResponse.Success);
         Assert.Equal(loginResponse, apiResponse.Data);
-        Assert.True(httpContext.Response.Headers.ContainsKey("Set-Cookie"));
+        AssertCanonicalRefreshTokenCookie(httpContext, "refreshtokenvalue");
     }
 
     [Fact]
@@ -302,15 +309,17 @@ public class AuthControllerTests
         Assert.False(apiResponse.Success);
     }
 
-    [Fact]
-    public async Task GoogleLogin_ReturnsOk_WhenLoginSucceeds()
+    [Theory]
+    [InlineData((int)UserRole.Client)]
+    [InlineData((int)UserRole.Freelancer)]
+    public async Task GoogleLogin_ReturnsOkWithCanonicalCookie_ForEveryRole(int role)
     {
         // Arrange
         var (controller, mediator, httpContext) = CreateController();
-        var request = new GoogleLoginRequest { AuthCode = "googlecode", Role = 1, IsFromSignIn = true };
+        var request = new GoogleLoginRequest { AuthCode = "googlecode", Role = role, IsFromSignIn = true };
         var loginResponse = new LoginResponse
         {
-            User = new UserDTO { UserId = Guid.NewGuid(), Email = "test@test.com", Role = 1 },
+            User = new UserDTO { UserId = Guid.NewGuid(), Email = "test@test.com", Role = role },
             Token = "jwt_token_here"
         };
         var expiry = DateTime.UtcNow.AddDays(7);
@@ -325,7 +334,7 @@ public class AuthControllerTests
         var apiResponse = Assert.IsType<ApiResponse<LoginResponse>>(okResult.Value);
         Assert.True(apiResponse.Success);
         Assert.Equal(loginResponse, apiResponse.Data);
-        Assert.True(httpContext.Response.Headers.ContainsKey("Set-Cookie"));
+        AssertCanonicalRefreshTokenCookie(httpContext, "refreshtokenvalue");
     }
 
     [Fact]
@@ -370,6 +379,127 @@ public class AuthControllerTests
         Assert.True(apiResponse.Success);
         Assert.Equal(loginResponse, apiResponse.Data);
         Assert.True(httpContext.Response.Headers.ContainsKey("Set-Cookie"));
+    }
+
+    [Fact]
+    public async Task Refresh_WithCanonicalAndLegacyCookies_ValidatesEveryCandidate()
+    {
+        var (controller, mediator, httpContext) = CreateController();
+        var request = new TokenRequest { AccessToken = "accesstoken" };
+        httpContext.Request.Headers.Append(
+            "Cookie",
+            "refreshToken=canonical-token; refreshToken=legacy-token");
+
+        var loginResponse = new LoginResponse
+        {
+            User = new UserDTO { UserId = Guid.NewGuid(), Email = "test@test.com", Role = 0 },
+            Token = "new_jwt_token"
+        };
+        mediator.Send(Arg.Any<RefreshTokenCommand>())
+            .Returns((loginResponse, "new-refresh-token", DateTime.UtcNow.AddDays(7)));
+
+        var result = await controller.Refresh(request);
+
+        Assert.IsType<OkObjectResult>(result);
+        await mediator.Received(1).Send(Arg.Is<RefreshTokenCommand>(command =>
+            command.RefreshTokenCandidates != null &&
+            command.RefreshTokenCandidates.Contains("canonical-token") &&
+            command.RefreshTokenCandidates.Contains("legacy-token")));
+    }
+
+    [Fact]
+    public async Task Login_ClearsLegacyCookiePathsAndSetsCanonicalCookie()
+    {
+        var (controller, mediator, httpContext) = CreateController();
+        var request = new LoginRequest { Email = "test@test.com", Password = "Password123!" };
+        var loginResponse = new LoginResponse
+        {
+            User = new UserDTO { UserId = Guid.NewGuid(), Email = "test@test.com", Role = 0 },
+            Token = "jwt_token_here"
+        };
+        mediator.Send(Arg.Any<LoginWithRefreshCommand>())
+            .Returns((loginResponse, "new-refresh-token", DateTime.UtcNow.AddDays(7)));
+
+        await controller.Login(request);
+
+        var setCookieHeaders = httpContext.Response.Headers.SetCookie.ToArray();
+        Assert.Contains(setCookieHeaders, value =>
+            value!.Contains("refreshToken=", StringComparison.Ordinal) &&
+            value.Contains("path=/api/auth", StringComparison.OrdinalIgnoreCase) &&
+            !value.Contains("expires=Thu, 01 Jan 1970", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(setCookieHeaders, value =>
+            value!.Contains("path=/;", StringComparison.OrdinalIgnoreCase) &&
+            value.Contains("expires=Thu, 01 Jan 1970", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(setCookieHeaders, value =>
+            value!.Contains("path=/api;", StringComparison.OrdinalIgnoreCase) &&
+            value.Contains("expires=Thu, 01 Jan 1970", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task Logout_RevokesPresentedTokensAndClearsAllCookiePaths()
+    {
+        var (controller, mediator, httpContext) = CreateController();
+        httpContext.Request.Headers.Append(
+            "Cookie",
+            "refreshToken=canonical-token; refreshToken=legacy-token");
+
+        var result = await controller.Logout();
+
+        var okResult = Assert.IsType<OkObjectResult>(result);
+        var apiResponse = Assert.IsType<ApiResponse<object>>(okResult.Value);
+        Assert.True(apiResponse.Success);
+        await mediator.Received(1).Send(Arg.Is<LogoutCommand>(command =>
+            command.RefreshTokens.Contains("canonical-token") &&
+            command.RefreshTokens.Contains("legacy-token")));
+
+        var setCookieHeaders = httpContext.Response.Headers.SetCookie.ToArray();
+        Assert.Equal(3, setCookieHeaders.Length);
+        Assert.All(setCookieHeaders, value =>
+            Assert.Contains("expires=Thu, 01 Jan 1970", value!, StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task Logout_ClearsAllCookiePaths_WhenRevocationFails()
+    {
+        var (controller, mediator, httpContext) = CreateController();
+        httpContext.Request.Headers.Append("Cookie", "refreshToken=current-token");
+        mediator.Send(Arg.Any<LogoutCommand>())
+            .Returns(Task.FromException(new InvalidOperationException("database unavailable")));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => controller.Logout());
+
+        var setCookieHeaders = httpContext.Response.Headers.SetCookie.ToArray();
+        Assert.Equal(3, setCookieHeaders.Length);
+        Assert.All(setCookieHeaders, value =>
+            Assert.Contains("expires=Thu, 01 Jan 1970", value!, StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task Logout_RejectsBrowserOriginOutsideCorsAllowlist()
+    {
+        var (controller, mediator, httpContext) = CreateController();
+        httpContext.Request.Headers.Origin = "https://attacker.example";
+
+        var result = await controller.Logout();
+
+        var forbidden = Assert.IsType<ObjectResult>(result);
+        Assert.Equal(StatusCodes.Status403Forbidden, forbidden.StatusCode);
+        await mediator.DidNotReceive().Send(Arg.Any<LogoutCommand>());
+        Assert.False(httpContext.Response.Headers.ContainsKey("Set-Cookie"));
+    }
+
+    [Fact]
+    public async Task Logout_AllowsConfiguredBrowserOrigin()
+    {
+        var (controller, mediator, httpContext) = CreateController();
+        httpContext.Request.Headers.Origin = "https://gigbridge.id.vn";
+        httpContext.Request.Headers.Cookie = "refreshToken=current-token";
+
+        var result = await controller.Logout();
+
+        Assert.IsType<OkObjectResult>(result);
+        await mediator.Received(1).Send(Arg.Any<LogoutCommand>());
+        Assert.Equal(3, httpContext.Response.Headers.SetCookie.Count);
     }
 
     [Fact]
@@ -484,6 +614,23 @@ public class AuthControllerTests
         var apiResponse = Assert.IsType<ApiResponse<object>>(okResult.Value);
         Assert.True(apiResponse.Success);
         await mediator.Received(1).Send(Arg.Any<ResetPasswordCommand>());
+    }
+
+    private static void AssertCanonicalRefreshTokenCookie(
+        DefaultHttpContext httpContext,
+        string refreshToken)
+    {
+        var canonicalCookie = Assert.Single(
+            httpContext.Response.Headers.SetCookie,
+            value => value is not null &&
+                     value.Contains($"refreshToken={refreshToken}", StringComparison.Ordinal));
+
+        Assert.Contains("path=/api/auth", canonicalCookie, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("httponly", canonicalCookie, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("secure", canonicalCookie, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("samesite=none", canonicalCookie, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("expires=", canonicalCookie, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("domain=", canonicalCookie, StringComparison.OrdinalIgnoreCase);
     }
 
 }

@@ -14,6 +14,7 @@ using Application.Common.InternalServices.Proposals.Email;
 using Application.Common.InternalServices.Proposals.Interfaces;
 using Application.Common.InternalServices.Proposals.Models;
 using Application.Features.Proposals.Common;
+using Application.Features.Chat.Common.Negotiations.Realtime;
 using Application.Features.Premium.Client.SmartTalentMatching.Feedback;
 using Domain.Entities;
 using Domain.Enums.Chat;
@@ -23,6 +24,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Application.Common.Models.Email;
 
 namespace Application.Features.Proposals.Common.AcceptForNegotiation.Commands;
 
@@ -127,7 +129,6 @@ public class AcceptProposalForNegotiationCommandHandler : IRequestHandler<Accept
                 _context, conversationId, proposal, now, cancellationToken);
 
             await _context.SaveChangesAsync(cancellationToken);
-            await NotifyConversationUpdated(conversationId, existingConversation.LastMessageAt, cancellationToken);
         }
         else
         {
@@ -153,7 +154,6 @@ public class AcceptProposalForNegotiationCommandHandler : IRequestHandler<Accept
                 _context, conversationId, proposal, now, cancellationToken);
 
             await _context.SaveChangesAsync(cancellationToken);
-            await NotifyConversationUpdated(conversationId, conversation.LastMessageAt, cancellationToken);
         }
 
         if (isFirstTime && shouldNotifyNegotiationStart)
@@ -164,6 +164,17 @@ public class AcceptProposalForNegotiationCommandHandler : IRequestHandler<Accept
                 proposal.UpdatedAt = now;
                 await _context.SaveChangesAsync(cancellationToken);
             }
+
+        }
+
+        await NotifyConversationUpdated(
+            conversationId,
+            existingConversation?.LastMessageAt,
+            cancellationToken);
+        await NotifyMilestonePlanUpdated(conversationId, command.UserId, now, cancellationToken);
+
+        if (isFirstTime && shouldNotifyNegotiationStart)
+        {
 
             // Create notification
             await _notificationService.CreateNotificationAsync(
@@ -216,6 +227,29 @@ public class AcceptProposalForNegotiationCommandHandler : IRequestHandler<Accept
         }
 
         return conversationId;
+    }
+
+    private async Task NotifyMilestonePlanUpdated(
+        Guid conversationId,
+        Guid updatedByUserId,
+        DateTime updatedAt,
+        CancellationToken cancellationToken)
+    {
+        var participantUserIds = await _context.Set<ConversationParticipant>()
+            .AsNoTracking()
+            .Where(participant =>
+                participant.ConversationsId == conversationId &&
+                participant.LeftAt == null &&
+                participant.DeletedAt == null)
+            .Select(participant => participant.UserId)
+            .Distinct()
+            .ToListAsync(cancellationToken);
+
+        await _chatRealtimeNotifier.SendUsersEventAsync(
+            participantUserIds,
+            NegotiationRealtimeEvents.MilestonePlanUpdated,
+            new NegotiationMilestonePlanUpdatedPayload(conversationId, updatedByUserId, updatedAt),
+            cancellationToken);
     }
 
     private async Task EnsureParticipants(Guid conversationId, Guid clientUserId, Guid freelancerUserId, CancellationToken cancellationToken)

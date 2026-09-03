@@ -1,6 +1,7 @@
 using Application.Common.Interfaces;
 using Application.Features.Contracts.Completion.Client.Commands;
 using Domain.Enums.Contracts;
+using Domain.Enums.Contracts.Escrow;
 using Domain.Enums.Contracts.Milestones;
 using Domain.Enums.Disputes;
 using MediatR;
@@ -13,6 +14,7 @@ namespace Application.Common.InternalServices.Contracts.Completion.BackgroundJob
 public sealed class ContractAutoCompletionWorker : BackgroundService
 {
     private static readonly TimeSpan CheckInterval = TimeSpan.FromHours(1);
+    private const decimal FinancialTolerance = 0.01m;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly ILogger<ContractAutoCompletionWorker> _logger;
 
@@ -58,8 +60,34 @@ public sealed class ContractAutoCompletionWorker : BackgroundService
         var context = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
         var mediator = scope.ServiceProvider.GetRequiredService<IMediator>();
         var cutoff = DateTime.UtcNow.AddHours(-72);
-        var candidates = await context.Set<Domain.Entities.Contract>()
+        var candidates = await CandidateQuery(context, cutoff)
+            .Take(20)
+            .ToListAsync(cancellationToken);
+
+        foreach (var candidate in candidates)
+        {
+            try
+            {
+                await mediator.Send(
+                    new EndProjectCommand(candidate.ContractId, candidate.ClientUserId),
+                    cancellationToken);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                _logger.LogWarning(
+                    exception,
+                    "Automatic completion failed for contract {ContractId}.",
+                    candidate.ContractId);
+            }
+        }
+    }
+
+    internal static IQueryable<ContractAutoCompletionCandidate> CandidateQuery(
+        IApplicationDbContext context,
+        DateTime cutoff) =>
+        context.Set<Domain.Entities.Contract>()
             .AsNoTracking()
+            .TagWith("Contract.AutoCompletion.Candidates")
             .Where(contract =>
                 contract.Status == (int)ContractStatus.Active &&
                 contract.Milestones.Any() &&
@@ -70,31 +98,31 @@ public sealed class ContractAutoCompletionWorker : BackgroundService
                     milestone.ApprovedAt.Value > cutoff) &&
                 !contract.Disputes.Any(dispute =>
                     dispute.Status != (int)DisputeStatus.Resolved &&
-                    dispute.Status != (int)DisputeStatus.Closed))
+                    dispute.Status != (int)DisputeStatus.Closed) &&
+                contract.ContractEscrow != null &&
+                (contract.ContractEscrow.Status == (int)ContractEscrowStatus.Funded ||
+                 contract.ContractEscrow.Status == (int)ContractEscrowStatus.PartiallyReleased ||
+                 contract.ContractEscrow.Status == (int)ContractEscrowStatus.Released) &&
+                Math.Abs(
+                    contract.ContractEscrow.FundedAmount -
+                    contract.Milestones.Sum(milestone => milestone.Amount - milestone.RefundedAmount)) <= FinancialTolerance &&
+                !contract.Milestones.Any(milestone =>
+                    milestone.Amount - milestone.RefundedAmount - milestone.ReleasedAmount < -FinancialTolerance) &&
+                Math.Abs(
+                    contract.ContractEscrow.FundedAmount - contract.ContractEscrow.ReleasedAmount -
+                    contract.Milestones.Sum(milestone =>
+                        milestone.Amount - milestone.RefundedAmount - milestone.ReleasedAmount)) <= FinancialTolerance &&
+                (contract.ContractEscrow.DepositedTokens + contract.ContractEscrow.EarnedTokens <= FinancialTolerance ||
+                 Math.Abs(
+                     contract.ContractEscrow.DepositedTokens + contract.ContractEscrow.EarnedTokens -
+                     (contract.ContractEscrow.FundedAmount - contract.ContractEscrow.ReleasedAmount)) <= FinancialTolerance) &&
+                contract.ClientProfiles.User.UserWallet != null &&
+                contract.ClientProfiles.User.UserWallet.HeldTokens + FinancialTolerance >=
+                    contract.ContractEscrow.FundedAmount - contract.ContractEscrow.ReleasedAmount)
             .OrderBy(contract => contract.UpdatedAt ?? contract.CreatedAt)
-            .Select(contract => new
-            {
+            .Select(contract => new ContractAutoCompletionCandidate(
                 contract.ContractsId,
-                ClientUserId = contract.ClientProfiles.UserId
-            })
-            .Take(20)
-            .ToListAsync(cancellationToken);
-
-        foreach (var candidate in candidates)
-        {
-            try
-            {
-                await mediator.Send(
-                    new EndProjectCommand(candidate.ContractsId, candidate.ClientUserId),
-                    cancellationToken);
-            }
-            catch (Exception exception) when (exception is not OperationCanceledException)
-            {
-                _logger.LogWarning(
-                    exception,
-                    "Automatic completion failed for contract {ContractId}.",
-                    candidate.ContractsId);
-            }
-        }
-    }
+                contract.ClientProfiles.UserId));
 }
+
+internal sealed record ContractAutoCompletionCandidate(Guid ContractId, Guid ClientUserId);

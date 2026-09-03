@@ -9,6 +9,8 @@ using Application.Features.Notifications.Public.MarkAllAsRead.Command;
 using Application.Features.Notifications.Public.MarkAsRead.Command;
 using Application.Features.Notifications.Queries.GetNotifications;
 using Application.Features.Notifications.Queries.GetUnreadCount;
+using Application.Features.Notifications.Public.GetStatus.Queries;
+using Application.Common.InternalServices.Realtime.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -51,6 +53,14 @@ public class NotificationsController : BaseApiController
         var query = new GetUnreadCountQuery { UserId = userId };
         var result = await Mediator.Send(query);
         return Ok(ApiResponse<UnreadCountResponse>.Ok(result, "Unread count retrieved successfully."));
+    }
+
+    [HttpGet("status")]
+    public async Task<IActionResult> GetStatus()
+    {
+        if (!TryGetCurrentUserId(out var userId)) return InvalidTokenResponse();
+        var result = await Mediator.Send(new GetNotificationStatusQuery(userId));
+        return Ok(ApiResponse<RealtimeStatusResponse>.Ok(result, "Notification status retrieved successfully."));
     }
 
     [HttpPut("{notificationId:guid}/read")]

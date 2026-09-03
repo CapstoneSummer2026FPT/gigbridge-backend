@@ -88,8 +88,20 @@ public sealed class ConfirmContractDetailsCommandHandler :
 
         contract.Status = (int)ContractStatus.PendingSignature;
         contract.UpdatedAt = now;
-        var document = await ContractEsignRenderer.EnsureDocumentAsync(
+        await using var transaction = await _context.BeginTransactionAsync(cancellationToken);
+
+        var (document, _, documentChanged) = await ContractEsignRenderer.EnsureDocumentAsync(
             _context, _documentGenerator, contract, now, cancellationToken);
+
+        if (documentChanged)
+        {
+            ESignDocumentRevision.Advance(document, now);
+            await ESignDocumentRevision.EnqueueAsync(
+                _context,
+                document,
+                now,
+                cancellationToken);
+        }
 
         await ContractConversationEvents.AddSystemMessageAsync(
             _context,
@@ -106,6 +118,7 @@ public sealed class ConfirmContractDetailsCommandHandler :
             "Freelancer confirmed participation in the project.");
 
         await _context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
 
         var participantUserIds = await _context.Set<ConversationParticipant>()
             .AsNoTracking()

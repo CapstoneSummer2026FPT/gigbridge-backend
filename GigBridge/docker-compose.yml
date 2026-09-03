@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   web-api:
-    image: ghcr.io/capstonesummer2026fpt/gigbridge-api:latest
+    image: ${WEB_API_IMAGE:-ghcr.io/capstonesummer2026fpt/gigbridge-api:latest}
     container_name: gigbridge-api
     restart: always
     environment:
@@ -26,6 +26,11 @@ services:
       - Jwt__Key=${JWT_KEY}
       - Jwt__Issuer=${JWT_ISSUER}
       - Jwt__Audience=${JWT_AUDIENCE}
+      - Jwt__AccessTokenMinutes=${JWT_ACCESS_TOKEN_MINUTES:-60}
+      - Jwt__RefreshTokenMinutes=${JWT_REFRESH_TOKEN_MINUTES:-10080}
+
+      # Multi-device refresh-token sessions.
+      - AuthSessions__MaxActiveSessionsPerUser=${AUTH_SESSIONS_MAX_ACTIVE_PER_USER:-5}
 
       # PayOS
       - PayOS__ClientId=${PAYOS_CLIENT_ID}
@@ -35,12 +40,24 @@ services:
       - PayOS__CancelUrl=${PAYOS_CANCEL_URL}
 
       # PayOS Payout
-      - PayOSPayout__ClientId=${PAYOS_PAYOUT_CLIENT_ID}
-      - PayOSPayout__ApiKey=${PAYOS_PAYOUT_API_KEY}
-      - PayOSPayout__ChecksumKey=${PAYOS_PAYOUT_CHECKSUM_KEY}
+      # These use the :? guard on purpose. Without it a missing .env entry makes Compose inject an
+      # EMPTY value, which overrides appsettings and silently authenticates payouts with no key -
+      # every payout then fails as HTTP_401 with the app still reporting healthy.
+      - PayOSPayout__ClientId=${PAYOS_PAYOUT_CLIENT_ID:?PAYOS_PAYOUT_CLIENT_ID must be set}
+      - PayOSPayout__ApiKey=${PAYOS_PAYOUT_API_KEY:?PAYOS_PAYOUT_API_KEY must be set}
+      - PayOSPayout__ChecksumKey=${PAYOS_PAYOUT_CHECKSUM_KEY:?PAYOS_PAYOUT_CHECKSUM_KEY must be set}
+      # Optional. Route payout traffic through a fixed egress IP when the PayOS payout channel
+      # whitelists a single address but the API runs on several nodes.
+      - PayOSPayout__ProxyUrl=${PAYOS_PAYOUT_PROXY_URL:-}
 
       # Wallet Withdrawals
-      - WalletWithdrawals__Enabled=${WALLET_WITHDRAWALS_ENABLED}
+      - WalletWithdrawals__Enabled=${WALLET_WITHDRAWALS_ENABLED:?WALLET_WITHDRAWALS_ENABLED must be set to true or false}
+
+      # Payout diagnostics. Raise to Debug to trace every PayOS payout call without turning up
+      # EF Core noise.
+      - Logging__LogLevel__Infrastructure.ExternalServices.Payments.PayOs=${PAYOUT_LOG_LEVEL:-Information}
+      - Logging__LogLevel__Application.Common.InternalServices.Wallets=${PAYOUT_LOG_LEVEL:-Information}
+      - Logging__LogLevel__Application.Features.Wallets=${PAYOUT_LOG_LEVEL:-Information}
 
       # Frontend Base URL
       - FrontendBaseUrl=${FRONTEND_BASE_URL}
@@ -68,6 +85,18 @@ services:
       # AI Service
       - AiService__BaseUrl=${AI_SERVICE_BASE_URL}
       - AiService__ApiKey=${AI_SERVICE_API_KEY}
+
+      # Sentry capture and read-only admin issue feed
+      - Sentry__Dsn=${SENTRY_BACKEND_DSN:-}
+      - Sentry__Environment=${SENTRY_ENVIRONMENT:-production}
+      - Sentry__Release=${SENTRY_RELEASE:-}
+      - Sentry__TracesSampleRate=${SENTRY_TRACES_SAMPLE_RATE:-0}
+      - SentryMonitoring__Organization=${SENTRY_ORGANIZATION:-}
+      - SentryMonitoring__AuthToken=${SENTRY_MONITORING_AUTH_TOKEN:-}
+      - SentryMonitoring__Environment=${SENTRY_ENVIRONMENT:-production}
+      - SentryMonitoring__ProjectIds__0=${SENTRY_FRONTEND_PROJECT_ID:-}
+      - SentryMonitoring__ProjectIds__1=${SENTRY_BACKEND_PROJECT_ID:-}
+      - SentryMonitoring__ProjectIds__2=${SENTRY_AI_PROJECT_ID:-}
 
     ports:
       - "127.0.0.1:8080:8080" # Exposed locally; Nginx routes public traffic

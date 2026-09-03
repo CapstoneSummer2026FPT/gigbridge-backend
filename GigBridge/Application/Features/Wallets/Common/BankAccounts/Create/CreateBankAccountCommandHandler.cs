@@ -54,8 +54,6 @@ public sealed class CreateBankAccountCommandHandler :
         var bank = await BankAccountWorkflow.ResolveBankAsync(
             _bankDirectory,
             command.Request.BankBin,
-            command.Request.BankCode,
-            command.Request.BankName,
             cancellationToken);
         var shouldSetDefault = command.Request.IsDefault ||
             !await _context.Set<BankAccount>().AnyAsync(

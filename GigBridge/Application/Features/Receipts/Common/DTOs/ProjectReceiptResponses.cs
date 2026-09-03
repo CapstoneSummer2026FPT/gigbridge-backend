@@ -15,7 +15,8 @@ public sealed record ProjectReceiptSummaryResponse(
     bool DownloadReady,
     bool CanRetry,
     DateTime? GeneratedAt,
-    DateTime? EmailedAt);
+    DateTime? EmailedAt,
+    int Revision);
 
 public sealed record ProjectReceiptDownloadResponse(
     byte[] Content,
@@ -34,10 +35,11 @@ public static class ProjectReceiptResponseMapper
         ((ProjectReceiptGenerationStatus)receipt.GenerationStatus).ToString(),
         ((ProjectReceiptEmailStatus)receipt.EmailStatus).ToString(),
         receipt.GenerationStatus == (int)ProjectReceiptGenerationStatus.Ready &&
-            receipt.PdfContent is { Length: > 0 },
+            receipt.PdfSizeBytes is > 0,
         receipt.GenerationStatus == (int)ProjectReceiptGenerationStatus.Failed ||
             receipt.GenerationStatus == (int)ProjectReceiptGenerationStatus.Ready &&
             receipt.EmailStatus == (int)ProjectReceiptEmailStatus.Failed,
         receipt.GeneratedAt,
-        receipt.EmailedAt);
+        receipt.EmailedAt,
+        receipt.Revision);
 }

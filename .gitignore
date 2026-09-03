@@ -48,3 +48,8 @@ repomix-output.xml
 database/migrations/20260720-add-esign-docx-artifacts.sql
 *.ps1
 /supabase
+*.dll
+/obj/codex-authsession-build
+*.sh
+/.claude
+/GigBridge/.claude-testbuildDebug

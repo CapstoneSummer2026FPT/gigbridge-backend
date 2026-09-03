@@ -20,6 +20,10 @@ internal static class DependencyInjection
             services.AddSingleton<DeadlineWarningService>();
             services.AddSingleton<IHostedService>(provider =>
                 provider.GetRequiredService<DeadlineWarningService>());
+
+            services.AddSingleton<JobPostExpirationService>();
+            services.AddSingleton<IHostedService>(provider =>
+                provider.GetRequiredService<JobPostExpirationService>());
         }
 
         return services;

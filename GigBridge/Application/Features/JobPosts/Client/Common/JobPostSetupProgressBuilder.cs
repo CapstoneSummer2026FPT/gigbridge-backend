@@ -1,3 +1,4 @@
+using Application.Common.InternalServices.Scheduling;
 using Application.Common.Interfaces;
 using Application.Features.JobPosts.Client.GetMyJobPostDetail.DTOs;
 using Application.Features.JobPosts.Client.GetMyJobPosts.DTOs;
@@ -90,7 +91,11 @@ internal static class JobPostSetupProgressBuilder
             !string.IsNullOrWhiteSpace(milestone.AcceptanceCriteria) &&
             milestone.WorkItems.All(item =>
                 !string.IsNullOrWhiteSpace(item.Title) &&
-                !string.IsNullOrWhiteSpace(item.Description)));
+                !string.IsNullOrWhiteSpace(item.Description)) &&
+            (!MilestoneDeadlineCalculator.TryGetWorkItemDurationOverage(
+                milestone.EstimatedDuration,
+                milestone.WorkItems.Select(item => item.EstimatedDuration),
+                out _, out _, out var overageDays) || overageDays == 0));
         var canPublish = source.Status == DraftJobPostStatus &&
             isDetailsComplete &&
             isMilestonePlanComplete;

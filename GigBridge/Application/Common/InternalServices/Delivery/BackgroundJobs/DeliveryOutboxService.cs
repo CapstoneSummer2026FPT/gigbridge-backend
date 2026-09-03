@@ -4,11 +4,14 @@ using Application.Common.InternalServices.Chat.Services;
 using Application.Common.InternalServices.ESign.Models;
 using Application.Common.InternalServices.ESign.Services;
 using Application.Common.InternalServices.Notifications.Models;
+using Application.Common.InternalServices.Realtime.Models;
 using System.Text.Json;
 using Application.Common.Interfaces;
 using Application.Common.Interfaces.Email;
 using Application.Common.InternalServices.Delivery.Interfaces;
 using Application.Common.InternalServices.Delivery.Models;
+using Application.Common.InternalServices.WorkSignals.Interfaces;
+using Application.Common.InternalServices.WorkSignals.Models;
 using Application.Common.InternalServices.ESign.Interfaces;
 using Application.Common.InternalServices.Notifications.Interfaces;
 using Application.Common.Options;
@@ -20,6 +23,7 @@ using Application.Features.Contracts.Milestones.Freelancer.Submit.Common;
 using Application.Common.InternalServices.Contracts.Interfaces;
 using Application.Common.InternalServices.Contracts.Milestones.Email;
 using Application.Common.InternalServices.Contracts.Models;
+using Application.Features.Contracts.Milestones.WorkItems.Common;
 using Application.Features.Contracts.Signing.Common.Sign.DTOs;
 using Application.Features.ESign.Common.Internal;
 using Application.Features.Notifications.Common.DTOs;
@@ -34,14 +38,15 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using Application.Common.Models.Email;
 
 namespace Application.Common.InternalServices.Delivery.BackgroundJobs;
 
 public sealed class DeliveryOutboxService : BackgroundService
 {
     internal static readonly TimeSpan DueDeliveryPollInterval = TimeSpan.FromSeconds(1);
-    private static readonly TimeSpan RealtimeMaxIdlePollInterval = TimeSpan.FromSeconds(15);
-    private static readonly TimeSpan EmailMaxIdlePollInterval = TimeSpan.FromMinutes(1);
+    private static readonly TimeSpan RealtimeMaxIdlePollInterval = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan EmailMaxIdlePollInterval = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan BackfillRetryInterval = TimeSpan.FromMinutes(1);
     private static readonly TimeSpan[] RetryDelays =
         [TimeSpan.FromMinutes(1), TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(15), TimeSpan.FromHours(1), TimeSpan.FromHours(6)];
@@ -58,7 +63,10 @@ public sealed class DeliveryOutboxService : BackgroundService
     private readonly IScheduleEmailRenderer _emailRenderer;
     private readonly ISignedEmailRenderer _signedEmailRenderer;
     private readonly IMilestoneSubmissionEmailRenderer _milestoneSubmissionEmailRenderer;
+    private readonly IWorkItemDeliveryEmailRenderer _workItemDeliveryEmailRenderer;
     private readonly DeliveryOutboxOptions _options;
+    private readonly WorkSignalOptions _workSignalOptions;
+    private readonly IWorkSignalSource _workSignal;
     private readonly DeliveryOutboxDatabaseGate _databaseGate;
     private readonly string _frontendBaseUrl;
 
@@ -69,14 +77,20 @@ public sealed class DeliveryOutboxService : BackgroundService
         IScheduleEmailRenderer emailRenderer,
         ISignedEmailRenderer signedEmailRenderer,
         IMilestoneSubmissionEmailRenderer milestoneSubmissionEmailRenderer,
-        IOptions<DeliveryOutboxOptions> options)
+        IWorkItemDeliveryEmailRenderer workItemDeliveryEmailRenderer,
+        IOptions<DeliveryOutboxOptions> options,
+        IOptions<WorkSignalOptions> workSignalOptions,
+        [FromKeyedServices(WorkSignalChannels.DeliveryOutbox)] IWorkSignalSource workSignal)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
         _emailRenderer = emailRenderer;
         _signedEmailRenderer = signedEmailRenderer;
         _milestoneSubmissionEmailRenderer = milestoneSubmissionEmailRenderer;
+        _workItemDeliveryEmailRenderer = workItemDeliveryEmailRenderer;
         _options = options.Value;
+        _workSignalOptions = workSignalOptions.Value;
+        _workSignal = workSignal;
         _databaseGate = new DeliveryOutboxDatabaseGate(_options.MaxConcurrentDbConnections);
         _frontendBaseUrl = (configuration["FrontendBaseUrl"] ?? "http://localhost:5173").TrimEnd('/');
     }
@@ -204,19 +218,85 @@ public sealed class DeliveryOutboxService : BackgroundService
                 _logger.LogError(ex, "Delivery outbox {Channel} batch failed.", channel);
             }
 
-            var delay = processedWork ? activeInterval : idleInterval;
-            idleInterval = processedWork
-                ? activeInterval
-                : NextIdleInterval(idleInterval, maxIdleInterval);
-
             try
             {
-                await Task.Delay(delay, stoppingToken);
+                if (processedWork)
+                {
+                    // A short breather between consecutive batches, not the idle wait — keep this
+                    // even when the work signal is enabled, so a burst of work doesn't hammer the
+                    // claim query back-to-back with no throttle at all.
+                    await Task.Delay(activeInterval, stoppingToken);
+                    idleInterval = activeInterval;
+                    continue;
+                }
+
+                if (_workSignalOptions.Enabled)
+                {
+                    var deadline = await ResolveIdleDeadlineAsync(channel, activeInterval, maxIdleInterval, stoppingToken);
+                    await _workSignal.WaitAsync(deadline, stoppingToken);
+                    idleInterval = activeInterval;
+                }
+                else
+                {
+                    await Task.Delay(idleInterval, stoppingToken);
+                    idleInterval = NextIdleInterval(idleInterval, maxIdleInterval);
+                }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
                 break;
             }
+        }
+    }
+
+    /// <summary>
+    /// Deadline for the idle wait: the next row's <c>NextAttemptAt</c> if one exists and it's
+    /// sooner than <paramref name="maxIdleInterval"/> from now, otherwise the max-idle ceiling.
+    /// Cheap index-only scan, run only when a batch found nothing to claim. This is what lets
+    /// future-dated rows (retry backoff, scheduled reminders) wake the worker exactly on time
+    /// instead of only on the next NOTIFY or the batch-idle ceiling — a naive "NOTIFY + long
+    /// fallback" design would regress latency for those rows compared to the old fixed-interval
+    /// polling.
+    ///
+    /// Clamped to never return sooner than <c>UtcNow + activeInterval</c>: a row can be Pending
+    /// with an overdue NextAttemptAt while another instance holds it via
+    /// <c>FOR UPDATE SKIP LOCKED</c> mid-claim (not yet committed to Processing) — this read sees
+    /// the last-committed Pending/overdue state under READ COMMITTED, so without the clamp the
+    /// resolved deadline would already be in the past, <c>WaitAsync</c> would return immediately,
+    /// and the loop would spin against the database with no delay at all until the other instance
+    /// finishes claiming.
+    /// </summary>
+    private async Task<DateTime> ResolveIdleDeadlineAsync(
+        DeliveryChannel channel,
+        TimeSpan activeInterval,
+        TimeSpan maxIdleInterval,
+        CancellationToken ct)
+    {
+        var ceiling = DateTime.UtcNow.Add(maxIdleInterval);
+        var earliestAllowed = DateTime.UtcNow.Add(activeInterval);
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var context = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
+            var nextDueAt = await context.Set<DeliveryOutbox>()
+                .Where(x => x.Channel == (int)channel && x.Status == (int)DeliveryOutboxStatus.Pending)
+                .OrderBy(x => x.NextAttemptAt)
+                .Select(x => (DateTime?)x.NextAttemptAt)
+                .FirstOrDefaultAsync(ct);
+            var deadline = nextDueAt.HasValue && nextDueAt.Value < ceiling ? nextDueAt.Value : ceiling;
+            return deadline < earliestAllowed ? earliestAllowed : deadline;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(
+                ex,
+                "Failed to resolve the idle deadline for {Channel}; falling back to the max idle interval.",
+                channel);
+            return ceiling;
         }
     }
 
@@ -358,6 +438,22 @@ public sealed class DeliveryOutboxService : BackgroundService
             {
                 DeliveryOutboxType.MilestoneSubmission =>
                     await PrepareMilestoneSubmissionEmailAsync(context, lease, job, ct),
+                DeliveryOutboxType.WorkItemSubmission =>
+                    PrepareWorkItemSubmissionEmail(lease, job),
+                DeliveryOutboxType.WorkItemRevisionRequested =>
+                    PrepareWorkItemRevisionEmail(lease, job),
+                DeliveryOutboxType.MilestoneAutoCompleted =>
+                    PrepareMilestoneAutoCompletedEmail(lease, job),
+                DeliveryOutboxType.GenericNotification =>
+                    await PrepareGenericNotificationAsync(context, lease, job, ct),
+                DeliveryOutboxType.ESignDocumentRevision =>
+                    PrepareESignDocumentRevision(lease, job),
+                DeliveryOutboxType.NotificationStateRevision =>
+                    PrepareRevisionEvent<NotificationStateChangedPayload>(lease, job, RealtimeRevisionEvents.NotificationStateChanged),
+                DeliveryOutboxType.ConversationInboxRevision =>
+                    PrepareRevisionEvent<ConversationInboxRevisionChangedPayload>(lease, job, RealtimeRevisionEvents.ConversationInboxRevisionChanged),
+                DeliveryOutboxType.ProjectReceiptRevision =>
+                    PrepareRevisionEvent<ProjectReceiptRevisionChangedPayload>(lease, job, RealtimeRevisionEvents.ProjectReceiptRevisionChanged),
                 _ => await PrepareFinalContractEmailAsync(context, lease, job, ct)
             };
         }
@@ -388,6 +484,45 @@ public sealed class DeliveryOutboxService : BackgroundService
             default:
                 throw new InvalidOperationException($"Unsupported delivery channel {job.Channel}.");
         }
+    }
+
+    private static PreparedDelivery PrepareESignDocumentRevision(
+        DeliveryOutboxLease lease,
+        DeliveryOutbox job)
+    {
+        if (job.Channel != (int)DeliveryChannel.NotificationRealtime)
+        {
+            throw new InvalidOperationException("ESign revision outbox deliveries require the realtime channel.");
+        }
+
+        var payload = JsonSerializer.Deserialize<ESignDocumentRevisionDeliveryPayload>(job.Payload, JsonOptions)
+            ?? throw new JsonException("Invalid ESign document revision delivery payload.");
+        if (payload.Revision != job.EventSequence ||
+            payload.ChangeKind is not (ESignDocumentRevision.UpsertChangeKind or ESignDocumentRevision.DeletedChangeKind))
+        {
+            throw new JsonException("Invalid ESign document revision sequence or change kind.");
+        }
+
+        return PreparedDelivery.ForRealtimeEvent(
+            lease,
+            job.DeliveryKey,
+            job.AttemptCount,
+            job.RecipientUserId,
+            ESignDocumentRevision.ChangedEventName,
+            payload);
+    }
+
+    private static PreparedDelivery PrepareRevisionEvent<TPayload>(
+        DeliveryOutboxLease lease,
+        DeliveryOutbox job,
+        string eventName)
+    {
+        if (job.Channel != (int)DeliveryChannel.NotificationRealtime)
+            throw new InvalidOperationException("Revision outbox deliveries require the realtime channel.");
+        var payload = JsonSerializer.Deserialize<TPayload>(job.Payload, JsonOptions)
+            ?? throw new JsonException("Invalid realtime revision payload.");
+        return PreparedDelivery.ForRealtimeEvent(
+            lease, job.DeliveryKey, job.AttemptCount, job.RecipientUserId, eventName, payload);
     }
 
     private async Task<PreparedDelivery?> PrepareScheduledNotificationAsync(
@@ -445,6 +580,56 @@ public sealed class DeliveryOutboxService : BackgroundService
             ToNotificationDto(notification));
     }
 
+    private async Task<PreparedDelivery?> PrepareGenericNotificationAsync(
+        IApplicationDbContext context,
+        DeliveryOutboxLease lease,
+        DeliveryOutbox job,
+        CancellationToken ct)
+    {
+        var payload = JsonSerializer.Deserialize<GenericNotificationDeliveryPayload>(job.Payload, JsonOptions)
+            ?? throw new JsonException("Invalid generic notification delivery payload.");
+
+        if (payload.NotificationId.HasValue)
+        {
+            var notification = await context.Set<Notification>()
+                .FirstOrDefaultAsync(x => x.NotificationsId == payload.NotificationId.Value, ct);
+            if (notification is null)
+            {
+                _logger.LogWarning(
+                    "Notification {NotificationId} for delivery {DeliveryKey} was not found; marking the delivery as completed.",
+                    payload.NotificationId,
+                    job.DeliveryKey);
+                return null;
+            }
+
+            return PreparedDelivery.ForNotification(
+                lease, job.DeliveryKey, job.AttemptCount, payload.UserId, ToNotificationDto(notification));
+        }
+
+        if (payload.BroadcastNotificationRecipientId.HasValue)
+        {
+            var recipient = await context.Set<BroadcastNotificationRecipient>()
+                .Include(x => x.BroadcastNotification)
+                .FirstOrDefaultAsync(
+                    x => x.BroadcastNotificationRecipientId == payload.BroadcastNotificationRecipientId.Value, ct);
+            if (recipient is null)
+            {
+                _logger.LogWarning(
+                    "Broadcast notification recipient {RecipientId} for delivery {DeliveryKey} was not found; marking the delivery as completed.",
+                    payload.BroadcastNotificationRecipientId,
+                    job.DeliveryKey);
+                return null;
+            }
+
+            return PreparedDelivery.ForNotification(
+                lease, job.DeliveryKey, job.AttemptCount, payload.UserId,
+                ToNotificationDto(recipient.BroadcastNotification, recipient));
+        }
+
+        throw new InvalidOperationException(
+            $"Generic notification delivery {job.DeliveryKey} has neither a notification nor a broadcast recipient reference.");
+    }
+
     private async Task<IReadOnlyList<DeliveryOutcome>> DispatchBatchAsync(
         IReadOnlyList<PreparedDelivery> deliveries,
         int concurrency,
@@ -489,6 +674,17 @@ public sealed class DeliveryOutboxService : BackgroundService
                 await sender.SendToUserAsync(
                     delivery.NotificationUserId.Value,
                     delivery.Notification,
+                    ct);
+            }
+            else if (delivery.RealtimePayload is not null &&
+                     delivery.RealtimeUserId.HasValue &&
+                     !string.IsNullOrWhiteSpace(delivery.RealtimeEventName))
+            {
+                var sender = scope.ServiceProvider.GetRequiredService<IUserRealtimeEventSender>();
+                await sender.SendAsync(
+                    delivery.RealtimeUserId.Value,
+                    delivery.RealtimeEventName,
+                    delivery.RealtimePayload,
                     ct);
             }
             else
@@ -573,6 +769,7 @@ public sealed class DeliveryOutboxService : BackgroundService
 
     private void LogOutcome(DeliveryOutcome outcome, int updated)
     {
+        var isEsignRevision = outcome.DeliveryKey.StartsWith("esign-revision:", StringComparison.Ordinal);
         if (updated == 0)
         {
             _logger.LogInformation(
@@ -583,6 +780,10 @@ public sealed class DeliveryOutboxService : BackgroundService
 
         if (outcome.Succeeded)
         {
+            if (isEsignRevision)
+            {
+                ESignTelemetry.RecordRevisionEvent("delivered");
+            }
             _logger.LogInformation(
                 "Delivery {DeliveryKey} completed successfully.",
                 outcome.DeliveryKey);
@@ -591,6 +792,10 @@ public sealed class DeliveryOutboxService : BackgroundService
 
         if (outcome.DeadLettered)
         {
+            if (isEsignRevision)
+            {
+                ESignTelemetry.RecordRevisionEvent("dead_lettered");
+            }
             _logger.LogError(outcome.Exception,
                 "Delivery {DeliveryKey} dead-lettered after {Attempts} attempts.",
                 outcome.DeliveryKey,
@@ -598,6 +803,10 @@ public sealed class DeliveryOutboxService : BackgroundService
         }
         else
         {
+            if (isEsignRevision)
+            {
+                ESignTelemetry.RecordRevisionEvent("retried");
+            }
             _logger.LogWarning(outcome.Exception,
                 "Delivery {DeliveryKey} failed; attempt {Attempt} scheduled for {NextAttemptAt}.",
                 outcome.DeliveryKey,
@@ -660,12 +869,35 @@ public sealed class DeliveryOutboxService : BackgroundService
                             .SetProperty(x => x.NextAttemptAt, DateTime.UtcNow)
                             .SetProperty(x => x.ClaimToken, (Guid?)null), timeout.Token);
                 }
+
+                // ExecuteUpdateAsync bypasses the change tracker, so the SaveChanges interceptor
+                // never sees this re-arm — publish explicitly, or a sleeping instance would only
+                // pick these back up at its next deadline instead of immediately.
+                await PublishDeliveryOutboxSignalAsync(scope, timeout.Token);
             }, timeout.Token);
         }
         catch (Exception ex)
         {
             _logger.LogDebug(ex,
                 "Delivery outbox leases could not be released.");
+        }
+    }
+
+    private async Task PublishDeliveryOutboxSignalAsync(IServiceScope scope, CancellationToken ct)
+    {
+        if (!_workSignalOptions.Enabled)
+        {
+            return;
+        }
+
+        try
+        {
+            var publisher = scope.ServiceProvider.GetRequiredService<IWorkSignalPublisher>();
+            await publisher.PublishAsync(WorkSignalChannels.DeliveryOutbox, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to publish the delivery outbox work signal.");
         }
     }
 
@@ -743,6 +975,8 @@ public sealed class DeliveryOutboxService : BackgroundService
         if (recovered > 0)
         {
             _logger.LogWarning("Recovered {Count} expired delivery leases.", recovered);
+            using var scope = _scopeFactory.CreateScope();
+            await PublishDeliveryOutboxSignalAsync(scope, ct);
         }
     }
 
@@ -1085,20 +1319,34 @@ public sealed class DeliveryOutboxService : BackgroundService
 
         var payload = JsonSerializer.Deserialize<ContractEsignDeliveryPayload>(job.Payload, JsonOptions)
             ?? throw new JsonException("Invalid ESign contract delivery payload.");
-        var document = await context.Set<EsignDocument>()
+        var documentMetadata = await context.Set<EsignDocument>()
             .AsNoTracking()
             .Where(item => item.EsignDocumentsId == payload.DocumentId)
-            .Select(item => new FinalContractArtifact(
+            .Select(item => new
+            {
                 item.Status,
                 item.DocumentCode,
-                item.PdfDocumentContent,
-                item.PdfDocumentFileName,
-                "application/pdf",
                 item.DocumentHash,
                 item.PdfDocumentHash,
-                item.PdfSignatureCount))
+                item.PdfSignatureCount
+            })
             .FirstOrDefaultAsync(ct)
             ?? throw new InvalidOperationException("The finalized ESign document no longer exists.");
+        var pdfArtifact = await ESignArtifactStorage.GetAsync(
+            context,
+            payload.DocumentId,
+            ESignArtifactType.Pdf,
+            "ESign.Artifact.Pdf.Email",
+            ct);
+        var document = new FinalContractArtifact(
+            documentMetadata.Status,
+            documentMetadata.DocumentCode,
+            pdfArtifact?.Content,
+            pdfArtifact?.FileName,
+            pdfArtifact?.MimeType,
+            documentMetadata.DocumentHash,
+            documentMetadata.PdfDocumentHash,
+            documentMetadata.PdfSignatureCount);
         if (document.Status != (int)ESignDocumentStatus.FullySigned ||
             document.Content is not { Length: > 0 } ||
             string.IsNullOrWhiteSpace(document.FileName) ||
@@ -1138,6 +1386,91 @@ public sealed class DeliveryOutboxService : BackgroundService
                 ]
             });
     }
+
+    /// <summary>
+    /// The work item delivery emails carry everything they need in their payload, so unlike the
+    /// milestone submission email they need no database round trip: nothing here can go stale
+    /// between enqueue and send, and a deleted contract cannot fail the send.
+    /// </summary>
+    private PreparedDelivery PrepareWorkItemSubmissionEmail(DeliveryOutboxLease lease, DeliveryOutbox job)
+    {
+        EnsureEmailChannel(job, "Work item submission");
+
+        var payload = JsonSerializer.Deserialize<WorkItemSubmissionDeliveryPayload>(job.Payload, JsonOptions)
+            ?? throw new JsonException("Invalid work item submission delivery payload.");
+
+        var rendered = _workItemDeliveryEmailRenderer.RenderSubmission(new WorkItemSubmissionEmailModel(
+            payload.RecipientName,
+            payload.MilestoneTitle,
+            payload.WorkItemTitles,
+            BuildDeliverySpaceUrl(payload.ContractId, payload.MilestoneId)));
+
+        return BuildEmailDelivery(lease, job, payload.RecipientEmail, rendered);
+    }
+
+    private PreparedDelivery PrepareWorkItemRevisionEmail(DeliveryOutboxLease lease, DeliveryOutbox job)
+    {
+        EnsureEmailChannel(job, "Work item revision");
+
+        var payload = JsonSerializer.Deserialize<WorkItemRevisionDeliveryPayload>(job.Payload, JsonOptions)
+            ?? throw new JsonException("Invalid work item revision delivery payload.");
+
+        var rendered = _workItemDeliveryEmailRenderer.RenderRevisionRequested(new WorkItemRevisionEmailModel(
+            payload.RecipientName,
+            payload.MilestoneTitle,
+            payload.WorkItemTitles,
+            payload.Reason,
+            BuildDeliverySpaceUrl(payload.ContractId, payload.MilestoneId)));
+
+        return BuildEmailDelivery(lease, job, payload.RecipientEmail, rendered);
+    }
+
+    private PreparedDelivery PrepareMilestoneAutoCompletedEmail(DeliveryOutboxLease lease, DeliveryOutbox job)
+    {
+        EnsureEmailChannel(job, "Milestone completion");
+
+        var payload = JsonSerializer.Deserialize<MilestoneAutoCompletedDeliveryPayload>(job.Payload, JsonOptions)
+            ?? throw new JsonException("Invalid milestone completion delivery payload.");
+
+        var rendered = _workItemDeliveryEmailRenderer.RenderMilestoneCompleted(new MilestoneAutoCompletedEmailModel(
+            payload.RecipientName,
+            payload.MilestoneTitle,
+            payload.NextMilestoneTitle,
+            BuildDeliverySpaceUrl(payload.ContractId, payload.NextMilestoneId ?? payload.MilestoneId)));
+
+        return BuildEmailDelivery(lease, job, payload.RecipientEmail, rendered);
+    }
+
+    private static void EnsureEmailChannel(DeliveryOutbox job, string label)
+    {
+        if (job.Channel != (int)DeliveryChannel.Email)
+        {
+            throw new InvalidOperationException($"{label} outbox deliveries only support email.");
+        }
+    }
+
+    private string BuildDeliverySpaceUrl(Guid contractId, Guid milestoneId) =>
+        $"{_frontendBaseUrl}/deliveryspace/{contractId:D}/milestones/{milestoneId:D}";
+
+    private static PreparedDelivery BuildEmailDelivery(
+        DeliveryOutboxLease lease,
+        DeliveryOutbox job,
+        string recipientEmail,
+        RenderedDeliveryEmail rendered) =>
+        PreparedDelivery.ForEmail(
+            lease,
+            job.DeliveryKey,
+            job.AttemptCount,
+            new EmailRequest
+            {
+                To = recipientEmail,
+                Subject = rendered.Subject,
+                Body = rendered.HtmlBody,
+                TextBody = rendered.TextBody,
+                IsHtml = true,
+                IdempotencyKey = job.DeliveryKey,
+                MessageId = $"<{job.DeliveryKey.Replace(':', '.')}@gigbridge.local>"
+            });
 
     private async Task<PreparedDelivery> PrepareMilestoneSubmissionEmailAsync(
         IApplicationDbContext context,
@@ -1231,6 +1564,25 @@ public sealed class DeliveryOutboxService : BackgroundService
         CreatedAt = notification.CreatedAt
     };
 
+    private static NotificationDto ToNotificationDto(
+        BroadcastNotification notification,
+        BroadcastNotificationRecipient recipient) => new()
+    {
+        Id = notification.BroadcastNotificationId,
+        Source = "Broadcast",
+        BroadcastNotificationId = notification.BroadcastNotificationId,
+        BroadcastRecipientId = recipient.BroadcastNotificationRecipientId,
+        ReadTargetId = recipient.BroadcastNotificationRecipientId,
+        Type = (NotificationType)notification.Type,
+        Title = notification.Title,
+        Content = notification.Content,
+        ReferenceId = notification.ReferenceId,
+        ReferenceType = notification.ReferenceType,
+        IsRead = recipient.IsRead ?? false,
+        ReadAt = recipient.ReadAt,
+        CreatedAt = recipient.CreatedAt
+    };
+
     private static bool IsPermanentFailure(Exception exception) =>
         exception is JsonException or InvalidOperationException;
 
@@ -1248,8 +1600,7 @@ public sealed class DeliveryOutboxService : BackgroundService
 
     private static bool IsFinalContractPdfReady(EsignDocument document) =>
         document.Status == (int)ESignDocumentStatus.FullySigned &&
-        document.PdfDocumentContent is { Length: > 0 } &&
-        !string.IsNullOrWhiteSpace(document.PdfDocumentFileName) &&
+        document.PdfDocumentSizeBytes is > 0 &&
         document.PdfSignatureCount == 2 &&
         string.Equals(
             document.PdfDocumentHash,
@@ -1317,14 +1668,17 @@ public sealed class DeliveryOutboxService : BackgroundService
         int AttemptCount,
         EmailRequest? Email,
         Guid? NotificationUserId,
-        NotificationDto? Notification)
+        NotificationDto? Notification,
+        Guid? RealtimeUserId,
+        string? RealtimeEventName,
+        object? RealtimePayload)
     {
         public static PreparedDelivery ForEmail(
             DeliveryOutboxLease lease,
             string deliveryKey,
             int attemptCount,
             EmailRequest email) =>
-            new(lease, deliveryKey, attemptCount, email, null, null);
+            new(lease, deliveryKey, attemptCount, email, null, null, null, null, null);
 
         public static PreparedDelivery ForNotification(
             DeliveryOutboxLease lease,
@@ -1332,7 +1686,16 @@ public sealed class DeliveryOutboxService : BackgroundService
             int attemptCount,
             Guid userId,
             NotificationDto notification) =>
-            new(lease, deliveryKey, attemptCount, null, userId, notification);
+            new(lease, deliveryKey, attemptCount, null, userId, notification, null, null, null);
+
+        public static PreparedDelivery ForRealtimeEvent(
+            DeliveryOutboxLease lease,
+            string deliveryKey,
+            int attemptCount,
+            Guid userId,
+            string eventName,
+            object payload) =>
+            new(lease, deliveryKey, attemptCount, null, null, null, userId, eventName, payload);
     }
 
     private sealed record PreparedDeliveryBatch(

@@ -42,26 +42,23 @@ internal static class ContractReviewReadiness
         Guid userId,
         CancellationToken cancellationToken)
     {
-        var isClient = await context.Set<ClientProfile>()
+        var isClientQuery = context.Set<ClientProfile>()
             .AsNoTracking()
-            .AnyAsync(
-                profile =>
-                    profile.UserId == userId &&
-                    profile.ClientProfilesId == contract.ClientProfilesId,
-                cancellationToken);
+            .Where(profile => profile.UserId == userId && profile.ClientProfilesId == contract.ClientProfilesId)
+            .Select(profile => 1);
 
-        if (isClient)
+        if (!contract.FreelancerProfilesId.HasValue)
         {
-            return true;
+            return await isClientQuery.AnyAsync(cancellationToken);
         }
 
-        return contract.FreelancerProfilesId.HasValue &&
-            await context.Set<FreelancerProfile>()
-                .AsNoTracking()
-                .AnyAsync(
-                    profile =>
-                        profile.UserId == userId &&
-                        profile.FreelancerProfilesId == contract.FreelancerProfilesId.Value,
-                    cancellationToken);
+        // Combined into a single SQL UNION round trip instead of two sequential AnyAsync calls.
+        var freelancerProfileId = contract.FreelancerProfilesId.Value;
+        var isFreelancerQuery = context.Set<FreelancerProfile>()
+            .AsNoTracking()
+            .Where(profile => profile.UserId == userId && profile.FreelancerProfilesId == freelancerProfileId)
+            .Select(profile => 1);
+
+        return await isClientQuery.Union(isFreelancerQuery).AnyAsync(cancellationToken);
     }
 }

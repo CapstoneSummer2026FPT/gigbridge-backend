@@ -1,3 +1,5 @@
+using Application.Common.Models.Files;
+
 namespace Application.Common.Interfaces.Files;
 
 public interface IWorkspaceUploadFilePolicy

@@ -1,4 +1,5 @@
 using Application.Common.Interfaces;
+using Application.Common.Models;
 using Application.Features.Admin.Disputes.Common.DTOs;
 using Application.Features.Admin.Disputes.Common.Internal;
 using Domain.Entities;
@@ -22,7 +23,7 @@ public sealed class GetAdminDisputesQueryHandler :
         CancellationToken cancellationToken)
     {
         var page = Math.Max(request.Page, 1);
-        var pageSize = Math.Clamp(request.PageSize, 1, 100);
+        var pageSize = Math.Clamp(request.PageSize, 1, PaginatedQuery.MaxPageSize);
         var query = _context.Set<Dispute>().AsNoTracking().AsQueryable();
 
         if (request.Status.HasValue)

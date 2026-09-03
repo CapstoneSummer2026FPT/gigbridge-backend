@@ -1,4 +1,5 @@
 using Application.Common.Exceptions;
+using Application.Common.InternalServices.Scheduling;
 using Application.Common.Interfaces;
 using Application.Features.Proposals.Common;
 using Domain.Entities;
@@ -87,6 +88,15 @@ internal static class JobPostSetupPublishGuard
                     string.IsNullOrWhiteSpace(item.Description)))
             {
                 throw new BadRequestException("Each client work item requires a title and description.");
+            }
+
+            if (MilestoneDeadlineCalculator.TryGetWorkItemDurationOverage(
+                    milestone.EstimatedDuration,
+                    milestone.WorkItems.Select(item => item.EstimatedDuration),
+                    out _, out _, out var overageDays) &&
+                overageDays > 0)
+            {
+                throw new BadRequestException($"Work items for milestone '{milestone.Title}' exceed the milestone duration by {overageDays} day(s).");
             }
         }
     }

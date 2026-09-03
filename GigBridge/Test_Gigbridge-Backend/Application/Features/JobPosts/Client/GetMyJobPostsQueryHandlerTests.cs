@@ -261,7 +261,6 @@ public class GetMyJobPostsQueryHandlerTests
             JobPostsId = jobPostId,
             ContractsId = null,
             DocumentCode = $"DOC-{documentId:N}"[..32],
-            RenderedHtmlContent = "<p>Job</p>",
             Status = (int)status,
             CreatedAt = createdAt
         };

@@ -16,6 +16,7 @@ using MediatR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
+using Application.Common.Models.Email;
 
 namespace Application.Features.JobInvitations.Client.CreateInvitation.Commands;
 
@@ -108,7 +109,12 @@ public sealed class CreateJobInvitationCommandHandler
             throw new ConflictException("This freelancer was already invited to this job post.", exception);
         }
 
-        await NotifyFreelancerAsync(freelancerProfile.UserId, invitation.JobInvitationsId, jobPost.Title, cancellationToken);
+        await NotifyFreelancerAsync(
+            freelancerProfile.UserId,
+            invitation.JobInvitationsId,
+            jobPost.JobPostsId,
+            jobPost.Title,
+            cancellationToken);
         await SendInvitationEmailAsync(
             freelancerProfile.User,
             clientProfile,
@@ -125,11 +131,14 @@ public sealed class CreateJobInvitationCommandHandler
     private async Task NotifyFreelancerAsync(
         Guid freelancerUserId,
         Guid invitationId,
+        Guid jobPostId,
         string jobTitle,
         CancellationToken cancellationToken)
     {
         try
         {
+            var metadata = System.Text.Json.JsonSerializer.Serialize(new { jobPostId });
+
             await _notificationService.CreateNotificationAsync(
                 freelancerUserId,
                 NotificationType.SystemAlert,
@@ -137,7 +146,8 @@ public sealed class CreateJobInvitationCommandHandler
                 $"You were invited to apply for \"{jobTitle}\".",
                 invitationId,
                 "JobInvitation",
-                cancellationToken);
+                cancellationToken,
+                metadata);
         }
         catch (Exception exception)
         {

@@ -7,9 +7,11 @@ using Application.Common.Exceptions;
 using Application.Common.Interfaces.Ai;
 using Application.Common.Models.Ai;
 using Application.Features.Proposals.Client.JudgeAllProposals;
+using Application.Features.Proposals.Client.JudgeAllProposals.DTOs;
 using Domain.Entities;
 using NSubstitute;
 using Test_Gigbridge_Backend.TestSupport;
+using Xunit;
 
 namespace Test_Gigbridge_Backend.Application.Features.Proposals.Client;
 
@@ -20,10 +22,28 @@ public class JudgeAllProposalsCommandHandlerTests
     {
         // Arrange
         var fixture = CreateFixture(new[] { "Answer 1", "Answer 2" }, hasExistingJudging: false);
-        var expected = new VettingEvaluationResponseDto { Score = 90, RecommendedHire = true };
+        var expectedBatch = new BatchCandidateJudgingResponseDto
+        {
+            JudgedProposals = new List<CandidateJudgingResponseDto>
+            {
+                new CandidateJudgingResponseDto
+                {
+                    ProposalId = fixture.ProposalId.ToString(),
+                    DeterministicCalculations = new DeterministicCalculationsDto
+                    {
+                        OverallTechnicalQualityTQ = 90,
+                        FinalValueScoreVS = 85,
+                        VerdictBadge = "high_match",
+                        QualityInterpretationBand = "Strong",
+                        SavingsRatioPercent = 10,
+                        ScopeCompletenessPercent = 95
+                    }
+                }
+            }
+        };
         fixture.AiClient
-            .AnalyzeVettingAsync(Arg.Any<AnalyzeVettingRequestDto>(), Arg.Any<CancellationToken>())
-            .Returns(expected);
+            .EvaluateCandidateBatchAsync(Arg.Any<BatchCandidateJudgingRequestDto>(), Arg.Any<CancellationToken>())
+            .Returns(expectedBatch);
 
         // Act
         var result = await fixture.Handler.Handle(
@@ -40,36 +60,10 @@ public class JudgeAllProposalsCommandHandlerTests
         Assert.Equal(0, result.RemainingCount);
         Assert.True(result.IsCompleted);
 
-        await fixture.AiClient.Received(1).AnalyzeVettingAsync(
-            Arg.Is<AnalyzeVettingRequestDto>(request =>
-                request.FreelancerId == fixture.FreelancerUserId.ToString() &&
-                request.QaPairs.Count == 2),
-            Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task Handle_WithEmptyAnswers_CreatesEmptyJudgingWithoutCallingAi()
-    {
-        // Arrange
-        var fixture = CreateFixture(new string?[] { null, "" }, hasExistingJudging: false);
-
-        // Act
-        var result = await fixture.Handler.Handle(
-            new JudgeAllProposalsCommand
-            {
-                JobPostId = fixture.JobPostId,
-                UserId = fixture.ClientUserId,
-                BatchSize = 10
-            },
-            CancellationToken.None);
-
-        // Assert
-        Assert.Equal(1, result.ProcessedCount);
-        Assert.Equal(0, result.RemainingCount);
-        Assert.True(result.IsCompleted);
-
-        await fixture.AiClient.DidNotReceive().AnalyzeVettingAsync(
-            Arg.Any<AnalyzeVettingRequestDto>(),
+        await fixture.AiClient.Received(1).EvaluateCandidateBatchAsync(
+            Arg.Is<BatchCandidateJudgingRequestDto>(request =>
+                request.JobPostBaseline.JobId == fixture.JobPostId.ToString() &&
+                request.Proposals.Count == 1),
             Arg.Any<CancellationToken>());
     }
 
@@ -94,8 +88,8 @@ public class JudgeAllProposalsCommandHandlerTests
         Assert.Equal(0, result.RemainingCount);
         Assert.True(result.IsCompleted);
 
-        await fixture.AiClient.DidNotReceive().AnalyzeVettingAsync(
-            Arg.Any<AnalyzeVettingRequestDto>(),
+        await fixture.AiClient.DidNotReceive().EvaluateCandidateBatchAsync(
+            Arg.Any<BatchCandidateJudgingRequestDto>(),
             Arg.Any<CancellationToken>());
     }
 

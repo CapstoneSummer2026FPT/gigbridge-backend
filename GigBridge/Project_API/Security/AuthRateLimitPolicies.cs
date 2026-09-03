@@ -29,13 +29,13 @@ public static class AuthRateLimitPolicies
                     cancellationToken);
             };
 
-            AddFixedWindow(options, Account, permitLimit: 5, TimeSpan.FromMinutes(5));
-            AddFixedWindow(options, Login, permitLimit: 10, TimeSpan.FromMinutes(1));
-            AddFixedWindow(options, OtpIssue, permitLimit: 3, TimeSpan.FromMinutes(5));
-            AddFixedWindow(options, OtpVerify, permitLimit: 10, TimeSpan.FromMinutes(5));
-            AddFixedWindow(options, Refresh, permitLimit: 30, TimeSpan.FromMinutes(1));
-            AddFixedWindow(options, DiscoveryAnalytics, permitLimit: 120, TimeSpan.FromMinutes(1));
-            AddFixedWindow(options, PromotionTelemetry, permitLimit: 120, TimeSpan.FromMinutes(1));
+            AddFixedWindow(options, Account, permitLimit: 50, TimeSpan.FromMinutes(5));
+            AddFixedWindow(options, Login, permitLimit: 50, TimeSpan.FromMinutes(1));
+            AddFixedWindow(options, OtpIssue, permitLimit: 50, TimeSpan.FromMinutes(5));
+            AddFixedWindow(options, OtpVerify, permitLimit: 50, TimeSpan.FromMinutes(5));
+            AddFixedWindow(options, Refresh, permitLimit: 150, TimeSpan.FromMinutes(1));
+            AddFixedWindow(options, DiscoveryAnalytics, permitLimit: 300, TimeSpan.FromMinutes(1));
+            AddFixedWindow(options, PromotionTelemetry, permitLimit: 300, TimeSpan.FromMinutes(1));
         });
 
         return services;
@@ -49,7 +49,7 @@ public static class AuthRateLimitPolicies
     {
         options.AddPolicy(policyName, httpContext =>
             RateLimitPartition.GetFixedWindowLimiter(
-                httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                GetClientIp(httpContext),
                 _ => new FixedWindowRateLimiterOptions
                 {
                     PermitLimit = permitLimit,
@@ -57,5 +57,31 @@ public static class AuthRateLimitPolicies
                     QueueLimit = 0,
                     AutoReplenishment = true
                 }));
+    }
+
+    private static string GetClientIp(HttpContext httpContext)
+    {
+        var forwardedFor = httpContext.Request.Headers["X-Forwarded-For"].FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(forwardedFor))
+        {
+            var clientIp = forwardedFor.Split(',')[0].Trim();
+            if (!string.IsNullOrWhiteSpace(clientIp))
+                return clientIp;
+        }
+
+        var realIp = httpContext.Request.Headers["X-Real-IP"].FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(realIp))
+        {
+            return realIp.Trim();
+        }
+
+        var remoteIp = httpContext.Connection.RemoteIpAddress?.ToString();
+        if (!string.IsNullOrWhiteSpace(remoteIp) && remoteIp != "127.0.0.1" && remoteIp != "::1")
+        {
+            return remoteIp;
+        }
+
+        var userAgent = httpContext.Request.Headers.UserAgent.ToString();
+        return $"fallback_{remoteIp ?? "unknown"}_{userAgent.GetHashCode()}";
     }
 }

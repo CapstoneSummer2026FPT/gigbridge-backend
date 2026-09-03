@@ -11,26 +11,6 @@ namespace Test_Gigbridge_Backend.Application.Features.JobPosts.Client;
 public class UpdateVisibilityJobPostCommandHandlerTests
 {
     [Theory]
-    [InlineData(0, 1)]
-    [InlineData(2, 1)]
-    [InlineData(null, 1)]
-    public async Task Handle_PublishedPublicOrInviteOnlyToPrivate_ThrowsBadRequest(
-        int? currentVisibility,
-        int requestedVisibility)
-    {
-        var fixture = new UpdateVisibilityFixture(status: 1, visibility: currentVisibility);
-
-        var exception = await Assert.ThrowsAsync<BadRequestException>(() =>
-            fixture.CreateHandler().Handle(
-                fixture.CreateCommand(requestedVisibility),
-                CancellationToken.None));
-
-        Assert.Equal(JobPostEditingGuard.PrivateTransitionLockedMessage, exception.Message);
-        Assert.Equal(currentVisibility, fixture.JobPost.Visibility);
-        Assert.Equal(0, fixture.Context.SaveChangesCount);
-    }
-
-    [Theory]
     [InlineData(0, 2)]
     [InlineData(2, 0)]
     public async Task Handle_PublishedPublicAndInviteOnly_CanSwitchBetweenScopes(
@@ -49,9 +29,8 @@ public class UpdateVisibilityJobPostCommandHandlerTests
     }
 
     [Theory]
-    [InlineData(0, 1)]
-    [InlineData(2, 1)]
-    [InlineData(1, 0)]
+    [InlineData(0, 2)]
+    [InlineData(2, 0)]
     public async Task Handle_DraftJob_AllowsAnySupportedScope(
         int currentVisibility,
         int requestedVisibility)

@@ -2,6 +2,9 @@ using Application.Common.InternalServices.Chat.Models;
 using System.Globalization;
 using System.Text.Json;
 using Application.Common.Interfaces;
+using Application.Common.InternalServices.WorkSignals.Interfaces;
+using Application.Common.InternalServices.WorkSignals.Models;
+using Application.Common.Options;
 using Application.Common.InternalServices.Chat.Interfaces;
 using Application.Common.InternalServices.Chat.Services;
 using Application.Features.Chat.Common.Schedules;
@@ -12,12 +15,13 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Options;
 
 namespace Application.Common.InternalServices.Chat.BackgroundJobs;
 public class GoogleMeetProvisioningWorker : BackgroundService
 {
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(5);
-    private static readonly TimeSpan MaxIdlePollInterval = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan MaxIdlePollInterval = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan LeaseDuration = TimeSpan.FromSeconds(60);
     private static readonly TimeSpan LeaseMonitorInterval = TimeSpan.FromSeconds(15);
     private static readonly TimeSpan MaxIdleLeaseMonitorInterval = TimeSpan.FromMinutes(1);
@@ -27,18 +31,24 @@ public class GoogleMeetProvisioningWorker : BackgroundService
     private readonly ILogger<GoogleMeetProvisioningWorker> _logger;
     private readonly IScheduleEmailRenderer _emailRenderer;
     private readonly string _frontendBaseUrl;
+    private readonly WorkSignalOptions _workSignalOptions;
+    private readonly IWorkSignalSource _workSignal;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public GoogleMeetProvisioningWorker(
         IServiceScopeFactory scopeFactory,
         ILogger<GoogleMeetProvisioningWorker> logger,
         IScheduleEmailRenderer emailRenderer,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        IOptions<WorkSignalOptions> workSignalOptions,
+        [FromKeyedServices(WorkSignalChannels.GoogleMeetProvisioning)] IWorkSignalSource workSignal)
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
         _emailRenderer = emailRenderer;
         _frontendBaseUrl = (configuration["FrontendBaseUrl"] ?? "http://localhost:5173").TrimEnd('/');
+        _workSignalOptions = workSignalOptions.Value;
+        _workSignal = workSignal;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -64,13 +74,28 @@ public class GoogleMeetProvisioningWorker : BackgroundService
                 _logger.LogError(ex, "Provisioning worker encountered an error");
             }
 
-            var delay = processedWork ? PollInterval : idleInterval;
-            idleInterval = processedWork
-                ? PollInterval
-                : NextIdleInterval(idleInterval, MaxIdlePollInterval);
             try
             {
-                await Task.Delay(delay, stoppingToken);
+                if (processedWork)
+                {
+                    await Task.Delay(PollInterval, stoppingToken);
+                    idleInterval = PollInterval;
+                    continue;
+                }
+
+                if (_workSignalOptions.Enabled)
+                {
+                    // Claimable jobs have no per-row future due time of their own (unlike the
+                    // delivery outbox's NextAttemptAt) — they're eligible as soon as they're
+                    // Pending — so the idle ceiling alone is deadline enough here.
+                    await _workSignal.WaitAsync(DateTime.UtcNow.Add(MaxIdlePollInterval), stoppingToken);
+                    idleInterval = PollInterval;
+                }
+                else
+                {
+                    await Task.Delay(idleInterval, stoppingToken);
+                    idleInterval = NextIdleInterval(idleInterval, MaxIdlePollInterval);
+                }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -461,17 +486,27 @@ public class GoogleMeetProvisioningWorker : BackgroundService
         var context = scope.ServiceProvider.GetRequiredService<IApplicationDbContext>();
 
         var now = DateTime.UtcNow;
-        var processingCandidateIds = await context.Set<GoogleMeetProvisioningJob>().AsNoTracking()
-            .Where(j => j.Status == GoogleMeetProvisioningJobStatus.Processing &&
-                j.LeaseExpiresAt != null && j.LeaseExpiresAt < now)
-            .Select(j => j.GoogleMeetProvisioningJobId)
+        // Collapsed from two separate SELECTs into one: this path is hit on every lease-monitor
+        // tick and almost always finds nothing (197,604 calls / 0 rows in production query-stats
+        // before this change), so halving the query count here halves that figure directly.
+        var candidates = await context.Set<GoogleMeetProvisioningJob>().AsNoTracking()
+            .Where(j =>
+                (j.Status == GoogleMeetProvisioningJobStatus.Processing &&
+                    j.LeaseExpiresAt != null && j.LeaseExpiresAt < now) ||
+                (j.Status == GoogleMeetProvisioningJobStatus.Pending &&
+                    j.CreatedAt < now - PendingJobTimeout))
+            .Select(j => new { j.GoogleMeetProvisioningJobId, j.Status })
             .ToListAsync(ct);
-        var pendingCandidateIds = await context.Set<GoogleMeetProvisioningJob>().AsNoTracking()
-            .Where(j => j.Status == GoogleMeetProvisioningJobStatus.Pending &&
-                j.CreatedAt < now - PendingJobTimeout)
-            .Select(j => j.GoogleMeetProvisioningJobId)
-            .ToListAsync(ct);
-        if (processingCandidateIds.Count == 0 && pendingCandidateIds.Count == 0) return false;
+        if (candidates.Count == 0) return false;
+
+        var processingCandidateIds = candidates
+            .Where(c => c.Status == GoogleMeetProvisioningJobStatus.Processing)
+            .Select(c => c.GoogleMeetProvisioningJobId)
+            .ToArray();
+        var pendingCandidateIds = candidates
+            .Where(c => c.Status == GoogleMeetProvisioningJobStatus.Pending)
+            .Select(c => c.GoogleMeetProvisioningJobId)
+            .ToArray();
 
         var expiredProcessingCount = await context.Set<GoogleMeetProvisioningJob>()
             .Where(j => processingCandidateIds.Contains(j.GoogleMeetProvisioningJobId) &&

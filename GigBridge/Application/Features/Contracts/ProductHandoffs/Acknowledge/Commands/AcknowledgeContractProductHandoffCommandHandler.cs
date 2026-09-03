@@ -70,7 +70,7 @@ public sealed class AcknowledgeContractProductHandoffCommandHandler :
         handoff.ReceivedAt = now;
         contract.UpdatedAt = now;
 
-        await ContractConversationEvents.AddSystemMessageAsync(
+        var systemMessage = await ContractConversationEvents.AddSystemMessageAsync(
             _context,
             contract.ContractsId,
             "Freelancer received product materials.",
@@ -90,6 +90,26 @@ public sealed class AcknowledgeContractProductHandoffCommandHandler :
                 participantUserIds,
                 "ProductHandoffAcknowledged",
                 ContractProductHandoffMapper.ToResponse(handoff),
+                cancellationToken);
+        }
+
+        if (systemMessage is not null)
+        {
+            var messagePayload = ContractConversationEvents.ToRealtimePayload(systemMessage);
+
+            if (participantUserIds.Count > 0)
+            {
+                await _chatRealtimeNotifier.SendUsersEventAsync(
+                    participantUserIds,
+                    "ReceiveMessage",
+                    messagePayload,
+                    cancellationToken);
+            }
+
+            await _chatRealtimeNotifier.SendConversationEventAsync(
+                systemMessage.ConversationsId,
+                "ReceiveMessage",
+                messagePayload,
                 cancellationToken);
         }
 

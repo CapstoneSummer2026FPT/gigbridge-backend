@@ -70,6 +70,38 @@ public sealed class PayOsPayoutProviderTests
     }
 
     [Fact]
+    public void UnmappedApprovalStateRequiresSync()
+    {
+        // A PayOS channel that gates payouts behind manual approval reports a state this switch
+        // does not know. It must degrade to SyncRequired rather than be read as success or failure.
+        var payout = CreatePayout((PayoutApprovalState)9999, PayoutTransactionState.Processing);
+
+        var result = PayOsPayoutProvider.Map(payout);
+
+        Assert.Equal(PayoutProviderOutcome.SyncRequired, result.Outcome);
+        Assert.Equal("9999:Processing", result.RawStatus);
+    }
+
+    [Fact]
+    public async Task AvailabilityBypassCacheForcesAFreshCall()
+    {
+        var handler = new StubHttpMessageHandler((request, cancellationToken) =>
+            Task.FromResult(JsonResponse(
+                HttpStatusCode.OK,
+                """
+                {"code":"00","desc":"success","data":{"accountNumber":"masked","accountName":"GigBridge","currency":"VND","balance":"150000"}}
+                """)));
+        var provider = CreateProvider(handler);
+
+        await provider.CheckAvailabilityAsync(CancellationToken.None);
+        await provider.CheckAvailabilityAsync(CancellationToken.None);
+        var fresh = await provider.CheckAvailabilityAsync(CancellationToken.None, bypassCache: true);
+
+        Assert.True(fresh.IsAvailable);
+        Assert.Equal(2, handler.CallCount);
+    }
+
+    [Fact]
     public async Task AvailabilityReturnsVndBalanceAndCachesResponse()
     {
         var handler = new StubHttpMessageHandler((request, cancellationToken) =>

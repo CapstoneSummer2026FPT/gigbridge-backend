@@ -29,6 +29,9 @@ public sealed class GetMilestoneByIdQueryHandler :
             .AsNoTracking()
             .Include(item => item.MilestoneAttachments)
             .Include(item => item.WorkItems)
+                .ThenInclude(workItem => workItem.Submissions)
+                    .ThenInclude(submission => submission.Attachments)
+            .AsSplitQuery()
             .FirstOrDefaultAsync(
                 item => item.MilestonesId == query.MilestoneId &&
                     (!query.ContractId.HasValue || item.ContractsId == query.ContractId.Value),
@@ -50,6 +53,6 @@ public sealed class GetMilestoneByIdQueryHandler :
             query.UserId,
             cancellationToken);
 
-        return MilestoneWorkflowGuard.ToResponse(milestone);
+        return MilestoneWorkflowGuard.ToResponse(milestone, contract.DeliveryMode);
     }
 }

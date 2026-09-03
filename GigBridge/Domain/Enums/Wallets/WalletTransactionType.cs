@@ -14,5 +14,6 @@ public enum WalletTransactionType
     WithdrawalFee = 9,
     SubscriptionPurchase = 10,
     PromotionPurchase = 11,
-    DisputePenalty = 12
+    DisputePenalty = 12,
+    ServiceFeeRefund = 13
 }

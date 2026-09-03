@@ -30,6 +30,10 @@ public partial class Contract
 
     public DateTime? CompletedAt { get; set; }
 
+    public DateTime? CancelledAt { get; set; }
+
+    public Guid? CancelledByUserId { get; set; }
+
     /// <summary>
     /// v1.2: URL bản hợp đồng lao động e-sign PDF khi có tranh chấp thanh toán
     /// </summary>
@@ -40,6 +44,13 @@ public partial class Contract
     public DateTime? UpdatedAt { get; set; }
 
     public int RevisionNumber { get; set; } = 1;
+
+    /// <summary>
+    /// Enum MilestoneDeliveryMode: 0=Legacy (submit/approve per milestone), 1=WorkItem (submit/approve
+    /// per work item, milestone auto-closes). Chosen while the contract is pre-Active and frozen at
+    /// activation. Existing contracts were stamped Legacy by the migration even when they carry work items.
+    /// </summary>
+    public int DeliveryMode { get; set; }
 
     public virtual ClientProfile ClientProfiles { get; set; } = null!;
 
@@ -74,4 +85,6 @@ public partial class Contract
     public virtual ICollection<ContractAmendment> Amendments { get; set; } = new List<ContractAmendment>();
 
     public virtual ICollection<ContractPlanRevision> PlanRevisions { get; set; } = new List<ContractPlanRevision>();
+
+    public virtual ICollection<ContractPlanChangeRequest> PlanChangeRequests { get; set; } = new List<ContractPlanChangeRequest>();
 }

@@ -1,8 +1,11 @@
 using Application.Common.Models;
 using Application.Common.Models.Ai;
 using Application.Features.Proposals.Client.GetProposalJudgingList;
+using Application.Features.Proposals.Client.GetProposalJudgingList.DTOs;
+using Application.Features.Proposals.Client.GetProposalJudgingList.Queries;
 using Application.Features.Proposals.Client.GetProposalsByJobPost.Queries;
 using Application.Features.Proposals.Client.JudgeAllProposals;
+using Application.Features.Proposals.Client.JudgeAllProposals.DTOs;
 using Application.Features.Proposals.Common.DTOs;
 using Domain.Enums.Accounts;
 using Microsoft.AspNetCore.Authorization;
@@ -62,7 +65,7 @@ public class ClientProposalsController : BaseApiController
     }
 
     [HttpPost("job/{jobPostId}/ai-judge-all")]
-    public async Task<IActionResult> JudgeAllProposals(Guid jobPostId, [FromQuery] int batchSize = 10)
+    public async Task<IActionResult> JudgeAllProposals(Guid jobPostId, [FromQuery] int batchSize = 1)
     {
         if (!TryGetCurrentUserId(out var userId))
         {

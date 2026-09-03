@@ -1,7 +1,10 @@
 using Application.Common.InternalServices.Wallets.Models;
 using Application.Common.InternalServices.Wallets.Interfaces;
 using System.Globalization;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using PayOS;
 using PayOS.Exceptions;
 using PayOS.Models;
@@ -9,16 +12,21 @@ using PayOS.Models.V1.Payouts;
 
 namespace Infrastructure.ExternalServices.Payments.PayOs;
 
-public sealed class PayOsPayoutProvider : IPayoutProvider
+public sealed partial class PayOsPayoutProvider : IPayoutProvider
 {
     private const string AvailabilityCacheKey = "payos:payout:availability";
     private readonly PayOSClient _client;
     private readonly IMemoryCache _cache;
+    private readonly ILogger<PayOsPayoutProvider> _logger;
 
-    public PayOsPayoutProvider(PayOSClient client, IMemoryCache cache)
+    public PayOsPayoutProvider(
+        PayOSClient client,
+        IMemoryCache cache,
+        ILogger<PayOsPayoutProvider>? logger = null)
     {
         _client = client;
         _cache = cache;
+        _logger = logger ?? NullLogger<PayOsPayoutProvider>.Instance;
     }
 
     public string ProviderName => "PayOS";
@@ -32,8 +40,18 @@ public sealed class PayOsPayoutProvider : IPayoutProvider
             var existing = await FindByReferenceIdAsync(request.ProviderOrderCode, cancellationToken);
             if (existing is not null)
             {
-                return Map(existing);
+                _logger.LogInformation(
+                    "PayOS payout {ReferenceId} already exists as {PayoutId}; reusing it instead of creating a duplicate.",
+                    request.ProviderOrderCode,
+                    existing.Id);
+                return LogResult("payout request", request.ProviderOrderCode, existing);
             }
+
+            _logger.LogInformation(
+                "Creating PayOS payout {ReferenceId} for {AmountVnd} VND to BIN {BankBin}.",
+                request.ProviderOrderCode,
+                request.AmountVnd,
+                request.BankBin);
 
             var payout = await _client.Payouts.CreateAsync(
                 new PayoutRequest
@@ -51,10 +69,11 @@ public sealed class PayOsPayoutProvider : IPayoutProvider
                     MaxRetries = 0
                 });
 
-            return Map(payout);
+            return LogResult("payout request", request.ProviderOrderCode, payout);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
+            LogTimeout("payout request", request.ProviderOrderCode);
             return SyncRequired("PayOS payout request timed out.", "TIMEOUT");
         }
         catch (UserAbortException) when (cancellationToken.IsCancellationRequested)
@@ -63,6 +82,7 @@ public sealed class PayOsPayoutProvider : IPayoutProvider
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            LogProviderException("payout request", request.ProviderOrderCode, ex);
             return MapException("payout request", ex);
         }
     }
@@ -79,12 +99,19 @@ public sealed class PayOsPayoutProvider : IPayoutProvider
                     request.ProviderPayoutId,
                     new RequestOptions { CancellationToken = cancellationToken, MaxRetries = 0 });
 
-            return payout is null
-                ? SyncRequired("PayOS payout was not found by reference ID.")
-                : Map(payout);
+            if (payout is null)
+            {
+                _logger.LogWarning(
+                    "PayOS has no payout for reference {ReferenceId}; the payout was never created.",
+                    request.ProviderOrderCode);
+                return SyncRequired("PayOS payout was not found by reference ID.");
+            }
+
+            return LogResult("payout status request", request.ProviderOrderCode, payout);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
+            LogTimeout("payout status request", request.ProviderOrderCode);
             return SyncRequired("PayOS payout status request timed out.", "TIMEOUT");
         }
         catch (UserAbortException) when (cancellationToken.IsCancellationRequested)
@@ -93,14 +120,17 @@ public sealed class PayOsPayoutProvider : IPayoutProvider
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            LogProviderException("payout status request", request.ProviderOrderCode, ex);
             return MapException("payout status request", ex);
         }
     }
 
     public async Task<PayoutProviderAvailability> CheckAvailabilityAsync(
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool bypassCache = false)
     {
-        if (_cache.TryGetValue<PayoutProviderAvailability>(AvailabilityCacheKey, out var cached))
+        if (!bypassCache &&
+            _cache.TryGetValue<PayoutProviderAvailability>(AvailabilityCacheKey, out var cached))
         {
             return cached!;
         }
@@ -134,6 +164,7 @@ public sealed class PayOsPayoutProvider : IPayoutProvider
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
+            LogTimeout("payout availability check", null);
             result = new PayoutProviderAvailability(
                 false,
                 null,
@@ -146,6 +177,7 @@ public sealed class PayOsPayoutProvider : IPayoutProvider
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            LogProviderException("payout availability check", null, ex);
             var mapped = MapException("payout availability check", ex);
             result = new PayoutProviderAvailability(
                 false,
@@ -154,6 +186,7 @@ public sealed class PayOsPayoutProvider : IPayoutProvider
                 mapped.FailureReason);
         }
 
+        LogAvailability(result, bypassCache);
         _cache.Set(AvailabilityCacheKey, result, TimeSpan.FromSeconds(30));
         return result;
     }
@@ -214,9 +247,7 @@ public sealed class PayOsPayoutProvider : IPayoutProvider
         }
 
         var apiException = exception as ApiException;
-        int? statusCode = apiException is null
-            ? null
-            : Convert.ToInt32(apiException.StatusCode, CultureInfo.InvariantCulture);
+        int? statusCode = ReadStatusCode(apiException);
         var providerCode = SanitizeMessage(apiException?.ErrorCode);
         var providerMessage = SanitizeMessage(apiException?.Message);
 
@@ -234,6 +265,94 @@ public sealed class PayOsPayoutProvider : IPayoutProvider
         return SyncRequired($"PayOS {operation} failed: {safeMessage}", rawStatus);
     }
 
+    /// <summary>
+    /// Logs the mapped outcome of a PayOS payout. An outcome of
+    /// <see cref="PayoutProviderOutcome.SyncRequired"/> here means PayOS reported an approval
+    /// state this code does not understand — for example a channel that requires manual
+    /// approval — which otherwise leaves the withdrawal stuck with no explanation.
+    /// </summary>
+    private PayoutProviderResult LogResult(string operation, string referenceId, Payout payout)
+    {
+        var result = Map(payout);
+        if (result.Outcome == PayoutProviderOutcome.SyncRequired)
+        {
+            _logger.LogWarning(
+                "PayOS {Operation} for {ReferenceId} returned an unhandled approval state. " +
+                "PayoutId={PayoutId} RawStatus={RawStatus} FailureReason={FailureReason}",
+                operation,
+                referenceId,
+                payout.Id,
+                result.RawStatus,
+                SanitizeMessage(result.FailureReason));
+        }
+        else
+        {
+            _logger.LogInformation(
+                "PayOS {Operation} for {ReferenceId} mapped to {Outcome}. " +
+                "PayoutId={PayoutId} RawStatus={RawStatus}",
+                operation,
+                referenceId,
+                result.Outcome,
+                payout.Id,
+                result.RawStatus);
+        }
+
+        return result;
+    }
+
+    private void LogAvailability(PayoutProviderAvailability availability, bool bypassCache)
+    {
+        if (availability.IsAvailable)
+        {
+            _logger.LogInformation(
+                "PayOS payout account is available. BalanceVnd={BalanceVnd} BypassCache={BypassCache}",
+                availability.BalanceVnd,
+                bypassCache);
+            return;
+        }
+
+        _logger.LogWarning(
+            "PayOS payout account is UNAVAILABLE. ErrorCode={ErrorCode} Reason={Reason} BypassCache={BypassCache}. " +
+            "Withdrawals cannot be created or processed until this clears.",
+            availability.ErrorCode,
+            availability.SafeMessage,
+            bypassCache);
+    }
+
+    private void LogTimeout(string operation, string? referenceId)
+    {
+        _logger.LogError(
+            "PayOS {Operation} timed out for {ReferenceId}.",
+            operation,
+            referenceId ?? "(n/a)");
+    }
+
+    /// <summary>
+    /// Logs the concrete cause of a PayOS failure. The raw exception is deliberately not passed
+    /// to the logger: a proxy connection failure surfaces the proxy URL — credentials included —
+    /// in <see cref="Exception.Message"/>. The structured fields below carry everything needed to
+    /// tell a 401 (bad credentials) from a 403 (outbound IP not whitelisted) from a network fault.
+    /// </summary>
+    private void LogProviderException(string operation, string? referenceId, Exception exception)
+    {
+        var apiException = exception as ApiException;
+        _logger.LogError(
+            "PayOS {Operation} failed for {ReferenceId}. " +
+            "ExceptionType={ExceptionType} HttpStatusCode={HttpStatusCode} " +
+            "PayOsErrorCode={PayOsErrorCode} Detail={Detail}",
+            operation,
+            referenceId ?? "(n/a)",
+            exception.GetType().Name,
+            ReadStatusCode(apiException),
+            SanitizeMessage(apiException?.ErrorCode),
+            SanitizeMessage(exception.Message));
+    }
+
+    private static int? ReadStatusCode(ApiException? apiException) =>
+        apiException is null
+            ? null
+            : Convert.ToInt32(apiException.StatusCode, CultureInfo.InvariantCulture);
+
     private static string? SanitizeMessage(string? message)
     {
         if (string.IsNullOrWhiteSpace(message)) return null;
@@ -241,8 +360,14 @@ public sealed class PayOsPayoutProvider : IPayoutProvider
         var sanitized = string.Join(' ', message.Split(
             ['\r', '\n', '\t'],
             StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        sanitized = UrlCredentialsPattern().Replace(sanitized, "$1://***:***@");
         return sanitized.Length <= 240 ? sanitized : sanitized[..240];
     }
+
+    /// <summary>Matches the <c>user:password@</c> segment of a URL so proxy credentials never
+    /// reach a log sink or an API response.</summary>
+    [GeneratedRegex(@"(\w+)://[^/\s:@]+:[^/\s@]+@", RegexOptions.IgnoreCase)]
+    private static partial Regex UrlCredentialsPattern();
 
     private static PayoutProviderResult SyncRequired(string reason, string? rawStatus = null)
     {

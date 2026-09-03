@@ -69,13 +69,29 @@ public sealed class AdminUserDetailQueryHandler :
     }
 
     public async Task<PaginatedList<AdminViolationDto>> Handle(GetAdminUserViolationsQuery q, CancellationToken ct)
-    { await EnsureAdmin(q.AdminId, ct); return await Page(Violations(q.UserId).Select(x => new AdminViolationDto(x.UserViolationId, x.SourceType, x.DisputeId, x.ReportId, x.ManualActionId, x.ViolationNumber, x.ViolationType, x.Reason, x.Description, x.ActionTaken, x.SuspendedUntil, x.IsActive, x.CreatedAt)), q.Page, q.PageSize, ct); }
-    public async Task<PaginatedList<AdminUserReportDto>> Handle(GetAdminUserReportsQuery q, CancellationToken ct)
-    { await EnsureAdmin(q.AdminId, ct); return await Page(Reports(q.UserId).Select(x => new AdminUserReportDto(x.ReportsId, x.Type, x.Status, x.Reason, x.Description, x.ReportEvidences.Count, x.CreatedAt)), q.Page, q.PageSize, ct); }
-    public async Task<PaginatedList<AdminUserAuditDto>> Handle(GetAdminUserAuditLogsQuery q, CancellationToken ct)
-    { await EnsureAdmin(q.AdminId, ct); var ids = await _context.Set<Report>().Where(x => x.ReportedEntityType == ReportedEntityTypes.User && x.ReportedEntityId == q.UserId).Select(x => x.ReportsId).ToListAsync(ct); return await Page(Audits(q.UserId, ids).Select(x => new AdminUserAuditDto(x.AdminAuditLogsId, x.Action, x.EntityType, x.EntityId, x.OldValues, x.NewValues, x.CreatedAt)), q.Page, q.PageSize, ct); }
+    {
+        await EnsureAdmin(q.AdminId, ct);
+        return await Page(Violations(q.UserId).Select(x => new AdminViolationDto(x.UserViolationId, x.SourceType, x.DisputeId, x.ReportId, x.ManualActionId, x.ViolationNumber, x.ViolationType, x.Reason, x.Description, x.ActionTaken, x.SuspendedUntil, x.IsActive, x.CreatedAt)), q.Page, q.PageSize, ct);
+    }
 
-    private async Task EnsureAdmin(Guid id, CancellationToken ct) { if (!await _context.Set<User>().AnyAsync(x => x.UserId == id && x.Role == (int)UserRole.Admin, ct)) throw new ForbiddenAccessException("Admin access is required."); }
+    public async Task<PaginatedList<AdminUserReportDto>> Handle(GetAdminUserReportsQuery q, CancellationToken ct)
+    {
+        await EnsureAdmin(q.AdminId, ct);
+        return await Page(Reports(q.UserId).Select(x => new AdminUserReportDto(x.ReportsId, x.Type, x.Status, x.Reason, x.Description, x.ReportEvidences.Count, x.CreatedAt)), q.Page, q.PageSize, ct);
+    }
+
+    public async Task<PaginatedList<AdminUserAuditDto>> Handle(GetAdminUserAuditLogsQuery q, CancellationToken ct)
+    {
+        await EnsureAdmin(q.AdminId, ct);
+        var ids = await _context.Set<Report>().Where(x => x.ReportedEntityType == ReportedEntityTypes.User && x.ReportedEntityId == q.UserId).Select(x => x.ReportsId).ToListAsync(ct);
+        return await Page(Audits(q.UserId, ids).Select(x => new AdminUserAuditDto(x.AdminAuditLogsId, x.Action, x.EntityType, x.EntityId, x.OldValues, x.NewValues, x.CreatedAt)), q.Page, q.PageSize, ct);
+    }
+
+    private async Task EnsureAdmin(Guid id, CancellationToken ct)
+    {
+        if (!await _context.Set<User>().AnyAsync(x => x.UserId == id && x.Role == (int)UserRole.Admin, ct)) throw new ForbiddenAccessException("Admin access is required.");
+    }
+
     private IQueryable<UserViolation> Violations(Guid id) => _context.Set<UserViolation>().AsNoTracking().Where(x => x.UserId == id).OrderByDescending(x => x.CreatedAt);
     private IQueryable<Report> Reports(Guid id) => _context.Set<Report>().AsNoTracking().Include(x => x.ReportEvidences).Where(x => x.ReportedEntityType == ReportedEntityTypes.User && x.ReportedEntityId == id).OrderByDescending(x => x.CreatedAt);
     private IQueryable<AdminAuditLog> Audits(Guid id, IReadOnlyCollection<Guid> reportIds) => _context.Set<AdminAuditLog>().AsNoTracking().Where(x => (x.EntityType == "User" && x.EntityId == id) || (x.EntityType == "Report" && x.EntityId.HasValue && reportIds.Contains(x.EntityId.Value))).OrderByDescending(x => x.CreatedAt);
@@ -88,8 +104,15 @@ public sealed class AdminUserDetailQueryHandler :
             u.FreelancerProfile.FreelancerSkills.Select(x => x.Skills.Name).ToList(), u.FreelancerProfile.FreelancerProfileCategories.Select(x => x.MajorCategory.Category.Name).ToList(),
             u.FreelancerProfile.PortfolioItems.Where(x => x.ProjectUrl != null).Select(x => x.ProjectUrl!).ToList(),
             u.FreelancerProfile.WorkExperiences.Select(x => $"{x.Title} · {x.CompanyName}").ToList());
+
     private static async Task<PaginatedList<T>> Page<T>(IQueryable<T> query, int page, int size, CancellationToken ct)
-    { page = Math.Max(page, 1); size = Math.Clamp(size, 1, 100); var count = await query.CountAsync(ct); var rows = await query.Skip((page - 1) * size).Take(size).ToListAsync(ct); return new(rows, count, page, size); }
+    {
+        page = Math.Max(page, 1);
+        size = Math.Clamp(size, 1, PaginatedQuery.MaxPageSize);
+        var count = await query.CountAsync(ct);
+        var rows = await query.Skip((page - 1) * size).Take(size).ToListAsync(ct);
+        return new(rows, count, page, size);
+    }
 }
 
 public sealed record AdminEnforcementRequest(Guid RequestId, UserViolationType ViolationType, string Reason, string? Description, DateTime? SuspendedUntil);
@@ -100,31 +123,58 @@ public sealed record ClearAdminUserSuspensionCommand(Guid AdminId, Guid UserId, 
 public sealed class AdminUserEnforcementHandler :
     IRequestHandler<EnforceAdminUserCommand, AccountEnforcementResult>, IRequestHandler<ClearAdminUserSuspensionCommand, bool>
 {
-    private readonly IApplicationDbContext _context; private readonly IUserAccountStatusService _status; private readonly IAdminAuditService _audit;
-    public AdminUserEnforcementHandler(IApplicationDbContext context, IUserAccountStatusService status, IAdminAuditService audit) { _context = context; _status = status; _audit = audit; }
+    private readonly IApplicationDbContext _context;
+    private readonly IUserAccountStatusService _status;
+    private readonly IAdminAuditService _audit;
+
+    public AdminUserEnforcementHandler(IApplicationDbContext context, IUserAccountStatusService status, IAdminAuditService audit)
+    {
+        _context = context;
+        _status = status;
+        _audit = audit;
+    }
+
     public async Task<AccountEnforcementResult> Handle(EnforceAdminUserCommand q, CancellationToken ct)
     {
         if (q.Request.RequestId == Guid.Empty || string.IsNullOrWhiteSpace(q.Request.Reason)) throw new BadRequestException("Request ID and reason are required.");
-        await using var tx = await _context.BeginTransactionAsync(ct); await tx.AcquireTransactionLockAsync(AccountEnforcementLock.ForUser(q.UserId), ct);
-        var user = await GetTarget(q.AdminId, q.UserId, ct); var before = new { user.ViolationCount, user.AccountStatus, user.IsActive, user.IsFlagged };
+        await using var tx = await _context.BeginTransactionAsync(ct);
+        await tx.AcquireTransactionLockAsync(AccountEnforcementLock.ForUser(q.UserId), ct);
+        var user = await GetTarget(q.AdminId, q.UserId, ct);
+        var before = new { user.ViolationCount, user.AccountStatus, user.IsActive, user.IsFlagged };
         var result = await _status.ApplyViolationAsync(user, new(UserViolationSourceType.ManualAdmin, ManualActionId: q.Request.RequestId), q.Request.ViolationType,
             q.Request.Reason, q.Request.Description, q.AdminId, q.Action, q.Request.SuspendedUntil, ct);
         if (!result.Duplicate) _audit.Add(q.AdminId, q.Action switch { AccountEnforcementAction.Warning => AdminAuditActions.WarningIssued, AccountEnforcementAction.Suspension => AdminAuditActions.UserSuspended, _ => AdminAuditActions.UserBanned }, "User", user.UserId, before, new { user.ViolationCount, user.AccountStatus, user.IsActive, user.IsFlagged, user.SuspendedUntil, user.BannedAt, reason = q.Request.Reason, requestId = q.Request.RequestId });
-        try { await _context.SaveChangesAsync(ct); }
-        catch (DbUpdateConcurrencyException) { throw new ConflictException("The user account changed while enforcement was being applied. Refresh and retry."); }
-        catch (DbUpdateException ex) when (IsViolationConflict(ex)) { throw new ConflictException("This enforcement request has already been processed."); }
-        await tx.CommitAsync(ct); return result;
+        try
+        {
+            await _context.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw new ConflictException("The user account changed while enforcement was being applied. Refresh and retry.");
+        }
+        catch (DbUpdateException ex) when (IsViolationConflict(ex))
+        {
+            throw new ConflictException("This enforcement request has already been processed.");
+        }
+        await tx.CommitAsync(ct);
+        return result;
     }
+
     public async Task<bool> Handle(ClearAdminUserSuspensionCommand q, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(q.Reason)) throw new BadRequestException("Reason is required.");
-        await using var tx = await _context.BeginTransactionAsync(ct); await tx.AcquireTransactionLockAsync(AccountEnforcementLock.ForUser(q.UserId), ct);
-        var user = await GetTarget(q.AdminId, q.UserId, ct); var before = new { user.AccountStatus, user.IsActive, user.SuspendedUntil, user.BannedAt };
+        await using var tx = await _context.BeginTransactionAsync(ct);
+        await tx.AcquireTransactionLockAsync(AccountEnforcementLock.ForUser(q.UserId), ct);
+        var user = await GetTarget(q.AdminId, q.UserId, ct);
+        var before = new { user.AccountStatus, user.IsActive, user.SuspendedUntil, user.BannedAt };
         if (q.Restore) _status.Restore(user); else _status.ClearSuspension(user);
         _audit.Add(q.AdminId, q.Restore ? AdminAuditActions.UserRestored : AdminAuditActions.SuspensionCleared, "User", user.UserId, before,
             new { user.AccountStatus, user.IsActive, user.SuspendedUntil, user.BannedAt, reason = q.Reason });
-        await _context.SaveChangesAsync(ct); await tx.CommitAsync(ct); return true;
+        await _context.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+        return true;
     }
+
     private async Task<User> GetTarget(Guid adminId, Guid userId, CancellationToken ct)
     {
         if (!await _context.Set<User>().AnyAsync(x => x.UserId == adminId && x.Role == (int)UserRole.Admin, ct)) throw new ForbiddenAccessException("Admin access is required.");
@@ -132,6 +182,7 @@ public sealed class AdminUserEnforcementHandler :
         if (user.Role == (int)UserRole.Admin) throw new ConflictException("Admin accounts are protected from enforcement actions.");
         return user;
     }
+
     private static bool IsViolationConflict(DbUpdateException ex) =>
         ex.InnerException?.Message.Contains("UserViolations_UserId_", StringComparison.OrdinalIgnoreCase) == true;
 }

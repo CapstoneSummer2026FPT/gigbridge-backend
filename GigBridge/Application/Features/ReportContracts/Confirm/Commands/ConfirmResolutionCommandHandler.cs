@@ -136,7 +136,6 @@ public sealed class ConfirmResolutionCommandHandler :
         else
         {
             // Decline - keep in WaitingReporterConfirmation for now
-            // TODO:
             // Future: Convert Report into Dispute.
             // Future: Assign Admin.
             // Future: Lock Contract.

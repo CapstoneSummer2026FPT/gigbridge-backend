@@ -21,7 +21,9 @@ public class ChangePasswordCommandHandlerTests
             Email = "test.user@example.com",
             Password = "old-password-hash",
             RefreshTokenHash = "active-refresh-token-hash",
-            RefreshTokenExpiry = DateTime.UtcNow.AddDays(7)
+            RefreshTokenExpiry = DateTime.UtcNow.AddDays(7),
+            PreviousRefreshTokenHash = "previous-refresh-token-hash",
+            PreviousRefreshTokenGraceExpiresAt = DateTime.UtcNow.AddSeconds(30)
         };
         var context = new InMemoryApplicationDbContext();
         context.AddSet(user);
@@ -47,6 +49,8 @@ public class ChangePasswordCommandHandlerTests
         Assert.Equal("new-password-hash", user.Password);
         Assert.Null(user.RefreshTokenHash);
         Assert.Null(user.RefreshTokenExpiry);
+        Assert.Null(user.PreviousRefreshTokenHash);
+        Assert.Null(user.PreviousRefreshTokenGraceExpiresAt);
         Assert.Equal(1, context.SaveChangesCount);
     }
 }

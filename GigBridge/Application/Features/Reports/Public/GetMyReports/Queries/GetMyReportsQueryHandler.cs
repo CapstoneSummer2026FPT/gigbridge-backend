@@ -1,4 +1,5 @@
 using Application.Common.Interfaces;
+using Application.Common.Models;
 using Application.Features.Reports.Common;
 using Application.Features.Reports.Common.DTOs;
 using Domain.Entities;
@@ -19,7 +20,7 @@ public class GetMyReportsQueryHandler : IRequestHandler<GetMyReportsQuery, Repor
     public async Task<ReportsResponse> Handle(GetMyReportsQuery request, CancellationToken cancellationToken)
     {
         var page = Math.Max(request.Page, 1);
-        var pageSize = Math.Clamp(request.PageSize, 1, 100);
+        var pageSize = Math.Clamp(request.PageSize, 1, PaginatedQuery.MaxPageSize);
         var query = _context.Set<Report>()
             .AsNoTracking()
             .Include(report => report.Reporter)

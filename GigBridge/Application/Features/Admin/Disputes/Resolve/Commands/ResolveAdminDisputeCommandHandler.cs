@@ -261,7 +261,21 @@ public sealed class ResolveAdminDisputeCommandHandler :
             milestone.UpdatedAt = now;
         }
 
-        MilestoneWorkflowGuard.AdvanceNextMilestone(milestones, now);
+        // Bring the work items in line with the status the admin just imposed. Skipping this leaves a
+        // Completed milestone full of Todo work items — and if the contract resumes, the client
+        // approving one straggler would run the auto-close a second time: duplicate completion email
+        // and the following milestone reopened.
+        await SyncResolvedWorkItemsAsync(allocations.Values.Select(a => editable[a.MilestoneId]), now, cancellationToken);
+
+        var nextMilestone = MilestoneWorkflowGuard.AdvanceNextMilestone(milestones, now);
+        if (nextMilestone is not null)
+        {
+            await MilestoneEarlyStartRequestWorkflow.CancelPendingForMilestoneAsync(
+                _context,
+                nextMilestone.MilestonesId,
+                now,
+                cancellationToken);
+        }
 
         escrow.ReleasedAmount += totalRelease;
         escrow.FundedAmount -= totalRefund + totalPenalty;
@@ -277,6 +291,25 @@ public sealed class ResolveAdminDisputeCommandHandler :
         contract.Status = command.ContractAction == AdminContractAction.Resume
             ? (int)ContractStatus.Active : (int)ContractStatus.Cancelled;
         contract.UpdatedAt = now;
+
+        if (command.ContractAction == AdminContractAction.Terminate)
+        {
+            // The offer that produced this contract must give up its "Accepted" slot too — the
+            // DB enforces at most one Accepted offer per job post
+            // (UX_NegotiationOffers_AcceptedPerJobPost), so leaving it Accepted would
+            // permanently block any future offer on this job post.
+            var acceptedOffer = await _context.Set<NegotiationOffer>()
+                .FirstOrDefaultAsync(
+                    offer =>
+                        offer.ContractsId == contract.ContractsId &&
+                        offer.Status == (int)NegotiationOfferStatus.Accepted,
+                    cancellationToken);
+            if (acceptedOffer is not null)
+            {
+                acceptedOffer.Status = (int)NegotiationOfferStatus.Cancelled;
+                acceptedOffer.RespondedAt = now;
+            }
+        }
         dispute.Status = (int)DisputeStatus.Resolved;
         dispute.Resolution = (int)command.Resolution;
         dispute.ResolutionNote = command.ResolutionNote.Trim();
@@ -371,6 +404,39 @@ public sealed class ResolveAdminDisputeCommandHandler :
         }
 
         return await AdminDisputeSupport.GetDetailAsync(_context, dispute.DisputesId, cancellationToken);
+    }
+
+    /// <summary>
+    /// Forces each resolved milestone's work items into a state consistent with the verdict, so the
+    /// delivery space and the auto-close logic agree with what the admin decided.
+    /// </summary>
+    private async Task SyncResolvedWorkItemsAsync(
+        IEnumerable<Milestone> resolvedMilestones,
+        DateTime now,
+        CancellationToken cancellationToken)
+    {
+        var milestoneList = resolvedMilestones.ToList();
+        if (milestoneList.Count == 0)
+        {
+            return;
+        }
+
+        var milestoneIds = milestoneList.Select(milestone => milestone.MilestonesId).ToList();
+        var workItems = await _context.Set<ContractWorkItem>()
+            .Where(item => milestoneIds.Contains(item.MilestonesId))
+            .ToListAsync(cancellationToken);
+        if (workItems.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var milestone in milestoneList)
+        {
+            MilestoneWorkItemWorkflow.SyncWorkItemsToResolvedMilestone(
+                milestone,
+                workItems.Where(item => item.MilestonesId == milestone.MilestonesId).ToList(),
+                now);
+        }
     }
 
     private static void ValidateHeader(ResolveAdminDisputeCommand command)

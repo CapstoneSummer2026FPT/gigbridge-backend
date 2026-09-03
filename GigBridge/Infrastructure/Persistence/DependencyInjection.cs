@@ -1,10 +1,10 @@
 using Application.Common.Interfaces;
-using Application.Common.InternalServices.Wallets.Interfaces;
-using Infrastructure.Persistence.Delivery;
-using Infrastructure.Persistence.Wallets;
+using Infrastructure.Persistence.WorkSignals;
+using Infrastructure.Persistence.HealthChecks;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -20,19 +20,22 @@ internal static class DependencyInjection
             ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
         var pooledConnectionString = DatabasePoolOptions.Apply(connectionString, configuration);
 
-        services.AddDbContext<GigbridgeDbContext>(options =>
-            options.UseNpgsql(pooledConnectionString));
+        services.AddDbContext<GigbridgeDbContext>((provider, options) =>
+            options.UseNpgsql(pooledConnectionString)
+                .AddInterceptors(provider.GetServices<ISaveChangesInterceptor>()));
         services.AddScoped<IApplicationDbContext>(provider =>
             provider.GetRequiredService<GigbridgeDbContext>());
-        services.AddDeliveryPersistence();
-        services.AddScoped<IWalletLedgerService, WalletLedgerService>();
+        services.AddWorkSignalListener();
 
         services.AddDataProtection()
             .SetApplicationName("GigBridge")
             .PersistKeysToDbContext<GigbridgeDbContext>();
 
         services.AddHealthChecks()
-            .AddDbContextCheck<GigbridgeDbContext>("Database");
+            .AddDbContextCheck<GigbridgeDbContext>("Database")
+            .AddCheck<AuthSessionSchemaHealthCheck>("AuthSessions")
+            .AddCheck<Infrastructure.ExternalServices.Payments.PayOs.PayoutProviderHealthCheck>(
+                "PayoutProvider");
 
         return services;
     }
