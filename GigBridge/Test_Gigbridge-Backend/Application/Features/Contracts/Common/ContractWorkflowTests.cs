@@ -1,13 +1,19 @@
-﻿using Application.Common.InternalServices.ESign.Services;
+using Application.Common.InternalServices.ESign.Services;
 using Application.Common.Exceptions;
 using Application.Common.Interfaces.Time;
 using Application.Common.Interfaces.Caching;
+using Application.Common.Interfaces.Email;
+using Application.Common.InternalServices.Contracts.Interfaces;
+using Application.Common.InternalServices.Contracts.Models;
 using Application.Common.InternalServices.Notifications.Interfaces;
+using Application.Common.Models.Email;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.Contracts.Details.Client.Update.Commands;
 using Application.Features.Contracts.Details.Client.Update.DTOs;
 using Application.Features.Contracts.Details.Client.Submit.Commands;
 using Application.Features.Contracts.Details.Freelancer.Confirm.Commands;
+using Application.Features.Contracts.Details.Common.PlanChangeRequest.Queries;
+using Application.Features.Contracts.Details.Freelancer.RequestChange.Commands;
 using Application.Features.Contracts.Escrow.Client.Fund.Commands;
 using Application.Features.Contracts.MilestoneReview.Freelancer.Accept.Commands;
 using Application.Features.Contracts.MilestoneReview.Freelancer.RequestChange.Commands;
@@ -29,6 +35,7 @@ using Domain.Enums.Notifications;
 using Domain.Enums.Wallets;
 using Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using Test_Gigbridge_Backend.TestSupport;
 using NSubstitute;
@@ -1311,11 +1318,16 @@ public class ContractWorkflowTests
         fixture.MarkDocumentFullySigned();
         var notificationService = new RecordingNotificationService();
 
+        var emailService = Substitute.For<IEmailService>();
         var handler = new RequestContractMilestoneChangeCommandHandler(
             fixture.Context,
             new FixedDateTimeService(fixture.Now),
             new NoopChatRealtimeNotifier(),
-            notificationService);
+            notificationService,
+            emailService,
+            StubPlanChangeEmailRenderer(),
+            PlanChangeConfiguration(),
+            NullLogger<RequestContractMilestoneChangeCommandHandler>.Instance);
 
         var result = await handler.Handle(
             new RequestContractMilestoneChangeCommand(
@@ -1336,6 +1348,16 @@ public class ContractWorkflowTests
         Assert.Contains("Please adjust the second milestone.", notification.Content);
         Assert.Equal(fixture.ContractId, notification.ReferenceId);
         Assert.Equal("Contract", notification.ReferenceType);
+        await emailService.Received(1).SendEmailAsync(
+            Arg.Is<EmailRequest>(email => email.To == "client@example.com"),
+            Arg.Any<CancellationToken>());
+
+        var planChange = Assert.Single(fixture.Context.Set<ContractPlanChangeRequest>());
+        Assert.Equal(fixture.ContractId, planChange.ContractsId);
+        Assert.Equal(fixture.FreelancerUserId, planChange.RequestedByUserId);
+        Assert.Equal("Please adjust the second milestone.", planChange.Reason);
+        Assert.Equal((int)ContractPlanChangeOrigin.MilestoneReview, planChange.Origin);
+        Assert.Null(planChange.ResolvedAt);
 
         var submitHandler = new SubmitContractDetailsCommandHandler(
             fixture.Context,
@@ -1359,6 +1381,76 @@ public class ContractWorkflowTests
             document.Status == (int)ESignDocumentStatus.Voided));
         Assert.Single(fixture.EsignDocuments.Entities.Where(document =>
             document.Status == (int)ESignDocumentStatus.PendingSignatures));
+        Assert.NotNull(Assert.Single(fixture.Context.Set<ContractPlanChangeRequest>()).ResolvedAt);
+    }
+
+    [Fact]
+    public async Task RequestContractDetailsChange_NotifiesAndEmailsClient()
+    {
+        var fixture = new ContractWorkflowFixture();
+        fixture.ApplyValidDetails();
+        fixture.Contract.Status = (int)ContractStatus.PendingContractConfirmation;
+        var notificationService = new RecordingNotificationService();
+        var emailService = Substitute.For<IEmailService>();
+        var emailRenderer = Substitute.For<IContractPlanChangeEmailRenderer>();
+        ContractPlanChangeEmailModel? renderedModel = null;
+        emailRenderer.Render(Arg.Any<ContractPlanChangeEmailModel>())
+            .Returns(callInfo =>
+            {
+                renderedModel = callInfo.Arg<ContractPlanChangeEmailModel>();
+                return new RenderedContractPlanChangeEmail(
+                    "Rendered subject",
+                    "<p>Rendered body</p>",
+                    "Rendered text");
+            });
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["FrontendBaseUrl"] = "https://gigbridge.example"
+            })
+            .Build();
+        var handler = new RequestContractDetailsChangeCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopChatRealtimeNotifier(),
+            notificationService,
+            emailService,
+            emailRenderer,
+            configuration,
+            NullLogger<RequestContractDetailsChangeCommandHandler>.Instance);
+
+        var result = await handler.Handle(
+            new RequestContractDetailsChangeCommand(
+                fixture.ContractId,
+                fixture.FreelancerUserId,
+                new RequestContractDetailsChangeRequest("Please update the WBS.")),
+            CancellationToken.None);
+
+        Assert.Equal((int)ContractStatus.PendingContractDetails, result.Status);
+        var notification = Assert.Single(notificationService.Notifications);
+        Assert.Equal(fixture.ClientUserId, notification.UserId);
+        Assert.Equal(NotificationType.MilestoneUpdated, notification.Type);
+        Assert.Equal("Project plan changes requested", notification.Title);
+        Assert.Contains("Please update the WBS.", notification.Content);
+        Assert.Equal(fixture.ContractId, notification.ReferenceId);
+        Assert.Equal("Contract", notification.ReferenceType);
+
+        Assert.NotNull(renderedModel);
+        Assert.Equal("Client", renderedModel.ClientName);
+        Assert.Equal("Freelancer", renderedModel.FreelancerName);
+        Assert.Equal("Fixed contract", renderedModel.ContractTitle);
+        Assert.Equal("Please update the WBS.", renderedModel.Reason);
+        Assert.Equal($"https://gigbridge.example/contracts/{fixture.ContractId}", renderedModel.ActionUrl);
+
+        await emailService.Received(1).SendEmailAsync(
+            Arg.Is<EmailRequest>(email =>
+                email.To == "client@example.com" &&
+                email.Subject == "Rendered subject" &&
+                email.Body == "<p>Rendered body</p>" &&
+                email.TextBody == "Rendered text" &&
+                email.IsHtml &&
+                email.IdempotencyKey == $"contract-plan-change:{fixture.ContractId:N}:1"),
+            CancellationToken.None);
     }
 
     private static ICacheService CreateVerifiedIdentityCache()
@@ -1368,6 +1460,146 @@ public class ContractWorkflowTests
             .Returns(true);
         return cache;
     }
+
+    [Fact]
+    public async Task RequestContractDetailsChange_RecordsOpenPlanChangeRequestForTheClient()
+    {
+        var fixture = new ContractWorkflowFixture();
+        fixture.ApplyValidDetails();
+        fixture.Contract.Status = (int)ContractStatus.PendingContractConfirmation;
+        var milestoneId = fixture.Milestones.Entities[0].MilestonesId;
+
+        var handler = new RequestContractDetailsChangeCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopChatRealtimeNotifier(),
+            new RecordingNotificationService(),
+            Substitute.For<IEmailService>(),
+            StubPlanChangeEmailRenderer(),
+            PlanChangeConfiguration(),
+            NullLogger<RequestContractDetailsChangeCommandHandler>.Instance);
+
+        await handler.Handle(
+            new RequestContractDetailsChangeCommand(
+                fixture.ContractId,
+                fixture.FreelancerUserId,
+                new RequestContractDetailsChangeRequest("  Split milestone one.  ", [milestoneId])),
+            CancellationToken.None);
+
+        var request = Assert.Single(fixture.Context.Set<ContractPlanChangeRequest>());
+        Assert.Equal(fixture.ContractId, request.ContractsId);
+        Assert.Equal(fixture.FreelancerUserId, request.RequestedByUserId);
+        Assert.Equal("Split milestone one.", request.Reason);
+        Assert.Equal([milestoneId], request.AffectedMilestoneIds);
+        Assert.Equal((int)ContractPlanChangeOrigin.ContractDetails, request.Origin);
+        Assert.Null(request.ResolvedAt);
+
+        var query = new GetOpenContractPlanChangeRequestQueryHandler(fixture.Context);
+        var dto = await query.Handle(
+            new GetOpenContractPlanChangeRequestQuery(fixture.ContractId, fixture.ClientUserId),
+            CancellationToken.None);
+
+        Assert.NotNull(dto);
+        Assert.Equal("Split milestone one.", dto.Reason);
+        Assert.Equal("Freelancer", dto.RequestedByName);
+        Assert.Equal([milestoneId], dto.AffectedMilestoneIds);
+    }
+
+    [Fact]
+    public async Task SubmitContractDetails_ResolvesTheOpenPlanChangeRequest()
+    {
+        var fixture = new ContractWorkflowFixture();
+        fixture.ApplyValidDetails();
+        fixture.Contract.Status = (int)ContractStatus.PendingContractConfirmation;
+
+        var requestHandler = new RequestContractDetailsChangeCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(fixture.Now),
+            new NoopChatRealtimeNotifier(),
+            new RecordingNotificationService(),
+            Substitute.For<IEmailService>(),
+            StubPlanChangeEmailRenderer(),
+            PlanChangeConfiguration(),
+            NullLogger<RequestContractDetailsChangeCommandHandler>.Instance);
+        await requestHandler.Handle(
+            new RequestContractDetailsChangeCommand(
+                fixture.ContractId,
+                fixture.FreelancerUserId,
+                new RequestContractDetailsChangeRequest("Rework the plan.")),
+            CancellationToken.None);
+
+        var resolvedAt = fixture.Now.AddMinutes(5);
+        var submitHandler = new SubmitContractDetailsCommandHandler(
+            fixture.Context,
+            new FixedDateTimeService(resolvedAt),
+            new NoopChatRealtimeNotifier());
+        await submitHandler.Handle(
+            new SubmitContractDetailsCommand(fixture.ContractId, fixture.ClientUserId),
+            CancellationToken.None);
+
+        Assert.Equal(resolvedAt, Assert.Single(fixture.Context.Set<ContractPlanChangeRequest>()).ResolvedAt);
+
+        var query = new GetOpenContractPlanChangeRequestQueryHandler(fixture.Context);
+        Assert.Null(await query.Handle(
+            new GetOpenContractPlanChangeRequestQuery(fixture.ContractId, fixture.ClientUserId),
+            CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task RequestContractDetailsChange_RetiresTheEarlierRequestSoOnlyOneStaysOpen()
+    {
+        var fixture = new ContractWorkflowFixture();
+        fixture.ApplyValidDetails();
+
+        async Task RequestAsync(string reason, DateTime at)
+        {
+            fixture.Contract.Status = (int)ContractStatus.PendingContractConfirmation;
+            var handler = new RequestContractDetailsChangeCommandHandler(
+                fixture.Context,
+                new FixedDateTimeService(at),
+                new NoopChatRealtimeNotifier(),
+                new RecordingNotificationService(),
+                Substitute.For<IEmailService>(),
+                StubPlanChangeEmailRenderer(),
+                PlanChangeConfiguration(),
+                NullLogger<RequestContractDetailsChangeCommandHandler>.Instance);
+            await handler.Handle(
+                new RequestContractDetailsChangeCommand(
+                    fixture.ContractId,
+                    fixture.FreelancerUserId,
+                    new RequestContractDetailsChangeRequest(reason)),
+                CancellationToken.None);
+        }
+
+        await RequestAsync("First pass.", fixture.Now);
+        await RequestAsync("Second pass.", fixture.Now.AddMinutes(10));
+
+        var requests = fixture.Context.Set<ContractPlanChangeRequest>().ToList();
+        Assert.Equal(2, requests.Count);
+        Assert.Single(requests.Where(request => request.ResolvedAt == null));
+
+        var query = new GetOpenContractPlanChangeRequestQueryHandler(fixture.Context);
+        var dto = await query.Handle(
+            new GetOpenContractPlanChangeRequestQuery(fixture.ContractId, fixture.ClientUserId),
+            CancellationToken.None);
+        Assert.Equal("Second pass.", dto?.Reason);
+    }
+
+    private static IContractPlanChangeEmailRenderer StubPlanChangeEmailRenderer()
+    {
+        var renderer = Substitute.For<IContractPlanChangeEmailRenderer>();
+        renderer.Render(Arg.Any<ContractPlanChangeEmailModel>())
+            .Returns(new RenderedContractPlanChangeEmail("Subject", "<p>Body</p>", "Text"));
+        return renderer;
+    }
+
+    private static IConfiguration PlanChangeConfiguration() =>
+        new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["FrontendBaseUrl"] = "https://gigbridge.example"
+            })
+            .Build();
 
     private sealed class ContractWorkflowFixture
     {

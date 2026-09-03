@@ -85,4 +85,6 @@ public partial class Contract
     public virtual ICollection<ContractAmendment> Amendments { get; set; } = new List<ContractAmendment>();
 
     public virtual ICollection<ContractPlanRevision> PlanRevisions { get; set; } = new List<ContractPlanRevision>();
+
+    public virtual ICollection<ContractPlanChangeRequest> PlanChangeRequests { get; set; } = new List<ContractPlanChangeRequest>();
 }
