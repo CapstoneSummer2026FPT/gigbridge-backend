@@ -60,6 +60,8 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
 
     public virtual DbSet<ContractChangeRequest> ContractChangeRequests { get; set; }
 
+    public virtual DbSet<ContractPlanChangeRequest> ContractPlanChangeRequests { get; set; }
+
     public virtual DbSet<ContractAmendment> ContractAmendments { get; set; }
 
     public virtual DbSet<ContractAmendmentMilestone> ContractAmendmentMilestones { get; set; }
@@ -703,6 +705,22 @@ public partial class GigbridgeDbContext : DbContext, IApplicationDbContext, IDat
             entity.Property(e => e.SnapshotJson).HasColumnType("jsonb");
             entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
             entity.HasOne(e => e.Contract).WithMany(e => e.PlanRevisions)
+                .HasForeignKey(e => e.ContractsId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ContractPlanChangeRequest>(entity =>
+        {
+            entity.HasKey(e => e.ContractPlanChangeRequestId);
+            entity.Property(e => e.ContractPlanChangeRequestId).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.Reason).HasMaxLength(2000);
+            entity.Property(e => e.AffectedMilestoneIds).HasColumnType("uuid[]");
+            entity.Property(e => e.AffectedWorkItemIds).HasColumnType("uuid[]");
+            entity.Property(e => e.CreatedAt).HasDefaultValueSql("now()");
+            // The client editor only ever asks for the open request on one contract, so the
+            // filtered index keeps that lookup off a sequential scan as the table grows.
+            entity.HasIndex(e => new { e.ContractsId, e.CreatedAt })
+                .HasFilter("\"ResolvedAt\" IS NULL");
+            entity.HasOne(e => e.Contract).WithMany(e => e.PlanChangeRequests)
                 .HasForeignKey(e => e.ContractsId).OnDelete(DeleteBehavior.Cascade);
         });
 

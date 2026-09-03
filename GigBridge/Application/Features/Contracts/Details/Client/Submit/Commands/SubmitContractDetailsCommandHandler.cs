@@ -91,6 +91,14 @@ public sealed class SubmitContractDetailsCommandHandler :
         contract.Status = (int)ContractStatus.PendingContractConfirmation;
         contract.UpdatedAt = now;
 
+        // Resubmitting is the client's answer to any open rework request, so it retires the
+        // banner rather than leaving it to be dismissed by hand.
+        await ContractPlanChangeRequests.ResolveOpenAsync(
+            _context,
+            contract.ContractsId,
+            now,
+            cancellationToken);
+
         await ContractConversationEvents.AddSystemMessageAsync(
             _context,
             contract.ContractsId,
