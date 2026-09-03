@@ -8,6 +8,7 @@ using Application.Common.InternalServices.Notifications.Interfaces;
 using Application.Common.Models;
 using Application.Features.Contracts.Common.Internal;
 using Application.Features.ReportContracts.Common.Internal;
+using Application.Features.Wallets.Common;
 using Domain.Entities;
 using Domain.Enums.Accounts;
 using Domain.Enums.Chat;
@@ -43,7 +44,21 @@ public sealed record AdminContractReportAttachment(Guid AttachmentId, string Fil
 public sealed record AdminContractReportNote(Guid NoteId, Guid AdminUserId, string AdminName, string Content, DateTime CreatedAt, DateTime? UpdatedAt);
 public sealed record AdminContractInformationRequest(Guid InformationRequestId, Guid RequestId, Guid TargetUserId, string TargetName, string Message, string? RequestedEvidenceOrClarification, DateTime? DueAt, int Status, DateTime CreatedAt, DateTime? RespondedAt);
 public sealed record AdminContractReportMilestone(Guid MilestoneId, string Title, decimal Amount, int Status, DateTime? SubmittedAt, DateTime? ApprovedAt, decimal ReleasedAmount, decimal RefundAmount, decimal PenaltyAmount);
-public sealed record AdminContractReportLedger(Guid TransactionId, Guid? MilestoneId, decimal Amount, int Type, int Status, DateTime CreatedAt);
+/// <summary>
+/// A ledger row for the report view. <paramref name="UserId"/> and <paramref name="IsCredit"/> are
+/// null for contract-level escrow transactions, which have no owning party. They are populated for
+/// wallet transactions, where an escrow release writes two rows of the same amount that are
+/// otherwise indistinguishable - without them an admin cannot tell the payer's row from the payee's.
+/// </summary>
+public sealed record AdminContractReportLedger(
+    Guid TransactionId,
+    Guid? MilestoneId,
+    decimal Amount,
+    int Type,
+    int Status,
+    DateTime CreatedAt,
+    Guid? UserId = null,
+    bool? IsCredit = null);
 public sealed record AdminContractReportMessage(Guid MessageId, Guid ConversationId, Guid? SenderUserId, string? SenderName, int MessageType, string? Content, DateTime SentAt);
 public sealed record AdminContractReportAudit(Guid AuditId, Guid AdminId, string? AdminName, string Action, string? OldValues, string? NewValues, Guid CorrelationId, DateTime CreatedAt);
 public sealed record AdminContractReportDetail(
@@ -141,8 +156,12 @@ public sealed class AdminContractReportQueryHandler :
         var c = r.Contract;
         var related = r.RelatedDisputes.SingleOrDefault();
         var escrow = await _context.Set<ContractEscrow>().AsNoTracking().FirstOrDefaultAsync(x => x.ContractsId == c.ContractsId, ct);
-        var escrowTx = escrow is null ? [] : await _context.Set<EscrowTransaction>().AsNoTracking().Where(x => x.ContractEscrowId == escrow.ContractEscrowId).OrderByDescending(x => x.CreatedAt).Take(100).Select(x => new AdminContractReportLedger(x.EscrowTransactionId, x.MilestonesId, x.Amount, x.Type, x.Status, x.CreatedAt)).ToListAsync(ct);
-        var walletTx = await _context.Set<WalletTransaction>().AsNoTracking().Where(x => x.ContractsId == c.ContractsId).OrderByDescending(x => x.CreatedAt).Take(100).Select(x => new AdminContractReportLedger(x.WalletTransactionsId, x.MilestonesId, x.TokenAmount, x.Type, x.Status, x.CreatedAt)).ToListAsync(ct);
+        var escrowTx = escrow is null ? [] : await _context.Set<EscrowTransaction>().AsNoTracking().Where(x => x.ContractEscrowId == escrow.ContractEscrowId).OrderByDescending(x => x.CreatedAt).Take(100).Select(x => new AdminContractReportLedger(x.EscrowTransactionId, x.MilestonesId, x.Amount, x.Type, x.Status, x.CreatedAt, null, null)).ToListAsync(ct);
+        // Materialised before mapping so the direction rule runs in memory: an escrow release writes
+        // one row per party with the same amount, told apart only by BalanceSource.
+        var walletRows = await _context.Set<WalletTransaction>().AsNoTracking().Where(x => x.ContractsId == c.ContractsId).OrderByDescending(x => x.CreatedAt).Take(100)
+            .Select(x => new { x.WalletTransactionsId, x.MilestonesId, x.TokenAmount, x.Type, x.Status, x.BalanceSource, x.CreatedAt, x.UserId }).ToListAsync(ct);
+        var walletTx = walletRows.Select(x => new AdminContractReportLedger(x.WalletTransactionsId, x.MilestonesId, x.TokenAmount, x.Type, x.Status, x.CreatedAt, x.UserId, WalletTransactionDirection.IsCredit(x.Type, x.BalanceSource))).ToList();
         var refund = r.MilestoneId.HasValue ? escrowTx.Where(x => x.MilestoneId == r.MilestoneId && x.Type == (int)EscrowTransactionType.RefundToClient && x.Status == (int)EscrowTransactionStatus.Succeeded).Sum(x => x.Amount) : 0;
         var penalty = r.MilestoneId.HasValue ? escrowTx.Where(x => x.MilestoneId == r.MilestoneId && x.Type == (int)EscrowTransactionType.DisputePenalty && x.Status == (int)EscrowTransactionStatus.Succeeded).Sum(x => x.Amount) : 0;
         var conversationIds = await _context.Set<Conversation>().AsNoTracking().Where(x => x.ContractsId == c.ContractsId && (x.ConversationType == (int)ConversationType.ContractWorkroom || (related != null && x.DisputesId == related.DisputesId))).Select(x => x.ConversationsId).ToListAsync(ct);
