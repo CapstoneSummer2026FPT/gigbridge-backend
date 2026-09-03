@@ -6,6 +6,7 @@ using Application.Common.Models;
 using Application.Common.Interfaces.Time;
 using Application.Common.InternalServices.Admin.Analytics.Models;
 using Application.Common.InternalServices.Admin.Analytics.Interfaces;
+using Application.Features.Wallets.Common;
 using Domain.Entities;
 using Domain.Enums.Accounts;
 using Domain.Enums.Contracts.Escrow;
@@ -392,8 +393,12 @@ public sealed class AdminAnalyticsService : IAdminAnalyticsService
         var range = AdminAnalyticsRangeResolver.Resolve(filter.Range, _clock.UtcNow);
         var query = FilterTransactions(filter, range);
         var filteredCount = await query.LongCountAsync(cancellationToken);
-        var chartRows = await query.Select(x => new { At = x.CompletedAt ?? x.CreatedAt, x.Type, x.Status })
+        var chartRows = await query
+            .Select(x => new { At = x.CompletedAt ?? x.CreatedAt, x.Type, x.Status, x.BalanceSource })
             .ToListAsync(cancellationToken);
+        var aggregateRows = chartRows
+            .Where(x => CountsTowardTransactionAggregates(x.Type, x.BalanceSource))
+            .ToList();
         if (TryDecodeCursor(filter.Cursor, out var cursorAt, out var cursorId))
             query = query.Where(x => (x.CompletedAt ?? x.CreatedAt) < cursorAt ||
                 ((x.CompletedAt ?? x.CreatedAt) == cursorAt && x.WalletTransactionsId.CompareTo(cursorId) < 0));
@@ -410,18 +415,18 @@ public sealed class AdminAnalyticsService : IAdminAnalyticsService
         var items = transactions.Select(x => new AdminTransactionItem(
             x.WalletTransactionsId, x.CompletedAt ?? x.CreatedAt, x.UserId, x.User.FullName,
             x.ContractsId, x.Contract?.Title, x.Type, Humanize(((WalletTransactionType)x.Type).ToString()),
-            x.Status, Humanize(((WalletTransactionStatus)x.Status).ToString()), Direction(x.Type),
+            x.Status, Humanize(((WalletTransactionStatus)x.Status).ToString()), Direction(x.Type, x.BalanceSource),
             x.TokenAmount, x.VndAmount, x.GatewayProvider,
             x.GatewayTransactionCode ?? x.IdempotencyKey, x.Note, x.Metadata,
             sources.GetValueOrDefault(x.WalletTransactionsId))).ToList();
         var nextCursor = hasMore && transactions.Count > 0
             ? EncodeCursor(transactions[^1].CompletedAt ?? transactions[^1].CreatedAt, transactions[^1].WalletTransactionsId)
             : null;
-        var typeBreakdown = chartRows.GroupBy(x => x.Type).Select(x => new AnalyticsBreakdown(
+        var typeBreakdown = aggregateRows.GroupBy(x => x.Type).Select(x => new AnalyticsBreakdown(
             x.Key.ToString(CultureInfo.InvariantCulture), Humanize(((WalletTransactionType)x.Key).ToString()), x.LongCount(), x.LongCount())).ToList();
-        var statusBreakdown = chartRows.GroupBy(x => x.Status).Select(x => new AnalyticsBreakdown(
+        var statusBreakdown = aggregateRows.GroupBy(x => x.Status).Select(x => new AnalyticsBreakdown(
             x.Key.ToString(CultureInfo.InvariantCulture), Humanize(((WalletTransactionStatus)x.Key).ToString()), x.LongCount(), x.LongCount())).ToList();
-        var countSeries = chartRows.GroupBy(x => new { Bucket = AdminAnalyticsRangeResolver.Bucket(x.At, range), x.Type })
+        var countSeries = aggregateRows.GroupBy(x => new { Bucket = AdminAnalyticsRangeResolver.Bucket(x.At, range), x.Type })
             .Select(x => new AnalyticsSeriesPoint(x.Key.Bucket, ((WalletTransactionType)x.Key.Type).ToString(), x.Count()))
             .OrderBy(x => x.Bucket).ToList();
         return new AdminTransactionPage(await BuildMeta(range, cancellationToken), items, nextCursor, pageSize,
@@ -459,7 +464,7 @@ public sealed class AdminAnalyticsService : IAdminAnalyticsService
                 {
                     Csv((item.CompletedAt ?? item.CreatedAt).ToString("O")), Csv(item.UserId.ToString()), Csv(item.User.FullName),
                     Csv(item.ContractsId?.ToString()), Csv(item.Contract?.Title), Csv(Humanize(((WalletTransactionType)item.Type).ToString())),
-                    Csv(Humanize(((WalletTransactionStatus)item.Status).ToString())), Csv(Direction(item.Type)),
+                    Csv(Humanize(((WalletTransactionStatus)item.Status).ToString())), Csv(Direction(item.Type, item.BalanceSource)),
                     Csv(item.TokenAmount.ToString(CultureInfo.InvariantCulture)), Csv(item.VndAmount.ToString(CultureInfo.InvariantCulture)),
                     Csv(item.GatewayProvider), Csv(item.GatewayTransactionCode ?? item.IdempotencyKey),
                     Csv(sources.GetValueOrDefault(item.WalletTransactionsId)), Csv(item.Note)
@@ -696,11 +701,28 @@ public sealed class AdminAnalyticsService : IAdminAnalyticsService
     internal static long ConservativeDistinctActorCount(IEnumerable<long> rolledUpCounts) =>
         rolledUpCounts.DefaultIfEmpty().Max();
 
-    private static string Direction(int type) => (WalletTransactionType)type switch
+    /// <summary>
+    /// Whether a row belongs in the transaction breakdowns and time series. One escrow release
+    /// writes two rows of the same amount - the client's debit leg and the freelancer's credit leg -
+    /// so counting both reports every release twice. Only the credit leg is aggregated; the item
+    /// list and CSV export still carry both legs, which an admin needs to reconcile a contract.
+    /// </summary>
+    internal static bool CountsTowardTransactionAggregates(int type, int balanceSource) =>
+        type != (int)WalletTransactionType.EscrowRelease ||
+        WalletTransactionDirection.IsCredit(type, balanceSource);
+
+    /// <summary>
+    /// An escrow release produces two rows with the same amount that differ only by
+    /// <see cref="WalletTransaction.BalanceSource"/>, so labelling both "Transfer" left an admin
+    /// unable to tell the payer's row from the payee's. Direction comes from the canonical rule.
+    /// </summary>
+    internal static string Direction(int type, int balanceSource) => (WalletTransactionType)type switch
     {
         WalletTransactionType.TopUp or WalletTransactionType.AdminCredit or WalletTransactionType.EscrowRefund or WalletTransactionType.WithdrawalRefund => "Credit",
         WalletTransactionType.EscrowHold => "Hold",
-        WalletTransactionType.EscrowRelease => "Transfer",
+        WalletTransactionType.EscrowRelease => WalletTransactionDirection.IsCredit(type, balanceSource)
+            ? "Release In"
+            : "Release Out",
         _ => "Debit"
     };
 
