@@ -54,6 +54,10 @@ public sealed class WalletController : BaseApiController
         return Ok(ApiResponse<WalletResponse>.Ok(result, "Success"));
     }
 
+    /// <remarks>
+    /// <paramref name="limit"/> is clamped server-side to 1..100 — asking for more silently
+    /// returns 100. Lifetime totals belong to transactions/summary, not to this window.
+    /// </remarks>
     [HttpGet("transactions")]
     public async Task<IActionResult> GetTransactions([FromQuery] int limit = 50)
     {
@@ -67,6 +71,12 @@ public sealed class WalletController : BaseApiController
         return Ok(ApiResponse<IReadOnlyList<WalletTransactionResponse>>.Ok(result, "Success"));
     }
 
+    /// <remarks>
+    /// The response is role-shaped: <c>role</c> ("Client" / "Freelancer" / "Generic") selects
+    /// which branch is populated, because only clients fund escrow and only freelancers withdraw.
+    /// Left open to every authenticated role — an Admin receives the "Generic" shape covering
+    /// their own wallet rather than a 403.
+    /// </remarks>
     [HttpGet("transactions/summary")]
     public async Task<IActionResult> GetTransactionsSummary()
     {

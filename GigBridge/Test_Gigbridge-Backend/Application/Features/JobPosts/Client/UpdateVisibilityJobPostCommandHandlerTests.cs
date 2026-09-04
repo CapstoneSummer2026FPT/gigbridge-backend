@@ -11,9 +11,34 @@ namespace Test_Gigbridge_Backend.Application.Features.JobPosts.Client;
 public class UpdateVisibilityJobPostCommandHandlerTests
 {
     [Theory]
-    [InlineData(0, 2)]
+    [InlineData(1, 0)]
     [InlineData(2, 0)]
-    public async Task Handle_PublishedPublicAndInviteOnly_CanSwitchBetweenScopes(
+    [InlineData(3, 0)]
+    [InlineData(1, null)]
+    public async Task Handle_PublishedPublicToInviteOnly_ThrowsBadRequest(
+        int status,
+        int? currentVisibility)
+    {
+        var fixture = new UpdateVisibilityFixture(status, currentVisibility);
+
+        var exception = await Assert.ThrowsAsync<BadRequestException>(() =>
+            fixture.CreateHandler().Handle(
+                fixture.CreateCommand(JobPostEditingGuard.InviteOnlyVisibility),
+                CancellationToken.None));
+
+        Assert.Equal(
+            JobPostEditingGuard.PublicToInviteOnlyTransitionLockedMessage,
+            exception.Message);
+        Assert.Equal(currentVisibility, fixture.JobPost.Visibility);
+        Assert.Null(fixture.JobPost.UpdatedAt);
+        Assert.Equal(0, fixture.Context.SaveChangesCount);
+    }
+
+    [Theory]
+    [InlineData(2, 0)]
+    [InlineData(0, 0)]
+    [InlineData(2, 2)]
+    public async Task Handle_PublishedAllowedTransition_Succeeds(
         int currentVisibility,
         int requestedVisibility)
     {
@@ -26,6 +51,7 @@ public class UpdateVisibilityJobPostCommandHandlerTests
         Assert.True(result);
         Assert.Equal(requestedVisibility, fixture.JobPost.Visibility);
         Assert.Equal(fixture.Now, fixture.JobPost.UpdatedAt);
+        Assert.Equal(1, fixture.Context.SaveChangesCount);
     }
 
     [Theory]

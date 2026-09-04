@@ -24,7 +24,7 @@ public sealed class ConfirmAiInterviewAnswerCommandHandler(
         var result = await aiServiceClient.ConfirmInterviewAnswerAsync(new AiInterviewConfirmRequestDto
         {
             SessionId = command.SessionId,
-            CorrectedText = command.CorrectedText
+            CorrectedText = string.IsNullOrWhiteSpace(command.CorrectedText) ? "[No answer provided]" : command.CorrectedText
         }, cancellationToken);
         var attempt = await context.Set<AiInterviewAttempt>().FirstOrDefaultAsync(x =>
             x.ExternalSessionId == command.SessionId && x.FreelancerUserId == command.UserId,

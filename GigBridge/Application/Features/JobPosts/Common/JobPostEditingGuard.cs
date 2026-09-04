@@ -16,6 +16,9 @@ public static class JobPostEditingGuard
     public const string ContentLockedMessage =
         "Published public and invite-only job posts cannot be edited.";
 
+    public const string PublicToInviteOnlyTransitionLockedMessage =
+        "A published public job post cannot be changed to invite-only.";
+
     public const string DraftTransitionLockedMessage =
         "A published job post cannot be changed back to draft.";
 
@@ -42,6 +45,18 @@ public static class JobPostEditingGuard
     public static void EnsureVisibilityTransitionAllowed(JobPost jobPost, int requestedVisibility)
     {
         EnsureNotAdminLocked(jobPost.Visibility);
+
+        if (jobPost.Status == DraftStatus)
+        {
+            return;
+        }
+
+        var currentVisibility = jobPost.Visibility ?? PublicVisibility;
+        if (currentVisibility == PublicVisibility &&
+            requestedVisibility == InviteOnlyVisibility)
+        {
+            throw new BadRequestException(PublicToInviteOnlyTransitionLockedMessage);
+        }
     }
 
     public static void EnsureStatusTransitionAllowed(JobPost jobPost, int requestedStatus)
